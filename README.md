@@ -1,6 +1,9 @@
 <div align="center">
 
-# Deskmates
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/deskmates-lockup-dark.png">
+  <img src="docs/assets/deskmates-lockup.png" alt="Deskmates" width="320">
+</picture>
 
 ### AI coworkers that share one computer.
 
