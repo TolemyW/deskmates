@@ -1,0 +1,8 @@
+/* Styles of the trash feature,
+   loaded after app.css by src/styles/feature-styles.ts. Unlayered rules come first: like
+   design-refresh.css they override every layered rule.
+   Rules inside @layer components rank with the shared components of app.css and lose to
+   any unlayered rule; within the layer the later rule wins. */
+.workspace-trash-page h2 {
+  overflow-wrap: anywhere;
+}

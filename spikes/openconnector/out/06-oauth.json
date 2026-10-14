@@ -1,0 +1,1240 @@
+{
+  "configsSummary": {
+    "status": 200,
+    "count": 114,
+    "slack": {
+      "service": "slack",
+      "configured": false,
+      "customClientAvailable": true,
+      "clientId": null,
+      "expectedRedirectUri": "https://deskmates-gateway.example.test/integration-runtime/oauth/callback",
+      "redirectUri": null,
+      "missingFields": [
+        "clientId",
+        "clientSecret"
+      ],
+      "auth": {
+        "type": "oauth2",
+        "authorizationUrl": "https://slack.com/oauth/v2_user/authorize",
+        "tokenUrl": "https://slack.com/api/oauth.v2.user.access",
+        "refreshTokenUrl": "https://slack.com/api/oauth.v2.access",
+        "scopes": [
+          "channels:read",
+          "channels:history",
+          "groups:read",
+          "groups:history",
+          "users:read",
+          "im:read",
+          "im:history",
+          "mpim:read",
+          "mpim:history",
+          "files:read",
+          "reactions:read",
+          "chat:write",
+          "im:write",
+          "files:write",
+          "reactions:write",
+          "search:read",
+          "search:read.public",
+          "search:read.private"
+        ],
+        "scopeSeparator": ",",
+        "tokenEndpointAuthMethod": "client_secret_post",
+        "authorizationOptions": [
+          {
+            "id": "channels:read",
+            "label": "Public channels",
+            "description": "List public Slack channels and read their metadata.",
+            "required": true,
+            "defaultSelected": true,
+            "risk": "standard"
+          },
+          {
+            "id": "channels:history",
+            "label": "Public channel messages",
+            "description": "Read message history in public Slack channels.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive",
+            "requires": [
+              "channels:read"
+            ]
+          },
+          {
+            "id": "groups:read",
+            "label": "Private channels",
+            "description": "List private channels that the connected user can access.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive"
+          },
+          {
+            "id": "groups:history",
+            "label": "Private channel messages",
+            "description": "Read message history in private Slack channels.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive",
+            "requires": [
+              "groups:read"
+            ]
+          },
+          {
+            "id": "users:read",
+            "label": "User directory",
+            "description": "Read Slack user profiles and directory information.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "standard"
+          },
+          {
+            "id": "im:read",
+            "label": "Direct messages",
+            "description": "Read direct-message conversation metadata.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive"
+          },
+          {
+            "id": "im:history",
+            "label": "Direct message history",
+            "description": "Read direct-message history.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive",
+            "requires": [
+              "im:read"
+            ]
+          },
+          {
+            "id": "mpim:read",
+            "label": "Group direct messages",
+            "description": "Read group direct-message conversation metadata.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive"
+          },
+          {
+            "id": "mpim:history",
+            "label": "Group direct message history",
+            "description": "Read group direct-message history.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive",
+            "requires": [
+              "mpim:read"
+            ]
+          },
+          {
+            "id": "files:read",
+            "label": "Files",
+            "description": "Read files shared in Slack.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive"
+          },
+          {
+            "id": "reactions:read",
+            "label": "Reactions",
+            "description": "Read reactions on Slack messages.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "standard"
+          },
+          {
+            "id": "chat:write",
+            "label": "Send messages",
+            "description": "Send messages as the connected Slack user.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive"
+          },
+          {
+            "id": "im:write",
+            "label": "Send direct messages",
+            "description": "Send direct messages as the connected Slack user.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive",
+            "requires": [
+              "im:read"
+            ]
+          },
+          {
+            "id": "files:write",
+            "label": "Upload files",
+            "description": "Upload files to Slack.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive"
+          },
+          {
+            "id": "reactions:write",
+            "label": "Manage reactions",
+            "description": "Add and remove reactions on Slack messages.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive"
+          },
+          {
+            "id": "search:read",
+            "label": "Legacy message search",
+            "description": "Search messages with Slack's legacy search API.",
+            "required": false,
+            "defaultSelected": true,
+            "risk": "sensitive"
+          },
+          {
+            "id": "search:read.public",
+            "label": "Public message search",
+            "description": "Search public-channel messages with Slack Real-time Search.",
+            "required": false,
+            "defaultSelected": false,
+            "risk": "sensitive"
+          },
+          {
+            "id": "search:read.private",
+            "label": "Private message search",
+            "description": "Search private-channel messages with Slack Real-time Search.",
+            "required": false,
+            "defaultSelected": false,
+            "risk": "sensitive",
+            "requires": [
+              "search:read.public"
+            ]
+          }
+        ]
+      },
+      "requestedScopes": null,
+      "effectiveScopes": [
+        "channels:read",
+        "channels:history",
+        "groups:read",
+        "groups:history",
+        "users:read",
+        "im:read",
+        "im:history",
+        "mpim:read",
+        "mpim:history",
+        "files:read",
+        "reactions:read",
+        "chat:write",
+        "im:write",
+        "files:write",
+        "reactions:write",
+        "search:read",
+        "search:read.public",
+        "search:read.private"
+      ],
+      "extra": {}
+    },
+    "googledrive": {
+      "service": "googledrive",
+      "configured": false,
+      "customClientAvailable": true,
+      "clientId": null,
+      "expectedRedirectUri": "https://deskmates-gateway.example.test/integration-runtime/oauth/callback",
+      "redirectUri": null,
+      "missingFields": [
+        "clientId",
+        "clientSecret"
+      ],
+      "auth": {
+        "type": "oauth2",
+        "authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth",
+        "tokenUrl": "https://oauth2.googleapis.com/token",
+        "scopes": [
+          "https://www.googleapis.com/auth/drive.readonly",
+          "https://www.googleapis.com/auth/drive.metadata.readonly",
+          "https://www.googleapis.com/auth/drive"
+        ],
+        "tokenEndpointAuthMethod": "client_secret_post",
+        "authorizationParams": {
+          "access_type": "offline",
+          "prompt": "consent"
+        }
+      },
+      "requestedScopes": null,
+      "effectiveScopes": [
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/drive.metadata.readonly",
+        "https://www.googleapis.com/auth/drive"
+      ],
+      "extra": {}
+    }
+  },
+  "setupSlack": {
+    "request": {
+      "method": "GET",
+      "path": "/v1/providers/slack/setup",
+      "headers": {
+        "authorization": "Bearer 258f2f..."
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 4395,
+      "body": {
+        "success": true,
+        "message": "OK",
+        "data": {
+          "service": "slack",
+          "auth": [
+            {
+              "type": "oauth2",
+              "clientFields": [
+                {
+                  "key": "clientId",
+                  "label": "Client ID",
+                  "inputType": "text",
+                  "required": true,
+                  "secret": false
+                },
+                {
+                  "key": "clientSecret",
+                  "label": "Client secret",
+                  "inputType": "password",
+                  "required": true,
+                  "secret": true
+                }
+              ],
+              "scopes": [
+                "channels:read",
+                "channels:history",
+                "groups:read",
+                "groups:history",
+                "users:read",
+                "im:read",
+                "im:history",
+                "mpim:read",
+                "mpim:history",
+                "files:read",
+                "reactions:read",
+                "chat:write",
+                "im:write",
+                "files:write",
+                "reactions:write",
+                "search:read",
+                "search:read.public",
+                "search:read.private"
+              ],
+              "authorizationOptions": [
+                {
+                  "id": "channels:read",
+                  "label": "Public channels",
+                  "description": "List public Slack channels and read their metadata.",
+                  "required": true,
+                  "defaultSelected": true,
+                  "risk": "standard"
+                },
+                {
+                  "id": "channels:history",
+                  "label": "Public channel messages",
+                  "description": "Read message history in public Slack channels.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive",
+                  "requires": [
+                    "channels:read"
+                  ]
+                },
+                {
+                  "id": "groups:read",
+                  "label": "Private channels",
+                  "description": "List private channels that the connected user can access.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive"
+                },
+                {
+                  "id": "groups:history",
+                  "label": "Private channel messages",
+                  "description": "Read message history in private Slack channels.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive",
+                  "requires": [
+                    "groups:read"
+                  ]
+                },
+                {
+                  "id": "users:read",
+                  "label": "User directory",
+                  "description": "Read Slack user profiles and directory information.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "standard"
+                },
+                {
+                  "id": "im:read",
+                  "label": "Direct messages",
+                  "description": "Read direct-message conversation metadata.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive"
+                },
+                {
+                  "id": "im:history",
+                  "label": "Direct message history",
+                  "description": "Read direct-message history.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive",
+                  "requires": [
+                    "im:read"
+                  ]
+                },
+                {
+                  "id": "mpim:read",
+                  "label": "Group direct messages",
+                  "description": "Read group direct-message conversation metadata.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive"
+                },
+                {
+                  "id": "mpim:history",
+                  "label": "Group direct message history",
+                  "description": "Read group direct-message history.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive",
+                  "requires": [
+                    "mpim:read"
+                  ]
+                },
+                {
+                  "id": "files:read",
+                  "label": "Files",
+                  "description": "Read files shared in Slack.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive"
+                },
+                {
+                  "id": "reactions:read",
+                  "label": "Reactions",
+                  "description": "Read reactions on Slack messages.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "standard"
+                },
+                {
+                  "id": "chat:write",
+                  "label": "Send messages",
+                  "description": "Send messages as the connected Slack user.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive"
+                },
+                {
+                  "id": "im:write",
+                  "label": "Send direct messages",
+                  "description": "Send direct messages as the connected Slack user.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive",
+                  "requires": [
+                    "im:read"
+                  ]
+                },
+                {
+                  "id": "files:write",
+                  "label": "Upload files",
+                  "description": "Upload files to Slack.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive"
+                },
+                {
+                  "id": "reactions:write",
+                  "label": "Manage reactions",
+                  "description": "Add and remove reactions on Slack messages.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive"
+                },
+                {
+                  "id": "search:read",
+                  "label": "Legacy message search",
+                  "description": "Search messages with Slack's legacy search API.",
+                  "required": false,
+                  "defaultSelected": true,
+                  "risk": "sensitive"
+                },
+                {
+                  "id": "search:read.public",
+                  "label": "Public message search",
+                  "description": "Search public-channel messages with Slack Real-time Search.",
+                  "required": false,
+                  "defaultSelected": false,
+                  "risk": "sensitive"
+                },
+                {
+                  "id": "search:read.private",
+                  "label": "Private message search",
+                  "description": "Search private-channel messages with Slack Real-time Search.",
+                  "required": false,
+                  "defaultSelected": false,
+                  "risk": "sensitive",
+                  "requires": [
+                    "search:read.public"
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "api_key",
+              "fields": [
+                {
+                  "key": "apiKey",
+                  "label": "Access token",
+                  "inputType": "password",
+                  "required": true,
+                  "secret": true,
+                  "placeholder": "xoxb-... or xoxp-...",
+                  "description": "Slack bot or user token used with the Authorization Bearer header. Create a Slack app, install it to the workspace, then copy the bot token or user token from OAuth & Permissions."
+                }
+              ]
+            }
+          ],
+          "oauthClient": {
+            "configured": false,
+            "customClientAvailable": true,
+            "expectedRedirectUri": "https://deskmates-gateway.example.test/integration-runtime/oauth/callback",
+            "missingFields": [
+              "clientId",
+              "clientSecret"
+            ]
+          }
+        },
+        "meta": {}
+      }
+    }
+  },
+  "setupGoogleDrive": {
+    "request": {
+      "method": "GET",
+      "path": "/v1/providers/googledrive/setup",
+      "headers": {
+        "authorization": "Bearer 258f2f..."
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 1865,
+      "body": {
+        "success": true,
+        "message": "OK",
+        "data": {
+          "service": "googledrive",
+          "auth": [
+            {
+              "type": "oauth2",
+              "clientFields": [
+                {
+                  "key": "clientId",
+                  "label": "Client ID",
+                  "inputType": "text",
+                  "required": true,
+                  "secret": false
+                },
+                {
+                  "key": "clientSecret",
+                  "label": "Client secret",
+                  "inputType": "password",
+                  "required": true,
+                  "secret": true
+                }
+              ],
+              "scopes": [
+                "https://www.googleapis.com/auth/drive.readonly",
+                "https://www.googleapis.com/auth/drive.metadata.readonly",
+                "https://www.googleapis.com/auth/drive"
+              ]
+            },
+            {
+              "type": "custom_credential",
+              "label": "Service Account",
+              "description": "Connect with a Google Cloud service account key instead of a user account, optionally impersonating a Workspace user through domain-wide delegation.",
+              "fields": [
+                {
+                  "key": "serviceAccountJson",
+                  "label": "Service Account JSON",
+                  "inputType": "textarea",
+                  "required": true,
+                  "secret": true,
+                  "placeholder": "{\"type\": \"service_account\", \"project_id\": \"...\", ...}",
+                  "description": "The complete service account key JSON from Google Cloud Console (IAM & Admin > Service Accounts > Keys). Enable the Drive API for its project and share Drive files with the service account email, or use domain-wide delegation below."
+                },
+                {
+                  "key": "subject",
+                  "label": "Subject Email (optional)",
+                  "inputType": "text",
+                  "required": false,
+                  "secret": false,
+                  "placeholder": "user@your-domain.com",
+                  "description": "Optional Workspace user to impersonate through domain-wide delegation. In the Workspace Admin console (Security > Access and data control > API Controls > Domain-wide Delegation), grant the service account client ID the Drive scopes this provider requests. This acts as the user across the domain when sharing files with the service account directly is not practical."
+                }
+              ]
+            }
+          ],
+          "oauthClient": {
+            "configured": false,
+            "customClientAvailable": true,
+            "expectedRedirectUri": "https://deskmates-gateway.example.test/integration-runtime/oauth/callback",
+            "missingFields": [
+              "clientId",
+              "clientSecret"
+            ]
+          }
+        },
+        "meta": {}
+      }
+    }
+  },
+  "putSlackConfig": {
+    "request": {
+      "method": "PUT",
+      "path": "/api/oauth/configs/slack",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "clientId": "PLACEHOLDER_SLACK_CLIENT_ID",
+        "clientSecret": "PLACEHOLDER_SLACK_CLIENT_SECRET"
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 4371,
+      "body": {
+        "service": "slack",
+        "configured": true,
+        "customClientAvailable": true,
+        "clientId": "PLACEHOLDER_SLACK_CLIENT_ID",
+        "expectedRedirectUri": "https://deskmates-gateway.example.test/integration-runtime/oauth/callback",
+        "redirectUri": null,
+        "missingFields": [],
+        "auth": {
+          "type": "oauth2",
+          "authorizationUrl": "https://slack.com/oauth/v2_user/authorize",
+          "tokenUrl": "https://slack.com/api/oauth.v2.user.access",
+          "refreshTokenUrl": "https://slack.com/api/oauth.v2.access",
+          "scopes": [
+            "channels:read",
+            "channels:history",
+            "groups:read",
+            "groups:history",
+            "users:read",
+            "im:read",
+            "im:history",
+            "mpim:read",
+            "mpim:history",
+            "files:read",
+            "reactions:read",
+            "chat:write",
+            "im:write",
+            "files:write",
+            "reactions:write",
+            "search:read",
+            "search:read.public",
+            "search:read.private"
+          ],
+          "scopeSeparator": ",",
+          "tokenEndpointAuthMethod": "client_secret_post",
+          "authorizationOptions": [
+            {
+              "id": "channels:read",
+              "label": "Public channels",
+              "description": "List public Slack channels and read their metadata.",
+              "required": true,
+              "defaultSelected": true,
+              "risk": "standard"
+            },
+            {
+              "id": "channels:history",
+              "label": "Public channel messages",
+              "description": "Read message history in public Slack channels.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive",
+              "requires": [
+                "channels:read"
+              ]
+            },
+            {
+              "id": "groups:read",
+              "label": "Private channels",
+              "description": "List private channels that the connected user can access.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "groups:history",
+              "label": "Private channel messages",
+              "description": "Read message history in private Slack channels.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive",
+              "requires": [
+                "groups:read"
+              ]
+            },
+            {
+              "id": "users:read",
+              "label": "User directory",
+              "description": "Read Slack user profiles and directory information.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "standard"
+            },
+            {
+              "id": "im:read",
+              "label": "Direct messages",
+              "description": "Read direct-message conversation metadata.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "im:history",
+              "label": "Direct message history",
+              "description": "Read direct-message history.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive",
+              "requires": [
+                "im:read"
+              ]
+            },
+            {
+              "id": "mpim:read",
+              "label": "Group direct messages",
+              "description": "Read group direct-message conversation metadata.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "mpim:history",
+              "label": "Group direct message history",
+              "description": "Read group direct-message history.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive",
+              "requires": [
+                "mpim:read"
+              ]
+            },
+            {
+              "id": "files:read",
+              "label": "Files",
+              "description": "Read files shared in Slack.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "reactions:read",
+              "label": "Reactions",
+              "description": "Read reactions on Slack messages.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "standard"
+            },
+            {
+              "id": "chat:write",
+              "label": "Send messages",
+              "description": "Send messages as the connected Slack user.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "im:write",
+              "label": "Send direct messages",
+              "description": "Send direct messages as the connected Slack user.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive",
+              "requires": [
+                "im:read"
+              ]
+            },
+            {
+              "id": "files:write",
+              "label": "Upload files",
+              "description": "Upload files to Slack.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "reactions:write",
+              "label": "Manage reactions",
+              "description": "Add and remove reactions on Slack messages.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "search:read",
+              "label": "Legacy message search",
+              "description": "Search messages with Slack's legacy search API.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "search:read.public",
+              "label": "Public message search",
+              "description": "Search public-channel messages with Slack Real-time Search.",
+              "required": false,
+              "defaultSelected": false,
+              "risk": "sensitive"
+            },
+            {
+              "id": "search:read.private",
+              "label": "Private message search",
+              "description": "Search private-channel messages with Slack Real-time Search.",
+              "required": false,
+              "defaultSelected": false,
+              "risk": "sensitive",
+              "requires": [
+                "search:read.public"
+              ]
+            }
+          ]
+        },
+        "requestedScopes": null,
+        "effectiveScopes": [
+          "channels:read",
+          "channels:history",
+          "groups:read",
+          "groups:history",
+          "users:read",
+          "im:read",
+          "im:history",
+          "mpim:read",
+          "mpim:history",
+          "files:read",
+          "reactions:read",
+          "chat:write",
+          "im:write",
+          "files:write",
+          "reactions:write",
+          "search:read",
+          "search:read.public",
+          "search:read.private"
+        ],
+        "extra": {}
+      }
+    }
+  },
+  "startSlackGlobalApp": {
+    "request": {
+      "method": "POST",
+      "path": "/api/oauth/authorizations",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "service": "slack",
+        "connectionName": "ws-a-slack"
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 620,
+      "body": {
+        "authorizationUrl": "https://slack.com/oauth/v2_user/authorize?client_id=PLACEHOLDER_SLACK_CLIENT_ID&redirect_uri=https%3A%2F%2Fdeskmates-gateway.example.test%2Fintegration-runtime%2Foauth%2Fcallback&response_type=code&state=1a077577-b2fb-4198-9594-9a9879903038&scope=channels%3Aread%2Cchannels%3Ahistory%2Cgroups%3Aread%2Cgroups%3Ahistory%2Cusers%3Aread%2Cim%3Aread%2Cim%3Ahistory%2Cmpim%3Aread%2Cmpim%3Ahistory%2Cfiles%3Aread%2Creactions%3Aread%2Cchat%3Awrite%2Cim%3Awrite%2Cfiles%3Awrite%2Creactions%3Awrite%2Csearch%3Aread%2Csearch%3Aread.public%2Csearch%3Aread.private",
+        "state": "1a077577-b2fb-4198-9594-9a9879903038"
+      }
+    }
+  },
+  "startSlackProgrammatic": {
+    "request": {
+      "method": "POST",
+      "path": "/v1/connections/slack/connect",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "returnUri": "https://deskmates-gateway.example.test/operator/integrations/done"
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 796,
+      "body": {
+        "success": true,
+        "message": "OK",
+        "data": {
+          "authorizationUrl": "https://slack.com/oauth/v2_user/authorize?client_id=PLACEHOLDER_SLACK_CLIENT_ID&redirect_uri=https%3A%2F%2Fdeskmates-gateway.example.test%2Fintegration-runtime%2Foauth%2Fcallback&response_type=code&state=30e0113a-30af-4e46-ac53-fc63cb3bdf54&scope=channels%3Aread%2Cchannels%3Ahistory%2Cgroups%3Aread%2Cgroups%3Ahistory%2Cusers%3Aread%2Cim%3Aread%2Cim%3Ahistory%2Cmpim%3Aread%2Cmpim%3Ahistory%2Cfiles%3Aread%2Creactions%3Aread%2Cchat%3Awrite%2Cim%3Awrite%2Cfiles%3Awrite%2Creactions%3Awrite%2Csearch%3Aread%2Csearch%3Aread.public%2Csearch%3Aread.private",
+          "stateHandle": "30e0113a-30af-4e46-ac53-fc63cb3bdf54",
+          "connectionRequestId": "1fde81f7-2d30-4460-ad2b-0a0b3906922c",
+          "status": "initiated",
+          "expiresAt": "2026-09-29T12:00:15.072Z"
+        },
+        "meta": {}
+      }
+    }
+  },
+  "startDriveConnectionScoped": {
+    "request": {
+      "method": "POST",
+      "path": "/api/oauth/authorizations",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "service": "googledrive",
+        "connectionName": "ws-a-drive",
+        "clientId": "PLACEHOLDER.apps.googleusercontent.com",
+        "clientSecret": "PLACEHOLDER_GOOGLE_CLIENT_SECRET",
+        "requestedScopes": [
+          "https://www.googleapis.com/auth/drive.readonly"
+        ]
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 420,
+      "body": {
+        "authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth?access_type=offline&prompt=consent&client_id=PLACEHOLDER.apps.googleusercontent.com&redirect_uri=https%3A%2F%2Fdeskmates-gateway.example.test%2Fintegration-runtime%2Foauth%2Fcallback&response_type=code&state=5f5f3c5e-cec7-47e0-9830-c5d02f2433d4&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.readonly",
+        "state": "5f5f3c5e-cec7-47e0-9830-c5d02f2433d4"
+      }
+    }
+  },
+  "callbackBogusState": {
+    "request": {
+      "method": "GET",
+      "path": "/oauth/callback?state=not-a-real-state&code=x",
+      "headers": {}
+    },
+    "response": {
+      "status": 400,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 87,
+      "body": {
+        "error": {
+          "code": "invalid_oauth_state",
+          "message": "OAuth state is missing or expired."
+        }
+      }
+    }
+  },
+  "callbackWithoutPrefix": {
+    "status": 404,
+    "body": "Not found"
+  },
+  "putSlackConfigGatewayRedirect": {
+    "request": {
+      "method": "PUT",
+      "path": "/api/oauth/configs/slack",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "clientId": "PLACEHOLDER_SLACK_CLIENT_ID",
+        "clientSecret": "PLACEHOLDER_SLACK_CLIENT_SECRET",
+        "redirectUri": "https://deskmates-gateway.example.test/operator/integrations/oauth/callback",
+        "requestedScopes": [
+          "channels:read",
+          "channels:history",
+          "chat:write",
+          "files:read",
+          "files:write",
+          "reactions:write"
+        ]
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 4355,
+      "body": {
+        "service": "slack",
+        "configured": true,
+        "customClientAvailable": true,
+        "clientId": "PLACEHOLDER_SLACK_CLIENT_ID",
+        "expectedRedirectUri": "https://deskmates-gateway.example.test/operator/integrations/oauth/callback",
+        "redirectUri": "https://deskmates-gateway.example.test/operator/integrations/oauth/callback",
+        "missingFields": [],
+        "auth": {
+          "type": "oauth2",
+          "authorizationUrl": "https://slack.com/oauth/v2_user/authorize",
+          "tokenUrl": "https://slack.com/api/oauth.v2.user.access",
+          "refreshTokenUrl": "https://slack.com/api/oauth.v2.access",
+          "scopes": [
+            "channels:read",
+            "channels:history",
+            "groups:read",
+            "groups:history",
+            "users:read",
+            "im:read",
+            "im:history",
+            "mpim:read",
+            "mpim:history",
+            "files:read",
+            "reactions:read",
+            "chat:write",
+            "im:write",
+            "files:write",
+            "reactions:write",
+            "search:read",
+            "search:read.public",
+            "search:read.private"
+          ],
+          "scopeSeparator": ",",
+          "tokenEndpointAuthMethod": "client_secret_post",
+          "authorizationOptions": [
+            {
+              "id": "channels:read",
+              "label": "Public channels",
+              "description": "List public Slack channels and read their metadata.",
+              "required": true,
+              "defaultSelected": true,
+              "risk": "standard"
+            },
+            {
+              "id": "channels:history",
+              "label": "Public channel messages",
+              "description": "Read message history in public Slack channels.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive",
+              "requires": [
+                "channels:read"
+              ]
+            },
+            {
+              "id": "groups:read",
+              "label": "Private channels",
+              "description": "List private channels that the connected user can access.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "groups:history",
+              "label": "Private channel messages",
+              "description": "Read message history in private Slack channels.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive",
+              "requires": [
+                "groups:read"
+              ]
+            },
+            {
+              "id": "users:read",
+              "label": "User directory",
+              "description": "Read Slack user profiles and directory information.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "standard"
+            },
+            {
+              "id": "im:read",
+              "label": "Direct messages",
+              "description": "Read direct-message conversation metadata.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "im:history",
+              "label": "Direct message history",
+              "description": "Read direct-message history.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive",
+              "requires": [
+                "im:read"
+              ]
+            },
+            {
+              "id": "mpim:read",
+              "label": "Group direct messages",
+              "description": "Read group direct-message conversation metadata.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "mpim:history",
+              "label": "Group direct message history",
+              "description": "Read group direct-message history.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive",
+              "requires": [
+                "mpim:read"
+              ]
+            },
+            {
+              "id": "files:read",
+              "label": "Files",
+              "description": "Read files shared in Slack.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "reactions:read",
+              "label": "Reactions",
+              "description": "Read reactions on Slack messages.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "standard"
+            },
+            {
+              "id": "chat:write",
+              "label": "Send messages",
+              "description": "Send messages as the connected Slack user.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "im:write",
+              "label": "Send direct messages",
+              "description": "Send direct messages as the connected Slack user.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive",
+              "requires": [
+                "im:read"
+              ]
+            },
+            {
+              "id": "files:write",
+              "label": "Upload files",
+              "description": "Upload files to Slack.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "reactions:write",
+              "label": "Manage reactions",
+              "description": "Add and remove reactions on Slack messages.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "search:read",
+              "label": "Legacy message search",
+              "description": "Search messages with Slack's legacy search API.",
+              "required": false,
+              "defaultSelected": true,
+              "risk": "sensitive"
+            },
+            {
+              "id": "search:read.public",
+              "label": "Public message search",
+              "description": "Search public-channel messages with Slack Real-time Search.",
+              "required": false,
+              "defaultSelected": false,
+              "risk": "sensitive"
+            },
+            {
+              "id": "search:read.private",
+              "label": "Private message search",
+              "description": "Search private-channel messages with Slack Real-time Search.",
+              "required": false,
+              "defaultSelected": false,
+              "risk": "sensitive",
+              "requires": [
+                "search:read.public"
+              ]
+            }
+          ]
+        },
+        "requestedScopes": [
+          "channels:read",
+          "channels:history",
+          "chat:write",
+          "files:read",
+          "files:write",
+          "reactions:write"
+        ],
+        "effectiveScopes": [
+          "channels:read",
+          "channels:history",
+          "chat:write",
+          "files:read",
+          "files:write",
+          "reactions:write"
+        ],
+        "extra": {}
+      }
+    }
+  },
+  "startSlackGatewayRedirect": {
+    "request": {
+      "method": "POST",
+      "path": "/api/oauth/authorizations",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "service": "slack",
+        "connectionName": "ws-a-slack"
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 421,
+      "body": {
+        "authorizationUrl": "https://slack.com/oauth/v2_user/authorize?client_id=PLACEHOLDER_SLACK_CLIENT_ID&redirect_uri=https%3A%2F%2Fdeskmates-gateway.example.test%2Foperator%2Fintegrations%2Foauth%2Fcallback&response_type=code&state=a32276c9-0fe2-4051-aa8e-db7ae9b0bb47&scope=channels%3Aread%2Cchannels%3Ahistory%2Cchat%3Awrite%2Cfiles%3Aread%2Cfiles%3Awrite%2Creactions%3Awrite",
+        "state": "a32276c9-0fe2-4051-aa8e-db7ae9b0bb47"
+      }
+    }
+  },
+  "deleteSlackConfig": {
+    "request": {
+      "method": "DELETE",
+      "path": "/api/oauth/configs/slack",
+      "headers": {
+        "authorization": "Bearer 258f2f..."
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 38,
+      "body": {
+        "service": "slack",
+        "configured": false
+      }
+    }
+  }
+}

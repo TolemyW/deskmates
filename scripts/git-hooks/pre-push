@@ -1,0 +1,14 @@
+#!/bin/sh
+# Refuse a push to the public mirror while a tracked file contains a blocked identifier.
+# Install once per clone:  git config core.hooksPath scripts/git-hooks
+# Pushes to any other remote are not checked here; `npm test` covers them.
+remote="$1"
+url="$2"
+case "$remote" in
+  public) ;;
+  *) case "$url" in
+       *github.com[:/]TolemyW/deskmates*) ;;
+       *) exit 0 ;;
+     esac ;;
+esac
+exec node "$(git rev-parse --show-toplevel)/scripts/public-scan.mjs"

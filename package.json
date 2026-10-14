@@ -1,0 +1,47 @@
+{
+  "name": "deskmates",
+  "private": true,
+  "version": "0.0.0",
+  "license": "GPL-3.0-only",
+  "description": "Deskmates: self-hosted, always-on agents. A group of bots shares one sandboxed computer; a thin control plane schedules, approves and records every run.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": ["packages/*", "packages/channels/deskmates-agent-mcp"],
+  "scripts": {
+    "scenario": "node --import tsx scripts/scenarios/cli.ts",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "tsc -b packages/contracts packages/testkit packages/golden-site packages/gateway packages/sidecar packages/sandbox-docker packages/connector-postgres packages/channels packages/channels/deskmates-agent-mcp && tsc -b acceptance && npm run typecheck -w @deskmates/ui && npm run typecheck -w @deskmates/web",
+    "lint": "biome check .",
+    "docs:check": "node scripts/docs-consistency.mjs",
+    "format": "biome format --write .",
+    "test": "vitest run --exclude \"**/*.container.test.ts\" --exclude \"**/*.acceptance.test.ts\"",
+    "test:container": "vitest run .container.test.ts",
+    "test:container:smoke": "vitest run $(grep -Ev '^[[:space:]]*(#|$)' acceptance/t2-smoke.list)",
+    "test:acceptance": "vitest run .acceptance.test.ts",
+    "evals": "tsx evals/run.ts",
+    "replay": "tsx --tsconfig evals/tsconfig.json evals/replay.ts",
+    "compare": "tsx --tsconfig evals/tsconfig.json evals/compare.ts",
+    "power": "tsx --tsconfig evals/tsconfig.json evals/power.ts",
+    "delegation-metrics": "tsx --tsconfig evals/tsconfig.json evals/delegation-metrics.ts",
+    "golden-site": "npm run serve -w packages/golden-site",
+    "dev:gateway": "npm run dev -w packages/gateway",
+    "auth": "node scripts/auth-cli.mjs",
+    "dev:web": "npm run dev -w packages/web",
+    "dev:ui-demo": "node --import tsx scripts/ui-demo.ts",
+    "ui:screenshots": "node scripts/ui-screenshots.mjs",
+    "image:workspace": "bash scripts/build-workspace-image.sh",
+    "image:golden-site": "bash scripts/build-golden-site-image.sh",
+    "spike:s0": "bash scripts/run-s0-spike.sh",
+    "dev:ui": "npm run dev -w @deskmates/ui",
+    "build:ui-studio": "npm run build:studio -w @deskmates/ui"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.20.4",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

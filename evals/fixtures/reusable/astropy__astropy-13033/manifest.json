@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "caseId": "astropy__astropy-13033",
+  "role": "development",
+  "status": "needs_adaptation",
+  "referenceGate": "Adapted-environment gold resolved, inert diff unresolved with the exact same image ID; literal empty patch ungraded. See Task A receipt for caveats.",
+  "source": {
+    "dataset": "princeton-nlp/SWE-bench_Verified",
+    "datasetRevision": "c104f840cc67f8b6eec6f759ebc8b2693d585d4a",
+    "split": "test",
+    "rowId": "astropy__astropy-13033",
+    "parquetPath": "data/test-00000-of-00001.parquet",
+    "parquetSha256": "a45b1fe4e2f0c8390b2b2938ac83e92ed5979000856808f3679c07812e9e6dcd",
+    "repository": "https://github.com/astropy/astropy",
+    "baseCommit": "298ccb478e6bf092953bca67a3d29dc6c35f6752",
+    "environmentSetupCommit": "298ccb478e6bf092953bca67a3d29dc6c35f6752",
+    "version": "4.3"
+  },
+  "harness": {
+    "repository": "https://github.com/SWE-bench/SWE-bench",
+    "commit": "02e7a74ffd0b707aab73d203fe87bdc7c76afc8e",
+    "entrypoint": "swebench eval with --task-repo for gold and inert controls; literal empty-patch control is skipped by the harness",
+    "taskRepoCommit": "3d07b464b7b311a0cbfb5ed5b2d8a3b96f84a33d",
+    "taskRepoCompatibility": "All 8 comparisons passed on pinned row and task repo: ID, base/environment commits, version, both test lists, gold and test patch bytes",
+    "datasetImport": "local evaluator-only case.json containing the exact pinned dataset row",
+    "referenceTests": ["astropy/timeseries/tests/test_sampled.py::test_required_columns"],
+    "passToPassCount": 20
+  },
+  "platform": {
+    "host": "testbox",
+    "os": "Linux",
+    "architecture": "x86_64",
+    "dockerVersion": "26.1.4",
+    "baseImage": "docker.io/library/ubuntu:jammy@sha256:b8b6ee6aa931ecd9d0d952abc34dc0e5f7c6a30c6bb71b079fe399fde0329c02",
+    "imageId": "sha256:677b5adf3e9eb9746aeea7f74c6707681246e0e6de4cb99c2e47519960f9b1c2",
+    "imageDigest": null,
+    "dockerfileAdaptation": "One-line PIP_INDEX_URL transport mirror; official Dockerfile SHA-256 47c355f5324d17b9bc811168e407be2f033f8c59897e9ccb0634b9887f5b1296; adapted SHA-256 5d446aee703e6a8415756d7201937d44600e887ea084665ec0201c1b55123dc5",
+    "pythonDependencies": "Resolved after install in evaluator-only pip-freeze.txt and pip-install-report.json; 74 of 75 report items carry archive hashes. Initial requirements were not pre-locked.",
+    "pipInstallReportSha256": "7b7470b2c4d206e9f31f24129700d1e106c5d2faaf4e5de16f39a3527fdaec48",
+    "pipIndex": "https://mirrors.aliyun.com/pypi/simple"
+  },
+  "licenses": {
+    "harness": "MIT, SWE-bench repository LICENSE",
+    "astropySource": "BSD 3-Clause style, Astropy LICENSE.rst at base commit; retain attribution and notice for redistribution",
+    "datasetRow": "No separate license declaration in the pinned Princeton-NLP Verified dataset card/metadata; upstream SWE-bench repository says MIT for its work, but its scope over this hosted row is not explicit. Internal private evaluation only pending rights clarification.",
+    "redistribution": "Do not redistribute the row, gold patch, test patch, checkout, or images from this fixture without separate review"
+  },
+  "agentVisible": {
+    "issueText": "agent-issue.md is byte-identical to problem_statement extracted from the pinned evaluator Parquet row",
+    "issueSha256": "a295c83e68ff62290947b0796b75659b94621b7f2340d6f0055512d04be3f1d1",
+    "checkout": "Astropy at baseCommit",
+    "egress": "Undecided; freeze an allowlist before a Deskmates trial"
+  },
+  "evaluatorOnly": {
+    "manifestBotMountable": false,
+    "assets": [
+      "full dataset row",
+      "gold patch",
+      "test patch",
+      "FAIL_TO_PASS and PASS_TO_PASS lists",
+      "official harness logs and reports"
+    ],
+    "location": "/home/owner/agent_workspace/deskmates-reusable-evals/astropy-13033-20260925/private and SWE-bench/logs/evaluation",
+    "mountedInBotWorkspace": false
+  },
+  "controls": ["gold", "literal-empty-patch-no-change", "behavior-preserving-inert-diff"],
+  "rowSha256": "bcd91be26999bd7edc182a2f125ad8875346345371444a664b407a07e634d106",
+  "goldPatchSha256": "7de34e6ed106dd91f81473f3646ed1340692a28c437324bf78adaf093d2c0c8d",
+  "reset": "Fresh Astropy base checkout for each later agent attempt; unique harness run_id for every prediction; evaluator cache and assets outside bot mount",
+  "agentBudget": null,
+  "budgetDecision": "Owner decision required before any real Deskmates model attempt"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "ws-galaxy",
+  "name": "Galaxy ops",
+  "sandboxProvider": "docker",
+  "status": "ready",
+  "probe": {
+    "url": "http://golden.test/dashboard",
+    "expectText": "Signed in as ops@galaxy.test"
+  },
+  "egressAllowlist": ["golden.test", "*.galaxy.test"],
+  "createdAt": "2026-09-21T08:00:00.000Z"
+}

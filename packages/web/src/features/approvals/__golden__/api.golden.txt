@@ -1,0 +1,282 @@
+{
+  "decideApproval": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/approvals/apr%2F1/decide",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "decision": "allow_once"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/approvals/apr%2F1/decide failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "getApproval": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/approvals/apr%2F1",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<approval>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/approvals/apr%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "getAutoApproval": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/workspaces/ws%2F1/auto-approval",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/workspaces/ws%2F1/auto-approval failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listApprovals": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/approvals?status=pending&threadId=thr%2F1",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<approvals>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/approvals?status=pending&threadId=thr%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listPendingApprovalsPage": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/approvals?status=pending&cursor=c%2F1&limit=50",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "approvals": "<approvals>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/approvals?status=pending&cursor=c%2F1&limit=50 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "setAutoApproval": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/workspaces/ws%2F1/auto-approval",
+        "method": "PUT",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "enabled": true
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "PUT /api/workspaces/ws%2F1/auto-approval failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  }
+}

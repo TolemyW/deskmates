@@ -1,0 +1,1155 @@
+{
+  "addThreadMembers": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1/members",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "botIds": [
+            "bot/1",
+            "bot_2"
+          ]
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/threads/thr%2F1/members failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "cancelRound": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1/rounds/msg_1/cancel",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {},
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/threads/thr%2F1/rounds/msg_1/cancel failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "createThread": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "workspaceId": "ws/1",
+          "botIds": [
+            "bot/1"
+          ]
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/threads failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "getThread": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/threads/thr%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listHandoffs": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1/activity?cursor=c%2F1",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/threads/thr%2F1/activity?cursor=c%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listMessageSlice": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1/messages?beforeSeq=51&limit=50",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/threads/thr%2F1/messages?beforeSeq=51&limit=50 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listMessages": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1/messages?afterSeq=7",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<messages>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/threads/thr%2F1/messages?afterSeq=7 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listRounds": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1/rounds?limit=5",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/threads/thr%2F1/rounds?limit=5 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listThreadPage": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads?workspaceId=ws%2F1&limit=50&cursor=c%2F1&q=launch",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/threads?workspaceId=ws%2F1&limit=50&cursor=c%2F1&q=launch failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listThreads": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<threads>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/threads failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "pinThread": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1/pin",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {},
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<pin>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/threads/thr%2F1/pin failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "postMessage": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1/messages",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "body": "hello @Ada"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/threads/thr%2F1/messages failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "readHandoffs": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1/activity/read",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "through": 12
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/threads/thr%2F1/activity/read failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "removeThreadMember": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1/members/bot%2F1",
+        "method": "DELETE",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "DELETE /api/threads/thr%2F1/members/bot%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "resolvePrivateChat": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/bots/bot%2F1/private-chat",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {},
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/bots/bot%2F1/private-chat failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "retryBotWelcome": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/bots/bot%2F1/welcome",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {},
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/bots/bot%2F1/welcome failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "retryRoundMember": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1/rounds/msg_1/members/bot%2F1/retry",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {},
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/threads/thr%2F1/rounds/msg_1/members/bot%2F1/retry failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "unpinThread": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/threads/thr%2F1/pin",
+        "method": "DELETE",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "DELETE /api/threads/thr%2F1/pin failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  }
+}

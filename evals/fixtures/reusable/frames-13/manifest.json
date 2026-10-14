@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "caseId": "FRAMES-13",
+  "role": "research",
+  "status": "needs_citation_calibration_and_browser_adapter",
+  "protocol": "Deskmates FRAMES-derived frozen-corpus protocol; not a live-web FRAMES score",
+  "source": {
+    "dataset": "google/frames-benchmark",
+    "revision": "58d9fb6330f3ab1316d1eca12e5e8ef23dcc22ef",
+    "split": "test",
+    "path": "test.tsv",
+    "tsvSha256": "4255093c93b595b5b04c7c8dde290b48ec87d72ca0fb0b760d9dd02740d669ff",
+    "rowField": "Unnamed: 0 (blank header in raw TSV)",
+    "rowId": "13",
+    "canonicalRowSha256": "ee31d4b76c0ab2f0a2f46a31cbdcee356977ad847f37183efe722cf08babcd88",
+    "privateRowFileSha256": "2b31b2ef5db861b637fdba305a4d3657b5855a9f32f8bcc2e57aa0c2a09bca64"
+  },
+  "platform": {
+    "host": "testbox",
+    "os": "Linux",
+    "architecture": "x86_64",
+    "browserCorpusImageDigest": null,
+    "dependencyInventory": "Python 3 standard library used for static preflight; browser-serving adapter pending"
+  },
+  "licenses": {
+    "dataset": "Apache-2.0 in Google FRAMES dataset card",
+    "snapshots": "Wikipedia text CC BY-SA 4.0; retain page title, exact revision URL, attribution and terms",
+    "redistribution": "Private pilot only; public corpus distribution needs a separate attribution/license review"
+  },
+  "agentVisible": {
+    "issueFile": "agent-issue.md",
+    "issueSha256": "89f010833a122f91c61f811385cbeac4f52967b2007114d76302d4e15736a97f",
+    "frozenCorpus": "Browser-accessible snapshot adapter pending; only source page text/attribution should be served",
+    "egress": "Deny live web during frozen-corpus trial; exact corpus-host allowlist pending"
+  },
+  "evaluatorOnly": {
+    "location": "/home/owner/agent_workspace/deskmates-reusable-evals/frames-20260925/private/prepared",
+    "mountedInBotWorkspace": false,
+    "assets": [
+      "row-13.json including Answer and source list",
+      "snapshot-receipt.json",
+      "frozen source pages",
+      "grader controls",
+      "human citation review"
+    ],
+    "snapshotReceiptSha256": "954061d0f249b96b340b95a4d2ed5c85383bc765f296b80da93f7e3e37288269",
+    "requiredHops": [
+      "identify Kingsolver's missionary-family novel",
+      "identify its Belgian Congo setting",
+      "verify the colony's independence year"
+    ],
+    "sourceRevisions": {
+      "barbara-kingsolver": {
+        "revisionId": 1371367589,
+        "contentSha256": "24a667cdfebf27a4a9a9ae381849e75fdaea2b46e7b0df9cb391cc64df32b7dc"
+      },
+      "the-poisonwood-bible": {
+        "revisionId": 1356679475,
+        "contentSha256": "1b9b8b2fa3f4bd10854add807fd09769a757d7ffd69ea774dca677cfd8a62ea1"
+      },
+      "belgian-congo": {
+        "revisionId": 1375469706,
+        "contentSha256": "4cf5ab083af4ab4cda6e67b3125860dc2a48c89fff620007b491cd343457f8af"
+      }
+    }
+  },
+  "controls": [
+    "reference answer and page coverage",
+    "wrong answer",
+    "unrelated citation",
+    "missing answer",
+    "missing or changed snapshot returns unknown",
+    "two-reviewer semantic-support calibration pending"
+  ],
+  "reset": "Serve exact frozen revisions from a clean corpus instance; preserve page hashes and browser trace; private answer/source list never enters bot mount",
+  "agentBudget": null
+}

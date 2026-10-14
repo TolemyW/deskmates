@@ -1,0 +1,10 @@
+#!/bin/sh
+# Container health: the shared Chromium answers on CDP and noVNC answers on 6080.
+curl --max-filesize 102400 -fsS --max-time 3 http://127.0.0.1:9222/json/version >/dev/null || exit 1
+curl --max-filesize 102400 -fsS --max-time 3 -o /dev/null http://127.0.0.1:6080/vnc.html || exit 2
+if [ "${DESKMATES_DESKTOP_MODE:-}" = "shared-monitors-v1" ]; then
+  for port in 6081 6082 6083 6084 6085 6086; do
+    curl --max-filesize 102400 -fsS --max-time 3 -o /dev/null "http://127.0.0.1:$port/vnc.html" || exit 3
+  done
+fi
+exit 0

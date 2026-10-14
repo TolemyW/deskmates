@@ -1,0 +1,24 @@
+{"section":"seed","request":"GET /api/bots/bot_0002/screen","status":200,"json":{"botId":"bot_0002","workspaceId":"ws_0001","state":"stopped","humanHeld":false}}
+{"section":"seed","request":"GET /api/bots/bot_0003/screen","status":200,"json":{"botId":"bot_0003","workspaceId":"ws_0001","state":"stopped","humanHeld":false}}
+{"section":"seed","request":"GET /api/bots/bot_0004/screen","status":200,"json":{"botId":"bot_0004","workspaceId":"ws_0001","state":"stopped","humanHeld":false}}
+{"section":"seed","request":"GET /api/bots/bot_001r/screen","status":200,"json":{"botId":"bot_001r","workspaceId":"ws_001q","state":"stopped","humanHeld":false}}
+{"section":"seed","request":"GET /api/bots/bot_001x/screen","status":200,"json":{"botId":"bot_001x","workspaceId":"ws_001w","state":"stopped","humanHeld":false}}
+{"section":"seed","request":"GET /api/bots/bot_001y/screen","status":200,"json":{"botId":"bot_001y","workspaceId":"ws_001w","state":"stopped","humanHeld":false}}
+{"section":"seed","request":"GET /api/bots/bot_001z/screen","status":200,"json":{"botId":"bot_001z","workspaceId":"ws_001w","state":"stopped","humanHeld":false}}
+{"section":"seed","request":"GET /api/bots/bot_0020/screen","status":200,"json":{"botId":"bot_0020","workspaceId":"ws_001w","state":"stopped","humanHeld":false}}
+{"section":"session","request":"POST /api/workspaces/ws_0001/takeover","status":200,"body":{},"json":{"browserLock":{"workspaceId":"ws_0001","holderKind":"human","acquiredAt":"2026-10-12T09:02:10.000Z"}}}
+{"section":"session","request":"GET /api/bots/bot_0002/screen","status":200,"json":{"botId":"bot_0002","workspaceId":"ws_0001","state":"stopped","humanHeld":true}}
+{"section":"session","request":"POST /api/bots/bot_0002/screen/start","status":200,"body":{},"json":{"botId":"bot_0002","workspaceId":"ws_0001","state":"unavailable","humanHeld":true}}
+{"section":"session","request":"POST /api/bots/bot_0002/screen/access","status":409,"body":{},"json":{"code":"conflict","message":"Desktops need a real workspace container; this demo has none.","details":{}}}
+{"section":"session","request":"POST /api/screen-access/acc_1/close","status":200,"body":{},"json":{"closed":true}}
+{"section":"session","request":"POST /api/workspaces/ws_0001/takeover/open-screen","status":503,"body":{},"json":{"code":"sandbox_unavailable","message":"No screen in the demo","details":{}}}
+{"section":"session","request":"POST /api/workspaces/ws_0001/handback","status":200,"body":{},"json":{"released":true}}
+{"section":"after session","request":"GET /api/bots/bot_0002/screen","status":200,"json":{"botId":"bot_0002","workspaceId":"ws_0001","state":"unavailable","humanHeld":false}}
+{"section":"after session","request":"GET /api/bots/bot_0003/screen","status":200,"json":{"botId":"bot_0003","workspaceId":"ws_0001","state":"stopped","humanHeld":false}}
+{"section":"after session","request":"GET /api/bots/bot_0004/screen","status":200,"json":{"botId":"bot_0004","workspaceId":"ws_0001","state":"stopped","humanHeld":false}}
+{"section":"after session","request":"GET /api/bots/bot_001r/screen","status":200,"json":{"botId":"bot_001r","workspaceId":"ws_001q","state":"stopped","humanHeld":false}}
+{"section":"after session","request":"GET /api/bots/bot_001x/screen","status":200,"json":{"botId":"bot_001x","workspaceId":"ws_001w","state":"stopped","humanHeld":false}}
+{"section":"after session","request":"GET /api/bots/bot_001y/screen","status":200,"json":{"botId":"bot_001y","workspaceId":"ws_001w","state":"stopped","humanHeld":false}}
+{"section":"after session","request":"GET /api/bots/bot_001z/screen","status":200,"json":{"botId":"bot_001z","workspaceId":"ws_001w","state":"stopped","humanHeld":false}}
+{"section":"after session","request":"GET /api/bots/bot_0020/screen","status":200,"json":{"botId":"bot_0020","workspaceId":"ws_001w","state":"stopped","humanHeld":false}}
+{"section":"after session","request":"GET /api/bots/bot_003i/screen","status":200,"json":{"botId":"bot_003i","workspaceId":"ws_0001","state":"stopped","humanHeld":false}}

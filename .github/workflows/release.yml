@@ -1,0 +1,208 @@
+# A semver tag `vX.Y.Z` becomes a release: the workspace BASE image (images/workspace-base:
+# desktop, browser, SDK, MCP, CLI, tools) built for linux/amd64 and pushed to GHCR; then a GitHub
+# release whose release-manifest.json names
+# the commit and the base by registry digest and image ID. The base is the only part that needs package registries; the app
+# layer (images/workspace) and the egress proxy build offline from the release source on the
+# target host. The content-addressed base tag is resolved before building, so an unchanged base
+# reuses the existing registry manifest instead of overwriting it with a new config digest.
+# Nothing is deployed from here: scripts/stable/ship.sh and stable.sh do that
+# (docs/runbooks/stable-release.md).
+#
+# No test gate runs here (owner decision 2026-10-13: package first, test where it is deployed).
+# The release is tested on the target host before activation: `stable.sh verify` runs T0/T1 and
+# then T2 against the release's own images, and `activate` refuses a release that has not passed.
+# ci.yml stays available by hand (workflow_dispatch) for anyone who wants an online run.
+name: release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+jobs:
+  # Publish needs the base.
+  base:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      content_tag: ${{ steps.tags.outputs.base }}
+      ref: ${{ steps.config.outputs.ref }}
+      digest: ${{ steps.config.outputs.digest }}
+      image_id: ${{ steps.config.outputs.image_id }}
+      app_layer: ${{ steps.smoke.outputs.result }}
+    steps:
+      # Shallow: the smoke decision below fetches the one earlier tag it compares against.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - id: tags
+        run: |
+          base="$(node scripts/image-tag.mjs base --arch amd64)"
+          {
+            echo "base=$base"
+            echo "base_suffix=${base#*:}"
+            echo "registry=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: existing
+        name: Resolve existing content-addressed base
+        env:
+          IMAGE_TAG: ${{ steps.tags.outputs.registry }}/deskmates-workspace-base:${{ steps.tags.outputs.base_suffix }}
+        run: |
+          manifest="$RUNNER_TEMP/workspace-base-manifest.json"
+          if docker buildx imagetools inspect --raw "$IMAGE_TAG" >"$manifest" 2>/dev/null; then
+            digest="sha256:$(sha256sum "$manifest" | cut -d' ' -f1)"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "digest=$digest" >> "$GITHUB_OUTPUT"
+            echo "reusing $IMAGE_TAG@$digest"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "$IMAGE_TAG is absent; building it"
+          fi
+      # provenance/sbom off: one plain single-platform manifest, so the digest a host pulls is
+      # the image itself rather than an attestation index.
+      - id: base
+        if: steps.existing.outputs.exists != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: images/workspace-base
+          file: images/workspace-base/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.tags.outputs.registry }}/deskmates-workspace-base:${{ steps.tags.outputs.base_suffix }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=workspace-base
+          cache-to: type=gha,scope=workspace-base,mode=max
+      # The image ID a host sees after pulling or loading is the config digest.
+      - id: config
+        env:
+          REPOSITORY: ${{ steps.tags.outputs.registry }}/deskmates-workspace-base
+          EXISTING_DIGEST: ${{ steps.existing.outputs.digest }}
+          BUILT_DIGEST: ${{ steps.base.outputs.digest }}
+        run: |
+          digest="${EXISTING_DIGEST:-$BUILT_DIGEST}"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "bad base digest: $digest" >&2; exit 1; }
+          REF="$REPOSITORY@$digest"
+          id="$(docker buildx imagetools inspect --raw "$REF" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).config.digest))')"
+          [[ "$id" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "bad config digest: $id" >&2; exit 1; }
+          { echo "ref=$REF"; echo "digest=$digest"; echo "image_id=$id"; } >> "$GITHUB_OUTPUT"
+      # A published release's base job proved that its app layer builds on its base. When this
+      # release has the same base digest (from that release's manifest) and none of the app
+      # layer's source inputs changed since then (scripts/image-tag.mjs, the same list the image
+      # hash uses), this build would be the same one, so it is skipped together with the npm ci
+      # and tsc it needs. Caches cannot carry that proof: one written by a tag's run is not
+      # visible to the next tag's run.
+      - id: smoke
+        name: Decide whether the app layer needs a smoke build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_DIGEST: ${{ steps.config.outputs.digest }}
+        run: |
+          prev=""
+          for t in $(git ls-remote --tags --refs origin 'v*' | sed -n 's#.*refs/tags/##p' | sort -rV); do
+            [[ "$t" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+            [ "$t" = "$GITHUB_REF_NAME" ] && continue
+            [ "$(printf '%s\n%s\n' "$t" "$GITHUB_REF_NAME" | sort -V | tail -1)" = "$GITHUB_REF_NAME" ] || continue
+            if gh release view "$t" >/dev/null 2>&1; then prev="$t"; break; fi
+          done
+          why=""
+          if [ -z "$prev" ]; then
+            why="there is no earlier published release"
+          else
+            prev_digest="$(gh release download "$prev" --pattern release-manifest.json --output - |
+              jq -r '.base.digest // empty')" || prev_digest=""
+            if [ -z "$prev_digest" ] || [ "$prev_digest" != "$BASE_DIGEST" ]; then
+              why="the base ($BASE_DIGEST) is not the one $prev built on (${prev_digest:-unknown})"
+            elif ! git fetch -q --depth=1 --no-tags origin "+refs/tags/$prev:refs/tags/$prev"; then
+              why="$prev could not be fetched"
+            else
+              inputs="$(node scripts/image-tag.mjs workspace --source-inputs)"
+              [ -n "$inputs" ] || { echo "no app layer inputs listed" >&2; exit 1; }
+              # shellcheck disable=SC2086 # one repo path per line, none with spaces
+              git diff --quiet "$prev" "$GITHUB_SHA" -- $inputs || why="app layer inputs changed since $prev"
+            fi
+          fi
+          if [ -z "$why" ]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "result=unchanged since $prev" >> "$GITHUB_OUTPUT"
+            echo "app layer inputs and base unchanged since $prev, whose release built them; smoke build skipped"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "result=built on the base" >> "$GITHUB_OUTPUT"
+            echo "$why; smoke build runs"
+          fi
+      - if: steps.smoke.outputs.needed == 'true'
+        run: npm ci
+      # The app-layer smoke build below copies contracts/ and sidecar/ dist.
+      # testkit before sidecar: the sidecar's tests import it; a fresh checkout has no dist/.
+      - if: steps.smoke.outputs.needed == 'true'
+        run: npx tsc -b packages/contracts packages/testkit packages/sidecar
+      # Prove the offline app layer builds on exactly this base, unless the previous release did.
+      - if: steps.smoke.outputs.needed == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: images/workspace/Dockerfile
+          platforms: linux/amd64
+          push: false
+          build-args: BASE_IMAGE=${{ steps.config.outputs.ref }}
+
+  publish:
+    needs: base
+    if: >-
+      !cancelled() && needs.base.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write release-manifest.json
+        env:
+          VERSION: ${{ github.ref_name }}
+          REVISION: ${{ github.sha }}
+          CONTENT_TAG: ${{ needs.base.outputs.content_tag }}
+          REF: ${{ needs.base.outputs.ref }}
+          DIGEST: ${{ needs.base.outputs.digest }}
+          IMAGE_ID: ${{ needs.base.outputs.image_id }}
+          APP_LAYER: ${{ needs.base.outputs.app_layer }}
+        run: |
+          node -e '
+            const e = process.env;
+            const hex = /^sha256:[0-9a-f]{64}$/;
+            if (!hex.test(e.DIGEST) || !hex.test(e.IMAGE_ID)) throw new Error("bad base digest or image ID");
+            const manifest = {
+              schema: 2,
+              version: e.VERSION,
+              revision: e.REVISION,
+              platform: "linux/amd64",
+              base: { contentTag: e.CONTENT_TAG, ref: e.REF, digest: e.DIGEST, imageId: e.IMAGE_ID },
+              gates: {
+                ci: "not run online: T0/T1 and T2 run on the target host (stable.sh verify)",
+                appLayer: `passed: ${e.APP_LAYER}`,
+                t2: "pending: runs on the target host before activation",
+              },
+            };
+            require("node:fs").writeFileSync("release-manifest.json", JSON.stringify(manifest, null, 2) + "\n");
+          '
+          cat release-manifest.json
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-manifest.json \
+            --title "$GITHUB_REF_NAME" --notes-from-tag --verify-tag

@@ -1,0 +1,295 @@
+/* Application compositions built on the shared native theme.
+ * Scoped typography and dark field contrast follow owner review. */
+:root[data-theme="dark"]
+  :is(.app, .cost-rules-sheet)
+  :is([data-gb-ui="input"], [data-gb-ui="textarea"], [data-gb-ui="select"]) {
+  --field-background: var(--surface-secondary);
+  --field-border: color-mix(in oklab, var(--foreground) 24%, var(--surface));
+  --field-border-width: 1px;
+  --border-width-field: 1px;
+  --field-hover: var(--surface-tertiary);
+  --field-focus: var(--surface-secondary);
+  --field-border-hover: color-mix(in oklab, var(--foreground) 36%, var(--surface));
+  --field-border-focus: var(--accent);
+}
+.icon-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--default);
+  border-color: transparent;
+  color: var(--foreground);
+}
+.icon-button:hover {
+  background: var(--default-hover);
+}
+.message .approval-card {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+.avatar,
+.avatar.sm,
+.avatar.lg,
+.avatar.xl,
+.avatar.bot,
+.avatar.emoji,
+.bot-avatar {
+  border-radius: 50%;
+  font-weight: 500;
+}
+.avatar[data-fallback-color="accent"] {
+  background: var(--accent-soft);
+  color: var(--accent-soft-foreground);
+}
+.avatar[data-fallback-color="success"] {
+  background: var(--success-soft);
+  color: var(--success-soft-foreground);
+}
+.avatar[data-fallback-color="warning"] {
+  background: var(--warning-soft);
+  color: var(--warning-soft-foreground);
+}
+.avatar[data-fallback-color="danger"] {
+  background: var(--danger-soft);
+  color: var(--danger-soft-foreground);
+}
+.avatar[data-fallback-color="default"] {
+  background: var(--default-soft);
+  color: var(--default-soft-foreground);
+}
+.tasks-heading h1 {
+  font-size: var(--app-text-2xl);
+  font-weight: 600;
+  letter-spacing: -.7px;
+}
+.eyebrow {
+  font-size: var(--app-text-xs);
+  font-weight: 400;
+  letter-spacing: .04em;
+}
+.card:not([data-gb-ui]) {
+  padding: 24px;
+  border: 0;
+  border-radius: 24px;
+  box-shadow: var(--app-shadow-sm);
+}
+.app-tabs {
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--default);
+  gap: 4px;
+}
+.app-tabs button {
+  padding: 8px 16px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--app-text-base);
+}
+.app-tabs button.active {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: var(--app-shadow-sm);
+}
+.avatar.emoji {
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+}
+.avatar-glyph {
+  display: block;
+  width: 1em;
+  height: 1em;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: 0;
+  text-align: center;
+}
+th {
+  background: var(--default);
+  font-size: var(--app-text-base);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 14px 16px;
+}
+td {
+  padding: 16px;
+  background: var(--surface);
+}
+@media (max-width: 720px) {
+  .tasks-heading {
+    flex-wrap: wrap;
+  }
+}
+
+/*
+ * Shared frame for menu pages that do not need the whole work area (issue #49). Keep the root
+ * element, heading and actions in this one centered column. The deliberate full-width exceptions
+ * are Chats and Contacts (rail + detail), Files when its detail panel is present, and run detail
+ * traces. `page-container--narrow` is for form-heavy pages such as Account settings.
+ */
+.page-container.page-container {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1120px;
+  margin-inline: auto;
+}
+.page-container--narrow.page-container {
+  max-width: 760px;
+}
+
+/* Shared computer: a quiet library first, editing and audit tools on demand. */
+.workspace-screen {
+  width: 100%;
+  max-width: 1120px;
+  gap: 24px;
+  padding: 32px;
+}
+.workspace-screen .profile-header {
+  align-items: center;
+  gap: 16px;
+}
+.workspace-screen .profile-title {
+  gap: 8px;
+  min-width: 0;
+}
+.workspace-screen .profile-title h1 {
+  margin: 0;
+  font-size: var(--app-text-2xl);
+  font-weight: 600;
+}
+.workspace-screen .profile-title > p {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: 1.5;
+}
+.workspace-screen .workspace-intro {
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+@media (max-width: 720px) {
+  .workspace-screen {
+    padding: 20px 16px;
+    gap: 20px;
+  }
+  .workspace-screen .workspace-mark {
+    display: none;
+  }
+}
+
+#cost-activity-table th,
+#cost-activity-table td,
+#cost-activity-table code {
+  white-space: nowrap;
+}
+
+/* Shared semantic tables: layout only; surfaces and corners belong to the UI package. */
+[data-gb-ui="table"] .table-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+#cost-activity-table th:nth-child(n + 4),
+#cost-activity-table td:nth-child(n + 4) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keep glyphs centered independently of global button padding and text baselines. */
+.icon-button {
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.icon-button > svg {
+  display: block;
+}
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.account-notice {
+  color: var(--success);
+}
+.handoff-secret {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.credential-card .account-password-field label {
+  font-weight: inherit;
+}
+@media (max-width: 360px) {
+  [role="dialog"] > [role="separator"] {
+    display: none;
+  }
+}
+.workspace-trash-page .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.workspace-file-compact > svg {
+  margin-top: 12px;
+}
+.workspace-file-compact > button {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+.workspace-file-compact > p {
+  grid-column: 1 / -1;
+}
+
+/* Inspectable details take real layout space; confirmations still use the modal dialog. */
+.detail-layout {
+  display: flex;
+  height: 100dvh;
+  min-width: 0;
+  overflow: hidden;
+}
+.detail-pane-host {
+  display: none;
+  min-height: 0;
+}
+.detail-layout[data-docked="true"] > .detail-pane-host {
+  display: block;
+  flex-shrink: 0;
+  border-left: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+.detail-pane-host > .docked-detail {
+  position: relative;
+  inset: auto;
+  transform: none;
+  translate: none;
+  height: 100%;
+  max-height: 100%;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+@media (max-width: 720px) {
+  [role="dialog"] > .gb-resize-handle {
+    display: none;
+  }
+}
+/* Keep the content tree mounted when the responsive shell changes modality/portal. */
+.detail-pane-mount,
+.detail-pane-body {
+  display: contents;
+}
+.detail-drawer .detail-pane-body > h2 {
+  padding-right: 36px;
+  overflow-wrap: anywhere;
+}

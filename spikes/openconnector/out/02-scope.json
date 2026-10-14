@@ -1,0 +1,2803 @@
+{
+  "createWsA": {
+    "request": {
+      "method": "PUT",
+      "path": "/api/connections/gitea",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "authType": "api_key",
+        "connectionName": "ws-a",
+        "values": {
+          "apiKey": "fake-token-a",
+          "baseUrl": "http://gitea.spike.internal:8080"
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 264,
+      "body": {
+        "id": "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+        "service": "gitea",
+        "connectionName": "ws-a",
+        "authType": "api_key",
+        "configured": true,
+        "virtual": false,
+        "default": false,
+        "profile": {
+          "accountId": "gitea:gitea.spike.internal:8080:42",
+          "displayName": "Spike Bot",
+          "grantedScopes": []
+        }
+      }
+    }
+  },
+  "createWsB": {
+    "request": {
+      "method": "PUT",
+      "path": "/api/connections/gitea",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "authType": "api_key",
+        "connectionName": "ws-b",
+        "values": {
+          "apiKey": "fake-token-b",
+          "baseUrl": "http://gitea.spike.internal:8080"
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 264,
+      "body": {
+        "id": "20c84306-46a6-4c55-bb83-fc8221f03496",
+        "service": "gitea",
+        "connectionName": "ws-b",
+        "authType": "api_key",
+        "configured": true,
+        "virtual": false,
+        "default": false,
+        "profile": {
+          "accountId": "gitea:gitea.spike.internal:8080:42",
+          "displayName": "Spike Bot",
+          "grantedScopes": []
+        }
+      }
+    }
+  },
+  "nameCharset": {
+    "ws_01J9ZK.gitea-main": {
+      "status": 400,
+      "error": {
+        "code": "invalid_connection_name",
+        "message": "connectionName must start with a letter or digit, contain only letters, digits, underscores, or hyphens, and be at most 64 characters."
+      }
+    },
+    "ws/a/main": {
+      "status": 400,
+      "error": {
+        "code": "invalid_connection_name",
+        "message": "connectionName must start with a letter or digit, contain only letters, digits, underscores, or hyphens, and be at most 64 characters."
+      }
+    },
+    "ws:a:main": {
+      "status": 400,
+      "error": {
+        "code": "invalid_connection_name",
+        "message": "connectionName must start with a letter or digit, contain only letters, digits, underscores, or hyphens, and be at most 64 characters."
+      }
+    },
+    "WS A main": {
+      "status": 400,
+      "error": {
+        "code": "invalid_connection_name",
+        "message": "connectionName must start with a letter or digit, contain only letters, digits, underscores, or hyphens, and be at most 64 characters."
+      }
+    },
+    "x*80": {
+      "status": 400,
+      "error": {
+        "code": "invalid_connection_name",
+        "message": "connectionName must start with a letter or digit, contain only letters, digits, underscores, or hyphens, and be at most 64 characters."
+      }
+    }
+  },
+  "createWithComment": {
+    "request": {
+      "method": "POST",
+      "path": "/v1/connections/gitea/connect/api-key",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "apiKey": "fake-token-c",
+        "extra": {
+          "baseUrl": "http://gitea.spike.internal:8080"
+        },
+        "comment": "deskmates-workspace=ws-c"
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 373,
+      "body": {
+        "success": true,
+        "message": "OK",
+        "data": {
+          "id": "9a3ea2d2-dc2e-4faf-a51a-119cac903e0b",
+          "service": "gitea",
+          "status": "active",
+          "alias": "395ed659-abbf-4691-b6e3-9ad08fe8d9b1",
+          "authType": "api_key",
+          "displayName": "Spike Bot",
+          "accountLabel": "Spike Bot",
+          "isDefault": false,
+          "scopes": [],
+          "providerAccountId": "gitea:gitea.spike.internal:8080:42",
+          "comment": "deskmates-workspace=ws-c"
+        },
+        "meta": {}
+      }
+    }
+  },
+  "adminList": {
+    "request": {
+      "method": "GET",
+      "path": "/api/connections",
+      "headers": {
+        "authorization": "Bearer 258f2f..."
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 6643,
+      "body": [
+        {
+          "id": "appledb:default",
+          "service": "appledb",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "appledb:public",
+            "displayName": "AppleDB Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "arxiv:default",
+          "service": "arxiv",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "arxiv:public",
+            "displayName": "arXiv Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "biorxiv_medrxiv:default",
+          "service": "biorxiv_medrxiv",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "biorxiv_medrxiv:public",
+            "displayName": "bioRxiv and medRxiv Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "clinicaltrials_gov:default",
+          "service": "clinicaltrials_gov",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "clinicaltrials_gov:public",
+            "displayName": "ClinicalTrials.gov Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "crossref:default",
+          "service": "crossref",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "crossref:public",
+            "displayName": "Crossref Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "datacite:default",
+          "service": "datacite",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "datacite:public",
+            "displayName": "DataCite Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "dealnews:default",
+          "service": "dealnews",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "dealnews:public",
+            "displayName": "DealNews Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "docsend_2_pdf:default",
+          "service": "docsend_2_pdf",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "docsend_2_pdf:public",
+            "displayName": "Docsend2pdf Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "europe_pmc:default",
+          "service": "europe_pmc",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "europe_pmc:public",
+            "displayName": "Europe PMC Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "fundzwatch:default",
+          "service": "fundzwatch",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "fundzwatch:public",
+            "displayName": "FundzWatch Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "9a3ea2d2-dc2e-4faf-a51a-119cac903e0b",
+          "service": "gitea",
+          "connectionName": "395ed659-abbf-4691-b6e3-9ad08fe8d9b1",
+          "authType": "api_key",
+          "configured": true,
+          "virtual": false,
+          "default": false,
+          "profile": {
+            "accountId": "gitea:gitea.spike.internal:8080:42",
+            "displayName": "Spike Bot",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+          "service": "gitea",
+          "connectionName": "ws-a",
+          "authType": "api_key",
+          "configured": true,
+          "virtual": false,
+          "default": false,
+          "profile": {
+            "accountId": "gitea:gitea.spike.internal:8080:42",
+            "displayName": "Spike Bot",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "20c84306-46a6-4c55-bb83-fc8221f03496",
+          "service": "gitea",
+          "connectionName": "ws-b",
+          "authType": "api_key",
+          "configured": true,
+          "virtual": false,
+          "default": false,
+          "profile": {
+            "accountId": "gitea:gitea.spike.internal:8080:42",
+            "displayName": "Spike Bot",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "hackernews:default",
+          "service": "hackernews",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "hackernews:public",
+            "displayName": "Hacker News Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "indiegogo:default",
+          "service": "indiegogo",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "indiegogo:public",
+            "displayName": "Indiegogo Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "itunes_search:default",
+          "service": "itunes_search",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "itunes_search:public",
+            "displayName": "iTunes Search API Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "lacuna:default",
+          "service": "lacuna",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "lacuna:public",
+            "displayName": "Lacuna Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "linux_do:default",
+          "service": "linux_do",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "linux_do:public",
+            "displayName": "Linux DO Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "npm:default",
+          "service": "npm",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "npm:public",
+            "displayName": "npm Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "openfda:default",
+          "service": "openfda",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "openfda:public",
+            "displayName": "openFDA Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "openfootball_worldcup:default",
+          "service": "openfootball_worldcup",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "openfootball_worldcup:public",
+            "displayName": "OpenFootball World Cup Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "ossinsight:default",
+          "service": "ossinsight",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "ossinsight:public",
+            "displayName": "OSS Insight Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "osv:default",
+          "service": "osv",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "osv:public",
+            "displayName": "OSV Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "pubmed:default",
+          "service": "pubmed",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "pubmed:public",
+            "displayName": "PubMed Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "quickchart:default",
+          "service": "quickchart",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "quickchart:public",
+            "displayName": "QuickChart Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "who_gho:default",
+          "service": "who_gho",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "who_gho:public",
+            "displayName": "WHO Global Health Observatory Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "wttr_in:default",
+          "service": "wttr_in",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "wttr_in:public",
+            "displayName": "wttr.in Public",
+            "grantedScopes": []
+          }
+        }
+      ]
+    }
+  },
+  "programmaticList": {
+    "request": {
+      "method": "GET",
+      "path": "/v1/connections",
+      "headers": {
+        "authorization": "Bearer 258f2f..."
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 921,
+      "body": {
+        "success": true,
+        "message": "OK",
+        "data": [
+          {
+            "id": "9a3ea2d2-dc2e-4faf-a51a-119cac903e0b",
+            "service": "gitea",
+            "status": "active",
+            "alias": "395ed659-abbf-4691-b6e3-9ad08fe8d9b1",
+            "authType": "api_key",
+            "displayName": "Spike Bot",
+            "accountLabel": "Spike Bot",
+            "isDefault": false,
+            "scopes": [],
+            "providerAccountId": "gitea:gitea.spike.internal:8080:42",
+            "comment": "deskmates-workspace=ws-c"
+          },
+          {
+            "id": "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+            "service": "gitea",
+            "status": "active",
+            "alias": "ws-a",
+            "authType": "api_key",
+            "displayName": "Spike Bot",
+            "accountLabel": "Spike Bot",
+            "isDefault": false,
+            "scopes": [],
+            "providerAccountId": "gitea:gitea.spike.internal:8080:42",
+            "comment": null
+          },
+          {
+            "id": "20c84306-46a6-4c55-bb83-fc8221f03496",
+            "service": "gitea",
+            "status": "active",
+            "alias": "ws-b",
+            "authType": "api_key",
+            "displayName": "Spike Bot",
+            "accountLabel": "Spike Bot",
+            "isDefault": false,
+            "scopes": [],
+            "providerAccountId": "gitea:gitea.spike.internal:8080:42",
+            "comment": null
+          }
+        ],
+        "meta": {}
+      }
+    }
+  },
+  "ids": {
+    "idA": "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+    "idB": "20c84306-46a6-4c55-bb83-fc8221f03496"
+  },
+  "tokenA": {
+    "request": {
+      "method": "POST",
+      "path": "/api/runtime-tokens",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "name": "workspace-ws-a",
+        "allowedActions": [],
+        "blockedActions": [],
+        "allowedProxies": [],
+        "allowedConnections": [
+          "36a717f4-b0bb-4951-9f93-62e065fa0f7c"
+        ]
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 299,
+      "body": {
+        "token": "oct_5M...",
+        "record": {
+          "id": "6a0b0003-5972-4711-a87b-04bde57194ad",
+          "name": "workspace-ws-a",
+          "allowedActions": [],
+          "blockedActions": [],
+          "allowedProxies": [],
+          "allowedConnections": [
+            "36a717f4-b0bb-4951-9f93-62e065fa0f7c"
+          ],
+          "createdAt": "2026-09-29T11:50:09.234Z"
+        }
+      }
+    }
+  },
+  "tokenB": {
+    "request": {
+      "method": "POST",
+      "path": "/api/runtime-tokens",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "name": "workspace-ws-b",
+        "allowedActions": [],
+        "blockedActions": [],
+        "allowedProxies": [],
+        "allowedConnections": [
+          "20c84306-46a6-4c55-bb83-fc8221f03496"
+        ]
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 299,
+      "body": {
+        "token": "oct_XI...",
+        "record": {
+          "id": "e3af071c-9eef-46ca-bc12-94be28c01464",
+          "name": "workspace-ws-b",
+          "allowedActions": [],
+          "blockedActions": [],
+          "allowedProxies": [],
+          "allowedConnections": [
+            "20c84306-46a6-4c55-bb83-fc8221f03496"
+          ],
+          "createdAt": "2026-09-29T11:50:09.240Z"
+        }
+      }
+    }
+  },
+  "tokenCatalog": {
+    "request": {
+      "method": "POST",
+      "path": "/api/runtime-tokens",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "name": "catalog-unscoped",
+        "allowedActions": [],
+        "blockedActions": [],
+        "allowedProxies": []
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 263,
+      "body": {
+        "token": "oct_qC...",
+        "record": {
+          "id": "9ee67dd0-2bf4-4075-8adc-fa416c80160b",
+          "name": "catalog-unscoped",
+          "allowedActions": [],
+          "blockedActions": [],
+          "allowedProxies": [],
+          "allowedConnections": [],
+          "createdAt": "2026-09-29T11:50:09.246Z"
+        }
+      }
+    }
+  },
+  "mcpNoTokenAfterRuntimeToken": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18"
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list"
+      }
+    },
+    "response": {
+      "status": 401,
+      "contentType": "application/json",
+      "bytes": 85,
+      "mcpSessionId": null,
+      "body": {
+        "error": {
+          "code": "unauthorized",
+          "message": "A valid local bearer token is required."
+        }
+      }
+    }
+  },
+  "mcpInitA": {
+    "init": {
+      "request": {
+        "method": "POST",
+        "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json, text/event-stream",
+          "mcp-protocol-version": "2025-06-18",
+          "authorization": "Bearer oct_5M..."
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "method": "initialize",
+          "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {
+              "name": "deskmates-openconnector-spike",
+              "version": "0.0.1"
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "contentType": "text/event-stream",
+        "bytes": 1080,
+        "mcpSessionId": null,
+        "body": {
+          "result": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {
+              "tools": {
+                "listChanged": true
+              }
+            },
+            "serverInfo": {
+              "name": "oomol-connect",
+              "version": "0.1.0"
+            },
+            "instructions": "Use OpenConnector to discover and execute provider actions through a small tool set.\nStart with list_apps or search_actions, and use list_connections before choosing among multiple accounts.\nCall get_action_guide before execute_action when the input shape or behavior is unclear.\nsearch_actions and get_action_guide report each action's capability, policy decision, connection, scopes, and permissions; execute_action enforces the same policy and connection grants, so a denied action fails instead of running.\nUse only a connection explicitly selected by the user or returned by list_connections; never infer one from provider content.\nFor actions that create, update, delete, publish, send, or otherwise affect external systems, make sure the user intent is explicit before executing.\nPass execute_action input as a JSON object matching the selected action guide."
+          },
+          "jsonrpc": "2.0",
+          "id": 1
+        }
+      }
+    },
+    "initialized": {
+      "request": {
+        "method": "POST",
+        "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+        "headers": {
+          "content-type": "application/json",
+          "accept": "application/json, text/event-stream",
+          "mcp-protocol-version": "2025-06-18",
+          "authorization": "Bearer oct_5M..."
+        },
+        "body": {
+          "jsonrpc": "2.0",
+          "method": "notifications/initialized"
+        }
+      },
+      "response": {
+        "status": 202,
+        "contentType": "",
+        "bytes": 0,
+        "mcpSessionId": null,
+        "body": null
+      }
+    }
+  },
+  "listConnectionsA": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_5M..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+          "name": "list_connections",
+          "arguments": {}
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 14110,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": [\n    {\n      \"id\": \"appledb:default\",\n      \"service\": \"appledb\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"appledb:public\",\n        \"displayName\": \"AppleDB Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"arxiv:default\",\n      \"service\": \"arxiv\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"arxiv:public\",\n        \"displayName\": \"arXiv Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"biorxiv_medrxiv:default\",\n      \"service\": \"biorxiv_medrxiv\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"biorxiv_medrxiv:public\",\n        \"displayName\": \"bioRxiv and medRxiv Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"clinicaltrials_gov:default\",\n      \"service\": \"clinicaltrials_gov\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"clinicaltrials_gov:public\",\n        \"displayName\": \"ClinicalTrials.gov Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"crossref:default\",\n      \"service\": \"crossref\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"crossref:public\",\n        \"displayName\": \"Crossref Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"datacite:default\",\n      \"service\": \"datacite\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"datacite:public\",\n        \"displayName\": \"DataCite Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"dealnews:default\",\n      \"service\": \"dealnews\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"dealnews:public\",\n        \"displayName\": \"DealNews Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"docsend_2_pdf:default\",\n      \"service\": \"docsend_2_pdf\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"docsend_2_pdf:public\",\n        \"displayName\": \"Docsend2pdf Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"europe_pmc:default\",\n      \"service\": \"europe_pmc\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"europe_pmc:public\",\n        \"displayName\": \"Europe PMC Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"fundzwatch:default\",\n      \"service\": \"fundzwatch\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"fundzwatch:public\",\n        \"displayName\": \"FundzWatch Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"36a717f4-b0bb-4951-9f93-62e065fa0f7c\",\n      \"service\": \"gitea\",\n      \"connectionName\": \"ws-a\",\n      \"authType\": \"api_key\",\n      \"default\": false,\n      \"profile\": {\n        \"accountId\": \"gitea:gitea.spike.internal:8080:42\",\n        \"displayName\": \"Spike Bot\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"hackernews:default\",\n      \"service\": \"hackernews\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"hackernews:public\",\n        \"displayName\": \"Hacker News Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"indiegogo:default\",\n      \"service\": \"indiegogo\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"indiegogo:public\",\n        \"displayName\": \"Indiegogo Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"itunes_search:default\",\n      \"service\": \"itunes_search\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"itunes_search:public\",\n        \"displayName\": \"iTunes Search API Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"lacuna:default\",\n      \"service\": \"lacuna\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"lacuna:public\",\n        \"displayName\": \"Lacuna Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"linux_do:default\",\n      \"service\": \"linux_do\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"linux_do:public\",\n        \"displayName\": \"Linux DO Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"npm:default\",\n      \"service\": \"npm\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"npm:public\",\n        \"displayName\": \"npm Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"openfda:default\",\n      \"service\": \"openfda\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"openfda:public\",\n        \"displayName\": \"openFDA Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"openfootball_worldcup:default\",\n      \"service\": \"openfootball_worldcup\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"openfootball_worldcup:public\",\n        \"displayName\": \"OpenFootball World Cup Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"ossinsight:default\",\n      \"service\": \"ossinsight\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"ossinsight:public\",\n        \"displayName\": \"OSS Insight Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"osv:default\",\n      \"service\": \"osv\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"osv:public\",\n        \"displayName\": \"OSV Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"pubmed:default\",\n      \"service\": \"pubmed\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"pubmed:public\",\n        \"displayName\": \"PubMed Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"quickchart:default\",\n      \"service\": \"quickchart\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"quickchart:public\",\n        \"displayName\": \"QuickChart Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"who_gho:default\",\n      \"service\": \"who_gho\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"who_gho:public\",\n        \"displayName\": \"WHO Global Health Observatory Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"wttr_in:default\",\n      \"service\": \"wttr_in\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"wttr_in:public\",\n        \"displayName\": \"wttr.in Public\",\n        \"grantedScopes\": []\n      }\n    }\n  ]\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": [
+              {
+                "id": "appledb:default",
+                "service": "appledb",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "appledb:public",
+                  "displayName": "AppleDB Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "arxiv:default",
+                "service": "arxiv",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "arxiv:public",
+                  "displayName": "arXiv Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "biorxiv_medrxiv:default",
+                "service": "biorxiv_medrxiv",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "biorxiv_medrxiv:public",
+                  "displayName": "bioRxiv and medRxiv Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "clinicaltrials_gov:default",
+                "service": "clinicaltrials_gov",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "clinicaltrials_gov:public",
+                  "displayName": "ClinicalTrials.gov Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "crossref:default",
+                "service": "crossref",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "crossref:public",
+                  "displayName": "Crossref Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "datacite:default",
+                "service": "datacite",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "datacite:public",
+                  "displayName": "DataCite Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "dealnews:default",
+                "service": "dealnews",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "dealnews:public",
+                  "displayName": "DealNews Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "docsend_2_pdf:default",
+                "service": "docsend_2_pdf",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "docsend_2_pdf:public",
+                  "displayName": "Docsend2pdf Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "europe_pmc:default",
+                "service": "europe_pmc",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "europe_pmc:public",
+                  "displayName": "Europe PMC Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "fundzwatch:default",
+                "service": "fundzwatch",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "fundzwatch:public",
+                  "displayName": "FundzWatch Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+                "service": "gitea",
+                "connectionName": "ws-a",
+                "authType": "api_key",
+                "default": false,
+                "profile": {
+                  "accountId": "gitea:gitea.spike.internal:8080:42",
+                  "displayName": "Spike Bot",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "hackernews:default",
+                "service": "hackernews",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "hackernews:public",
+                  "displayName": "Hacker News Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "indiegogo:default",
+                "service": "indiegogo",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "indiegogo:public",
+                  "displayName": "Indiegogo Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "itunes_search:default",
+                "service": "itunes_search",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "itunes_search:public",
+                  "displayName": "iTunes Search API Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "lacuna:default",
+                "service": "lacuna",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "lacuna:public",
+                  "displayName": "Lacuna Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "linux_do:default",
+                "service": "linux_do",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "linux_do:public",
+                  "displayName": "Linux DO Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "npm:default",
+                "service": "npm",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "npm:public",
+                  "displayName": "npm Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "openfda:default",
+                "service": "openfda",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "openfda:public",
+                  "displayName": "openFDA Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "openfootball_worldcup:default",
+                "service": "openfootball_worldcup",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "openfootball_worldcup:public",
+                  "displayName": "OpenFootball World Cup Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "ossinsight:default",
+                "service": "ossinsight",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "ossinsight:public",
+                  "displayName": "OSS Insight Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "osv:default",
+                "service": "osv",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "osv:public",
+                  "displayName": "OSV Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "pubmed:default",
+                "service": "pubmed",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "pubmed:public",
+                  "displayName": "PubMed Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "quickchart:default",
+                "service": "quickchart",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "quickchart:public",
+                  "displayName": "QuickChart Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "who_gho:default",
+                "service": "who_gho",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "who_gho:public",
+                  "displayName": "WHO Global Health Observatory Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "wttr_in:default",
+                "service": "wttr_in",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "wttr_in:public",
+                  "displayName": "wttr.in Public",
+                  "grantedScopes": []
+                }
+              }
+            ]
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 2
+      }
+    }
+  },
+  "listConnectionsB": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_XI..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+          "name": "list_connections",
+          "arguments": {}
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 14110,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": [\n    {\n      \"id\": \"appledb:default\",\n      \"service\": \"appledb\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"appledb:public\",\n        \"displayName\": \"AppleDB Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"arxiv:default\",\n      \"service\": \"arxiv\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"arxiv:public\",\n        \"displayName\": \"arXiv Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"biorxiv_medrxiv:default\",\n      \"service\": \"biorxiv_medrxiv\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"biorxiv_medrxiv:public\",\n        \"displayName\": \"bioRxiv and medRxiv Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"clinicaltrials_gov:default\",\n      \"service\": \"clinicaltrials_gov\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"clinicaltrials_gov:public\",\n        \"displayName\": \"ClinicalTrials.gov Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"crossref:default\",\n      \"service\": \"crossref\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"crossref:public\",\n        \"displayName\": \"Crossref Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"datacite:default\",\n      \"service\": \"datacite\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"datacite:public\",\n        \"displayName\": \"DataCite Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"dealnews:default\",\n      \"service\": \"dealnews\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"dealnews:public\",\n        \"displayName\": \"DealNews Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"docsend_2_pdf:default\",\n      \"service\": \"docsend_2_pdf\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"docsend_2_pdf:public\",\n        \"displayName\": \"Docsend2pdf Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"europe_pmc:default\",\n      \"service\": \"europe_pmc\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"europe_pmc:public\",\n        \"displayName\": \"Europe PMC Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"fundzwatch:default\",\n      \"service\": \"fundzwatch\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"fundzwatch:public\",\n        \"displayName\": \"FundzWatch Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"20c84306-46a6-4c55-bb83-fc8221f03496\",\n      \"service\": \"gitea\",\n      \"connectionName\": \"ws-b\",\n      \"authType\": \"api_key\",\n      \"default\": false,\n      \"profile\": {\n        \"accountId\": \"gitea:gitea.spike.internal:8080:42\",\n        \"displayName\": \"Spike Bot\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"hackernews:default\",\n      \"service\": \"hackernews\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"hackernews:public\",\n        \"displayName\": \"Hacker News Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"indiegogo:default\",\n      \"service\": \"indiegogo\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"indiegogo:public\",\n        \"displayName\": \"Indiegogo Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"itunes_search:default\",\n      \"service\": \"itunes_search\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"itunes_search:public\",\n        \"displayName\": \"iTunes Search API Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"lacuna:default\",\n      \"service\": \"lacuna\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"lacuna:public\",\n        \"displayName\": \"Lacuna Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"linux_do:default\",\n      \"service\": \"linux_do\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"linux_do:public\",\n        \"displayName\": \"Linux DO Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"npm:default\",\n      \"service\": \"npm\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"npm:public\",\n        \"displayName\": \"npm Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"openfda:default\",\n      \"service\": \"openfda\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"openfda:public\",\n        \"displayName\": \"openFDA Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"openfootball_worldcup:default\",\n      \"service\": \"openfootball_worldcup\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"openfootball_worldcup:public\",\n        \"displayName\": \"OpenFootball World Cup Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"ossinsight:default\",\n      \"service\": \"ossinsight\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"ossinsight:public\",\n        \"displayName\": \"OSS Insight Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"osv:default\",\n      \"service\": \"osv\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"osv:public\",\n        \"displayName\": \"OSV Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"pubmed:default\",\n      \"service\": \"pubmed\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"pubmed:public\",\n        \"displayName\": \"PubMed Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"quickchart:default\",\n      \"service\": \"quickchart\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"quickchart:public\",\n        \"displayName\": \"QuickChart Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"who_gho:default\",\n      \"service\": \"who_gho\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"who_gho:public\",\n        \"displayName\": \"WHO Global Health Observatory Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"wttr_in:default\",\n      \"service\": \"wttr_in\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"wttr_in:public\",\n        \"displayName\": \"wttr.in Public\",\n        \"grantedScopes\": []\n      }\n    }\n  ]\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": [
+              {
+                "id": "appledb:default",
+                "service": "appledb",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "appledb:public",
+                  "displayName": "AppleDB Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "arxiv:default",
+                "service": "arxiv",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "arxiv:public",
+                  "displayName": "arXiv Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "biorxiv_medrxiv:default",
+                "service": "biorxiv_medrxiv",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "biorxiv_medrxiv:public",
+                  "displayName": "bioRxiv and medRxiv Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "clinicaltrials_gov:default",
+                "service": "clinicaltrials_gov",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "clinicaltrials_gov:public",
+                  "displayName": "ClinicalTrials.gov Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "crossref:default",
+                "service": "crossref",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "crossref:public",
+                  "displayName": "Crossref Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "datacite:default",
+                "service": "datacite",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "datacite:public",
+                  "displayName": "DataCite Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "dealnews:default",
+                "service": "dealnews",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "dealnews:public",
+                  "displayName": "DealNews Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "docsend_2_pdf:default",
+                "service": "docsend_2_pdf",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "docsend_2_pdf:public",
+                  "displayName": "Docsend2pdf Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "europe_pmc:default",
+                "service": "europe_pmc",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "europe_pmc:public",
+                  "displayName": "Europe PMC Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "fundzwatch:default",
+                "service": "fundzwatch",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "fundzwatch:public",
+                  "displayName": "FundzWatch Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "20c84306-46a6-4c55-bb83-fc8221f03496",
+                "service": "gitea",
+                "connectionName": "ws-b",
+                "authType": "api_key",
+                "default": false,
+                "profile": {
+                  "accountId": "gitea:gitea.spike.internal:8080:42",
+                  "displayName": "Spike Bot",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "hackernews:default",
+                "service": "hackernews",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "hackernews:public",
+                  "displayName": "Hacker News Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "indiegogo:default",
+                "service": "indiegogo",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "indiegogo:public",
+                  "displayName": "Indiegogo Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "itunes_search:default",
+                "service": "itunes_search",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "itunes_search:public",
+                  "displayName": "iTunes Search API Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "lacuna:default",
+                "service": "lacuna",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "lacuna:public",
+                  "displayName": "Lacuna Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "linux_do:default",
+                "service": "linux_do",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "linux_do:public",
+                  "displayName": "Linux DO Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "npm:default",
+                "service": "npm",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "npm:public",
+                  "displayName": "npm Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "openfda:default",
+                "service": "openfda",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "openfda:public",
+                  "displayName": "openFDA Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "openfootball_worldcup:default",
+                "service": "openfootball_worldcup",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "openfootball_worldcup:public",
+                  "displayName": "OpenFootball World Cup Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "ossinsight:default",
+                "service": "ossinsight",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "ossinsight:public",
+                  "displayName": "OSS Insight Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "osv:default",
+                "service": "osv",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "osv:public",
+                  "displayName": "OSV Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "pubmed:default",
+                "service": "pubmed",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "pubmed:public",
+                  "displayName": "PubMed Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "quickchart:default",
+                "service": "quickchart",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "quickchart:public",
+                  "displayName": "QuickChart Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "who_gho:default",
+                "service": "who_gho",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "who_gho:public",
+                  "displayName": "WHO Global Health Observatory Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "wttr_in:default",
+                "service": "wttr_in",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "wttr_in:public",
+                  "displayName": "wttr.in Public",
+                  "grantedScopes": []
+                }
+              }
+            ]
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 1
+      }
+    }
+  },
+  "listConnectionsAService": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_5M..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+          "name": "list_connections",
+          "arguments": {
+            "service": "gitea"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 776,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": [\n    {\n      \"id\": \"36a717f4-b0bb-4951-9f93-62e065fa0f7c\",\n      \"service\": \"gitea\",\n      \"connectionName\": \"ws-a\",\n      \"authType\": \"api_key\",\n      \"default\": false,\n      \"profile\": {\n        \"accountId\": \"gitea:gitea.spike.internal:8080:42\",\n        \"displayName\": \"Spike Bot\",\n        \"grantedScopes\": []\n      }\n    }\n  ]\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": [
+              {
+                "id": "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+                "service": "gitea",
+                "connectionName": "ws-a",
+                "authType": "api_key",
+                "default": false,
+                "profile": {
+                  "accountId": "gitea:gitea.spike.internal:8080:42",
+                  "displayName": "Spike Bot",
+                  "grantedScopes": []
+                }
+              }
+            ]
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 3
+      }
+    }
+  },
+  "executeAOwn": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_5M..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+          "name": "execute_action",
+          "arguments": {
+            "actionId": "gitea.get_current_user",
+            "connectionName": "ws-a",
+            "input": {}
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 1341,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"id\": 42,\n    \"login\": \"spike-bot\",\n    \"full_name\": \"Spike Bot\",\n    \"email\": \"spike-bot@gitea.spike.internal\",\n    \"html_url\": \"http://gitea.spike.internal:8080/spike-bot\",\n    \"avatar_url\": \"\"\n  },\n  \"executionId\": \"9ba9ed08-b61d-410b-85c7-4d782ee1b85c\",\n  \"auditPersisted\": true,\n  \"connection\": {\n    \"id\": \"36a717f4-b0bb-4951-9f93-62e065fa0f7c\",\n    \"service\": \"gitea\",\n    \"connectionName\": \"ws-a\",\n    \"authType\": \"api_key\",\n    \"default\": false,\n    \"profile\": {\n      \"accountId\": \"gitea:gitea.spike.internal:8080:42\",\n      \"displayName\": \"Spike Bot\",\n      \"grantedScopes\": []\n    }\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "id": 42,
+              "login": "spike-bot",
+              "full_name": "Spike Bot",
+              "email": "spike-bot@gitea.spike.internal",
+              "html_url": "http://gitea.spike.internal:8080/spike-bot",
+              "avatar_url": ""
+            },
+            "executionId": "9ba9ed08-b61d-410b-85c7-4d782ee1b85c",
+            "auditPersisted": true,
+            "connection": {
+              "id": "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+              "service": "gitea",
+              "connectionName": "ws-a",
+              "authType": "api_key",
+              "default": false,
+              "profile": {
+                "accountId": "gitea:gitea.spike.internal:8080:42",
+                "displayName": "Spike Bot",
+                "grantedScopes": []
+              }
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 4
+      }
+    }
+  },
+  "executeAOther": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_5M..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "tools/call",
+        "params": {
+          "name": "execute_action",
+          "arguments": {
+            "actionId": "gitea.get_current_user",
+            "connectionName": "ws-b",
+            "input": {}
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 478,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": false,\n  \"error\": {\n    \"code\": \"connection_not_allowed\",\n    \"message\": \"20c84306-46a6-4c55-bb83-fc8221f03496 connection is not granted to this runtime token.\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": false,
+            "error": {
+              "code": "connection_not_allowed",
+              "message": "20c84306-46a6-4c55-bb83-fc8221f03496 connection is not granted to this runtime token."
+            }
+          },
+          "isError": true
+        },
+        "jsonrpc": "2.0",
+        "id": 5
+      }
+    }
+  },
+  "executeANoName": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_5M..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 6,
+        "method": "tools/call",
+        "params": {
+          "name": "execute_action",
+          "arguments": {
+            "actionId": "gitea.get_current_user",
+            "input": {}
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 596,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": false,\n  \"error\": {\n    \"code\": \"connection_not_allowed\",\n    \"message\": \"The selected connection is not granted to this runtime token.\"\n  },\n  \"executionId\": \"da1e8fc0-0312-4205-b8b3-d83fe4cd0518\",\n  \"auditPersisted\": true\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": false,
+            "error": {
+              "code": "connection_not_allowed",
+              "message": "The selected connection is not granted to this runtime token."
+            },
+            "executionId": "da1e8fc0-0312-4205-b8b3-d83fe4cd0518",
+            "auditPersisted": true
+          },
+          "isError": true
+        },
+        "jsonrpc": "2.0",
+        "id": 6
+      }
+    }
+  },
+  "guideAOther": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_5M..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "gitea.get_current_user",
+            "connectionName": "ws-b"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 478,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": false,\n  \"error\": {\n    \"code\": \"connection_not_allowed\",\n    \"message\": \"20c84306-46a6-4c55-bb83-fc8221f03496 connection is not granted to this runtime token.\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": false,
+            "error": {
+              "code": "connection_not_allowed",
+              "message": "20c84306-46a6-4c55-bb83-fc8221f03496 connection is not granted to this runtime token."
+            }
+          },
+          "isError": true
+        },
+        "jsonrpc": "2.0",
+        "id": 7
+      }
+    }
+  },
+  "httpAOther": {
+    "request": {
+      "method": "POST",
+      "path": "/v1/actions/gitea.get_current_user",
+      "headers": {
+        "x-oo-connector-alias": "ws-b",
+        "content-type": "application/json",
+        "authorization": "Bearer oct_5M..."
+      },
+      "body": {
+        "input": {}
+      }
+    },
+    "response": {
+      "status": 403,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 284,
+      "body": {
+        "success": false,
+        "message": "20c84306-46a6-4c55-bb83-fc8221f03496 connection is not granted to this runtime token.",
+        "data": null,
+        "errorCode": "connection_not_allowed",
+        "meta": {
+          "executionId": "1b2d4c2d-861b-4f72-af23-8c137bf01668",
+          "actionId": "gitea.get_current_user",
+          "auditPersisted": true
+        }
+      }
+    }
+  },
+  "httpAppsA": {
+    "request": {
+      "method": "GET",
+      "path": "/v1/apps/services/gitea",
+      "headers": {
+        "authorization": "Bearer oct_5M..."
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 251,
+      "body": {
+        "success": true,
+        "message": "OK",
+        "data": [
+          {
+            "id": "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+            "service": "gitea",
+            "status": "active",
+            "alias": "ws-a",
+            "authType": "api_key",
+            "displayName": "Spike Bot",
+            "accountLabel": "Spike Bot",
+            "isDefault": false,
+            "scopes": []
+          }
+        ],
+        "meta": {}
+      }
+    }
+  },
+  "adminEndpointWithRuntimeToken": {
+    "request": {
+      "method": "GET",
+      "path": "/api/connections",
+      "headers": {
+        "authorization": "Bearer oct_5M..."
+      }
+    },
+    "response": {
+      "status": 401,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 85,
+      "body": {
+        "error": {
+          "code": "unauthorized",
+          "message": "A valid local bearer token is required."
+        }
+      }
+    }
+  },
+  "guideAUnconnectedService": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_5M..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 8,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "slack.post_message"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 430,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": false,\n  \"error\": {\n    \"code\": \"connection_not_allowed\",\n    \"message\": \"The selected connection is not granted to this runtime token.\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": false,
+            "error": {
+              "code": "connection_not_allowed",
+              "message": "The selected connection is not granted to this runtime token."
+            }
+          },
+          "isError": true
+        },
+        "jsonrpc": "2.0",
+        "id": 8
+      }
+    }
+  },
+  "searchAUnconnectedService": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_5M..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "method": "tools/call",
+        "params": {
+          "name": "search_actions",
+          "arguments": {
+            "query": "post message",
+            "service": "slack",
+            "limit": 1
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 4089,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": [\n    {\n      \"id\": \"slack.post_message\",\n      \"service\": \"slack\",\n      \"name\": \"post_message\",\n      \"description\": \"Post a Slack message. Use text for plain messages, or blocks for rich Block Kit layouts with text as fallback.\",\n      \"operationType\": \"write\",\n      \"capability\": {\n        \"operationType\": \"write\",\n        \"execution\": {\n          \"locallyExecutable\": true,\n          \"catalogOnly\": false,\n          \"requiredAuthTypes\": [\n            \"oauth2\",\n            \"api_key\"\n          ],\n          \"noAuthRunnable\": false,\n          \"needsCredential\": true\n        },\n        \"authTypes\": [\n          \"oauth2\",\n          \"api_key\"\n        ],\n        \"requiredScopes\": [\n          \"chat:write\"\n        ],\n        \"providerPermissions\": [],\n        \"policy\": {\n          \"allowed\": true,\n          \"checks\": []\n        }\n      },\n      \"inputSummary\": [\n        {\n          \"name\": \"channelId\",\n          \"required\": true,\n          \"type\": \"string\",\n          \"description\": \"The Slack conversation or channel ID.\"\n        },\n        {\n          \"name\": \"text\",\n          \"required\": false,\n          \"type\": \"string\",\n          \"description\": \"Plain text message content. When blocks are provided, Slack uses this as notification and accessibility fallback text.\"\n        },\n        {\n          \"name\": \"blocks\",\n          \"required\": false,\n          \"type\": \"array\",\n          \"description\": \"Slack Block Kit blocks to render in the message.\"\n        },\n        {\n          \"name\": \"attachments\",\n          \"required\": false,\n          \"type\": \"array\",\n          \"description\": \"Slack legacy attachments to include in the message.\"\n        },\n        {\n          \"name\": \"unfurlLinks\",\n          \"required\": false,\n          \"type\": \"boolean\",\n          \"description\": \"Whether Slack should unfurl links in the message.\"\n        },\n        {\n          \"name\": \"unfurlMedia\",\n          \"required\": false,\n          \"type\": \"boolean\",\n          \"description\": \"Whether Slack should unfurl media in the message.\"\n        },\n        {\n          \"name\": \"metadata\",\n          \"required\": false,\n          \"type\": \"object\",\n          \"description\": \"Slack message metadata to attach to the message.\"\n        }\n      ]\n    }\n  ]\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": [
+              {
+                "id": "slack.post_message",
+                "service": "slack",
+                "name": "post_message",
+                "description": "Post a Slack message. Use text for plain messages, or blocks for rich Block Kit layouts with text as fallback.",
+                "operationType": "write",
+                "capability": {
+                  "operationType": "write",
+                  "execution": {
+                    "locallyExecutable": true,
+                    "catalogOnly": false,
+                    "requiredAuthTypes": [
+                      "oauth2",
+                      "api_key"
+                    ],
+                    "noAuthRunnable": false,
+                    "needsCredential": true
+                  },
+                  "authTypes": [
+                    "oauth2",
+                    "api_key"
+                  ],
+                  "requiredScopes": [
+                    "chat:write"
+                  ],
+                  "providerPermissions": [],
+                  "policy": {
+                    "allowed": true,
+                    "checks": []
+                  }
+                },
+                "inputSummary": [
+                  {
+                    "name": "channelId",
+                    "required": true,
+                    "type": "string",
+                    "description": "The Slack conversation or channel ID."
+                  },
+                  {
+                    "name": "text",
+                    "required": false,
+                    "type": "string",
+                    "description": "Plain text message content. When blocks are provided, Slack uses this as notification and accessibility fallback text."
+                  },
+                  {
+                    "name": "blocks",
+                    "required": false,
+                    "type": "array",
+                    "description": "Slack Block Kit blocks to render in the message."
+                  },
+                  {
+                    "name": "attachments",
+                    "required": false,
+                    "type": "array",
+                    "description": "Slack legacy attachments to include in the message."
+                  },
+                  {
+                    "name": "unfurlLinks",
+                    "required": false,
+                    "type": "boolean",
+                    "description": "Whether Slack should unfurl links in the message."
+                  },
+                  {
+                    "name": "unfurlMedia",
+                    "required": false,
+                    "type": "boolean",
+                    "description": "Whether Slack should unfurl media in the message."
+                  },
+                  {
+                    "name": "metadata",
+                    "required": false,
+                    "type": "object",
+                    "description": "Slack message metadata to attach to the message."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 9
+      }
+    }
+  },
+  "updateTokenA": {
+    "request": {
+      "method": "PUT",
+      "path": "/api/runtime-tokens/6a0b0003-5972-4711-a87b-04bde57194ad",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "name": "workspace-ws-a",
+        "allowedActions": [],
+        "blockedActions": [],
+        "allowedProxies": [],
+        "allowedConnections": [
+          "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+          "9a3ea2d2-dc2e-4faf-a51a-119cac903e0b"
+        ]
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 309,
+      "body": {
+        "id": "6a0b0003-5972-4711-a87b-04bde57194ad",
+        "name": "workspace-ws-a",
+        "allowedActions": [],
+        "blockedActions": [],
+        "allowedProxies": [],
+        "allowedConnections": [
+          "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+          "9a3ea2d2-dc2e-4faf-a51a-119cac903e0b"
+        ],
+        "createdAt": "2026-09-29T11:50:09.234Z",
+        "lastUsedAt": "2026-09-29T11:50:09.350Z"
+      }
+    }
+  },
+  "listConnectionsAAfterUpdate": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_5M..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "tools/call",
+        "params": {
+          "name": "list_connections",
+          "arguments": {
+            "service": "gitea"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 1440,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": [\n    {\n      \"id\": \"9a3ea2d2-dc2e-4faf-a51a-119cac903e0b\",\n      \"service\": \"gitea\",\n      \"connectionName\": \"395ed659-abbf-4691-b6e3-9ad08fe8d9b1\",\n      \"authType\": \"api_key\",\n      \"default\": false,\n      \"profile\": {\n        \"accountId\": \"gitea:gitea.spike.internal:8080:42\",\n        \"displayName\": \"Spike Bot\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"36a717f4-b0bb-4951-9f93-62e065fa0f7c\",\n      \"service\": \"gitea\",\n      \"connectionName\": \"ws-a\",\n      \"authType\": \"api_key\",\n      \"default\": false,\n      \"profile\": {\n        \"accountId\": \"gitea:gitea.spike.internal:8080:42\",\n        \"displayName\": \"Spike Bot\",\n        \"grantedScopes\": []\n      }\n    }\n  ]\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": [
+              {
+                "id": "9a3ea2d2-dc2e-4faf-a51a-119cac903e0b",
+                "service": "gitea",
+                "connectionName": "395ed659-abbf-4691-b6e3-9ad08fe8d9b1",
+                "authType": "api_key",
+                "default": false,
+                "profile": {
+                  "accountId": "gitea:gitea.spike.internal:8080:42",
+                  "displayName": "Spike Bot",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+                "service": "gitea",
+                "connectionName": "ws-a",
+                "authType": "api_key",
+                "default": false,
+                "profile": {
+                  "accountId": "gitea:gitea.spike.internal:8080:42",
+                  "displayName": "Spike Bot",
+                  "grantedScopes": []
+                }
+              }
+            ]
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 10
+      }
+    }
+  },
+  "tokenAdopted": {
+    "request": {
+      "method": "POST",
+      "path": "/api/runtime-tokens",
+      "headers": {
+        "content-type": "application/json",
+        "authorization": "Bearer 258f2f..."
+      },
+      "body": {
+        "name": "workspace-ws-a-adopted",
+        "allowedActions": [
+          "gitea.*"
+        ],
+        "blockedActions": [],
+        "allowedProxies": [],
+        "allowedConnections": [
+          "36a717f4-b0bb-4951-9f93-62e065fa0f7c"
+        ]
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 316,
+      "body": {
+        "token": "oct_ll...",
+        "record": {
+          "id": "1aaabfbd-5cf1-4a54-a6cb-b511c8a558e1",
+          "name": "workspace-ws-a-adopted",
+          "allowedActions": [
+            "gitea.*"
+          ],
+          "blockedActions": [],
+          "allowedProxies": [],
+          "allowedConnections": [
+            "36a717f4-b0bb-4951-9f93-62e065fa0f7c"
+          ],
+          "createdAt": "2026-09-29T11:50:09.637Z"
+        }
+      }
+    }
+  },
+  "adoptedNoAuthExecute": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_ll..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+          "name": "execute_action",
+          "arguments": {
+            "actionId": "hackernews.get_item",
+            "input": {
+              "id": 1
+            }
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 598,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": false,\n  \"error\": {\n    \"code\": \"action_not_allowed\",\n    \"message\": \"hackernews.get_item is not included in the local action allowlist.\"\n  },\n  \"executionId\": \"04d23d14-5170-4768-b66e-3fe1143ede75\",\n  \"auditPersisted\": true\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": false,
+            "error": {
+              "code": "action_not_allowed",
+              "message": "hackernews.get_item is not included in the local action allowlist."
+            },
+            "executionId": "04d23d14-5170-4768-b66e-3fe1143ede75",
+            "auditPersisted": true
+          },
+          "isError": true
+        },
+        "jsonrpc": "2.0",
+        "id": 1
+      }
+    }
+  },
+  "adoptedGiteaExecute": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_ll..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+          "name": "execute_action",
+          "arguments": {
+            "actionId": "gitea.get_current_user",
+            "connectionName": "ws-a",
+            "input": {}
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 1341,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"id\": 42,\n    \"login\": \"spike-bot\",\n    \"full_name\": \"Spike Bot\",\n    \"email\": \"spike-bot@gitea.spike.internal\",\n    \"html_url\": \"http://gitea.spike.internal:8080/spike-bot\",\n    \"avatar_url\": \"\"\n  },\n  \"executionId\": \"02659ead-fd79-4bf8-90ba-8786f0cd049a\",\n  \"auditPersisted\": true,\n  \"connection\": {\n    \"id\": \"36a717f4-b0bb-4951-9f93-62e065fa0f7c\",\n    \"service\": \"gitea\",\n    \"connectionName\": \"ws-a\",\n    \"authType\": \"api_key\",\n    \"default\": false,\n    \"profile\": {\n      \"accountId\": \"gitea:gitea.spike.internal:8080:42\",\n      \"displayName\": \"Spike Bot\",\n      \"grantedScopes\": []\n    }\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "id": 42,
+              "login": "spike-bot",
+              "full_name": "Spike Bot",
+              "email": "spike-bot@gitea.spike.internal",
+              "html_url": "http://gitea.spike.internal:8080/spike-bot",
+              "avatar_url": ""
+            },
+            "executionId": "02659ead-fd79-4bf8-90ba-8786f0cd049a",
+            "auditPersisted": true,
+            "connection": {
+              "id": "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+              "service": "gitea",
+              "connectionName": "ws-a",
+              "authType": "api_key",
+              "default": false,
+              "profile": {
+                "accountId": "gitea:gitea.spike.internal:8080:42",
+                "displayName": "Spike Bot",
+                "grantedScopes": []
+              }
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 2
+      }
+    }
+  },
+  "adoptedListConnections": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_ll..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+          "name": "list_connections",
+          "arguments": {}
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 14110,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": [\n    {\n      \"id\": \"appledb:default\",\n      \"service\": \"appledb\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"appledb:public\",\n        \"displayName\": \"AppleDB Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"arxiv:default\",\n      \"service\": \"arxiv\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"arxiv:public\",\n        \"displayName\": \"arXiv Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"biorxiv_medrxiv:default\",\n      \"service\": \"biorxiv_medrxiv\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"biorxiv_medrxiv:public\",\n        \"displayName\": \"bioRxiv and medRxiv Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"clinicaltrials_gov:default\",\n      \"service\": \"clinicaltrials_gov\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"clinicaltrials_gov:public\",\n        \"displayName\": \"ClinicalTrials.gov Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"crossref:default\",\n      \"service\": \"crossref\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"crossref:public\",\n        \"displayName\": \"Crossref Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"datacite:default\",\n      \"service\": \"datacite\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"datacite:public\",\n        \"displayName\": \"DataCite Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"dealnews:default\",\n      \"service\": \"dealnews\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"dealnews:public\",\n        \"displayName\": \"DealNews Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"docsend_2_pdf:default\",\n      \"service\": \"docsend_2_pdf\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"docsend_2_pdf:public\",\n        \"displayName\": \"Docsend2pdf Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"europe_pmc:default\",\n      \"service\": \"europe_pmc\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"europe_pmc:public\",\n        \"displayName\": \"Europe PMC Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"fundzwatch:default\",\n      \"service\": \"fundzwatch\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"fundzwatch:public\",\n        \"displayName\": \"FundzWatch Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"36a717f4-b0bb-4951-9f93-62e065fa0f7c\",\n      \"service\": \"gitea\",\n      \"connectionName\": \"ws-a\",\n      \"authType\": \"api_key\",\n      \"default\": false,\n      \"profile\": {\n        \"accountId\": \"gitea:gitea.spike.internal:8080:42\",\n        \"displayName\": \"Spike Bot\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"hackernews:default\",\n      \"service\": \"hackernews\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"hackernews:public\",\n        \"displayName\": \"Hacker News Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"indiegogo:default\",\n      \"service\": \"indiegogo\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"indiegogo:public\",\n        \"displayName\": \"Indiegogo Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"itunes_search:default\",\n      \"service\": \"itunes_search\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"itunes_search:public\",\n        \"displayName\": \"iTunes Search API Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"lacuna:default\",\n      \"service\": \"lacuna\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"lacuna:public\",\n        \"displayName\": \"Lacuna Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"linux_do:default\",\n      \"service\": \"linux_do\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"linux_do:public\",\n        \"displayName\": \"Linux DO Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"npm:default\",\n      \"service\": \"npm\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"npm:public\",\n        \"displayName\": \"npm Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"openfda:default\",\n      \"service\": \"openfda\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"openfda:public\",\n        \"displayName\": \"openFDA Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"openfootball_worldcup:default\",\n      \"service\": \"openfootball_worldcup\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"openfootball_worldcup:public\",\n        \"displayName\": \"OpenFootball World Cup Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"ossinsight:default\",\n      \"service\": \"ossinsight\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"ossinsight:public\",\n        \"displayName\": \"OSS Insight Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"osv:default\",\n      \"service\": \"osv\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"osv:public\",\n        \"displayName\": \"OSV Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"pubmed:default\",\n      \"service\": \"pubmed\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"pubmed:public\",\n        \"displayName\": \"PubMed Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"quickchart:default\",\n      \"service\": \"quickchart\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"quickchart:public\",\n        \"displayName\": \"QuickChart Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"who_gho:default\",\n      \"service\": \"who_gho\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"who_gho:public\",\n        \"displayName\": \"WHO Global Health Observatory Public\",\n        \"grantedScopes\": []\n      }\n    },\n    {\n      \"id\": \"wttr_in:default\",\n      \"service\": \"wttr_in\",\n      \"connectionName\": \"default\",\n      \"authType\": \"no_auth\",\n      \"default\": true,\n      \"profile\": {\n        \"accountId\": \"wttr_in:public\",\n        \"displayName\": \"wttr.in Public\",\n        \"grantedScopes\": []\n      }\n    }\n  ]\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": [
+              {
+                "id": "appledb:default",
+                "service": "appledb",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "appledb:public",
+                  "displayName": "AppleDB Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "arxiv:default",
+                "service": "arxiv",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "arxiv:public",
+                  "displayName": "arXiv Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "biorxiv_medrxiv:default",
+                "service": "biorxiv_medrxiv",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "biorxiv_medrxiv:public",
+                  "displayName": "bioRxiv and medRxiv Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "clinicaltrials_gov:default",
+                "service": "clinicaltrials_gov",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "clinicaltrials_gov:public",
+                  "displayName": "ClinicalTrials.gov Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "crossref:default",
+                "service": "crossref",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "crossref:public",
+                  "displayName": "Crossref Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "datacite:default",
+                "service": "datacite",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "datacite:public",
+                  "displayName": "DataCite Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "dealnews:default",
+                "service": "dealnews",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "dealnews:public",
+                  "displayName": "DealNews Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "docsend_2_pdf:default",
+                "service": "docsend_2_pdf",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "docsend_2_pdf:public",
+                  "displayName": "Docsend2pdf Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "europe_pmc:default",
+                "service": "europe_pmc",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "europe_pmc:public",
+                  "displayName": "Europe PMC Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "fundzwatch:default",
+                "service": "fundzwatch",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "fundzwatch:public",
+                  "displayName": "FundzWatch Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "36a717f4-b0bb-4951-9f93-62e065fa0f7c",
+                "service": "gitea",
+                "connectionName": "ws-a",
+                "authType": "api_key",
+                "default": false,
+                "profile": {
+                  "accountId": "gitea:gitea.spike.internal:8080:42",
+                  "displayName": "Spike Bot",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "hackernews:default",
+                "service": "hackernews",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "hackernews:public",
+                  "displayName": "Hacker News Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "indiegogo:default",
+                "service": "indiegogo",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "indiegogo:public",
+                  "displayName": "Indiegogo Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "itunes_search:default",
+                "service": "itunes_search",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "itunes_search:public",
+                  "displayName": "iTunes Search API Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "lacuna:default",
+                "service": "lacuna",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "lacuna:public",
+                  "displayName": "Lacuna Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "linux_do:default",
+                "service": "linux_do",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "linux_do:public",
+                  "displayName": "Linux DO Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "npm:default",
+                "service": "npm",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "npm:public",
+                  "displayName": "npm Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "openfda:default",
+                "service": "openfda",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "openfda:public",
+                  "displayName": "openFDA Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "openfootball_worldcup:default",
+                "service": "openfootball_worldcup",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "openfootball_worldcup:public",
+                  "displayName": "OpenFootball World Cup Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "ossinsight:default",
+                "service": "ossinsight",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "ossinsight:public",
+                  "displayName": "OSS Insight Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "osv:default",
+                "service": "osv",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "osv:public",
+                  "displayName": "OSV Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "pubmed:default",
+                "service": "pubmed",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "pubmed:public",
+                  "displayName": "PubMed Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "quickchart:default",
+                "service": "quickchart",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "quickchart:public",
+                  "displayName": "QuickChart Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "who_gho:default",
+                "service": "who_gho",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "who_gho:public",
+                  "displayName": "WHO Global Health Observatory Public",
+                  "grantedScopes": []
+                }
+              },
+              {
+                "id": "wttr_in:default",
+                "service": "wttr_in",
+                "connectionName": "default",
+                "authType": "no_auth",
+                "default": true,
+                "profile": {
+                  "accountId": "wttr_in:public",
+                  "displayName": "wttr.in Public",
+                  "grantedScopes": []
+                }
+              }
+            ]
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 3
+      }
+    }
+  },
+  "adoptedSearchSlack": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_ll..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+          "name": "search_actions",
+          "arguments": {
+            "query": "post message",
+            "service": "slack",
+            "limit": 1
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 4501,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": [\n    {\n      \"id\": \"slack.post_message\",\n      \"service\": \"slack\",\n      \"name\": \"post_message\",\n      \"description\": \"Post a Slack message. Use text for plain messages, or blocks for rich Block Kit layouts with text as fallback.\",\n      \"operationType\": \"write\",\n      \"capability\": {\n        \"operationType\": \"write\",\n        \"execution\": {\n          \"locallyExecutable\": true,\n          \"catalogOnly\": false,\n          \"requiredAuthTypes\": [\n            \"oauth2\",\n            \"api_key\"\n          ],\n          \"noAuthRunnable\": false,\n          \"needsCredential\": true\n        },\n        \"authTypes\": [\n          \"oauth2\",\n          \"api_key\"\n        ],\n        \"requiredScopes\": [\n          \"chat:write\"\n        ],\n        \"providerPermissions\": [],\n        \"policy\": {\n          \"allowed\": false,\n          \"code\": \"action_not_allowed\",\n          \"message\": \"slack.post_message is not included in the local action allowlist.\",\n          \"checks\": [\n            {\n              \"source\": \"token\",\n              \"outcome\": \"allow_miss\"\n            }\n          ]\n        }\n      },\n      \"inputSummary\": [\n        {\n          \"name\": \"channelId\",\n          \"required\": true,\n          \"type\": \"string\",\n          \"description\": \"The Slack conversation or channel ID.\"\n        },\n        {\n          \"name\": \"text\",\n          \"required\": false,\n          \"type\": \"string\",\n          \"description\": \"Plain text message content. When blocks are provided, Slack uses this as notification and accessibility fallback text.\"\n        },\n        {\n          \"name\": \"blocks\",\n          \"required\": false,\n          \"type\": \"array\",\n          \"description\": \"Slack Block Kit blocks to render in the message.\"\n        },\n        {\n          \"name\": \"attachments\",\n          \"required\": false,\n          \"type\": \"array\",\n          \"description\": \"Slack legacy attachments to include in the message.\"\n        },\n        {\n          \"name\": \"unfurlLinks\",\n          \"required\": false,\n          \"type\": \"boolean\",\n          \"description\": \"Whether Slack should unfurl links in the message.\"\n        },\n        {\n          \"name\": \"unfurlMedia\",\n          \"required\": false,\n          \"type\": \"boolean\",\n          \"description\": \"Whether Slack should unfurl media in the message.\"\n        },\n        {\n          \"name\": \"metadata\",\n          \"required\": false,\n          \"type\": \"object\",\n          \"description\": \"Slack message metadata to attach to the message.\"\n        }\n      ]\n    }\n  ]\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": [
+              {
+                "id": "slack.post_message",
+                "service": "slack",
+                "name": "post_message",
+                "description": "Post a Slack message. Use text for plain messages, or blocks for rich Block Kit layouts with text as fallback.",
+                "operationType": "write",
+                "capability": {
+                  "operationType": "write",
+                  "execution": {
+                    "locallyExecutable": true,
+                    "catalogOnly": false,
+                    "requiredAuthTypes": [
+                      "oauth2",
+                      "api_key"
+                    ],
+                    "noAuthRunnable": false,
+                    "needsCredential": true
+                  },
+                  "authTypes": [
+                    "oauth2",
+                    "api_key"
+                  ],
+                  "requiredScopes": [
+                    "chat:write"
+                  ],
+                  "providerPermissions": [],
+                  "policy": {
+                    "allowed": false,
+                    "code": "action_not_allowed",
+                    "message": "slack.post_message is not included in the local action allowlist.",
+                    "checks": [
+                      {
+                        "source": "token",
+                        "outcome": "allow_miss"
+                      }
+                    ]
+                  }
+                },
+                "inputSummary": [
+                  {
+                    "name": "channelId",
+                    "required": true,
+                    "type": "string",
+                    "description": "The Slack conversation or channel ID."
+                  },
+                  {
+                    "name": "text",
+                    "required": false,
+                    "type": "string",
+                    "description": "Plain text message content. When blocks are provided, Slack uses this as notification and accessibility fallback text."
+                  },
+                  {
+                    "name": "blocks",
+                    "required": false,
+                    "type": "array",
+                    "description": "Slack Block Kit blocks to render in the message."
+                  },
+                  {
+                    "name": "attachments",
+                    "required": false,
+                    "type": "array",
+                    "description": "Slack legacy attachments to include in the message."
+                  },
+                  {
+                    "name": "unfurlLinks",
+                    "required": false,
+                    "type": "boolean",
+                    "description": "Whether Slack should unfurl links in the message."
+                  },
+                  {
+                    "name": "unfurlMedia",
+                    "required": false,
+                    "type": "boolean",
+                    "description": "Whether Slack should unfurl media in the message."
+                  },
+                  {
+                    "name": "metadata",
+                    "required": false,
+                    "type": "object",
+                    "description": "Slack message metadata to attach to the message."
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 4
+      }
+    }
+  }
+}

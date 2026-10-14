@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "caseId": "QA-D4J-CLI-1",
+  "role": "qa",
+  "status": "needs_adaptation",
+  "source": {
+    "frameworkRepository": "https://github.com/rjust/defects4j",
+    "frameworkTag": "v3.0.1",
+    "frameworkCommit": "6d54320e0db5a357f9ab38a8e4d2e5aead7e1c09",
+    "project": "Cli",
+    "bugId": "1",
+    "buggyRevision": "8f46f467a33ace44ccd9f394910940b6c48a3827",
+    "fixedRevision": "b0e1b80b6d4a10a9c9f46539bc4c7a3cce55886e",
+    "upstreamIssue": "https://issues.apache.org/jira/browse/CLI-13",
+    "activeBugsCsvSha256": "0f3d51162349d43e048f129007136df042bb52f4ee6897d62915e71b76fd3a54",
+    "triggerRecordSha256": "e1067eff4c1f9f082c53299670fd05f3f33b85c2739f211dc091b31a13e11251",
+    "sourcePatchSha256": "5c696e0edc34cfca26a1b5c4cef8cf8e760941f4d717235952670da821dd55a1"
+  },
+  "platform": {
+    "host": "testbox",
+    "os": "Linux",
+    "architecture": "x86_64",
+    "java": "11",
+    "timezone": "America/Los_Angeles",
+    "baseImageDigest": "sha256:922e0ba86e4ed0e0fd8cc332e112f815a44a2e1db4ad3c8bc629e1e6d35c5bc3",
+    "evaluatorImageId": "sha256:846ad09146a177f09680660d3345143336c5cb933fde9ff829cae3f2d4ac4286",
+    "dependencyInventory": "Private Testbox image-attempt-3/minimal-ant-image-packages-and-jars.txt, perl-cpan-inventory.txt, ant-and-test-jars.txt; apt/CPAN resolution not fully locked"
+  },
+  "licenses": {
+    "framework": "MIT; Defects4J license.txt at pinned commit",
+    "project": "Apache License 2.0; Apache Commons CLI source and NOTICE at pinned revision",
+    "redistribution": "Private evaluation only until the exact source/dependency notices and redistribution terms are checked"
+  },
+  "agentVisible": {
+    "issueFile": "agent-issue.md",
+    "issueSha256": "f00df55372d5a4ba166115a551cacfc36e4d6e710f08ff27b1d4b674bafbfe59",
+    "checkout": "Raw pinned buggy source-only projection passed hash and fixed-only-material audit in docs/design/defects4j-agent-bundle-review-2026-09-26.md; not mounted in a real bot workspace",
+    "sourceProjectionReceipt": "docs/design/defects4j-agent-bundle-review-2026-09-26.md",
+    "syntheticArtifactHandoffReceipt": "docs/design/defects4j-agent-artifact-handoff-2026-09-26.md",
+    "egress": "No live download during agent work; exact allowlist pending adapter"
+  },
+  "evaluatorOnly": {
+    "location": "/home/owner/agent_workspace/deskmates-reusable-evals/defects4j-20260925",
+    "mountedInBotWorkspace": false,
+    "assets": [
+      "Cli-1f",
+      "trigger_tests/1",
+      "patches/1.src.patch",
+      "QaCli13ReferenceTest.java",
+      "control logs",
+      "verdicts"
+    ],
+    "referenceTestSha256": "f88f8d8f2a6cf480c754c6bfa105897bfaa41d59fef4cf25f9c8d56da986d53c",
+    "referenceMain": "org.apache.commons.cli.bug.QaCli13ReferenceTest::testLongNamePresenceAfterShortNameParse",
+    "referenceClean": "org.apache.commons.cli.bug.QaCli13ReferenceTest::testShortNameAndValueCleanControl",
+    "officialTrigger": "org.apache.commons.cli.bug.BugCLI13Test::testCLI13",
+    "officialTriggerSourceSha256": "46d2854c12ea2137aac196dc68b69b2fb4882f71f0d01d6b27475363dd15bd06",
+    "officialFailedAssertion": "fixed-revision BugCLI13Test.java line 50: assertTrue(commandLine.hasOption(debugOpt)) after parsing -d true"
+  },
+  "referenceValidation": {
+    "status": "adapted_minimal_ant_semantics_passed",
+    "environment": "Java 11 Linux, standard Apache Ant 1.10.9 plus source-bundled JUnit/Hamcrest classpath links; full official init.sh and Major wrapper not executed",
+    "privateControlsDirectory": "/home/owner/agent_workspace/deskmates-reusable-evals/defects4j-20260925/controls-attempt-3/controls",
+    "executionSummarySha256": "5555b2a284c0b4c3726dd479e8aeb7793f884753f09bafe7f68f062ea877854f",
+    "originalControlsExitStatus": 25,
+    "exitStatusExplanation": "Original missing-method classifier expected JUnit 4 wording; Cli's JUnit 3 synthetic method-not-found failure was retrospectively classified invalid_rejected from saved raw logs, without changing the original receipt.",
+    "receipt": "docs/design/defects4j-feasibility-2026-09-25.md"
+  },
+  "controls": [
+    "fixed baseline 94 executed/0 failing; buggy baseline 94/1 at official trigger",
+    "reference fixed pass twice, each 1/0",
+    "reference buggy fail twice, each 1/1 at long-name presence assertion",
+    "short-name and value clean control passes both, each 1/0",
+    "fixed suite with reference 96/0",
+    "missing-method diagnostic retrospectively rejected as invalid using saved logs",
+    "unconditional failure rejected, 1/1",
+    "invalid syntax rejected at Java compilation",
+    "synthetic disabled/no-assertion invalid controls and timeout/missing-evidence unknown controls verified in independent receipt; untrusted candidate grader pending"
+  ],
+  "reset": "Fresh official defects4j checkout for every private reference control; identical evaluator-owned reference source copied into both. Agent attempts require a separately audited buggy snapshot, not an uninspected official Cli-1b checkout",
+  "agentBudget": null,
+  "negativeControlValidation": {
+    "scope": "fixture_specific_fault_classification_only",
+    "receipt": "docs/design/defects4j-negative-controls-2026-09-26.md",
+    "savedEvidenceReviewSha256": "93177f3df9cb53b65a01b42c77e34dbd93a8423468f4880dbc8cead048cdcb6e",
+    "status": "verified",
+    "realAgentGraderValidated": false
+  },
+  "candidate_grader_receipt": "docs/design/defects4j-candidate-grader-2026-09-26.md",
+  "live_trial_validation": {
+    "receipt": "docs/design/defects4j-live-first-attempts-2026-09-26.md",
+    "status": "infrastructure_unknown_partial_candidate_fixed_acceptance_failed",
+    "untrusted_grader_limit": "candidate JVM result stream requires host semantic review; not fully anti-gaming",
+    "production_constraint": "no_change_observed",
+    "retries": "one authorized corrected logical call; old calls retained"
+  }
+}

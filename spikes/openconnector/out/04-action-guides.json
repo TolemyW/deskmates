@@ -1,0 +1,872 @@
+{
+  "slack.post_message": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_qC..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "slack.post_message"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 5296,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"capability\": {\n      \"operationType\": \"write\",\n      \"execution\": {\n        \"locallyExecutable\": true,\n        \"catalogOnly\": false,\n        \"requiredAuthTypes\": [\n          \"oauth2\",\n          \"api_key\"\n        ],\n        \"noAuthRunnable\": false,\n        \"needsCredential\": true\n      },\n      \"authTypes\": [\n        \"oauth2\",\n        \"api_key\"\n      ],\n      \"requiredScopes\": [\n        \"chat:write\"\n      ],\n      \"providerPermissions\": [],\n      \"policy\": {\n        \"allowed\": true,\n        \"checks\": []\n      }\n    },\n    \"markdown\": \"# slack.post\\\\_message\\n\\nPost a Slack message. Use text for plain messages, or blocks for rich Block Kit layouts with text as fallback.\\n\\n## Execute\\n\\nCall the `execute_action` tool with these arguments:\\n\\n```json\\n{\\n  \\\"actionId\\\": \\\"slack.post_message\\\",\\n  \\\"input\\\": {\\n    \\\"channelId\\\": \\\"\\\"\\n  }\\n}\\n```\\n\\nAdd `connectionName` to run the action with a named connection instead of the default one.\\n\\n## Input Parameters\\n\\n| Name          | Required | Type      |\\n| ------------- | -------- | --------- |\\n| `channelId`   | Yes      | `string`  |\\n| `text`        | No       | `string`  |\\n| `blocks`      | No       | `array`   |\\n| `attachments` | No       | `array`   |\\n| `unfurlLinks` | No       | `boolean` |\\n| `unfurlMedia` | No       | `boolean` |\\n| `metadata`    | No       | `object`  |\\n\\n- `channelId`\\n\\n  The Slack conversation or channel ID.\\n- `text`\\n\\n  Plain text message content. When blocks are provided, Slack uses this as notification and accessibility fallback text.\\n- `blocks`\\n\\n  Slack Block Kit blocks to render in the message.\\n- `attachments`\\n\\n  Slack legacy attachments to include in the message.\\n- `unfurlLinks`\\n\\n  Whether Slack should unfurl links in the message.\\n- `unfurlMedia`\\n\\n  Whether Slack should unfurl media in the message.\\n- `metadata`\\n\\n  Slack message metadata to attach to the message.\\n\\n## Required Scopes\\n\\n- `chat:write`\\n\\n## Provider Permissions\\n\\nNo provider permissions are declared.\\n\\n## Execution Policy\\n\\nAllowed by the current execution policy.\\n\\nNo policy rules matched or restricted this action.\\n\\n## Current Connection\\n\\nThis provider is not connected in the local runtime.\\n\\n## Notes For Agents\\n\\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\\n- Send JSON with a top-level `input` object.\\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\\n- If execution fails with a credential error, ask the user to connect the app in the local console.\\n\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "capability": {
+                "operationType": "write",
+                "execution": {
+                  "locallyExecutable": true,
+                  "catalogOnly": false,
+                  "requiredAuthTypes": [
+                    "oauth2",
+                    "api_key"
+                  ],
+                  "noAuthRunnable": false,
+                  "needsCredential": true
+                },
+                "authTypes": [
+                  "oauth2",
+                  "api_key"
+                ],
+                "requiredScopes": [
+                  "chat:write"
+                ],
+                "providerPermissions": [],
+                "policy": {
+                  "allowed": true,
+                  "checks": []
+                }
+              },
+              "markdown": "# slack.post\\_message\n\nPost a Slack message. Use text for plain messages, or blocks for rich Block Kit layouts with text as fallback.\n\n## Execute\n\nCall the `execute_action` tool with these arguments:\n\n```json\n{\n  \"actionId\": \"slack.post_message\",\n  \"input\": {\n    \"channelId\": \"\"\n  }\n}\n```\n\nAdd `connectionName` to run the action with a named connection instead of the default one.\n\n## Input Parameters\n\n| Name          | Required | Type      |\n| ------------- | -------- | --------- |\n| `channelId`   | Yes      | `string`  |\n| `text`        | No       | `string`  |\n| `blocks`      | No       | `array`   |\n| `attachments` | No       | `array`   |\n| `unfurlLinks` | No       | `boolean` |\n| `unfurlMedia` | No       | `boolean` |\n| `metadata`    | No       | `object`  |\n\n- `channelId`\n\n  The Slack conversation or channel ID.\n- `text`\n\n  Plain text message content. When blocks are provided, Slack uses this as notification and accessibility fallback text.\n- `blocks`\n\n  Slack Block Kit blocks to render in the message.\n- `attachments`\n\n  Slack legacy attachments to include in the message.\n- `unfurlLinks`\n\n  Whether Slack should unfurl links in the message.\n- `unfurlMedia`\n\n  Whether Slack should unfurl media in the message.\n- `metadata`\n\n  Slack message metadata to attach to the message.\n\n## Required Scopes\n\n- `chat:write`\n\n## Provider Permissions\n\nNo provider permissions are declared.\n\n## Execution Policy\n\nAllowed by the current execution policy.\n\nNo policy rules matched or restricted this action.\n\n## Current Connection\n\nThis provider is not connected in the local runtime.\n\n## Notes For Agents\n\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\n- Send JSON with a top-level `input` object.\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\n- If execution fails with a credential error, ask the user to connect the app in the local console.\n"
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 11
+      }
+    }
+  },
+  "slack.list_channels": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_qC..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 12,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "slack.list_channels"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 3620,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"capability\": {\n      \"operationType\": \"read\",\n      \"execution\": {\n        \"locallyExecutable\": true,\n        \"catalogOnly\": false,\n        \"requiredAuthTypes\": [\n          \"oauth2\",\n          \"api_key\"\n        ],\n        \"noAuthRunnable\": false,\n        \"needsCredential\": true\n      },\n      \"authTypes\": [\n        \"oauth2\",\n        \"api_key\"\n      ],\n      \"requiredScopes\": [\n        \"channels:read\"\n      ],\n      \"providerPermissions\": [],\n      \"policy\": {\n        \"allowed\": true,\n        \"checks\": []\n      }\n    },\n    \"markdown\": \"# slack.list\\\\_channels\\n\\nList Slack public channels visible to the connected Slack identity.\\n\\n## Execute\\n\\nCall the `execute_action` tool with these arguments:\\n\\n```json\\n{\\n  \\\"actionId\\\": \\\"slack.list_channels\\\",\\n  \\\"input\\\": {}\\n}\\n```\\n\\nAdd `connectionName` to run the action with a named connection instead of the default one.\\n\\n## Input Parameters\\n\\n| Name    | Required | Type      |\\n| ------- | -------- | --------- |\\n| `limit` | No       | `integer` |\\n\\n- `limit`\\n\\n  The maximum number of channels to return.\\n\\n## Required Scopes\\n\\n- `channels:read`\\n\\n## Provider Permissions\\n\\nNo provider permissions are declared.\\n\\n## Execution Policy\\n\\nAllowed by the current execution policy.\\n\\nNo policy rules matched or restricted this action.\\n\\n## Current Connection\\n\\nThis provider is not connected in the local runtime.\\n\\n## Notes For Agents\\n\\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\\n- Send JSON with a top-level `input` object.\\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\\n- If execution fails with a credential error, ask the user to connect the app in the local console.\\n\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "capability": {
+                "operationType": "read",
+                "execution": {
+                  "locallyExecutable": true,
+                  "catalogOnly": false,
+                  "requiredAuthTypes": [
+                    "oauth2",
+                    "api_key"
+                  ],
+                  "noAuthRunnable": false,
+                  "needsCredential": true
+                },
+                "authTypes": [
+                  "oauth2",
+                  "api_key"
+                ],
+                "requiredScopes": [
+                  "channels:read"
+                ],
+                "providerPermissions": [],
+                "policy": {
+                  "allowed": true,
+                  "checks": []
+                }
+              },
+              "markdown": "# slack.list\\_channels\n\nList Slack public channels visible to the connected Slack identity.\n\n## Execute\n\nCall the `execute_action` tool with these arguments:\n\n```json\n{\n  \"actionId\": \"slack.list_channels\",\n  \"input\": {}\n}\n```\n\nAdd `connectionName` to run the action with a named connection instead of the default one.\n\n## Input Parameters\n\n| Name    | Required | Type      |\n| ------- | -------- | --------- |\n| `limit` | No       | `integer` |\n\n- `limit`\n\n  The maximum number of channels to return.\n\n## Required Scopes\n\n- `channels:read`\n\n## Provider Permissions\n\nNo provider permissions are declared.\n\n## Execution Policy\n\nAllowed by the current execution policy.\n\nNo policy rules matched or restricted this action.\n\n## Current Connection\n\nThis provider is not connected in the local runtime.\n\n## Notes For Agents\n\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\n- Send JSON with a top-level `input` object.\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\n- If execution fails with a credential error, ask the user to connect the app in the local console.\n"
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 12
+      }
+    }
+  },
+  "slack.get_channel_messages": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_qC..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 13,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "slack.get_channel_messages"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 6095,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"capability\": {\n      \"operationType\": \"read\",\n      \"execution\": {\n        \"locallyExecutable\": true,\n        \"catalogOnly\": false,\n        \"requiredAuthTypes\": [\n          \"oauth2\",\n          \"api_key\"\n        ],\n        \"noAuthRunnable\": false,\n        \"needsCredential\": true\n      },\n      \"authTypes\": [\n        \"oauth2\",\n        \"api_key\"\n      ],\n      \"requiredScopes\": [\n        \"channels:history\",\n        \"groups:history\",\n        \"im:history\",\n        \"mpim:history\"\n      ],\n      \"providerPermissions\": [],\n      \"policy\": {\n        \"allowed\": true,\n        \"checks\": []\n      }\n    },\n    \"markdown\": \"# slack.get\\\\_channel\\\\_messages\\n\\nGet recent messages from a Slack conversation.\\n\\n## Execute\\n\\nCall the `execute_action` tool with these arguments:\\n\\n```json\\n{\\n  \\\"actionId\\\": \\\"slack.get_channel_messages\\\",\\n  \\\"input\\\": {\\n    \\\"channelId\\\": \\\"\\\"\\n  }\\n}\\n```\\n\\nAdd `connectionName` to run the action with a named connection instead of the default one.\\n\\n## Input Parameters\\n\\n| Name         | Required | Type      |\\n| ------------ | -------- | --------- |\\n| `channelId`  | Yes      | `string`  |\\n| `limit`      | No       | `integer` |\\n| `cursor`     | No       | `string`  |\\n| `oldest`     | No       | `string`  |\\n| `latest`     | No       | `string`  |\\n| `inclusive`  | No       | `boolean` |\\n| `includeRaw` | No       | `boolean` |\\n\\n- `channelId`\\n\\n  The Slack conversation or channel ID.\\n- `limit`\\n\\n  The maximum number of messages to return.\\n- `cursor`\\n\\n  The Slack pagination cursor from a previous page. Omit for the first page.\\n- `oldest`\\n\\n  Only return messages after this Slack timestamp, for example '1700000000.123456'. The message at exactly this timestamp is included only when inclusive is true.\\n- `latest`\\n\\n  Only return messages before this Slack timestamp. Defaults to now. The message at exactly this timestamp is included only when inclusive is true.\\n- `inclusive`\\n\\n  Include messages whose timestamp equals oldest or latest. Slack ignores this unless one of those bounds is set.\\n- `includeRaw`\\n\\n  When true, each returned message also carries the untouched Slack record under raw, including its blocks, attachments, files and message metadata. Defaults to false.\\n\\n## Required Scopes\\n\\n- `channels:history`\\n- `groups:history`\\n- `im:history`\\n- `mpim:history`\\n\\n## Provider Permissions\\n\\nNo provider permissions are declared.\\n\\n## Execution Policy\\n\\nAllowed by the current execution policy.\\n\\nNo policy rules matched or restricted this action.\\n\\n## Current Connection\\n\\nThis provider is not connected in the local runtime.\\n\\n## Notes For Agents\\n\\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\\n- Send JSON with a top-level `input` object.\\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\\n- If execution fails with a credential error, ask the user to connect the app in the local console.\\n\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "capability": {
+                "operationType": "read",
+                "execution": {
+                  "locallyExecutable": true,
+                  "catalogOnly": false,
+                  "requiredAuthTypes": [
+                    "oauth2",
+                    "api_key"
+                  ],
+                  "noAuthRunnable": false,
+                  "needsCredential": true
+                },
+                "authTypes": [
+                  "oauth2",
+                  "api_key"
+                ],
+                "requiredScopes": [
+                  "channels:history",
+                  "groups:history",
+                  "im:history",
+                  "mpim:history"
+                ],
+                "providerPermissions": [],
+                "policy": {
+                  "allowed": true,
+                  "checks": []
+                }
+              },
+              "markdown": "# slack.get\\_channel\\_messages\n\nGet recent messages from a Slack conversation.\n\n## Execute\n\nCall the `execute_action` tool with these arguments:\n\n```json\n{\n  \"actionId\": \"slack.get_channel_messages\",\n  \"input\": {\n    \"channelId\": \"\"\n  }\n}\n```\n\nAdd `connectionName` to run the action with a named connection instead of the default one.\n\n## Input Parameters\n\n| Name         | Required | Type      |\n| ------------ | -------- | --------- |\n| `channelId`  | Yes      | `string`  |\n| `limit`      | No       | `integer` |\n| `cursor`     | No       | `string`  |\n| `oldest`     | No       | `string`  |\n| `latest`     | No       | `string`  |\n| `inclusive`  | No       | `boolean` |\n| `includeRaw` | No       | `boolean` |\n\n- `channelId`\n\n  The Slack conversation or channel ID.\n- `limit`\n\n  The maximum number of messages to return.\n- `cursor`\n\n  The Slack pagination cursor from a previous page. Omit for the first page.\n- `oldest`\n\n  Only return messages after this Slack timestamp, for example '1700000000.123456'. The message at exactly this timestamp is included only when inclusive is true.\n- `latest`\n\n  Only return messages before this Slack timestamp. Defaults to now. The message at exactly this timestamp is included only when inclusive is true.\n- `inclusive`\n\n  Include messages whose timestamp equals oldest or latest. Slack ignores this unless one of those bounds is set.\n- `includeRaw`\n\n  When true, each returned message also carries the untouched Slack record under raw, including its blocks, attachments, files and message metadata. Defaults to false.\n\n## Required Scopes\n\n- `channels:history`\n- `groups:history`\n- `im:history`\n- `mpim:history`\n\n## Provider Permissions\n\nNo provider permissions are declared.\n\n## Execution Policy\n\nAllowed by the current execution policy.\n\nNo policy rules matched or restricted this action.\n\n## Current Connection\n\nThis provider is not connected in the local runtime.\n\n## Notes For Agents\n\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\n- Send JSON with a top-level `input` object.\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\n- If execution fails with a credential error, ask the user to connect the app in the local console.\n"
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 13
+      }
+    }
+  },
+  "slack.upload_file": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_qC..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 14,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "slack.upload_file"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 5709,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"capability\": {\n      \"operationType\": \"write\",\n      \"execution\": {\n        \"locallyExecutable\": true,\n        \"catalogOnly\": false,\n        \"requiredAuthTypes\": [\n          \"oauth2\",\n          \"api_key\"\n        ],\n        \"noAuthRunnable\": false,\n        \"needsCredential\": true\n      },\n      \"authTypes\": [\n        \"oauth2\",\n        \"api_key\"\n      ],\n      \"requiredScopes\": [\n        \"files:write\"\n      ],\n      \"providerPermissions\": [],\n      \"policy\": {\n        \"allowed\": true,\n        \"checks\": []\n      }\n    },\n    \"markdown\": \"# slack.upload\\\\_file\\n\\nUpload a file to Slack using the current external upload flow. Provide fileUrl; binary content is fetched by the connector runtime.\\n\\n## Execute\\n\\nCall the `execute_action` tool with these arguments:\\n\\n```json\\n{\\n  \\\"actionId\\\": \\\"slack.upload_file\\\",\\n  \\\"input\\\": {\\n    \\\"filename\\\": \\\"\\\",\\n    \\\"fileUrl\\\": \\\"\\\"\\n  }\\n}\\n```\\n\\nAdd `connectionName` to run the action with a named connection instead of the default one.\\n\\n## Input Parameters\\n\\n| Name             | Required | Type     |\\n| ---------------- | -------- | -------- |\\n| `filename`       | Yes      | `string` |\\n| `fileUrl`        | Yes      | `string` |\\n| `title`          | No       | `string` |\\n| `channelId`      | No       | `string` |\\n| `initialComment` | No       | `string` |\\n| `threadTs`       | No       | `string` |\\n| `mimeType`       | No       | `string` |\\n| `altText`        | No       | `string` |\\n| `snippetType`    | No       | `string` |\\n\\n- `filename`\\n\\n  The file name Slack should display.\\n- `fileUrl`\\n\\n  A URL whose response body should be uploaded to Slack.\\n- `title`\\n\\n  Optional file title shown in Slack.\\n- `channelId`\\n\\n  The Slack conversation or channel ID.\\n- `initialComment`\\n\\n  Optional message text to post with the file.\\n- `threadTs`\\n\\n  The Slack message timestamp, for example '1711.0001'.\\n- `mimeType`\\n\\n  The content type to send while uploading the file.\\n- `altText`\\n\\n  Alternative text for the uploaded file when Slack supports it.\\n- `snippetType`\\n\\n  Slack snippet type for text snippets.\\n\\n## Required Scopes\\n\\n- `files:write`\\n\\n## Provider Permissions\\n\\nNo provider permissions are declared.\\n\\n## Execution Policy\\n\\nAllowed by the current execution policy.\\n\\nNo policy rules matched or restricted this action.\\n\\n## Current Connection\\n\\nThis provider is not connected in the local runtime.\\n\\n## Notes For Agents\\n\\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\\n- Send JSON with a top-level `input` object.\\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\\n- If execution fails with a credential error, ask the user to connect the app in the local console.\\n\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "capability": {
+                "operationType": "write",
+                "execution": {
+                  "locallyExecutable": true,
+                  "catalogOnly": false,
+                  "requiredAuthTypes": [
+                    "oauth2",
+                    "api_key"
+                  ],
+                  "noAuthRunnable": false,
+                  "needsCredential": true
+                },
+                "authTypes": [
+                  "oauth2",
+                  "api_key"
+                ],
+                "requiredScopes": [
+                  "files:write"
+                ],
+                "providerPermissions": [],
+                "policy": {
+                  "allowed": true,
+                  "checks": []
+                }
+              },
+              "markdown": "# slack.upload\\_file\n\nUpload a file to Slack using the current external upload flow. Provide fileUrl; binary content is fetched by the connector runtime.\n\n## Execute\n\nCall the `execute_action` tool with these arguments:\n\n```json\n{\n  \"actionId\": \"slack.upload_file\",\n  \"input\": {\n    \"filename\": \"\",\n    \"fileUrl\": \"\"\n  }\n}\n```\n\nAdd `connectionName` to run the action with a named connection instead of the default one.\n\n## Input Parameters\n\n| Name             | Required | Type     |\n| ---------------- | -------- | -------- |\n| `filename`       | Yes      | `string` |\n| `fileUrl`        | Yes      | `string` |\n| `title`          | No       | `string` |\n| `channelId`      | No       | `string` |\n| `initialComment` | No       | `string` |\n| `threadTs`       | No       | `string` |\n| `mimeType`       | No       | `string` |\n| `altText`        | No       | `string` |\n| `snippetType`    | No       | `string` |\n\n- `filename`\n\n  The file name Slack should display.\n- `fileUrl`\n\n  A URL whose response body should be uploaded to Slack.\n- `title`\n\n  Optional file title shown in Slack.\n- `channelId`\n\n  The Slack conversation or channel ID.\n- `initialComment`\n\n  Optional message text to post with the file.\n- `threadTs`\n\n  The Slack message timestamp, for example '1711.0001'.\n- `mimeType`\n\n  The content type to send while uploading the file.\n- `altText`\n\n  Alternative text for the uploaded file when Slack supports it.\n- `snippetType`\n\n  Slack snippet type for text snippets.\n\n## Required Scopes\n\n- `files:write`\n\n## Provider Permissions\n\nNo provider permissions are declared.\n\n## Execution Policy\n\nAllowed by the current execution policy.\n\nNo policy rules matched or restricted this action.\n\n## Current Connection\n\nThis provider is not connected in the local runtime.\n\n## Notes For Agents\n\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\n- Send JSON with a top-level `input` object.\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\n- If execution fails with a credential error, ask the user to connect the app in the local console.\n"
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 14
+      }
+    }
+  },
+  "slack.add_reaction": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_qC..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 15,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "slack.add_reaction"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 4218,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"capability\": {\n      \"operationType\": \"write\",\n      \"execution\": {\n        \"locallyExecutable\": true,\n        \"catalogOnly\": false,\n        \"requiredAuthTypes\": [\n          \"oauth2\",\n          \"api_key\"\n        ],\n        \"noAuthRunnable\": false,\n        \"needsCredential\": true\n      },\n      \"authTypes\": [\n        \"oauth2\",\n        \"api_key\"\n      ],\n      \"requiredScopes\": [\n        \"reactions:write\"\n      ],\n      \"providerPermissions\": [],\n      \"policy\": {\n        \"allowed\": true,\n        \"checks\": []\n      }\n    },\n    \"markdown\": \"# slack.add\\\\_reaction\\n\\nAdd an emoji reaction to a Slack message.\\n\\n## Execute\\n\\nCall the `execute_action` tool with these arguments:\\n\\n```json\\n{\\n  \\\"actionId\\\": \\\"slack.add_reaction\\\",\\n  \\\"input\\\": {\\n    \\\"channelId\\\": \\\"\\\",\\n    \\\"messageTs\\\": \\\"\\\",\\n    \\\"name\\\": \\\"\\\"\\n  }\\n}\\n```\\n\\nAdd `connectionName` to run the action with a named connection instead of the default one.\\n\\n## Input Parameters\\n\\n| Name        | Required | Type     |\\n| ----------- | -------- | -------- |\\n| `channelId` | Yes      | `string` |\\n| `messageTs` | Yes      | `string` |\\n| `name`      | Yes      | `string` |\\n\\n- `channelId`\\n\\n  The Slack conversation or channel ID.\\n- `messageTs`\\n\\n  The Slack message timestamp, for example '1711.0001'.\\n- `name`\\n\\n  The emoji reaction name without surrounding colons.\\n\\n## Required Scopes\\n\\n- `reactions:write`\\n\\n## Provider Permissions\\n\\nNo provider permissions are declared.\\n\\n## Execution Policy\\n\\nAllowed by the current execution policy.\\n\\nNo policy rules matched or restricted this action.\\n\\n## Current Connection\\n\\nThis provider is not connected in the local runtime.\\n\\n## Notes For Agents\\n\\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\\n- Send JSON with a top-level `input` object.\\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\\n- If execution fails with a credential error, ask the user to connect the app in the local console.\\n\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "capability": {
+                "operationType": "write",
+                "execution": {
+                  "locallyExecutable": true,
+                  "catalogOnly": false,
+                  "requiredAuthTypes": [
+                    "oauth2",
+                    "api_key"
+                  ],
+                  "noAuthRunnable": false,
+                  "needsCredential": true
+                },
+                "authTypes": [
+                  "oauth2",
+                  "api_key"
+                ],
+                "requiredScopes": [
+                  "reactions:write"
+                ],
+                "providerPermissions": [],
+                "policy": {
+                  "allowed": true,
+                  "checks": []
+                }
+              },
+              "markdown": "# slack.add\\_reaction\n\nAdd an emoji reaction to a Slack message.\n\n## Execute\n\nCall the `execute_action` tool with these arguments:\n\n```json\n{\n  \"actionId\": \"slack.add_reaction\",\n  \"input\": {\n    \"channelId\": \"\",\n    \"messageTs\": \"\",\n    \"name\": \"\"\n  }\n}\n```\n\nAdd `connectionName` to run the action with a named connection instead of the default one.\n\n## Input Parameters\n\n| Name        | Required | Type     |\n| ----------- | -------- | -------- |\n| `channelId` | Yes      | `string` |\n| `messageTs` | Yes      | `string` |\n| `name`      | Yes      | `string` |\n\n- `channelId`\n\n  The Slack conversation or channel ID.\n- `messageTs`\n\n  The Slack message timestamp, for example '1711.0001'.\n- `name`\n\n  The emoji reaction name without surrounding colons.\n\n## Required Scopes\n\n- `reactions:write`\n\n## Provider Permissions\n\nNo provider permissions are declared.\n\n## Execution Policy\n\nAllowed by the current execution policy.\n\nNo policy rules matched or restricted this action.\n\n## Current Connection\n\nThis provider is not connected in the local runtime.\n\n## Notes For Agents\n\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\n- Send JSON with a top-level `input` object.\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\n- If execution fails with a credential error, ask the user to connect the app in the local console.\n"
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 15
+      }
+    }
+  },
+  "googledrive.files.list": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_qC..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 16,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "googledrive.files.list"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 7311,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"capability\": {\n      \"operationType\": \"read\",\n      \"execution\": {\n        \"locallyExecutable\": true,\n        \"catalogOnly\": false,\n        \"requiredAuthTypes\": [\n          \"oauth2\",\n          \"custom_credential\"\n        ],\n        \"noAuthRunnable\": false,\n        \"needsCredential\": true\n      },\n      \"authTypes\": [\n        \"oauth2\",\n        \"custom_credential\"\n      ],\n      \"requiredScopes\": [\n        \"https://www.googleapis.com/auth/drive.readonly\",\n        \"https://www.googleapis.com/auth/drive.metadata.readonly\"\n      ],\n      \"providerPermissions\": [],\n      \"policy\": {\n        \"allowed\": true,\n        \"checks\": []\n      }\n    },\n    \"markdown\": \"# googledrive.files.list\\n\\nList Google Drive files using the official Drive query and pagination parameters.\\n\\n## Execute\\n\\nCall the `execute_action` tool with these arguments:\\n\\n```json\\n{\\n  \\\"actionId\\\": \\\"googledrive.files.list\\\",\\n  \\\"input\\\": {}\\n}\\n```\\n\\nAdd `connectionName` to run the action with a named connection instead of the default one.\\n\\n## Input Parameters\\n\\n| Name                        | Required | Type      |\\n| --------------------------- | -------- | --------- |\\n| `corpora`                   | No       | `string`  |\\n| `corpus`                    | No       | `string`  |\\n| `driveId`                   | No       | `string`  |\\n| `includeItemsFromAllDrives` | No       | `boolean` |\\n| `includeLabels`             | No       | `string`  |\\n| `includePermissionsForView` | No       | `string`  |\\n| `orderBy`                   | No       | `string`  |\\n| `pageSize`                  | No       | `integer` |\\n| `pageToken`                 | No       | `string`  |\\n| `q`                         | No       | `string`  |\\n| `spaces`                    | No       | `string`  |\\n| `supportsAllDrives`         | No       | `boolean` |\\n| `teamDriveId`               | No       | `string`  |\\n\\n- `corpora`\\n\\n  Bodies of items to which the query applies.\\n- `corpus`\\n\\n  The source of files to list.\\n- `driveId`\\n\\n  ID of the shared drive to search.\\n- `includeItemsFromAllDrives`\\n\\n  Whether both My Drive and shared drive items should be included in results.\\n- `includeLabels`\\n\\n  A comma-separated list of label IDs to include in labelInfo.\\n- `includePermissionsForView`\\n\\n  Specifies which additional view's permissions to include in the response.\\n- `orderBy`\\n\\n  A comma-separated list of sort keys.\\n- `pageSize`\\n\\n  The maximum number of files to return per page.\\n- `pageToken`\\n\\n  The token for continuing a previous list request.\\n- `q`\\n\\n  A Google Drive query string for filtering files.\\n- `spaces`\\n\\n  A comma-separated list of spaces to query.\\n- `supportsAllDrives`\\n\\n  Whether the request supports both My Drives and shared drives.\\n- `teamDriveId`\\n\\n  Deprecated Team Drive ID.\\n\\n## Required Scopes\\n\\n- `https://www.googleapis.com/auth/drive.readonly`\\n- `https://www.googleapis.com/auth/drive.metadata.readonly`\\n\\n## Provider Permissions\\n\\nNo provider permissions are declared.\\n\\n## Execution Policy\\n\\nAllowed by the current execution policy.\\n\\nNo policy rules matched or restricted this action.\\n\\n## Current Connection\\n\\nThis provider is not connected in the local runtime.\\n\\n## Notes For Agents\\n\\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\\n- Send JSON with a top-level `input` object.\\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\\n- If execution fails with a credential error, ask the user to connect the app in the local console.\\n\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "capability": {
+                "operationType": "read",
+                "execution": {
+                  "locallyExecutable": true,
+                  "catalogOnly": false,
+                  "requiredAuthTypes": [
+                    "oauth2",
+                    "custom_credential"
+                  ],
+                  "noAuthRunnable": false,
+                  "needsCredential": true
+                },
+                "authTypes": [
+                  "oauth2",
+                  "custom_credential"
+                ],
+                "requiredScopes": [
+                  "https://www.googleapis.com/auth/drive.readonly",
+                  "https://www.googleapis.com/auth/drive.metadata.readonly"
+                ],
+                "providerPermissions": [],
+                "policy": {
+                  "allowed": true,
+                  "checks": []
+                }
+              },
+              "markdown": "# googledrive.files.list\n\nList Google Drive files using the official Drive query and pagination parameters.\n\n## Execute\n\nCall the `execute_action` tool with these arguments:\n\n```json\n{\n  \"actionId\": \"googledrive.files.list\",\n  \"input\": {}\n}\n```\n\nAdd `connectionName` to run the action with a named connection instead of the default one.\n\n## Input Parameters\n\n| Name                        | Required | Type      |\n| --------------------------- | -------- | --------- |\n| `corpora`                   | No       | `string`  |\n| `corpus`                    | No       | `string`  |\n| `driveId`                   | No       | `string`  |\n| `includeItemsFromAllDrives` | No       | `boolean` |\n| `includeLabels`             | No       | `string`  |\n| `includePermissionsForView` | No       | `string`  |\n| `orderBy`                   | No       | `string`  |\n| `pageSize`                  | No       | `integer` |\n| `pageToken`                 | No       | `string`  |\n| `q`                         | No       | `string`  |\n| `spaces`                    | No       | `string`  |\n| `supportsAllDrives`         | No       | `boolean` |\n| `teamDriveId`               | No       | `string`  |\n\n- `corpora`\n\n  Bodies of items to which the query applies.\n- `corpus`\n\n  The source of files to list.\n- `driveId`\n\n  ID of the shared drive to search.\n- `includeItemsFromAllDrives`\n\n  Whether both My Drive and shared drive items should be included in results.\n- `includeLabels`\n\n  A comma-separated list of label IDs to include in labelInfo.\n- `includePermissionsForView`\n\n  Specifies which additional view's permissions to include in the response.\n- `orderBy`\n\n  A comma-separated list of sort keys.\n- `pageSize`\n\n  The maximum number of files to return per page.\n- `pageToken`\n\n  The token for continuing a previous list request.\n- `q`\n\n  A Google Drive query string for filtering files.\n- `spaces`\n\n  A comma-separated list of spaces to query.\n- `supportsAllDrives`\n\n  Whether the request supports both My Drives and shared drives.\n- `teamDriveId`\n\n  Deprecated Team Drive ID.\n\n## Required Scopes\n\n- `https://www.googleapis.com/auth/drive.readonly`\n- `https://www.googleapis.com/auth/drive.metadata.readonly`\n\n## Provider Permissions\n\nNo provider permissions are declared.\n\n## Execution Policy\n\nAllowed by the current execution policy.\n\nNo policy rules matched or restricted this action.\n\n## Current Connection\n\nThis provider is not connected in the local runtime.\n\n## Notes For Agents\n\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\n- Send JSON with a top-level `input` object.\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\n- If execution fails with a credential error, ask the user to connect the app in the local console.\n"
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 16
+      }
+    }
+  },
+  "googledrive.files.get": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_qC..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 17,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "googledrive.files.get"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 5085,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"capability\": {\n      \"operationType\": \"read\",\n      \"execution\": {\n        \"locallyExecutable\": true,\n        \"catalogOnly\": false,\n        \"requiredAuthTypes\": [\n          \"oauth2\",\n          \"custom_credential\"\n        ],\n        \"noAuthRunnable\": false,\n        \"needsCredential\": true\n      },\n      \"authTypes\": [\n        \"oauth2\",\n        \"custom_credential\"\n      ],\n      \"requiredScopes\": [\n        \"https://www.googleapis.com/auth/drive.readonly\",\n        \"https://www.googleapis.com/auth/drive.metadata.readonly\"\n      ],\n      \"providerPermissions\": [],\n      \"policy\": {\n        \"allowed\": true,\n        \"checks\": []\n      }\n    },\n    \"markdown\": \"# googledrive.files.get\\n\\nGet metadata for a Drive file by ID, or download stored file content with alt=media.\\n\\n## Execute\\n\\nCall the `execute_action` tool with these arguments:\\n\\n```json\\n{\\n  \\\"actionId\\\": \\\"googledrive.files.get\\\",\\n  \\\"input\\\": {\\n    \\\"fileId\\\": \\\"\\\"\\n  }\\n}\\n```\\n\\nAdd `connectionName` to run the action with a named connection instead of the default one.\\n\\n## Input Parameters\\n\\n| Name                  | Required | Type      |\\n| --------------------- | -------- | --------- |\\n| `fileId`              | Yes      | `string`  |\\n| `includeSharedDrives` | No       | `boolean` |\\n| `alt`                 | No       | `\\\"media\\\"` |\\n| `acknowledgeAbuse`    | No       | `boolean` |\\n\\n- `fileId`\\n\\n  The ID of the Google Drive file to retrieve.\\n- `includeSharedDrives`\\n\\n  Whether the request supports files in shared drives.\\n- `alt`\\n\\n  Return stored file content instead of metadata.\\n- `acknowledgeAbuse`\\n\\n  Whether the caller acknowledges the risk of downloading known malware or other abusive files.\\n\\n## Required Scopes\\n\\n- `https://www.googleapis.com/auth/drive.readonly`\\n- `https://www.googleapis.com/auth/drive.metadata.readonly`\\n\\n## Provider Permissions\\n\\nNo provider permissions are declared.\\n\\n## Execution Policy\\n\\nAllowed by the current execution policy.\\n\\nNo policy rules matched or restricted this action.\\n\\n## Current Connection\\n\\nThis provider is not connected in the local runtime.\\n\\n## Notes For Agents\\n\\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\\n- Send JSON with a top-level `input` object.\\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\\n- If execution fails with a credential error, ask the user to connect the app in the local console.\\n\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "capability": {
+                "operationType": "read",
+                "execution": {
+                  "locallyExecutable": true,
+                  "catalogOnly": false,
+                  "requiredAuthTypes": [
+                    "oauth2",
+                    "custom_credential"
+                  ],
+                  "noAuthRunnable": false,
+                  "needsCredential": true
+                },
+                "authTypes": [
+                  "oauth2",
+                  "custom_credential"
+                ],
+                "requiredScopes": [
+                  "https://www.googleapis.com/auth/drive.readonly",
+                  "https://www.googleapis.com/auth/drive.metadata.readonly"
+                ],
+                "providerPermissions": [],
+                "policy": {
+                  "allowed": true,
+                  "checks": []
+                }
+              },
+              "markdown": "# googledrive.files.get\n\nGet metadata for a Drive file by ID, or download stored file content with alt=media.\n\n## Execute\n\nCall the `execute_action` tool with these arguments:\n\n```json\n{\n  \"actionId\": \"googledrive.files.get\",\n  \"input\": {\n    \"fileId\": \"\"\n  }\n}\n```\n\nAdd `connectionName` to run the action with a named connection instead of the default one.\n\n## Input Parameters\n\n| Name                  | Required | Type      |\n| --------------------- | -------- | --------- |\n| `fileId`              | Yes      | `string`  |\n| `includeSharedDrives` | No       | `boolean` |\n| `alt`                 | No       | `\"media\"` |\n| `acknowledgeAbuse`    | No       | `boolean` |\n\n- `fileId`\n\n  The ID of the Google Drive file to retrieve.\n- `includeSharedDrives`\n\n  Whether the request supports files in shared drives.\n- `alt`\n\n  Return stored file content instead of metadata.\n- `acknowledgeAbuse`\n\n  Whether the caller acknowledges the risk of downloading known malware or other abusive files.\n\n## Required Scopes\n\n- `https://www.googleapis.com/auth/drive.readonly`\n- `https://www.googleapis.com/auth/drive.metadata.readonly`\n\n## Provider Permissions\n\nNo provider permissions are declared.\n\n## Execution Policy\n\nAllowed by the current execution policy.\n\nNo policy rules matched or restricted this action.\n\n## Current Connection\n\nThis provider is not connected in the local runtime.\n\n## Notes For Agents\n\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\n- Send JSON with a top-level `input` object.\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\n- If execution fails with a credential error, ask the user to connect the app in the local console.\n"
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 17
+      }
+    }
+  },
+  "googledrive.files.export": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_qC..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 18,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "googledrive.files.export"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 4729,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"capability\": {\n      \"operationType\": \"read\",\n      \"execution\": {\n        \"locallyExecutable\": true,\n        \"catalogOnly\": false,\n        \"requiredAuthTypes\": [\n          \"oauth2\",\n          \"custom_credential\"\n        ],\n        \"noAuthRunnable\": false,\n        \"needsCredential\": true\n      },\n      \"authTypes\": [\n        \"oauth2\",\n        \"custom_credential\"\n      ],\n      \"requiredScopes\": [\n        \"https://www.googleapis.com/auth/drive.readonly\",\n        \"https://www.googleapis.com/auth/drive.metadata.readonly\"\n      ],\n      \"providerPermissions\": [],\n      \"policy\": {\n        \"allowed\": true,\n        \"checks\": []\n      }\n    },\n    \"markdown\": \"# googledrive.files.export\\n\\nExport a Google Workspace file to the requested MIME type and return a transit URL for the exported content.\\n\\n## Execute\\n\\nCall the `execute_action` tool with these arguments:\\n\\n```json\\n{\\n  \\\"actionId\\\": \\\"googledrive.files.export\\\",\\n  \\\"input\\\": {}\\n}\\n```\\n\\nAdd `connectionName` to run the action with a named connection instead of the default one.\\n\\n## Input Parameters\\n\\n| Name                  | Required | Type      |\\n| --------------------- | -------- | --------- |\\n| `fileId`              | No       | `string`  |\\n| `includeSharedDrives` | No       | `boolean` |\\n| `mimeType`            | No       | `string`  |\\n\\n- `fileId`\\n\\n  The ID of the file.\\n- `includeSharedDrives`\\n\\n  When true, includes files from shared drives.\\n- `mimeType`\\n\\n  The MIME type to export the file to (required for Google Workspace files).\\n\\n## Required Scopes\\n\\n- `https://www.googleapis.com/auth/drive.readonly`\\n- `https://www.googleapis.com/auth/drive.metadata.readonly`\\n\\n## Provider Permissions\\n\\nNo provider permissions are declared.\\n\\n## Execution Policy\\n\\nAllowed by the current execution policy.\\n\\nNo policy rules matched or restricted this action.\\n\\n## Current Connection\\n\\nThis provider is not connected in the local runtime.\\n\\n## Notes For Agents\\n\\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\\n- Send JSON with a top-level `input` object.\\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\\n- If execution fails with a credential error, ask the user to connect the app in the local console.\\n\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "capability": {
+                "operationType": "read",
+                "execution": {
+                  "locallyExecutable": true,
+                  "catalogOnly": false,
+                  "requiredAuthTypes": [
+                    "oauth2",
+                    "custom_credential"
+                  ],
+                  "noAuthRunnable": false,
+                  "needsCredential": true
+                },
+                "authTypes": [
+                  "oauth2",
+                  "custom_credential"
+                ],
+                "requiredScopes": [
+                  "https://www.googleapis.com/auth/drive.readonly",
+                  "https://www.googleapis.com/auth/drive.metadata.readonly"
+                ],
+                "providerPermissions": [],
+                "policy": {
+                  "allowed": true,
+                  "checks": []
+                }
+              },
+              "markdown": "# googledrive.files.export\n\nExport a Google Workspace file to the requested MIME type and return a transit URL for the exported content.\n\n## Execute\n\nCall the `execute_action` tool with these arguments:\n\n```json\n{\n  \"actionId\": \"googledrive.files.export\",\n  \"input\": {}\n}\n```\n\nAdd `connectionName` to run the action with a named connection instead of the default one.\n\n## Input Parameters\n\n| Name                  | Required | Type      |\n| --------------------- | -------- | --------- |\n| `fileId`              | No       | `string`  |\n| `includeSharedDrives` | No       | `boolean` |\n| `mimeType`            | No       | `string`  |\n\n- `fileId`\n\n  The ID of the file.\n- `includeSharedDrives`\n\n  When true, includes files from shared drives.\n- `mimeType`\n\n  The MIME type to export the file to (required for Google Workspace files).\n\n## Required Scopes\n\n- `https://www.googleapis.com/auth/drive.readonly`\n- `https://www.googleapis.com/auth/drive.metadata.readonly`\n\n## Provider Permissions\n\nNo provider permissions are declared.\n\n## Execution Policy\n\nAllowed by the current execution policy.\n\nNo policy rules matched or restricted this action.\n\n## Current Connection\n\nThis provider is not connected in the local runtime.\n\n## Notes For Agents\n\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\n- Send JSON with a top-level `input` object.\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\n- If execution fails with a credential error, ask the user to connect the app in the local console.\n"
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 18
+      }
+    }
+  },
+  "googledrive.files.create": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_qC..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 19,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "googledrive.files.create"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 5688,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"capability\": {\n      \"operationType\": \"write\",\n      \"execution\": {\n        \"locallyExecutable\": true,\n        \"catalogOnly\": false,\n        \"requiredAuthTypes\": [\n          \"oauth2\",\n          \"custom_credential\"\n        ],\n        \"noAuthRunnable\": false,\n        \"needsCredential\": true\n      },\n      \"authTypes\": [\n        \"oauth2\",\n        \"custom_credential\"\n      ],\n      \"requiredScopes\": [\n        \"https://www.googleapis.com/auth/drive\"\n      ],\n      \"providerPermissions\": [],\n      \"policy\": {\n        \"allowed\": true,\n        \"checks\": []\n      }\n    },\n    \"markdown\": \"# googledrive.files.create\\n\\nCreate a Drive file with official File metadata and optional connector media upload content.\\n\\n## Execute\\n\\nCall the `execute_action` tool with these arguments:\\n\\n```json\\n{\\n  \\\"actionId\\\": \\\"googledrive.files.create\\\",\\n  \\\"input\\\": {}\\n}\\n```\\n\\nAdd `connectionName` to run the action with a named connection instead of the default one.\\n\\n## Input Parameters\\n\\n| Name            | Required | Type      |\\n| --------------- | -------- | --------- |\\n| `name`          | No       | `string`  |\\n| `mimeType`      | No       | `string`  |\\n| `description`   | No       | `string`  |\\n| `parents`       | No       | `array`   |\\n| `starred`       | No       | `boolean` |\\n| `appProperties` | No       | `object`  |\\n| `properties`    | No       | `object`  |\\n| `contentBase64` | No       | `string`  |\\n| `text`          | No       | `string`  |\\n\\n- `name`\\n\\n  The name of the file.\\n- `mimeType`\\n\\n  The MIME type of the file.\\n- `description`\\n\\n  A short description of the file.\\n- `parents`\\n\\n  A list of parent folder IDs to place the file in.\\n- `starred`\\n\\n  Whether the user has starred the file.\\n- `appProperties`\\n\\n  A collection of arbitrary key-value pairs which are private to the requesting app.\\n- `properties`\\n\\n  A collection of arbitrary key-value pairs which are visible to all apps.\\n- `contentBase64`\\n\\n  Connector media upload content encoded as a Base64 string.\\n- `text`\\n\\n  Connector text media upload content.\\n\\n## Required Scopes\\n\\n- `https://www.googleapis.com/auth/drive`\\n\\n## Provider Permissions\\n\\nNo provider permissions are declared.\\n\\n## Execution Policy\\n\\nAllowed by the current execution policy.\\n\\nNo policy rules matched or restricted this action.\\n\\n## Current Connection\\n\\nThis provider is not connected in the local runtime.\\n\\n## Notes For Agents\\n\\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\\n- Send JSON with a top-level `input` object.\\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\\n- If execution fails with a credential error, ask the user to connect the app in the local console.\\n\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "capability": {
+                "operationType": "write",
+                "execution": {
+                  "locallyExecutable": true,
+                  "catalogOnly": false,
+                  "requiredAuthTypes": [
+                    "oauth2",
+                    "custom_credential"
+                  ],
+                  "noAuthRunnable": false,
+                  "needsCredential": true
+                },
+                "authTypes": [
+                  "oauth2",
+                  "custom_credential"
+                ],
+                "requiredScopes": [
+                  "https://www.googleapis.com/auth/drive"
+                ],
+                "providerPermissions": [],
+                "policy": {
+                  "allowed": true,
+                  "checks": []
+                }
+              },
+              "markdown": "# googledrive.files.create\n\nCreate a Drive file with official File metadata and optional connector media upload content.\n\n## Execute\n\nCall the `execute_action` tool with these arguments:\n\n```json\n{\n  \"actionId\": \"googledrive.files.create\",\n  \"input\": {}\n}\n```\n\nAdd `connectionName` to run the action with a named connection instead of the default one.\n\n## Input Parameters\n\n| Name            | Required | Type      |\n| --------------- | -------- | --------- |\n| `name`          | No       | `string`  |\n| `mimeType`      | No       | `string`  |\n| `description`   | No       | `string`  |\n| `parents`       | No       | `array`   |\n| `starred`       | No       | `boolean` |\n| `appProperties` | No       | `object`  |\n| `properties`    | No       | `object`  |\n| `contentBase64` | No       | `string`  |\n| `text`          | No       | `string`  |\n\n- `name`\n\n  The name of the file.\n- `mimeType`\n\n  The MIME type of the file.\n- `description`\n\n  A short description of the file.\n- `parents`\n\n  A list of parent folder IDs to place the file in.\n- `starred`\n\n  Whether the user has starred the file.\n- `appProperties`\n\n  A collection of arbitrary key-value pairs which are private to the requesting app.\n- `properties`\n\n  A collection of arbitrary key-value pairs which are visible to all apps.\n- `contentBase64`\n\n  Connector media upload content encoded as a Base64 string.\n- `text`\n\n  Connector text media upload content.\n\n## Required Scopes\n\n- `https://www.googleapis.com/auth/drive`\n\n## Provider Permissions\n\nNo provider permissions are declared.\n\n## Execution Policy\n\nAllowed by the current execution policy.\n\nNo policy rules matched or restricted this action.\n\n## Current Connection\n\nThis provider is not connected in the local runtime.\n\n## Notes For Agents\n\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\n- Send JSON with a top-level `input` object.\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\n- If execution fails with a credential error, ask the user to connect the app in the local console.\n"
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 19
+      }
+    }
+  },
+  "googledrive.permissions.create": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_qC..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 20,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "googledrive.permissions.create"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 9727,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"capability\": {\n      \"operationType\": \"write\",\n      \"execution\": {\n        \"locallyExecutable\": true,\n        \"catalogOnly\": false,\n        \"requiredAuthTypes\": [\n          \"oauth2\",\n          \"custom_credential\"\n        ],\n        \"noAuthRunnable\": false,\n        \"needsCredential\": true\n      },\n      \"authTypes\": [\n        \"oauth2\",\n        \"custom_credential\"\n      ],\n      \"requiredScopes\": [\n        \"https://www.googleapis.com/auth/drive\"\n      ],\n      \"providerPermissions\": [],\n      \"policy\": {\n        \"allowed\": true,\n        \"checks\": []\n      }\n    },\n    \"markdown\": \"# googledrive.permissions.create\\n\\nCreate a permission on a Drive file or shared drive.\\n\\n## Execute\\n\\nCall the `execute_action` tool with these arguments:\\n\\n```json\\n{\\n  \\\"actionId\\\": \\\"googledrive.permissions.create\\\",\\n  \\\"input\\\": {\\n    \\\"role\\\": \\\"owner\\\",\\n    \\\"type\\\": \\\"user\\\"\\n  }\\n}\\n```\\n\\nAdd `connectionName` to run the action with a named connection instead of the default one.\\n\\n## Input Parameters\\n\\n| Name                      | Required | Type                                                                               |\\n| ------------------------- | -------- | ---------------------------------------------------------------------------------- |\\n| `fileId`                  | No       | `string`                                                                           |\\n| `role`                    | Yes      | `\\\"owner\\\" \\\\| \\\"organizer\\\" \\\\| \\\"fileOrganizer\\\" \\\\| \\\"writer\\\" \\\\| \\\"commenter\\\" \\\\| \\\"reader\\\"` |\\n| `type`                    | Yes      | `\\\"user\\\" \\\\| \\\"group\\\" \\\\| \\\"domain\\\" \\\\| \\\"anyone\\\"`                                        |\\n| `domain`                  | No       | `string`                                                                           |\\n| `emailAddress`            | No       | `string`                                                                           |\\n| `email_message`           | No       | `string`                                                                           |\\n| `expiration_time`         | No       | `string`                                                                           |\\n| `transfer_ownership`      | No       | `boolean`                                                                          |\\n| `supportsAllDrives`       | No       | `boolean`                                                                          |\\n| `allow_file_discovery`    | No       | `boolean`                                                                          |\\n| `move_to_new_owners_root` | No       | `boolean`                                                                          |\\n| `send_notification_email` | No       | `boolean`                                                                          |\\n| `useDomainAdminAccess`    | No       | `boolean`                                                                          |\\n\\n- `fileId`\\n\\n  The ID of the file.\\n- `role`\\n\\n  The role granted by this permission.\\n- `type`\\n\\n  The type of the grantee (user, group, domain, or anyone).\\n- `domain`\\n\\n  The domain to which this permission refers (required for domain type).\\n- `emailAddress`\\n\\n  The email address of the user or group (required for user or group type).\\n- `email_message`\\n\\n  A custom message to include in the notification email.\\n- `expiration_time`\\n\\n  The time at which this permission will expire (RFC 3339 date-time).\\n- `transfer_ownership`\\n\\n  Whether to transfer ownership to the specified user (for owner role only).\\n- `supportsAllDrives`\\n\\n  Whether the request supports both My Drives and shared drives.\\n- `allow_file_discovery`\\n\\n  Whether the permission allows the file to be discovered through search.\\n- `move_to_new_owners_root`\\n\\n  Whether to move the file to the new owner's My Drive root folder.\\n- `send_notification_email`\\n\\n  Whether to send a notification email when sharing to users or groups.\\n- `useDomainAdminAccess`\\n\\n  Issue the request as a domain administrator.\\n\\n## Required Scopes\\n\\n- `https://www.googleapis.com/auth/drive`\\n\\n## Provider Permissions\\n\\nNo provider permissions are declared.\\n\\n## Execution Policy\\n\\nAllowed by the current execution policy.\\n\\nNo policy rules matched or restricted this action.\\n\\n## Current Connection\\n\\nThis provider is not connected in the local runtime.\\n\\n## Notes For Agents\\n\\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\\n- Send JSON with a top-level `input` object.\\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\\n- If execution fails with a credential error, ask the user to connect the app in the local console.\\n\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "capability": {
+                "operationType": "write",
+                "execution": {
+                  "locallyExecutable": true,
+                  "catalogOnly": false,
+                  "requiredAuthTypes": [
+                    "oauth2",
+                    "custom_credential"
+                  ],
+                  "noAuthRunnable": false,
+                  "needsCredential": true
+                },
+                "authTypes": [
+                  "oauth2",
+                  "custom_credential"
+                ],
+                "requiredScopes": [
+                  "https://www.googleapis.com/auth/drive"
+                ],
+                "providerPermissions": [],
+                "policy": {
+                  "allowed": true,
+                  "checks": []
+                }
+              },
+              "markdown": "# googledrive.permissions.create\n\nCreate a permission on a Drive file or shared drive.\n\n## Execute\n\nCall the `execute_action` tool with these arguments:\n\n```json\n{\n  \"actionId\": \"googledrive.permissions.create\",\n  \"input\": {\n    \"role\": \"owner\",\n    \"type\": \"user\"\n  }\n}\n```\n\nAdd `connectionName` to run the action with a named connection instead of the default one.\n\n## Input Parameters\n\n| Name                      | Required | Type                                                                               |\n| ------------------------- | -------- | ---------------------------------------------------------------------------------- |\n| `fileId`                  | No       | `string`                                                                           |\n| `role`                    | Yes      | `\"owner\" \\| \"organizer\" \\| \"fileOrganizer\" \\| \"writer\" \\| \"commenter\" \\| \"reader\"` |\n| `type`                    | Yes      | `\"user\" \\| \"group\" \\| \"domain\" \\| \"anyone\"`                                        |\n| `domain`                  | No       | `string`                                                                           |\n| `emailAddress`            | No       | `string`                                                                           |\n| `email_message`           | No       | `string`                                                                           |\n| `expiration_time`         | No       | `string`                                                                           |\n| `transfer_ownership`      | No       | `boolean`                                                                          |\n| `supportsAllDrives`       | No       | `boolean`                                                                          |\n| `allow_file_discovery`    | No       | `boolean`                                                                          |\n| `move_to_new_owners_root` | No       | `boolean`                                                                          |\n| `send_notification_email` | No       | `boolean`                                                                          |\n| `useDomainAdminAccess`    | No       | `boolean`                                                                          |\n\n- `fileId`\n\n  The ID of the file.\n- `role`\n\n  The role granted by this permission.\n- `type`\n\n  The type of the grantee (user, group, domain, or anyone).\n- `domain`\n\n  The domain to which this permission refers (required for domain type).\n- `emailAddress`\n\n  The email address of the user or group (required for user or group type).\n- `email_message`\n\n  A custom message to include in the notification email.\n- `expiration_time`\n\n  The time at which this permission will expire (RFC 3339 date-time).\n- `transfer_ownership`\n\n  Whether to transfer ownership to the specified user (for owner role only).\n- `supportsAllDrives`\n\n  Whether the request supports both My Drives and shared drives.\n- `allow_file_discovery`\n\n  Whether the permission allows the file to be discovered through search.\n- `move_to_new_owners_root`\n\n  Whether to move the file to the new owner's My Drive root folder.\n- `send_notification_email`\n\n  Whether to send a notification email when sharing to users or groups.\n- `useDomainAdminAccess`\n\n  Issue the request as a domain administrator.\n\n## Required Scopes\n\n- `https://www.googleapis.com/auth/drive`\n\n## Provider Permissions\n\nNo provider permissions are declared.\n\n## Execution Policy\n\nAllowed by the current execution policy.\n\nNo policy rules matched or restricted this action.\n\n## Current Connection\n\nThis provider is not connected in the local runtime.\n\n## Notes For Agents\n\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\n- Send JSON with a top-level `input` object.\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\n- If execution fails with a credential error, ask the user to connect the app in the local console.\n"
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 20
+      }
+    }
+  },
+  "slack.delete_message": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_qC..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 21,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "slack.delete_message"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 3977,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"capability\": {\n      \"operationType\": \"destructive\",\n      \"execution\": {\n        \"locallyExecutable\": true,\n        \"catalogOnly\": false,\n        \"requiredAuthTypes\": [\n          \"oauth2\",\n          \"api_key\"\n        ],\n        \"noAuthRunnable\": false,\n        \"needsCredential\": true\n      },\n      \"authTypes\": [\n        \"oauth2\",\n        \"api_key\"\n      ],\n      \"requiredScopes\": [\n        \"chat:write\"\n      ],\n      \"providerPermissions\": [],\n      \"policy\": {\n        \"allowed\": true,\n        \"checks\": []\n      }\n    },\n    \"markdown\": \"# slack.delete\\\\_message\\n\\nDelete a Slack message posted through this connection.\\n\\n## Execute\\n\\nCall the `execute_action` tool with these arguments:\\n\\n```json\\n{\\n  \\\"actionId\\\": \\\"slack.delete_message\\\",\\n  \\\"input\\\": {\\n    \\\"channelId\\\": \\\"\\\",\\n    \\\"messageTs\\\": \\\"\\\"\\n  }\\n}\\n```\\n\\nAdd `connectionName` to run the action with a named connection instead of the default one.\\n\\n## Input Parameters\\n\\n| Name        | Required | Type     |\\n| ----------- | -------- | -------- |\\n| `channelId` | Yes      | `string` |\\n| `messageTs` | Yes      | `string` |\\n\\n- `channelId`\\n\\n  The Slack conversation or channel ID.\\n- `messageTs`\\n\\n  The Slack message timestamp, for example '1711.0001'.\\n\\n## Required Scopes\\n\\n- `chat:write`\\n\\n## Provider Permissions\\n\\nNo provider permissions are declared.\\n\\n## Execution Policy\\n\\nAllowed by the current execution policy.\\n\\nNo policy rules matched or restricted this action.\\n\\n## Current Connection\\n\\nThis provider is not connected in the local runtime.\\n\\n## Notes For Agents\\n\\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\\n- Send JSON with a top-level `input` object.\\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\\n- If execution fails with a credential error, ask the user to connect the app in the local console.\\n\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "capability": {
+                "operationType": "destructive",
+                "execution": {
+                  "locallyExecutable": true,
+                  "catalogOnly": false,
+                  "requiredAuthTypes": [
+                    "oauth2",
+                    "api_key"
+                  ],
+                  "noAuthRunnable": false,
+                  "needsCredential": true
+                },
+                "authTypes": [
+                  "oauth2",
+                  "api_key"
+                ],
+                "requiredScopes": [
+                  "chat:write"
+                ],
+                "providerPermissions": [],
+                "policy": {
+                  "allowed": true,
+                  "checks": []
+                }
+              },
+              "markdown": "# slack.delete\\_message\n\nDelete a Slack message posted through this connection.\n\n## Execute\n\nCall the `execute_action` tool with these arguments:\n\n```json\n{\n  \"actionId\": \"slack.delete_message\",\n  \"input\": {\n    \"channelId\": \"\",\n    \"messageTs\": \"\"\n  }\n}\n```\n\nAdd `connectionName` to run the action with a named connection instead of the default one.\n\n## Input Parameters\n\n| Name        | Required | Type     |\n| ----------- | -------- | -------- |\n| `channelId` | Yes      | `string` |\n| `messageTs` | Yes      | `string` |\n\n- `channelId`\n\n  The Slack conversation or channel ID.\n- `messageTs`\n\n  The Slack message timestamp, for example '1711.0001'.\n\n## Required Scopes\n\n- `chat:write`\n\n## Provider Permissions\n\nNo provider permissions are declared.\n\n## Execution Policy\n\nAllowed by the current execution policy.\n\nNo policy rules matched or restricted this action.\n\n## Current Connection\n\nThis provider is not connected in the local runtime.\n\n## Notes For Agents\n\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\n- Send JSON with a top-level `input` object.\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\n- If execution fails with a credential error, ask the user to connect the app in the local console.\n"
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 21
+      }
+    }
+  },
+  "googledrive.files.delete": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+        "authorization": "Bearer oct_qC..."
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 22,
+        "method": "tools/call",
+        "params": {
+          "name": "get_action_guide",
+          "arguments": {
+            "actionId": "googledrive.files.delete"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 4044,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\n  \"ok\": true,\n  \"data\": {\n    \"capability\": {\n      \"operationType\": \"destructive\",\n      \"execution\": {\n        \"locallyExecutable\": true,\n        \"catalogOnly\": false,\n        \"requiredAuthTypes\": [\n          \"oauth2\",\n          \"custom_credential\"\n        ],\n        \"noAuthRunnable\": false,\n        \"needsCredential\": true\n      },\n      \"authTypes\": [\n        \"oauth2\",\n        \"custom_credential\"\n      ],\n      \"requiredScopes\": [\n        \"https://www.googleapis.com/auth/drive\"\n      ],\n      \"providerPermissions\": [],\n      \"policy\": {\n        \"allowed\": true,\n        \"checks\": []\n      }\n    },\n    \"markdown\": \"# googledrive.files.delete\\n\\nPermanently delete a Drive file or folder by ID.\\n\\n## Execute\\n\\nCall the `execute_action` tool with these arguments:\\n\\n```json\\n{\\n  \\\"actionId\\\": \\\"googledrive.files.delete\\\",\\n  \\\"input\\\": {}\\n}\\n```\\n\\nAdd `connectionName` to run the action with a named connection instead of the default one.\\n\\n## Input Parameters\\n\\n| Name                  | Required | Type      |\\n| --------------------- | -------- | --------- |\\n| `fileId`              | No       | `string`  |\\n| `includeSharedDrives` | No       | `boolean` |\\n\\n- `fileId`\\n\\n  The ID of the file.\\n- `includeSharedDrives`\\n\\n  When true, includes files from shared drives.\\n\\n## Required Scopes\\n\\n- `https://www.googleapis.com/auth/drive`\\n\\n## Provider Permissions\\n\\nNo provider permissions are declared.\\n\\n## Execution Policy\\n\\nAllowed by the current execution policy.\\n\\nNo policy rules matched or restricted this action.\\n\\n## Current Connection\\n\\nThis provider is not connected in the local runtime.\\n\\n## Notes For Agents\\n\\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\\n- Send JSON with a top-level `input` object.\\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\\n- If execution fails with a credential error, ask the user to connect the app in the local console.\\n\"\n  }\n}"
+            }
+          ],
+          "structuredContent": {
+            "ok": true,
+            "data": {
+              "capability": {
+                "operationType": "destructive",
+                "execution": {
+                  "locallyExecutable": true,
+                  "catalogOnly": false,
+                  "requiredAuthTypes": [
+                    "oauth2",
+                    "custom_credential"
+                  ],
+                  "noAuthRunnable": false,
+                  "needsCredential": true
+                },
+                "authTypes": [
+                  "oauth2",
+                  "custom_credential"
+                ],
+                "requiredScopes": [
+                  "https://www.googleapis.com/auth/drive"
+                ],
+                "providerPermissions": [],
+                "policy": {
+                  "allowed": true,
+                  "checks": []
+                }
+              },
+              "markdown": "# googledrive.files.delete\n\nPermanently delete a Drive file or folder by ID.\n\n## Execute\n\nCall the `execute_action` tool with these arguments:\n\n```json\n{\n  \"actionId\": \"googledrive.files.delete\",\n  \"input\": {}\n}\n```\n\nAdd `connectionName` to run the action with a named connection instead of the default one.\n\n## Input Parameters\n\n| Name                  | Required | Type      |\n| --------------------- | -------- | --------- |\n| `fileId`              | No       | `string`  |\n| `includeSharedDrives` | No       | `boolean` |\n\n- `fileId`\n\n  The ID of the file.\n- `includeSharedDrives`\n\n  When true, includes files from shared drives.\n\n## Required Scopes\n\n- `https://www.googleapis.com/auth/drive`\n\n## Provider Permissions\n\nNo provider permissions are declared.\n\n## Execution Policy\n\nAllowed by the current execution policy.\n\nNo policy rules matched or restricted this action.\n\n## Current Connection\n\nThis provider is not connected in the local runtime.\n\n## Notes For Agents\n\n- Use the `execute_action` tool above; do not call provider APIs directly unless the user asks.\n- Send JSON with a top-level `input` object.\n- Check the current connection and provider scopes before choosing actions on the user's behalf.\n- If execution fails with a credential error, ask the user to connect the app in the local console.\n"
+            }
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 22
+      }
+    }
+  }
+}

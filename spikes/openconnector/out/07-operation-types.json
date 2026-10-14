@@ -1,0 +1,356 @@
+{
+  "slack": [
+    {
+      "id": "slack.add_reaction",
+      "operationType": "write",
+      "description": "Add an emoji reaction to a Slack message."
+    },
+    {
+      "id": "slack.conversations_members",
+      "operationType": "read",
+      "description": "List the member user IDs of a Slack conversation. Returns one page; pass the cursor from nextCursor until it comes back empty."
+    },
+    {
+      "id": "slack.delete_file",
+      "operationType": "destructive",
+      "description": "Delete a Slack file."
+    },
+    {
+      "id": "slack.delete_message",
+      "operationType": "destructive",
+      "description": "Delete a Slack message posted through this connection."
+    },
+    {
+      "id": "slack.download_file",
+      "operationType": "read",
+      "description": "Download a Slack-hosted file into transit storage using the connected identity's access."
+    },
+    {
+      "id": "slack.get_channel_messages",
+      "operationType": "read",
+      "description": "Get recent messages from a Slack conversation."
+    },
+    {
+      "id": "slack.get_conversation",
+      "operationType": "read",
+      "description": "Get metadata for a Slack conversation."
+    },
+    {
+      "id": "slack.get_current_user",
+      "operationType": "read",
+      "description": "Get the workspace and user identity of the connected Slack credential, including whether it belongs to a bot."
+    },
+    {
+      "id": "slack.get_file",
+      "operationType": "read",
+      "description": "Get metadata for a Slack file."
+    },
+    {
+      "id": "slack.get_message_permalink",
+      "operationType": "read",
+      "description": "Get a permalink for a Slack message."
+    },
+    {
+      "id": "slack.get_reactions",
+      "operationType": "read",
+      "description": "Get reactions for a Slack message."
+    },
+    {
+      "id": "slack.get_thread",
+      "operationType": "read",
+      "description": "Get messages in a Slack thread."
+    },
+    {
+      "id": "slack.get_user",
+      "operationType": "read",
+      "description": "Get metadata for a Slack user."
+    },
+    {
+      "id": "slack.list_channels",
+      "operationType": "read",
+      "description": "List Slack public channels visible to the connected Slack identity."
+    },
+    {
+      "id": "slack.list_conversations",
+      "operationType": "read",
+      "description": "List Slack conversations visible to the connected Slack identity."
+    },
+    {
+      "id": "slack.list_files",
+      "operationType": "read",
+      "description": "List Slack files visible to the connected Slack identity, optionally filtered by channel or user."
+    },
+    {
+      "id": "slack.list_users",
+      "operationType": "read",
+      "description": "List Slack users visible to the connected Slack identity."
+    },
+    {
+      "id": "slack.open_conversation",
+      "operationType": "write",
+      "description": "Open or resume a direct message with one Slack user."
+    },
+    {
+      "id": "slack.post_ephemeral_message",
+      "operationType": "write",
+      "description": "Post an ephemeral Slack message visible only to one user in a conversation."
+    },
+    {
+      "id": "slack.post_message",
+      "operationType": "write",
+      "description": "Post a Slack message. Use text for plain messages, or blocks for rich Block Kit layouts with text as fallback."
+    },
+    {
+      "id": "slack.remove_reaction",
+      "operationType": "destructive",
+      "description": "Remove an emoji reaction from a Slack message."
+    },
+    {
+      "id": "slack.reply_message",
+      "operationType": "write",
+      "description": "Reply to a Slack thread. Use text, blocks, or attachments for the reply content."
+    },
+    {
+      "id": "slack.schedule_message",
+      "operationType": "write",
+      "description": "Schedule a Slack message to be posted later. Use text or blocks for the scheduled content."
+    },
+    {
+      "id": "slack.search_context",
+      "operationType": "read",
+      "description": "Search Slack messages with the granular Real-time Search API."
+    },
+    {
+      "id": "slack.search_messages",
+      "operationType": "read",
+      "description": "Search Slack messages visible to the connected user. Supports Slack search modifiers such as in:channel_name and from:<@UserID>."
+    },
+    {
+      "id": "slack.update_message",
+      "operationType": "write",
+      "description": "Update a Slack message posted through this connection. Provide text, blocks, or attachments as the new message content."
+    },
+    {
+      "id": "slack.upload_file",
+      "operationType": "write",
+      "description": "Upload a file to Slack using the current external upload flow. Provide fileUrl; binary content is fetched by the connector runtime."
+    }
+  ],
+  "googledrive": [
+    {
+      "id": "googledrive.about.get",
+      "operationType": "read",
+      "description": "Get Drive account information such as user details, quota, and supported capabilities."
+    },
+    {
+      "id": "googledrive.accessproposals.list",
+      "operationType": "read",
+      "description": "List pending access proposals for a specific Drive file."
+    },
+    {
+      "id": "googledrive.approvals.list",
+      "operationType": "read",
+      "description": "List approvals associated with a specific Drive file."
+    },
+    {
+      "id": "googledrive.apps.get",
+      "operationType": "read",
+      "description": "Get metadata for a specific Google Drive app by app ID."
+    },
+    {
+      "id": "googledrive.changes.getStartPageToken",
+      "operationType": "read",
+      "description": "Get the page token for monitoring future Drive changes."
+    },
+    {
+      "id": "googledrive.changes.list",
+      "operationType": "read",
+      "description": "List file and drive changes for incremental sync workflows."
+    },
+    {
+      "id": "googledrive.comments.create",
+      "operationType": "write",
+      "description": "Create a comment on a Drive file, optionally with anchor or quoted file content."
+    },
+    {
+      "id": "googledrive.comments.delete",
+      "operationType": "destructive",
+      "description": "Permanently delete a comment thread from a Drive file."
+    },
+    {
+      "id": "googledrive.comments.get",
+      "operationType": "read",
+      "description": "Get a specific comment on a Drive file by comment ID."
+    },
+    {
+      "id": "googledrive.comments.list",
+      "operationType": "read",
+      "description": "List comments on a Drive file with pagination."
+    },
+    {
+      "id": "googledrive.comments.update",
+      "operationType": "write",
+      "description": "Update the content of an existing Drive file comment."
+    },
+    {
+      "id": "googledrive.drives.create",
+      "operationType": "write",
+      "description": "Create a new shared drive."
+    },
+    {
+      "id": "googledrive.drives.delete",
+      "operationType": "destructive",
+      "description": "Permanently delete a shared drive."
+    },
+    {
+      "id": "googledrive.drives.get",
+      "operationType": "read",
+      "description": "Get a shared drive by drive ID."
+    },
+    {
+      "id": "googledrive.drives.hide",
+      "operationType": "destructive",
+      "description": "Hide a shared drive from the default Drive view."
+    },
+    {
+      "id": "googledrive.drives.list",
+      "operationType": "read",
+      "description": "List shared drives accessible to the connected account."
+    },
+    {
+      "id": "googledrive.drives.unhide",
+      "operationType": "write",
+      "description": "Unhide a shared drive and restore it to the default Drive view."
+    },
+    {
+      "id": "googledrive.drives.update",
+      "operationType": "write",
+      "description": "Update metadata or restrictions on a shared drive."
+    },
+    {
+      "id": "googledrive.files.copy",
+      "operationType": "write",
+      "description": "Copy a Drive file and optionally override official File metadata."
+    },
+    {
+      "id": "googledrive.files.create",
+      "operationType": "write",
+      "description": "Create a Drive file with official File metadata and optional connector media upload content."
+    },
+    {
+      "id": "googledrive.files.delete",
+      "operationType": "destructive",
+      "description": "Permanently delete a Drive file or folder by ID."
+    },
+    {
+      "id": "googledrive.files.emptyTrash",
+      "operationType": "destructive",
+      "description": "Permanently empty the user's trash or a shared drive's trash."
+    },
+    {
+      "id": "googledrive.files.export",
+      "operationType": "read",
+      "description": "Export a Google Workspace file to the requested MIME type and return a transit URL for the exported content."
+    },
+    {
+      "id": "googledrive.files.generateIds",
+      "operationType": "write",
+      "description": "Generate one or more Drive file IDs for later create or copy requests."
+    },
+    {
+      "id": "googledrive.files.get",
+      "operationType": "read",
+      "description": "Get metadata for a Drive file by ID, or download stored file content with alt=media."
+    },
+    {
+      "id": "googledrive.files.list",
+      "operationType": "read",
+      "description": "List Google Drive files using the official Drive query and pagination parameters."
+    },
+    {
+      "id": "googledrive.files.listLabels",
+      "operationType": "read",
+      "description": "List the Drive labels currently applied to a file."
+    },
+    {
+      "id": "googledrive.files.modifyLabels",
+      "operationType": "destructive",
+      "description": "Add, update, or remove Drive labels on a file."
+    },
+    {
+      "id": "googledrive.files.update",
+      "operationType": "destructive",
+      "description": "Patch a Drive file with official metadata, parent query parameters, and optional connector media upload content."
+    },
+    {
+      "id": "googledrive.permissions.create",
+      "operationType": "write",
+      "description": "Create a permission on a Drive file or shared drive."
+    },
+    {
+      "id": "googledrive.permissions.delete",
+      "operationType": "destructive",
+      "description": "Delete a permission from a Drive file or shared drive."
+    },
+    {
+      "id": "googledrive.permissions.get",
+      "operationType": "read",
+      "description": "Get a specific permission on a Drive file or shared drive by permission ID."
+    },
+    {
+      "id": "googledrive.permissions.list",
+      "operationType": "read",
+      "description": "List permissions on a Drive file or shared drive."
+    },
+    {
+      "id": "googledrive.permissions.update",
+      "operationType": "write",
+      "description": "Update an existing Drive permission using Google Drive v3 patch semantics."
+    },
+    {
+      "id": "googledrive.replies.create",
+      "operationType": "write",
+      "description": "Create a reply under an existing Drive file comment."
+    },
+    {
+      "id": "googledrive.replies.delete",
+      "operationType": "destructive",
+      "description": "Permanently delete a specific reply from a Drive file comment thread."
+    },
+    {
+      "id": "googledrive.replies.get",
+      "operationType": "read",
+      "description": "Get a specific reply under a Drive file comment."
+    },
+    {
+      "id": "googledrive.replies.list",
+      "operationType": "read",
+      "description": "List replies under a Drive file comment with pagination."
+    },
+    {
+      "id": "googledrive.replies.update",
+      "operationType": "write",
+      "description": "Update the content of an existing reply on a Drive file comment."
+    },
+    {
+      "id": "googledrive.revisions.delete",
+      "operationType": "destructive",
+      "description": "Permanently delete a specific revision from a Drive file."
+    },
+    {
+      "id": "googledrive.revisions.get",
+      "operationType": "read",
+      "description": "Get metadata for a specific Drive file revision."
+    },
+    {
+      "id": "googledrive.revisions.list",
+      "operationType": "read",
+      "description": "List revision metadata for a Drive file."
+    },
+    {
+      "id": "googledrive.revisions.update",
+      "operationType": "write",
+      "description": "Update revision metadata flags on a specific Drive file revision."
+    }
+  ]
+}

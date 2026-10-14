@@ -1,0 +1,371 @@
+/* Styles of the computer feature,
+   loaded after app.css by src/styles/feature-styles.ts. Unlayered rules come first: like
+   design-refresh.css they override every layered rule.
+   Rules inside @layer components rank with the shared components of app.css and lose to
+   any unlayered rule; within the layer the later rule wins.
+   This file skips Tailwind's compile. `background: none 0 0` and `transparent 0 0` spell
+   what that compile shipped for `none` and `transparent` (it set the position to 0 0). */
+.page-heading h1 {
+  font-size: var(--app-text-2xl);
+  font-weight: 600;
+  letter-spacing: -.7px;
+}
+.workspace-screen .workspace-settings {
+  display: grid;
+  gap: 16px;
+}
+.workspace-screen .workspace-settings .card {
+  display: grid;
+  gap: 12px;
+}
+.workspace-screen .workspace-settings h3 {
+  margin: 0;
+  font-size: var(--app-text-lg);
+}
+.workspace-screen .workspace-settings p {
+  margin: 0;
+  line-height: 1.5;
+}
+.computer-page > .resource-page {
+  padding: 0;
+}
+.resource-heading-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+}
+.computer-bot-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+/* Computer */
+.computer-page .workspace-settings {
+  display: grid;
+  gap: 16px;
+}
+.computer-page .workspace-settings .card {
+  display: grid;
+  gap: 12px;
+}
+.computer-page .workspace-settings h2 {
+  margin: 0;
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+}
+.computer-page .workspace-settings p {
+  margin: 0;
+  line-height: 1.5;
+}
+.computer-bots {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.computer-bots .workspace-bot-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--separator);
+  min-width: 0;
+}
+.computer-bot-name {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.computer-bot-name > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.computer-bot-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  font-size: var(--app-text-sm);
+}
+@layer components {
+  .page-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .page-heading h1 {
+    margin: 4px 0 6px;
+  }
+  .page-heading p {
+    color: var(--app-text-3);
+    font-size: var(--app-text-sm);
+    line-height: 1.6;
+    max-width: 62ch;
+  }
+  /* Desktop panel */
+  .desktop-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px 16px;
+    border-left: 1px solid var(--app-border);
+    background: var(--surface-2);
+    overflow: auto;
+    min-width: 0;
+  }
+  .desktop-rail > header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .desktop-rail h2 {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 4px;
+    font-size: var(--app-text-md);
+  }
+  .desktop-count {
+    padding: 2px 8px;
+    font-size: var(--app-text-xs);
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-full);
+    background: var(--app-surface);
+    color: var(--app-text-3);
+  }
+  .desktop-intro {
+    font-size: var(--app-text-xs);
+    line-height: 1.6;
+    color: var(--app-text-3);
+  }
+  .desktop-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .desktop-card {
+    border: 1px solid var(--app-border);
+    background: var(--app-surface);
+    border-radius: var(--app-radius-lg);
+    overflow: hidden;
+    box-shadow: var(--app-shadow-xs);
+  }
+  .desktop-card-heading {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 12px 10px;
+  }
+  .desktop-card-heading h3 {
+    font-size: var(--app-text-xs);
+    font-weight: 600;
+  }
+  .desktop-card-heading > div > span {
+    display: block;
+    margin-top: 2px;
+    color: var(--app-text-3);
+    font-size: var(--app-text-xs);
+  }
+  .desktop-placeholder {
+    margin: 0 12px;
+    min-height: 136px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--surface-2);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--app-radius-sm);
+    color: var(--app-text-4);
+  }
+  .desktop-placeholder span {
+    font-size: var(--app-text-xs);
+    max-width: 180px;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .desktop-card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 8px 8px 14px;
+  }
+  .desktop-card-actions > span {
+    color: var(--app-text-4);
+    letter-spacing: 0.1em;
+    font-size: var(--app-text-xs);
+    font-weight: 600;
+  }
+  .desktop-footnote {
+    display: flex;
+    gap: 9px;
+    padding: 4px 2px;
+    color: var(--app-text-4);
+    font-size: var(--app-text-xs);
+    line-height: 1.6;
+  }
+  .desktop-footnote svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .desktop-frame {
+    position: relative;
+    background: var(--surface-3);
+    overflow: hidden;
+    border-radius: var(--app-radius-sm);
+    aspect-ratio: 8 / 5;
+  }
+  .desktop-frame.expanded {
+    min-height: 200px;
+    max-height: 68dvh;
+    width: 100%;
+  }
+  .rfb-surface {
+    width: 100%;
+    height: 100%;
+  }
+  .desktop-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--surface-3);
+    color: var(--app-text-3);
+    font-size: var(--app-text-xs);
+    padding: 18px;
+    text-align: center;
+  }
+  .desktop-live {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: color-mix(in srgb, var(--app-surface) 90%, transparent);
+    color: var(--success-text);
+    padding: 3px 7px;
+    border-radius: var(--app-radius-xs);
+    font-size: var(--app-text-xs);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    pointer-events: none;
+  }
+  .desktop-dialog-heading {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin-bottom: 16px;
+    padding-right: 28px;
+  }
+  .desktop-dialog-footer {
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .desktop-dialog-footer > span {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--app-text-3);
+    font-size: var(--app-text-sm);
+  }
+  .desktop-control-note {
+    font-size: var(--app-text-xs);
+    color: var(--app-text-3);
+    margin-top: 10px;
+  }
+  .desktop-error {
+    padding: 0 14px 12px;
+    font-size: var(--app-text-xs);
+  }
+  /* Desktops page */
+  .desktops-screen {
+    padding: 28px 32px 48px;
+  }
+  .workspace-desktops {
+    margin-top: 28px;
+  }
+  .workspace-desktops > h2 {
+    font-size: var(--app-text-md);
+    color: var(--app-text-2);
+    margin-bottom: 14px;
+  }
+  .workspace-desktops > .desktop-rail {
+    background: none 0 0;
+    border: 0;
+    padding: 0;
+    overflow: visible;
+  }
+  .workspace-desktops > .desktop-rail > header,
+  .workspace-desktops .desktop-intro,
+  .workspace-desktops .desktop-footnote {
+    display: none;
+  }
+  .workspace-desktops .desktop-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+    gap: 18px;
+  }
+  .desktops-empty {
+    min-height: 50vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    color: var(--app-text-3);
+    gap: 14px;
+    text-align: center;
+  }
+  .desktops-empty h2 {
+    color: var(--text);
+    font-size: var(--app-text-lg);
+  }
+  .desktops-empty p {
+    font-size: var(--app-text-sm);
+  }
+  .workspace-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 760px;
+  }
+  .workspace-settings .card:not([data-gb-ui]) > p + * {
+    margin-top: 12px;
+  }
+  .workspace-bot-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+  }
+  .info-members {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: var(--app-text-sm);
+  }
+  @media (max-width: 960px) {
+    .desktop-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .desktops-screen {
+      padding: 20px;
+    }
+  }
+}

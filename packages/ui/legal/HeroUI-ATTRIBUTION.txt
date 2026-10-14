@@ -1,0 +1,24 @@
+HeroUI dependency attribution (prepared by Deskmates)
+
+Components: @heroui/react 3.2.6 and @heroui/styles 3.2.6
+Upstream: https://github.com/heroui-inc/heroui
+Copyright 2025 NextUI Inc.
+License: Apache License, Version 2.0. See HeroUI-LICENSE.txt in this directory.
+
+The accompanying license is copied verbatim from both installed packages,
+whose license texts are identical. Neither package contains a separate NOTICE
+file. This attribution is supplied by Deskmates, not an upstream NOTICE file.
+
+Deskmates imports and composes the upstream components and styles, adds its own
+wrappers and theme aliases, and bundles/minifies the result for browser use.
+This integration does not patch or edit upstream source files. Deskmates branding,
+application logic and the supplied Deskmates logo are not HeroUI materials.
+
+Version note: the installed package.json license fields still say MIT. The
+included LICENSE files and official v3 documentation instead specify Apache-2.0;
+the official v3.0.3 release notes record the change from MIT to Apache-2.0:
+https://heroui.com/en/docs/react/releases/v3-0-3
+
+This file covers these two dependencies only, not all third-party dependencies
+of Deskmates or their licenses. Recheck upstream licenses and NOTICE files when
+upgrading these packages.

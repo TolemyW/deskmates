@@ -1,0 +1,29 @@
+{
+  "name": "@deskmates/connector-postgres",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone connector service implementing the ADR-0012 HTTP contract against one PostgreSQL-protocol database (PostgreSQL or a compatible server). Imports contracts only; imported by nothing.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "deskmates-connector-postgres": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests --config ../../vitest.config.ts --exclude \"**/*.container.test.ts\" --exclude \"**/*.acceptance.test.ts\"",
+    "start": "node dist/index.js"
+  },
+  "files": ["dist", "migrations"],
+  "dependencies": {
+    "@deskmates/contracts": "*",
+    "better-sqlite3": "^12.4.1",
+    "fastify": "^5.6.1",
+    "pg": "^8.23.0",
+    "pgsql-ast-parser": "^12.0.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/pg": "^8.23.1"
+  }
+}

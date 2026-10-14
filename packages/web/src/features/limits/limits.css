@@ -1,0 +1,53 @@
+/* Workspace execution limits section (ADR-0005 amendment 5, ADR-0016 amendment 2). */
+
+.limits-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.limits-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.limits-list dt {
+  color: var(--muted, inherit);
+}
+
+.limits-list dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.limits-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.limits-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 6px 12px;
+}
+
+.limits-field > label:first-child {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 240px;
+}
+
+.limits-off {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.limits-actions {
+  display: flex;
+  gap: 8px;
+}

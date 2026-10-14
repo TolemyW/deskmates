@@ -1,0 +1,27 @@
+{
+  "name": "@deskmates/sidecar",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Runs inside the bot container. Hosts the Claude Agent SDK loop, intercepts tools, owns the browser lock.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "deskmates-sidecar": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests --config ../../vitest.config.ts --exclude \"**/*.container.test.ts\" --exclude \"**/*.acceptance.test.ts\"",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.278",
+    "@deskmates/contracts": "*",
+    "node-pty": "1.1.0",
+    "undici": "7.29.1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@deskmates/testkit": "*"
+  }
+}

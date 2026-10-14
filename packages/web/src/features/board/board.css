@@ -1,0 +1,62 @@
+/* Styles of the board feature,
+   loaded after app.css by src/styles/feature-styles.ts. Unlayered rules come first: like
+   design-refresh.css they override every layered rule.
+   Rules inside @layer components rank with the shared components of app.css and lose to
+   any unlayered rule; within the layer the later rule wins. */
+@layer components {
+  .board-composer {
+    display: grid;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .board-textarea {
+    width: 100%;
+    min-height: 4.5rem;
+    resize: vertical;
+    font: inherit;
+  }
+
+  .board-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .board-posts,
+  .board-history {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .board-post {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .board-post-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  /* Plain text: keep the author's line breaks, break long words. */
+  .board-post-body {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .board-post-hidden {
+    opacity: 0.7;
+    border-style: dashed;
+  }
+
+  .board-post-flag {
+    font-weight: 600;
+  }
+}

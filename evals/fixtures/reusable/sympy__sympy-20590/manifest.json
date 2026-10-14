@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "caseId": "sympy__sympy-20590",
+  "role": "development",
+  "purpose": "public official SWE-bench quickstart pipeline smoke, not a blind agent ability score",
+  "status": "exact_row_extracted_reference_pending",
+  "source": {
+    "dataset": "princeton-nlp/SWE-bench_Lite",
+    "datasetRevision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+    "split": "test",
+    "parquetPath": "data/test-00000-of-00001.parquet",
+    "parquetSha256": "7a21f37b8bc179c7db5beeb14e88ac538ba283455c776e6b2535bbfb6e3551b4",
+    "baseCommit": "cffd4e0f86fefd4802349a9f9b19ed70934ea354",
+    "environmentSetupCommit": "cffd4e0f86fefd4802349a9f9b19ed70934ea354",
+    "version": "1.7",
+    "rowSha256": "d7ac1694d45ae9ea9d0a0c20663cde64b071e91ab46b529f90970b597d01b589",
+    "repository": "https://github.com/sympy/sympy",
+    "repositoryLicense": "BSD 3-Clause style, SymPy LICENSE at pinned base commit; bundled components may carry separate notices",
+    "license": "No separate license declared on the pinned Princeton-NLP Lite card; keep row and patches in private evaluator storage pending rights clarification"
+  },
+  "harness": {
+    "repository": "https://github.com/SWE-bench/SWE-bench",
+    "commit": "02e7a74ffd0b707aab73d203fe87bdc7c76afc8e",
+    "taskRepoCommit": "3d07b464b7b311a0cbfb5ed5b2d8a3b96f84a33d",
+    "taskRepoCompatibilitySha256": "2f249aa04a7d71ef4ad80e143a344e535336f36a933c61c2589c79645ef9d7fb",
+    "license": "MIT",
+    "referenceTests": ["test_immutable"],
+    "passToPassCount": 21,
+    "imageId": null,
+    "imageDigest": null
+  },
+  "platform": "Testbox Linux x86_64; Docker image build and official controls pending",
+  "agentVisible": {
+    "issueText": "agent-issue.md extracted from the exact pinned row's problem_statement only",
+    "issueSha256": "e2f8e16a69eabf97334f7852f8675d8d470ef7a3e990ab484c6427bd7ad9ff52",
+    "checkout": "SymPy at baseCommit"
+  },
+  "evaluatorOnly": {
+    "manifestBotMountable": false,
+    "assets": ["full dataset row", "gold/test patches", "official tests and reports"],
+    "mountedInBotWorkspace": false
+  },
+  "controls": ["gold", "literal-empty-patch-no-change", "behavior-preserving-inert-diff"],
+  "budget": null,
+  "budgetDecision": "Owner must predeclare time, turns, model cost and attempts before a real Deskmates trial"
+}

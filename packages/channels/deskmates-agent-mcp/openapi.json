@@ -1,0 +1,1059 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Deskmates operator API: the subset deskmates-agent-mcp uses",
+    "version": "0.1.0",
+    "description": "Generated from packages/channels/deskmates-agent-mcp/src/openapi.ts. Every route is on the Gateway's authenticated operator listener and is tenant-scoped; ids of another tenant answer the same 404 as missing ones. Errors carry a DeskmatesError body; 429 means a request, queue or service-principal budget is spent and the call may be retried later."
+  },
+  "servers": [
+    {
+      "url": "{gatewayUrl}",
+      "variables": {
+        "gatewayUrl": {
+          "default": "http://127.0.0.1:8081"
+        }
+      }
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "paths": {
+    "/api/workspaces": {
+      "get": {
+        "operationId": "listWorkspaces",
+        "summary": "Workspaces of the caller's tenant",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "workspaces": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/bots": {
+      "get": {
+        "operationId": "listBots",
+        "summary": "Bots, optionally of one workspace; each carries its name and role",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "description": "Only this workspace's bots",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bots": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Bot"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/capacity": {
+      "get": {
+        "operationId": "getCapacity",
+        "summary": "Free lanes, queue depth and parked runs per bot; browser lock; sidecar slots",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "query",
+            "description": "Workspace id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "capacity": {
+                      "$ref": "#/components/schemas/Object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workspaces/{id}/submit": {
+      "post": {
+        "operationId": "submitWork",
+        "summary": "Create a thread bound to (channel, externalKey), post one must-reply instruction and a linked task; idempotent on externalKey. Admin role: a member-role service principal gets 403 (ADR-0022 amendment 1)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Workspace id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["externalKey", "botId", "title", "instruction"],
+                "additionalProperties": false,
+                "properties": {
+                  "externalKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Your own id for this unit of work, unique per workspace. A repeat submit with the same key returns the existing thread, task and runs instead of creating new ones."
+                  },
+                  "botId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The bot that does the work (see list_bots)."
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Thread and task title."
+                  },
+                  "instruction": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "What the bot should do. Posted as one must-reply message: a run that ends without replying is recorded failed with reason `no_reply`."
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Optional longer task description."
+                  },
+                  "outputSchema": {
+                    "type": "object",
+                    "description": "Optional JSON Schema the bot's delivered output must satisfy (subset: type, required, properties, enum, items, additionalProperties, title, description)."
+                  },
+                  "deadline": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "Optional ISO 8601 date-time with a zone, in the future (a past deadline is refused). Past it the scheduler cancels the thread's unfinished runs with reason `deadline`."
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "description": "Optional inputs attached to the instruction message: a workspace path or a Gateway artifact URL each. Names inputs; does not upload them.",
+                    "items": {
+                      "type": "object",
+                      "required": ["name", "mimeType", "ref"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "mimeType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "ref": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Workspace path or artifact URL"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A repeated externalKey: the original ids and current runs; nothing is created and no budget is checked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workspaces/{id}/submissions": {
+      "get": {
+        "operationId": "getSubmission",
+        "summary": "Recover a submission's thread, task and latest run by externalKey (404 if unknown)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Workspace id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "externalKey",
+            "in": "query",
+            "description": "The key given to submit",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Submission"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workspaces/{workspaceId}/tasks": {
+      "get": {
+        "operationId": "listTasks",
+        "summary": "Tasks of a workspace",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "description": "Workspace id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Task"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workspaces/{workspaceId}/tasks/{id}": {
+      "get": {
+        "operationId": "getTask",
+        "summary": "One task, with its status, linked threads and runs, artifacts and output",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "description": "Workspace id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Task id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "task": {
+                      "$ref": "#/components/schemas/Task"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/threads/{id}/messages": {
+      "get": {
+        "operationId": "listMessages",
+        "summary": "A thread's transcript after a sequence number",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Thread id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "afterSeq",
+            "in": "query",
+            "description": "Return messages with seq greater than this",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "messages": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "postMessage",
+        "summary": "Post a human message, waking members as routing decides",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Thread id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "body": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "mustReply": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["body"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A redelivery of an earlier externalId",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Object"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Posted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "$ref": "#/components/schemas/Object"
+                    },
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Run"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/runs": {
+      "get": {
+        "operationId": "listRuns",
+        "summary": "Runs of the caller's tenant, optionally of one thread",
+        "parameters": [
+          {
+            "name": "threadId",
+            "in": "query",
+            "description": "Only this thread's runs",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Run"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/runs/{id}": {
+      "get": {
+        "operationId": "getRun",
+        "summary": "One run and its token usage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Run id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "run": {
+                      "$ref": "#/components/schemas/Run"
+                    },
+                    "usage": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/runs/{id}/cancel": {
+      "post": {
+        "operationId": "cancelRun",
+        "summary": "Cancel a run that has not finished",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Run id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "run": {
+                      "$ref": "#/components/schemas/Run"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/approvals": {
+      "get": {
+        "operationId": "listApprovals",
+        "summary": "Pending (or decided) approvals, optionally of one thread",
+        "parameters": [
+          {
+            "name": "threadId",
+            "in": "query",
+            "description": "Only this thread's approvals",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "pending (default) or decided",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["pending", "decided"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "approvals": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}/decide": {
+      "post": {
+        "operationId": "decideApproval",
+        "summary": "Decide a pending approval; allow_always also stores a rule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Approval id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": ["allow_once", "allow_always", "deny"],
+                    "description": "allow_once lets this one call proceed; allow_always also stores a rule for the bot that answers matching calls without asking; deny refuses it."
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": ["decision"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decided",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "approval": {
+                      "$ref": "#/components/schemas/Object"
+                    },
+                    "rule": {
+                      "$ref": "#/components/schemas/Object"
+                    }
+                  },
+                  "required": ["approval"]
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/workspaces/{id}/files": {
+      "get": {
+        "operationId": "downloadFile",
+        "summary": "Download one workspace file under /work/ or /home/<bot>/ (ADR-0014)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Workspace id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "description": "Absolute path in the workspace",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file's bytes",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "$ref": "#/components/responses/Error"
+          },
+          "5XX": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "A service principal token (deskmates-sp.<token>) or the operator token."
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "A DeskmatesError",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Object": {
+        "type": "object",
+        "description": "See the Gateway's contracts package for the shape."
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "DeskmatesError code, e.g. not_found, budget_exceeded"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
+          }
+        },
+        "required": ["code", "message"]
+      },
+      "Bot": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "soulVersion": {
+            "type": "integer"
+          }
+        },
+        "required": ["id", "name", "role", "workspaceId"]
+      },
+      "Task": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workspaceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "ownerBotId": {
+            "type": ["string", "null"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["planned", "in_progress", "blocked", "delivered", "accepted", "cancelled"]
+          },
+          "threadIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "runIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "runId": {
+                  "type": "string"
+                }
+              },
+              "required": ["label", "path"]
+            }
+          },
+          "version": {
+            "type": "integer"
+          },
+          "deliveredAt": {
+            "type": ["string", "null"]
+          },
+          "deliveredBy": {
+            "type": ["string", "null"]
+          },
+          "outputSchema": {
+            "type": ["object", "null"]
+          },
+          "output": {
+            "description": "Structured output the bot delivered, or null"
+          },
+          "acceptedAt": {
+            "type": ["string", "null"]
+          },
+          "acceptedBy": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": ["id", "workspaceId", "title", "status", "version"]
+      },
+      "Run": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "botId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "lane": {
+            "type": "string",
+            "enum": ["interactive", "background"]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "waiting_approval_live",
+              "waiting_approval",
+              "waiting_browser",
+              "waiting_continuation",
+              "succeeded",
+              "silent",
+              "failed",
+              "cancelled",
+              "stopped"
+            ]
+          },
+          "error": {
+            "type": "string",
+            "description": "`no_reply`, `deadline`, or free text from the sidecar or scheduler"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "finishedAt": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "botId", "status"]
+      },
+      "SubmitResponse": {
+        "type": "object",
+        "properties": {
+          "threadId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "taskId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "messageId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Run"
+            }
+          }
+        },
+        "required": ["threadId", "taskId", "messageId", "runs"]
+      },
+      "Submission": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "$ref": "#/components/schemas/Object"
+          },
+          "task": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Task"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null only when an operator has unlinked the task since"
+          },
+          "latestRun": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Run"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The thread's newest run; null when none was created"
+          }
+        },
+        "required": ["thread", "task", "latestRun"]
+      }
+    }
+  }
+}

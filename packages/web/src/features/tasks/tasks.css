@@ -1,0 +1,378 @@
+/* Styles of the tasks feature,
+   loaded after app.css by src/styles/feature-styles.ts. Unlayered rules come first: like
+   design-refresh.css they override every layered rule.
+   Rules inside @layer components rank with the shared components of app.css and lose to
+   any unlayered rule; within the layer the later rule wins.
+   This file skips Tailwind's compile. `background: none 0 0` and `transparent 0 0` spell
+   what that compile shipped for `none` and `transparent` (it set the position to 0 0). */
+.task-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 28px;
+}
+.task-metric-card {
+  padding: 24px;
+}
+.task-metric-card > div {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
+}
+.tasks-screen {
+  padding: 32px;
+}
+.tasks-layout {
+  grid-template-columns: minmax(280px, .9fr) minmax(0, 1.65fr);
+  gap: 24px;
+}
+.task-list {
+  padding: 0;
+  border: 0;
+  background: transparent 0 0;
+}
+.task-list > label {
+  font-size: var(--app-text-base);
+}
+.task-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.task-list-heading h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+}
+.task-list ul {
+  gap: 8px;
+}
+.task-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+}
+.task-item-meta .task-status {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.task-owner {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-list .task-blocker {
+  border-top: 1px solid var(--separator);
+  padding-top: 10px;
+  font-size: var(--app-text-xs);
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+.task-list li a {
+  border: 0;
+  border-radius: 18px;
+  background: var(--surface);
+  padding: 16px;
+  gap: 12px;
+  box-shadow: var(--app-shadow-xs);
+}
+.task-list li a:hover,
+.task-list li a.active {
+  background: var(--default);
+  border-color: transparent;
+}
+.task-list li a strong {
+  line-height: 1.5;
+  overflow-wrap: break-word;
+  font-size: var(--app-text-base);
+  font-weight: 500;
+}
+.task-detail {
+  border: 0;
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: var(--app-shadow-sm);
+}
+.task-detail h2 {
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+}
+.task-form {
+  gap: 20px;
+}
+.task-form fieldset {
+  border: 0;
+  padding: 0;
+  gap: 20px;
+}
+.task-status {
+  font-size: var(--app-text-xs);
+  font-weight: 500;
+}
+.task-form-row {
+  gap: 20px;
+}
+@media (max-width: 1100px) {
+  .tasks-layout {
+    grid-template-columns: minmax(230px, .8fr) minmax(0, 1.4fr);
+  }
+}
+@media (max-width: 960px) {
+  .tasks-screen {
+    padding: 24px;
+  }
+  .task-metrics {
+    gap: 12px;
+  }
+}
+@media (max-width: 720px) {
+  .tasks-screen {
+    padding: 20px 16px;
+  }
+  .tasks-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .task-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .task-metric-card {
+    padding: 18px;
+    gap: 12px;
+  }
+  .task-detail {
+    padding: 20px;
+  }
+}
+@layer components {
+  .tasks-screen {
+    height: 100%;
+    overflow: auto;
+    padding: 28px;
+  }
+  .task-detail-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .task-new-link {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .task-new-link {
+    flex-shrink: 0;
+  }
+  .tasks-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .task-list,
+  .task-detail {
+    min-width: 0;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-lg);
+    background: var(--app-surface);
+    padding: 20px;
+  }
+  .task-list,
+  .task-list ul,
+  .task-form,
+  .task-form fieldset,
+  .task-artifact-editor,
+  .task-artifact-fields,
+  .task-linked-records,
+  .task-saved-artifact {
+    display: grid;
+    gap: 14px;
+  }
+  .task-list li a {
+    display: grid;
+    gap: 6px;
+    padding: 12px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius);
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+  .task-list li a:hover,
+  .task-list li a.active {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+    text-decoration: none;
+  }
+  .task-status {
+    display: inline-flex;
+    width: fit-content;
+    padding: 3px 8px;
+    border-radius: var(--app-radius-full);
+    font-size: var(--app-text-xs);
+    background: var(--surface-3);
+    color: var(--app-text-2);
+  }
+  .task-status.in_progress,
+  .task-status.delivered {
+    background: var(--info-soft);
+    color: var(--info-text);
+  }
+  .task-status.blocked,
+  .task-warning {
+    background: var(--app-warning-soft);
+    color: var(--warning-text);
+  }
+  .task-status.accepted {
+    background: var(--app-success-soft);
+    color: var(--success-text);
+  }
+  .task-blocker {
+    color: var(--warning-text);
+    font-size: var(--app-text-sm);
+  }
+  .task-detail-heading h2 {
+    overflow-wrap: anywhere;
+    margin-bottom: 8px;
+  }
+  .task-detail > .error,
+  .task-notice,
+  .task-warning {
+    display: block;
+    margin-bottom: 16px;
+  }
+  .task-warning {
+    padding: 12px;
+    border-radius: var(--app-radius);
+  }
+  .task-record {
+    display: grid;
+    gap: 4px;
+    margin-bottom: 20px;
+  }
+  .task-json {
+    margin-bottom: 20px;
+  }
+  .task-json pre {
+    max-height: 320px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .task-form fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .task-form label,
+  .task-list > label {
+    display: grid;
+    gap: 6px;
+    font-size: var(--app-text-sm);
+    font-weight: 500;
+  }
+  .task-form-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .task-artifact-fields,
+  .task-saved-artifact {
+    padding: 14px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius);
+    background: var(--surface-2);
+  }
+  .task-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .task-acceptance,
+  .task-linked-records {
+    display: grid;
+    gap: 12px;
+    margin-top: 24px;
+    border-top: 1px solid var(--app-border);
+    padding-top: 20px;
+    overflow-wrap: anywhere;
+  }
+  .task-acceptance > button,
+  .task-artifact-editor > button,
+  .task-artifact-fields > button {
+    justify-self: start;
+  }
+  @media (max-width: 900px) {
+    .tasks-screen {
+      padding: 16px;
+    }
+
+    .tasks-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .task-list ul {
+      max-height: 280px;
+      overflow: auto;
+    }
+  }
+  @media (max-width: 540px) {
+    .task-detail-heading {
+      flex-direction: column;
+    }
+
+    .task-form-row {
+      grid-template-columns: 1fr;
+    }
+
+    .task-list,
+    .task-detail {
+      padding: 14px;
+    }
+  }
+
+  /* ADR-0021 amendment 3: trigger choice and measured execution. */
+  .task-trigger,
+  .task-execution {
+    display: grid;
+    gap: 8px;
+  }
+
+  .task-execution {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+  }
+
+  .task-submissions,
+  .task-deliveries ul {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .task-execution-state {
+    font-size: 0.85em;
+    font-weight: 600;
+  }
+
+  .task-execution-state.failed,
+  .task-execution-state.missed {
+    color: var(--danger, #c0392b);
+  }
+
+  .task-execution-state.waiting,
+  .task-execution-state.skipped {
+    color: var(--warning, #b7791f);
+  }
+}

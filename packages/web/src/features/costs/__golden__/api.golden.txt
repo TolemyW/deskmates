@@ -1,0 +1,659 @@
+{
+  "acknowledgeCostAlert": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/cost-alerts/alert%2F1/acknowledge",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {},
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<alert>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/cost-alerts/alert%2F1/acknowledge failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "continueBudget": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/budgets/ws%2F1/continue",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "runIds": [
+            "run/1"
+          ]
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/budgets/ws%2F1/continue failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "createCostAlertRule": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/cost-alert-rules",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "kind": "known_cost",
+          "window": "day",
+          "thresholdUsd": 2
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<rule>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/cost-alert-rules failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "deleteCostAlertRule": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/cost-alert-rules/rule%2F2",
+        "method": "DELETE",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "DELETE /api/cost-alert-rules/rule%2F2 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "getCostRanking": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/costs/ranking?by=bot&metric=money&from=2026-10-01&offset=10",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/costs/ranking?by=bot&metric=money&from=2026-10-01&offset=10 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "getCostRows": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/costs/rows?from=2026-10-01&botId=bot%2F1&cursor=c%2F1&limit=10",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/costs/rows?from=2026-10-01&botId=bot%2F1&cursor=c%2F1&limit=10 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "getCosts": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/costs?from=2026-10-01&botId=bot%2F1",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/costs?from=2026-10-01&botId=bot%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listBudgets": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/budgets",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/budgets failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listCostAlertRules": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/cost-alert-rules?offset=25&limit=25",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/cost-alert-rules?offset=25&limit=25 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listCostAlerts": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/cost-alerts?status=open&cursor=c%2F2&limit=10",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/cost-alerts?status=open&cursor=c%2F2&limit=10 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "setBudget": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/budgets/ws%2F1",
+        "method": "PUT",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "weeklyLimitUsd": 5,
+          "cumulativeLimitUsd": null
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "PUT /api/budgets/ws%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  }
+}

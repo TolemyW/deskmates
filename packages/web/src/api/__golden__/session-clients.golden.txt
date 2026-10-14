@@ -1,0 +1,1362 @@
+{
+  "account.changePassword": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/password",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "body": {
+          "currentPassword": "old",
+          "newPassword": "new"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "POST /auth/password failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "account.createAgentToken": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/service-principals",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "body": {
+          "name": "ci"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "POST /api/service-principals failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "account.removeAvatar": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/avatar",
+        "method": "DELETE",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "DELETE /auth/avatar failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "account.updateDisplayName": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/profile",
+        "method": "PATCH",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "body": {
+          "displayName": "Ada"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "PATCH /auth/profile failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "account.uploadAvatar": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/avatar",
+        "method": "PUT",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "image/png",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "body": {
+          "blobSize": 3
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "PUT /auth/avatar failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "auth.getSession": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/session",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "GET /auth/session failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 0
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "auth.login": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/login",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "login-csrf"
+        },
+        "body": {
+          "loginName": "ada",
+          "password": "pw"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "POST /auth/login failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 0
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "auth.logout": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/logout",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-csrf": "csrf-x"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "POST /auth/logout failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 0
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "auth.logoutAll": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/logout-all",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-csrf": "csrf-x"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "POST /auth/logout-all failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 0
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "flows.acceptInvitation": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/invitations/accept",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-x"
+        },
+        "body": {
+          "token": "tok/1"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "POST /auth/invitations/accept failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 0
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "flows.getSession": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/session",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn_9"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "GET /auth/session failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 0
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "flows.getSessionNoTenant": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/session",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "GET /auth/session failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 0
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "flows.previewInvitation": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/invitations/tok%2F1",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "GET /auth/invitations/tok%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 0
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "flows.startSso": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/oidc/corp%2F1/start",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-x"
+        },
+        "body": {
+          "returnTo": "/"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "POST /auth/oidc/corp%2F1/start failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 0
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "members.createAccount": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/accounts",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "body": {
+          "loginName": "bo",
+          "displayName": "Bo",
+          "role": "guest",
+          "workspaceId": "ws/1"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "POST /api/accounts failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "members.createInvitation": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/invitations",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "body": {
+          "role": "member",
+          "workspaceId": "ws/1"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "POST /api/invitations failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "members.listMembers": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/members?workspaceId=ws%2F1&limit=100",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": [
+        "<",
+        "m",
+        ">"
+      ]
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "GET /api/members?workspaceId=ws%2F1&limit=100 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "members.listMembersNoWorkspace": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/members?limit=100",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": [
+        "<",
+        "m",
+        ">"
+      ]
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "GET /api/members?limit=100 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "members.pageInvitations": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/invitations?workspaceId=ws%2F1&offset=25&limit=25",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "GET /api/invitations?workspaceId=ws%2F1&offset=25&limit=25 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "members.pageInvitationsNoWorkspace": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/invitations",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "GET /api/invitations failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "members.pageMembers": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/members?workspaceId=ws%2F1&role=guest&status=active&offset=50&limit=25",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "GET /api/members?workspaceId=ws%2F1&role=guest&status=active&offset=50&limit=25 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "members.pageMembersNoWorkspace": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/members",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "members": "<m>",
+        "invitations": "<i>",
+        "preferences": "<p>",
+        "ok": true
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "GET /api/members failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "members.revokeInvitation": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/invitations/inv%2F1",
+        "method": "DELETE",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "body": {
+          "workspaceId": "ws/1"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "DELETE /api/invitations/inv%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "members.updateMember": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/members/u%2F1",
+        "method": "PATCH",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "body": {
+          "role": "admin",
+          "workspaceId": "ws/1"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "PATCH /api/members/u%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  },
+  "members.updatePreferences": {
+    "requests": [
+      {
+        "url": "https://gw.test/auth/preferences",
+        "method": "PATCH",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn_1"
+        },
+        "body": {
+          "locale": "en"
+        },
+        "credentials": "same-origin",
+        "cache": "no-store"
+      }
+    ],
+    "ok": {
+      "resolved": "<p>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unknown",
+        "message": "PATCH /auth/preferences failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "forbidden",
+        "message": "No",
+        "status": 403,
+        "details": {
+          "why": "x"
+        }
+      },
+      "notified": 0
+    },
+    "network": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "network",
+        "message": "Failed to fetch",
+        "status": 0,
+        "details": {}
+      }
+    }
+  }
+}

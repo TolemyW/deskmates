@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "packVersion": "1.0.0",
+  "skills": [
+    {
+      "name": "web-research-citations",
+      "category": "research",
+      "origin": "Deskmates",
+      "license": "GPL-3.0",
+      "version": 1,
+      "sha256": "32c14fe070ae3183b1871c6786452450dfbcb196150d96721eee939f301cb64e"
+    },
+    {
+      "name": "report-writing",
+      "category": "research",
+      "origin": "Deskmates",
+      "license": "GPL-3.0",
+      "version": 1,
+      "sha256": "c91c16599266deb49fd35b47c5333065e62341120f9c060c6e18065d2656a92c"
+    },
+    {
+      "name": "sql-analysis",
+      "category": "data",
+      "origin": "Deskmates",
+      "license": "GPL-3.0",
+      "version": 1,
+      "sha256": "46d17ef5da3be9cc58fc205bdc8cd01d837b055f69ddf89e4ef4026d5bf19641"
+    },
+    {
+      "name": "screenshot-evidence",
+      "category": "browser",
+      "origin": "Deskmates",
+      "license": "GPL-3.0",
+      "version": 1,
+      "sha256": "40e0c89726c3705cafb850bc5b2889268936be5ba6954d64635a0c45902bb526"
+    },
+    {
+      "name": "confirmation-aware-forms",
+      "category": "browser",
+      "origin": "Deskmates",
+      "license": "GPL-3.0",
+      "version": 1,
+      "sha256": "a4a2f2bcf75614de794d61fd98296cbb36ea458855728b9ca0cf711910390ddc"
+    },
+    {
+      "name": "deskmates-collaboration",
+      "category": "collaboration",
+      "origin": "Deskmates",
+      "license": "GPL-3.0",
+      "version": 1,
+      "sha256": "02ed21ea9fd70c280d2147bcf064f77a81c53b8d207ae9a5e446031e9d53de91"
+    },
+    {
+      "name": "skill-creator",
+      "category": "meta",
+      "origin": "Deskmates",
+      "license": "GPL-3.0",
+      "version": 1,
+      "sha256": "1290cc15e0ef2d3eef73767199bfd29332d5b58ba278dfba87f937692a006987"
+    }
+  ]
+}

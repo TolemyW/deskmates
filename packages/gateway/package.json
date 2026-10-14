@@ -1,0 +1,32 @@
+{
+  "name": "@deskmates/gateway",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Control plane: registry, scheduler, approvals, ledger, knowledge, threads, secrets, egress rules.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests --config ../../vitest.config.ts",
+    "dev": "node ../../scripts/dev-gateway.mjs"
+  },
+  "dependencies": {
+    "@deskmates/contracts": "*",
+    "argon2": "^0.44.0",
+    "better-sqlite3": "^12.4.1",
+    "fastify": "^5.6.1",
+    "jose": "^6.2.12",
+    "openid-client": "^6.8.8",
+    "undici": "7.29.1",
+    "ws": "^8.21.3"
+  },
+  "optionalDependencies": {
+    "@deskmates/sandbox-docker": "*"
+  },
+  "devDependencies": {
+    "@deskmates/testkit": "*",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/ws": "^8.18.1"
+  }
+}

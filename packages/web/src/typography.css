@@ -1,0 +1,77 @@
+/* Owner-requested compact application typography (2026-10-10).
+ * The component studio retains native HeroUI defaults. Only type is adapted here;
+ * component colors, radii, shadows and interaction still come from @deskmates/ui.
+ */
+:where(.app, .credential-screen)
+  :is(
+    [data-gb-ui="button"],
+    [data-gb-ui="button-link"],
+    [data-gb-ui="input"],
+    [data-gb-ui="textarea"]
+  ) {
+  font-size: var(--app-text-base);
+  line-height: 1.5;
+}
+:where(.app, .credential-screen) [data-gb-ui="pill"] {
+  font-size: var(--app-text-xs);
+  line-height: 1.4;
+  min-height: 1.5em;
+  height: auto;
+}
+:where(.app, .credential-screen) :is(small, .small) {
+  font-size: var(--app-text-xs);
+  line-height: 1.5;
+}
+.task-metric-card > span {
+  font-size: var(--app-text-base);
+}
+.task-metric-card strong {
+  font-size: var(--app-text-metric);
+  line-height: 1.25;
+}
+/* A status label needs the same legibility as any other supporting text. */
+.contact-status .status,
+.task-status,
+.thread-time,
+.message .meta,
+.composer-hint,
+.mention-preview,
+.eyebrow,
+.cost-tile-label {
+  font-size: var(--app-text-xs);
+  line-height: 1.5;
+}
+.cost-tile strong {
+  font-size: var(--app-text-metric);
+  line-height: 1.25;
+}
+.team-card-grid p,
+.thread-list .thread-sub,
+.signed-in-role,
+.workspace-health,
+.nav-group-label,
+.nav-label,
+.rail-group-label {
+  font-size: var(--app-text-xs);
+  line-height: 1.5;
+}
+.approval-facts dd {
+  font-size: var(--app-text-base);
+  line-height: 1.5;
+}
+
+/* Select menus are portalled outside .app; carry the same type scale there. */
+.app [data-gb-ui="select"] :is(.select__value, .label),
+[data-gb-ui="select-popover"] .label {
+  font-size: var(--app-text-base, 15px);
+  line-height: 1.5;
+}
+
+/* Application density; the component library retains upstream studio defaults. */
+[data-gb-ui="table"] .table__column {
+  font-size: var(--app-text-xs);
+}
+[data-gb-ui="table"] .table__cell {
+  font-size: var(--app-text-base);
+  line-height: 1.5;
+}

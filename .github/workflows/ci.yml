@@ -1,0 +1,79 @@
+# T0/T1 gate. No Docker, no network beyond `npm ci`, no model: `npm test` must pass on such a
+# machine (AGENTS.md). T2 runs on Testbox before a release is activated; T3 runs there for
+# milestone releases (docs/runbooks/stable-release.md).
+#
+# GitHub Actions minutes are limited, and every job is billed rounded up to the minute, so the
+# gate is one job: one `npm ci` and one typecheck instead of one per parallel runner. It runs on
+# pull requests that are ready for review (opened, pushed to, reopened, or marked ready; a draft
+# gets none, and marking it ready runs it), by hand (workflow_dispatch), and when another workflow
+# calls it (workflow_call). A merge to main does not run it, and neither does a release: releases
+# only package, and are tested on the target host before activation (owner decision 2026-10-13).
+# A new push to a pull request cancels its older run.
+name: ci
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # A change under any of these runs the whole suite: shared packages and config, migrations,
+  # docs and generated docs, scripts and their guards, route policies (read as text), locale
+  # fragments, goldens and snapshots, and the workflows themselves.
+  FULL_SUITE_PATHS: '^(packages/contracts/|packages/testkit/|packages/[^/]+/package\.json$|package(-lock)?\.json$|tsconfig|vitest\.config|biome\.json|scripts/|docs/|\.github/|acceptance/|evals/|packages/gateway/migrations/|packages/gateway/src/api/route-policies/)|/messages/|__golden__/|__snapshots__/'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the migration order check needs the merge base with the target branch
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Builds every package's dist/ before the tests import them. The root typecheck and
+      # `npm test` already cover packages/web; its build is the only web-specific step.
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run docs:check
+      # ADR-0030: a PR compares with its base branch, a push to main with the previous commit. A
+      # release tag calls this workflow for a commit main already checked, so it is skipped there.
+      - name: New migrations sort after the target branch
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: node scripts/check-migration-order.mjs --base "$BASE"
+      - run: npm run build -w packages/web
+      # A pull request runs only the tests its change can affect (vitest --changed follows the
+      # import graph). Files that tests read as text, not through imports, and anything shared by
+      # every package force the full suite. A manual run and a call from another workflow always
+      # run everything. Releases are tested on the target host (stable.sh verify), not here.
+      - name: Choose the test scope
+        id: scope
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then echo "full=true" >>"$GITHUB_OUTPUT"; exit 0; fi
+          changed="$(git diff --name-only "$BASE"...HEAD)"
+          printf '%s\n' "$changed"
+          if printf '%s\n' "$changed" | grep -qE "$FULL_SUITE_PATHS"; then full=true; else full=false; fi
+          echo "full=$full" >>"$GITHUB_OUTPUT"
+      - name: Test the whole suite
+        if: steps.scope.outputs.full == 'true'
+        run: npm test
+      - name: Test what the change affects
+        if: steps.scope.outputs.full != 'true'
+        run: npm test -- --changed "origin/${{ github.base_ref }}" --passWithNoTests

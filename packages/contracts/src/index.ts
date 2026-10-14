@@ -1,0 +1,59 @@
+// @deskmates/contracts entry point. Types and protocol shared by every other package.
+// Zero runtime dependencies; only constants and pure functions beyond the types.
+//
+// Keep the export lines sorted by module path (plain string order, so "./run-context.js"
+// comes before "./run.js"); index-sorted.test.ts fails otherwise. A new module adds one line
+// in its sorted place.
+
+export * from "./activity-summary.js";
+export * from "./approval-review.js";
+export * from "./approval.js";
+export * from "./auth.js";
+export * from "./board.js";
+export * from "./bot.js";
+export * from "./browser-evidence.js";
+export * from "./budget.js";
+export * from "./capacity.js";
+export * from "./channel.js";
+export * from "./connector.js";
+export * from "./cost-alert.js";
+export * from "./cost.js";
+export * from "./cron.js";
+export * from "./errors.js";
+export * from "./file-collection.js";
+export * from "./ids.js";
+export * from "./integration.js";
+export * from "./knowledge.js";
+export * from "./memory-disposition.js";
+export * from "./memory-recency.js";
+export * from "./memory.js";
+export * from "./model-capability.js";
+export * from "./model-config.js";
+export * from "./network-profile.js";
+export * from "./operator-config.js";
+export * from "./pagination.js";
+export { type PrivateEgressTarget, parsePrivateEgressTargets } from "./private-egress.js";
+export * from "./reasoning.js";
+export * from "./role-actions.js";
+export * from "./round.js";
+export * from "./run-context.js";
+export * from "./run.js";
+export * from "./runtime.js";
+export * from "./sandbox.js";
+export type { BotScreen, ScreenAccess } from "./screens.js";
+export * from "./sidecar-protocol.js";
+export * from "./skill.js";
+export * from "./soul-proposal.js";
+export * from "./submit.js";
+export * from "./task.js";
+export * from "./thread.js";
+export * from "./timing.js";
+export * from "./untrusted.js";
+export * from "./user-preferences.js";
+export * from "./welcome.js";
+export * from "./workspace-directory.js";
+export * from "./workspace-file.js";
+export * from "./workspace-limits.js";
+export * from "./workspace-name.js";
+export * from "./workspace-upload.js";
+export * from "./workspace.js";

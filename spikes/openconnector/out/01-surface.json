@@ -1,0 +1,644 @@
+{
+  "health": {
+    "request": {
+      "method": "GET",
+      "path": "/health",
+      "headers": {}
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 11,
+      "body": {
+        "ok": true
+      }
+    }
+  },
+  "v1Health": {
+    "request": {
+      "method": "GET",
+      "path": "/v1/health",
+      "headers": {}
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 86,
+      "body": {
+        "success": true,
+        "message": "OK",
+        "data": {
+          "ok": true,
+          "runtime": "oomol-connect"
+        },
+        "meta": {}
+      }
+    }
+  },
+  "mcpToolsPreview": {
+    "request": {
+      "method": "GET",
+      "path": "/mcp/tools",
+      "headers": {}
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 2441,
+      "body": {
+        "tools": [
+          {
+            "name": "list_apps",
+            "title": "List Apps",
+            "description": "List every provider app in the catalog, including apps with no connection yet. Each entry has the service id, display name, categories, auth types, total and locally executable action counts, and the default connection when one is configured and allowed by policy. Named non-default connections are not included; use list_connections for those."
+          },
+          {
+            "name": "list_connections",
+            "title": "List Connections",
+            "description": "List configured provider connections and their safe account profiles, optionally filtered by service id. Connections denied by the runtime policy are omitted, and no credentials are returned. Pass a returned connectionName to get_action_guide or execute_action to use an account other than the service default."
+          },
+          {
+            "name": "search_actions",
+            "title": "Search Actions",
+            "description": "Search catalog actions by free-text query, optionally limited to one provider service id. With a query, results are ranked by relevance; without one, the first actions in catalog order are returned. Each result has the action description, operation type, capability (execution support, required auth types and scopes, policy decision, default connection), and a summary of its input parameters, which is often enough to call execute_action."
+          },
+          {
+            "name": "get_action_guide",
+            "title": "Get Action Guide",
+            "description": "Return one action's markdown guide: description, an execute_action example, input parameters, required scopes, provider permissions, execution policy, and the selected connection's status, plus the same capability object search_actions returns. Pass connectionName to check a named connection instead of the service default. Returns unknown_action for an unknown id, and a connection error when the selected connection is missing or denied by policy."
+          },
+          {
+            "name": "execute_action",
+            "title": "Execute Action",
+            "description": "Run one provider action by id against the provider's API, using the default connection or the named connectionName. The input object must match the action's input parameters. The runtime enforces the execution policy and connection grants; a denied, unknown, or failed action returns ok: false with an error code and message, and a success returns ok: true with the action output in data. Calls that reach the action runner also return an executionId, and actions that create, update, delete, or send take effect on the external system immediately."
+          }
+        ]
+      }
+    }
+  },
+  "consoleRootNoToken": {
+    "request": {
+      "method": "GET",
+      "path": "/",
+      "headers": {}
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/html; charset=UTF-8",
+      "location": null,
+      "bytes": 624,
+      "body": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <link rel=\"icon\" type=\"image/png\" href=\"/favicon.png\" />\n    <title>Open Connector</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-CaoPzqJl.js\"></script>\n    <link rel=\"modulepreload\" crossorigin href=\"/assets/rolldown-runtime-QTnfLwEv.js\">\n    <link rel=\"modulepreload\" crossorigin href=\"/assets/charts-CtZQ_77u.js\">\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-CHKSArCQ.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n"
+    }
+  },
+  "adminNoToken": {
+    "request": {
+      "method": "GET",
+      "path": "/api/connections",
+      "headers": {}
+    },
+    "response": {
+      "status": 401,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 85,
+      "body": {
+        "error": {
+          "code": "unauthorized",
+          "message": "A valid local bearer token is required."
+        }
+      }
+    }
+  },
+  "adminWithToken": {
+    "request": {
+      "method": "GET",
+      "path": "/api/connections",
+      "headers": {
+        "authorization": "Bearer 258f2f..."
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "application/json",
+      "location": null,
+      "bytes": 5816,
+      "body": [
+        {
+          "id": "appledb:default",
+          "service": "appledb",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "appledb:public",
+            "displayName": "AppleDB Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "arxiv:default",
+          "service": "arxiv",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "arxiv:public",
+            "displayName": "arXiv Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "biorxiv_medrxiv:default",
+          "service": "biorxiv_medrxiv",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "biorxiv_medrxiv:public",
+            "displayName": "bioRxiv and medRxiv Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "clinicaltrials_gov:default",
+          "service": "clinicaltrials_gov",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "clinicaltrials_gov:public",
+            "displayName": "ClinicalTrials.gov Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "crossref:default",
+          "service": "crossref",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "crossref:public",
+            "displayName": "Crossref Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "datacite:default",
+          "service": "datacite",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "datacite:public",
+            "displayName": "DataCite Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "dealnews:default",
+          "service": "dealnews",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "dealnews:public",
+            "displayName": "DealNews Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "docsend_2_pdf:default",
+          "service": "docsend_2_pdf",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "docsend_2_pdf:public",
+            "displayName": "Docsend2pdf Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "europe_pmc:default",
+          "service": "europe_pmc",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "europe_pmc:public",
+            "displayName": "Europe PMC Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "fundzwatch:default",
+          "service": "fundzwatch",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "fundzwatch:public",
+            "displayName": "FundzWatch Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "hackernews:default",
+          "service": "hackernews",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "hackernews:public",
+            "displayName": "Hacker News Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "indiegogo:default",
+          "service": "indiegogo",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "indiegogo:public",
+            "displayName": "Indiegogo Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "itunes_search:default",
+          "service": "itunes_search",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "itunes_search:public",
+            "displayName": "iTunes Search API Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "lacuna:default",
+          "service": "lacuna",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "lacuna:public",
+            "displayName": "Lacuna Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "linux_do:default",
+          "service": "linux_do",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "linux_do:public",
+            "displayName": "Linux DO Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "npm:default",
+          "service": "npm",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "npm:public",
+            "displayName": "npm Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "openfda:default",
+          "service": "openfda",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "openfda:public",
+            "displayName": "openFDA Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "openfootball_worldcup:default",
+          "service": "openfootball_worldcup",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "openfootball_worldcup:public",
+            "displayName": "OpenFootball World Cup Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "ossinsight:default",
+          "service": "ossinsight",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "ossinsight:public",
+            "displayName": "OSS Insight Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "osv:default",
+          "service": "osv",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "osv:public",
+            "displayName": "OSV Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "pubmed:default",
+          "service": "pubmed",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "pubmed:public",
+            "displayName": "PubMed Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "quickchart:default",
+          "service": "quickchart",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "quickchart:public",
+            "displayName": "QuickChart Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "who_gho:default",
+          "service": "who_gho",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "who_gho:public",
+            "displayName": "WHO Global Health Observatory Public",
+            "grantedScopes": []
+          }
+        },
+        {
+          "id": "wttr_in:default",
+          "service": "wttr_in",
+          "connectionName": "default",
+          "authType": "no_auth",
+          "configured": true,
+          "virtual": true,
+          "default": true,
+          "profile": {
+            "accountId": "wttr_in:public",
+            "displayName": "wttr.in Public",
+            "grantedScopes": []
+          }
+        }
+      ]
+    }
+  },
+  "openapi": {
+    "status": 200,
+    "bytes": 116730
+  },
+  "providers": {
+    "status": 200,
+    "bytes": 9075899,
+    "count": 1566,
+    "actionCount": 18320
+  },
+  "mcpNoTokenBeforeRuntimeToken": {
+    "request": {
+      "method": "POST",
+      "url": "http://oc-spike-runtime:3000/integration-runtime/mcp",
+      "headers": {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18"
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/list"
+      }
+    },
+    "response": {
+      "status": 200,
+      "contentType": "text/event-stream",
+      "bytes": 4730,
+      "mcpSessionId": null,
+      "body": {
+        "result": {
+          "tools": [
+            {
+              "name": "list_apps",
+              "title": "List Apps",
+              "description": "List every provider app in the catalog, including apps with no connection yet. Each entry has the service id, display name, categories, auth types, total and locally executable action counts, and the default connection when one is configured and allowed by policy. Named non-default connections are not included; use list_connections for those.",
+              "inputSchema": {
+                "type": "object",
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "properties": {
+                  "query": {
+                    "description": "Optional case-insensitive substring matched against service id, display name, categories, and auth types.",
+                    "type": "string"
+                  }
+                }
+              },
+              "annotations": {
+                "readOnlyHint": true,
+                "destructiveHint": false,
+                "openWorldHint": false
+              }
+            },
+            {
+              "name": "list_connections",
+              "title": "List Connections",
+              "description": "List configured provider connections and their safe account profiles, optionally filtered by service id. Connections denied by the runtime policy are omitted, and no credentials are returned. Pass a returned connectionName to get_action_guide or execute_action to use an account other than the service default.",
+              "inputSchema": {
+                "type": "object",
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "properties": {
+                  "service": {
+                    "description": "Optional provider service id such as github, gmail, or notion.",
+                    "type": "string"
+                  }
+                }
+              },
+              "annotations": {
+                "readOnlyHint": true,
+                "destructiveHint": false,
+                "openWorldHint": false
+              }
+            },
+            {
+              "name": "search_actions",
+              "title": "Search Actions",
+              "description": "Search catalog actions by free-text query, optionally limited to one provider service id. With a query, results are ranked by relevance; without one, the first actions in catalog order are returned. Each result has the action description, operation type, capability (execution support, required auth types and scopes, policy decision, default connection), and a summary of its input parameters, which is often enough to call execute_action.",
+              "inputSchema": {
+                "type": "object",
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "properties": {
+                  "query": {
+                    "description": "Optional case-insensitive search text matched against action id, name, description, and scopes.",
+                    "type": "string"
+                  },
+                  "service": {
+                    "description": "Optional provider service id such as github, gmail, hackernews, or notion.",
+                    "type": "string"
+                  },
+                  "limit": {
+                    "default": 20,
+                    "description": "Maximum number of actions to return.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50
+                  }
+                }
+              },
+              "annotations": {
+                "readOnlyHint": true,
+                "destructiveHint": false,
+                "openWorldHint": false
+              }
+            },
+            {
+              "name": "get_action_guide",
+              "title": "Get Action Guide",
+              "description": "Return one action's markdown guide: description, an execute_action example, input parameters, required scopes, provider permissions, execution policy, and the selected connection's status, plus the same capability object search_actions returns. Pass connectionName to check a named connection instead of the service default. Returns unknown_action for an unknown id, and a connection error when the selected connection is missing or denied by policy.",
+              "inputSchema": {
+                "type": "object",
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "properties": {
+                  "actionId": {
+                    "type": "string",
+                    "description": "Full action id, for example github.get_current_user."
+                  },
+                  "connectionName": {
+                    "description": "Optional named connection. Omit it to use the default connection.",
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "actionId"
+                ]
+              },
+              "annotations": {
+                "readOnlyHint": true,
+                "destructiveHint": false,
+                "openWorldHint": false
+              }
+            },
+            {
+              "name": "execute_action",
+              "title": "Execute Action",
+              "description": "Run one provider action by id against the provider's API, using the default connection or the named connectionName. The input object must match the action's input parameters. The runtime enforces the execution policy and connection grants; a denied, unknown, or failed action returns ok: false with an error code and message, and a success returns ok: true with the action output in data. Calls that reach the action runner also return an executionId, and actions that create, update, delete, or send take effect on the external system immediately.",
+              "inputSchema": {
+                "type": "object",
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "properties": {
+                  "actionId": {
+                    "type": "string",
+                    "description": "Full action id, for example hackernews.get_item."
+                  },
+                  "input": {
+                    "default": {},
+                    "description": "Action input object matching the selected action guide.",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  },
+                  "connectionName": {
+                    "description": "Optional named connection. Omit it to use the default connection.",
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "actionId"
+                ]
+              },
+              "annotations": {
+                "readOnlyHint": false,
+                "destructiveHint": true,
+                "openWorldHint": true
+              }
+            }
+          ]
+        },
+        "jsonrpc": "2.0",
+        "id": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,330 @@
+// Operator-facing registry routes: bots (packages/gateway/docs/http-api.md). Workspace routes
+// are in `workspace-routes.ts`.
+
+import type { BotAvatar, BotDefinition, BotId, Thread, WorkspaceId } from "@deskmates/contracts";
+import { DeskmatesError, canRetryWelcome, decidedByHuman, isBotAvatar } from "@deskmates/contracts";
+import type { FastifyInstance } from "fastify";
+import type { BotPatch } from "../bots/bots.js";
+import { hashWebhookToken, newWebhookToken } from "../bots/webhook-token.js";
+import type { GatewayContext } from "../context.js";
+import { newId } from "../db/ids.js";
+import type { Scheduler } from "../scheduler/scheduler.js";
+import { welcomeDeliveryOf } from "../threads/welcome-delivery.js";
+import { requestActorId } from "./actor.js";
+import { SOUL_BODY_MAX_BYTES } from "./memory-routes.js";
+import { parseOffsetQuery } from "./pagination.js";
+import { requestTenant } from "./route-policy.js";
+import {
+  asCronEntries,
+  asRecord,
+  optionalEffort,
+  optionalString,
+  optionalStringArray,
+  optionalThinking,
+  requireString,
+} from "./validate.js";
+import { readableWorkspaceIds } from "./workspace-access.js";
+
+/** A workspace's bots in a rail: 50 per page, at most 100 (#113 slice B, plan rows 29, 41). */
+const BOT_PAGE = { default: 50, max: 100 } as const;
+
+export function registerRegistryRoutes(
+  app: FastifyInstance,
+  ctx: GatewayContext,
+  scheduler: Scheduler,
+): void {
+  app.get<{
+    Querystring: { workspaceId?: string; offset?: string; limit?: string; q?: string };
+  }>("/api/bots", async (request) => {
+    const readable = readableWorkspaceIds(ctx, request, "guest");
+    // #113 slice B: the Contacts and Computer rails read one workspace's bots a page at a time
+    // (`name, id`, 50 by default, at most 100) with server search. Without paging parameters the
+    // list stays whole: it is the name map every screen labels bots with (plan §3.2).
+    const { offset, limit, q } = request.query;
+    if (offset !== undefined || limit !== undefined || q !== undefined) {
+      const workspaceId = request.query.workspaceId as WorkspaceId | undefined;
+      if (!workspaceId)
+        throw new DeskmatesError("validation", "a bot page needs workspaceId", {
+          field: "workspaceId",
+        });
+      const query = parseOffsetQuery(request.query, BOT_PAGE);
+      const page = ctx.bots.page(workspaceId, requestTenant(request), {
+        ...query,
+        ...(q ? { q } : {}),
+      });
+      return { bots: page.bots, offset: query.offset, limit: query.limit, total: page.total };
+    }
+    return {
+      bots: ctx.bots
+        .list(request.query.workspaceId as WorkspaceId | undefined, requestTenant(request))
+        .filter((bot) => readable === undefined || readable.has(bot.workspaceId)),
+    };
+  });
+
+  app.post("/api/bots", async (request, reply) => {
+    const body = asRecord(request.body);
+    // Same rule as PATCH (ADR-0023 decision 1): absent or null inherits the Gateway default; a
+    // string must be a priced model id. The empty string is an error, not a silent default.
+    const model = optionalString(body, "model");
+    const cheapModel = optionalString(body, "cheapModel");
+    if (model !== undefined) requirePricedModel(ctx, "model", model);
+    if (cheapModel !== undefined) requirePricedModel(ctx, "cheapModel", cheapModel);
+    // The reasoning knob (contracts `reasoning.ts`); `null` at create means the same as absent.
+    const effort = optionalEffort(body) ?? undefined;
+    const thinking = optionalThinking(body) ?? undefined;
+    const avatar = optionalAvatar(body) ?? undefined;
+    const connectors = optionalStringArray(body, "connectors");
+    const messageAllowlist = optionalStringArray(body, "messageAllowlist");
+    // Every schedule is parsed before the row exists: a bot whose cron the runner cannot read is
+    // a bot that silently never fires.
+    const cron =
+      body.cron === undefined || body.cron === null ? undefined : asCronEntries(body.cron);
+    const soul = optionalSoul(body);
+    // Issue #77: `welcome: false` creates the bot unstarted, for a SOUL drafted after creation;
+    // its welcome run is started by `POST /api/bots/:id/welcome` once that SOUL is applied or
+    // the operator starts it without one (#89 ordering: no welcome before the chosen SOUL).
+    const startWelcome = optionalWelcome(body);
+    const webhookToken = newWebhookToken();
+    const created = ctx.db.transaction(() => {
+      const bot = ctx.bots.create({
+        name: requireString(body, "name"),
+        role: optionalString(body, "role") ?? "",
+        workspaceId: requireString(body, "workspaceId") as WorkspaceId,
+        ...(model !== undefined ? { model } : {}),
+        ...(cheapModel !== undefined ? { cheapModel } : {}),
+        ...(effort ? { effort } : {}),
+        ...(thinking ? { thinking } : {}),
+        ...(avatar ? { avatar } : {}),
+        ...(connectors ? { connectors } : {}),
+        ...(messageAllowlist ? { messageAllowlist } : {}),
+        ...(cron ? { cron } : {}),
+        webhookTokenHash: hashWebhookToken(webhookToken),
+      });
+      // Issue #89: the welcome run below holds this bot's lane, which makes a SOUL PATCH right
+      // after create 409 lane_busy. Writing the initial SOUL here, through the canonical write,
+      // commits it with the bot and its welcome run, so the welcome already speaks in it.
+      if (soul !== undefined) {
+        const initial = ctx.bots.canonicalSoul(bot.id);
+        if (initial) ctx.bots.updateCanonicalSoul(bot.id, soul, initial.version);
+      }
+      ctx.audit.record({
+        action: "bot.create",
+        actor: decidedByHuman(requestActorId(request, body)),
+        workspaceId: bot.workspaceId,
+        targetKind: "bot",
+        targetId: bot.id,
+        after: botConfiguration(bot),
+      });
+      const privateChat = ctx.privateChats.resolve(bot.id);
+      const welcomeRun = startWelcome ? createWelcomeRun(ctx, bot, privateChat) : null;
+      return { bot, privateChat, welcomeRun };
+    })();
+    ctx.bus.publish({ type: "thread_members", threadId: created.privateChat.id });
+    if (created.welcomeRun)
+      ctx.bus.publish({
+        type: "run_status",
+        threadId: created.privateChat.id,
+        run: created.welcomeRun,
+      });
+    // ADR-0023 amendment 1, decision 6: a bot brings its model into the workspace.
+    queueVisionProbe(ctx, created.bot, "model_added", requestActorId(request, body));
+    scheduler.kick();
+    // The only time the plaintext token is readable; `POST /api/bots/:id/webhook-token` issues a
+    // new one and invalidates this.
+    return reply.code(201).send({ ...created, webhookToken });
+  });
+
+  app.post<{ Params: { id: string } }>("/api/bots/:id/welcome", async (request, reply) => {
+    const bot = ctx.bots.mustGet(request.params.id as BotId);
+    // ADR-0024 amendment 2, decision 11: only a finished welcome whose greeting never reached the
+    // chat is retried; a silent run that greeted through `thread_post` is delivered. The check and
+    // the insert below run without an await between them, so two submissions cannot both pass.
+    const prior = ctx.runs.latestOfTrigger(bot.id, "welcome");
+    const delivery = prior ? welcomeDeliveryOf(ctx.db, prior) : undefined;
+    if (prior && delivery && !canRetryWelcome(delivery)) {
+      throw new DeskmatesError("invalid_transition", `welcome is already ${delivery}`, {
+        runId: prior.id,
+        status: prior.status,
+        delivery,
+      });
+    }
+    const privateChat = ctx.privateChats.resolve(bot.id);
+    const welcomeRun = createWelcomeRun(ctx, bot, privateChat);
+    ctx.bus.publish({ type: "run_status", threadId: privateChat.id, run: welcomeRun });
+    scheduler.kick();
+    return reply.code(202).send({ run: welcomeRun, thread: privateChat });
+  });
+
+  app.get<{ Params: { id: string } }>("/api/bots/:id", async (request) => ({
+    bot: ctx.bots.mustGet(request.params.id as BotId),
+  }));
+
+  /**
+   * The editable fields: the cron entries, the two model overrides and the reasoning knob. A
+   * model is configuration, not a create-time property — a deployment that swaps models would
+   * otherwise have to delete and recreate every bot. Each key is independent: absent leaves the
+   * field alone and `null` clears an override, so the bot inherits `DEFAULT_MODEL` /
+   * `CHEAP_MODEL` (or the SDK's own reasoning default) again. Everything else stays create-time.
+   */
+  app.patch<{ Params: { id: string } }>("/api/bots/:id", async (request) => {
+    const body = asRecord(request.body);
+    const id = request.params.id as BotId;
+    ctx.bots.mustGet(id);
+    const patch: BotPatch = {};
+    if (body.cron !== undefined && body.cron !== null) patch.cron = asCronEntries(body.cron);
+    for (const key of ["model", "cheapModel"] as const) {
+      if (body[key] === undefined) continue;
+      // `null` is the clear; anything else must be a priced model id (ADR-0023 decision 1), and
+      // the empty string is not one.
+      if (body[key] === null) {
+        patch[key] = null;
+        continue;
+      }
+      const value = requireString(body, key);
+      requirePricedModel(ctx, key, value);
+      patch[key] = value;
+    }
+    const effort = optionalEffort(body);
+    if (effort !== undefined) patch.effort = effort;
+    const thinking = optionalThinking(body);
+    if (thinking !== undefined) patch.thinking = thinking;
+    const avatar = optionalAvatar(body);
+    if (avatar !== undefined) patch.avatar = avatar;
+    if (Object.keys(patch).length === 0) {
+      throw new DeskmatesError(
+        "validation",
+        "nothing to update: send cron, model, cheapModel, effort, thinking or avatar",
+      );
+    }
+    const actor = decidedByHuman(requestActorId(request, body));
+    const updated = {
+      bot: ctx.db.transaction(() => {
+        const before = ctx.bots.mustGet(id);
+        const after = ctx.bots.update(id, patch);
+        ctx.audit.record({
+          action: "bot.update",
+          actor,
+          workspaceId: after.workspaceId,
+          targetKind: "bot",
+          targetId: id,
+          before: pick(botConfiguration(before), Object.keys(patch)),
+          after: pick(botConfiguration(after), Object.keys(patch)),
+        });
+        return after;
+      })(),
+    };
+    if (patch.model !== undefined) {
+      queueVisionProbe(ctx, updated.bot, "model_changed", actor);
+      scheduler.kick();
+    }
+    return updated;
+  });
+}
+
+/** Decision 6: probe a bot's effective model unless its key has a result or a pending probe. */
+function queueVisionProbe(
+  ctx: GatewayContext,
+  bot: BotDefinition,
+  trigger: "model_added" | "model_changed",
+  actor: string,
+): void {
+  const queued = ctx.modelJobs.vision.queue({
+    workspaceId: bot.workspaceId,
+    model: ctx.modelJobs.vision.effectiveModel(bot),
+    trigger,
+    requestedBy: decidedByHuman(actor),
+    host: bot,
+  });
+  if (queued.run) ctx.bus.publish({ type: "run_status", run: queued.run });
+}
+
+function optionalWelcome(body: Record<string, unknown>): boolean {
+  if (body.welcome === undefined || body.welcome === null) return true;
+  if (typeof body.welcome !== "boolean")
+    throw new DeskmatesError("validation", "welcome must be a boolean");
+  return body.welcome;
+}
+
+/** The configuration a bot's audit rows record: never its webhook token or SOUL text. */
+function botConfiguration(bot: BotDefinition): Record<string, unknown> {
+  return {
+    name: bot.name,
+    role: bot.role,
+    model: bot.model ?? null,
+    cheapModel: bot.cheapModel ?? null,
+    effort: bot.effort ?? null,
+    thinking: bot.thinking ?? null,
+    avatar: bot.avatar ?? null,
+    connectors: bot.connectors,
+    messageAllowlist: bot.messageAllowlist,
+    cron: bot.cron,
+  };
+}
+
+function pick(value: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  return Object.fromEntries(keys.map((key) => [key, value[key] ?? null]));
+}
+
+function createWelcomeRun(ctx: GatewayContext, bot: BotDefinition, thread: Thread) {
+  const role = bot.role.trim() || "a helpful teammate";
+  return ctx.runs.create({
+    botId: bot.id,
+    threadId: thread.id,
+    lane: "interactive",
+    triggerKind: "welcome",
+    triggerRef: newId("welcome"),
+    triggerPayload: {
+      prompt: `You have just joined this workspace as ${bot.name}, whose role is ${role}. Following your own instructions and voice, write a brief first welcome message to the people in this private chat. Introduce how you can help and invite them to start. Reply only with the welcome message.`,
+    },
+    config: { ...ctx.runConfig(), welcomeVersion: 1 },
+  });
+}
+
+/**
+ * A bot's model override must have a row in the price table (ADR-0023 decision 1), so every model
+ * a run can be frozen on is one the Gateway can price; an unpriced override is refused at write
+ * time rather than discovered as `pricing_missing` after the money is spent.
+ */
+function requirePricedModel(ctx: GatewayContext, key: string, model: string): void {
+  if (model === "") {
+    throw new DeskmatesError("validation", `${key} must be a model id, not empty`, { key });
+  }
+  if (ctx.prices.listForModel(model).length === 0) {
+    throw new DeskmatesError(
+      "validation",
+      `${key} "${model}" has no price row; add it to the price table before setting it on a bot`,
+      { key, model },
+    );
+  }
+}
+
+/**
+ * The initial SOUL at create (issue #89): `undefined` when absent or `null`, otherwise a string
+ * within the same size limit as `PATCH /api/bots/:id/soul`.
+ */
+function optionalSoul(body: Record<string, unknown>): string | undefined {
+  const value = body.soul;
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string" || Buffer.byteLength(value) > SOUL_BODY_MAX_BYTES) {
+    throw new DeskmatesError(
+      "validation",
+      `soul must be a string of at most ${SOUL_BODY_MAX_BYTES} bytes`,
+    );
+  }
+  return value;
+}
+
+/** `undefined` when absent, `null` to clear, otherwise a validated `BotAvatar`. */
+function optionalAvatar(body: Record<string, unknown>): BotAvatar | null | undefined {
+  const value = body.avatar;
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (!isBotAvatar(value)) {
+    throw new DeskmatesError(
+      "validation",
+      "avatar must be {emoji?: one character, color?: one of the named colours}",
+      { avatar: value },
+    );
+  }
+  return value;
+}

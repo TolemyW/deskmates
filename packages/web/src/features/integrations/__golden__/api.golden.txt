@@ -1,0 +1,791 @@
+{
+  "adoptIntegrationProvider": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/integrations/providers",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "service": "github"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<provider>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/integrations/providers failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "commandChannel": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/workspaces/ws%2F1/channels/whatsapp%2Fqr/commands/relink",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {},
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<connection>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/workspaces/ws%2F1/channels/whatsapp%2Fqr/commands/relink failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "connectChannel": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/workspaces/ws%2F1/channels/whatsapp%2Fqr/connect",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "method": "qr",
+          "botId": "bot/1",
+          "config": {
+            "label": "x"
+          }
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<connection>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/workspaces/ws%2F1/channels/whatsapp%2Fqr/connect failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "createApiKeyConnection": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/integrations/workspaces/ws%2F1/connections/api-key",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "service": "linear",
+          "connectionName": "Linear",
+          "apiKey": "key-1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<connection>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/integrations/workspaces/ws%2F1/connections/api-key failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "getChannelCatalog": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/channels",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/channels failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "getIntegrationCatalog": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/integrations/catalog",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/integrations/catalog failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "getIntegrations": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/integrations",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/integrations failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listChannelConnections": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/workspaces/ws%2F1/channels",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<connections>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/workspaces/ws%2F1/channels failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listConnectors": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/connectors?workspaceId=ws%2F1&offset=25&limit=25",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/connectors?workspaceId=ws%2F1&offset=25&limit=25 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "listIntegrationConnections": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/integrations/workspaces/ws%2F1/connections?status=live&offset=25&limit=25",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/integrations/workspaces/ws%2F1/connections?status=live&offset=25&limit=25 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "registerConnector": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/connectors",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "workspaceId": "ws/1",
+          "name": "db",
+          "url": "http://db:8080"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<connector>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/connectors failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "revokeIntegrationConnection": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/integrations/workspaces/ws%2F1/connections/conn%2F1",
+        "method": "DELETE",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<connection>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "DELETE /api/integrations/workspaces/ws%2F1/connections/conn%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "startOAuthConnection": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/integrations/workspaces/ws%2F1/connections/oauth/start",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "service": "github",
+          "connectionName": "GH"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/integrations/workspaces/ws%2F1/connections/oauth/start failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "unadoptIntegrationProvider": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/integrations/providers/git%20hub",
+        "method": "DELETE",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "DELETE /api/integrations/providers/git%20hub failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  }
+}

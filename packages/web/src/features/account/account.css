@@ -1,0 +1,180 @@
+/* Styles of the account feature,
+   loaded after app.css by src/styles/feature-styles.ts. Unlayered rules come first: like
+   design-refresh.css they override every layered rule.
+   Rules inside @layer components rank with the shared components of app.css and lose to
+   any unlayered rule; within the layer the later rule wins. */
+/* Account settings → Preferences: Language and Appearance side by side when there is room. */
+.account-preferences {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  max-width: 520px;
+}
+.preferences-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.preferences-field .language-control {
+  padding: 0;
+}
+/* Account settings: profile and password as two separate cards. */
+.account-screen {
+  max-width: 760px;
+}
+.account-screen .account-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px;
+  margin-top: 16px;
+}
+.account-section h2 {
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+}
+.account-section small,
+.account-explainer {
+  color: var(--muted);
+  font-size: var(--app-text-xs);
+}
+.account-photo {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.account-photo-actions {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+}
+.account-photo-actions small {
+  flex-basis: 100%;
+}
+.account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 440px;
+}
+.account-form label {
+  font-weight: 500;
+}
+.account-password-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.account-password-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.account-password-input > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.account-password-input .icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: var(--app-text-base);
+}
+.account-facts {
+  margin: 0;
+}
+.account-facts > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.account-facts dt {
+  font-weight: 500;
+}
+.account-facts dd {
+  margin: 0;
+}
+.account-section .error {
+  margin: 0;
+}
+/* Account: Connect an agent. The prompt is copied whole, so it wraps and never scrolls sideways. */
+.agent-prompt {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: var(--app-text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .account-screen .account-section {
+    padding: 16px;
+  }
+  .account-form {
+    max-width: none;
+  }
+}
+
+/* User Settings: three pages with a left category list; a compact row of links when narrow
+   (ADR-0034 decision 7). */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  margin-top: 16px;
+}
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 16px;
+}
+.settings-nav-link {
+  padding: 8px 12px;
+  border-radius: 9px;
+  color: var(--text);
+  text-decoration: none;
+}
+.settings-nav-link:hover,
+.settings-nav-link:focus-visible {
+  background: var(--surface-2);
+}
+.settings-nav-link.active {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+.settings-content {
+  min-width: 0;
+}
+.settings-content > .account-section:first-child,
+.settings-content > .card:first-child {
+  margin-top: 0;
+}
+@media (max-width: 760px) {
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .settings-nav {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--app-border);
+  }
+  .settings-nav-link {
+    flex: 0 0 auto;
+    border-radius: 9px 9px 0 0;
+  }
+}
+/* Room for the category list beside the content. */
+.account-screen {
+  max-width: 1040px;
+}

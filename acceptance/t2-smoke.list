@@ -1,0 +1,23 @@
+# T2 smoke subset: `npm run test:container:smoke`, and what `stable.sh verify` runs for a patch
+# tag (vX.Y.Z with Z > 0). One repo-relative path per line; `#` starts a comment line.
+#
+# Rule: the smoke subset covers the stack end to end (Gateway, workspace container, sidecar, SDK),
+# each trigger lane (interactive chat, background webhook), and every M3 feature that ships to the
+# trial. Everything else is in t2-full-only.list with its reason; the full suite runs in the
+# background at least once per day of releases and before every minor tag
+# (docs/runbooks/stable-release.md). acceptance/t2-lists.test.ts checks that every
+# *.container.test.ts is in exactly one of the two lists.
+acceptance/m0-stack.container.test.ts
+acceptance/m1-triggers.container.test.ts
+acceptance/m2-knowledge.container.test.ts
+acceptance/m3-file-download.container.test.ts
+acceptance/m4-file-upload.container.test.ts
+acceptance/m3-integrations.container.test.ts
+acceptance/m3-memory-boundaries.container.test.ts
+acceptance/m3-memory-lifecycle.container.test.ts
+acceptance/m3-canonical-restoration.container.test.ts
+acceptance/m3-legacy-concurrent.container.test.ts
+acceptance/m3-auto-compaction.container.test.ts
+acceptance/lan-egress.container.test.ts
+acceptance/private-egress.container.test.ts
+packages/sandbox-docker/src/preflight.container.test.ts

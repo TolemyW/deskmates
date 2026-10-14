@@ -1,0 +1,320 @@
+/* Resources (Knowledge, Skills) and Computer, issue #27: one heading, quiet rows, details on
+   demand. The page is a size container so the detail panel and the skill columns follow the
+   content column, including an expanded sidebar, not the window. */
+.resource-page {
+  container-type: inline-size;
+  min-width: 0;
+}
+.resource-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+}
+.resource-heading-text {
+  display: grid;
+  flex: 1 1 320px;
+  gap: 6px;
+  min-width: 0;
+}
+.resource-heading h1 {
+  margin: 0;
+  font-size: var(--app-text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.4px;
+}
+.resource-heading-text > p {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.resource-heading-action {
+  flex-shrink: 0;
+}
+.resource-row-main:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.resource-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+.resource-search {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 240px;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: var(--surface-2, var(--surface));
+  color: var(--muted);
+}
+.resource-search:focus-within {
+  border-color: var(--focus);
+  box-shadow: var(--ring);
+}
+.resource-search input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--foreground);
+  font-size: var(--app-text-sm);
+}
+.resource-search input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.resource-toolbar > p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.resource-status {
+  margin: 0;
+  padding: 24px 4px;
+  line-height: 1.5;
+}
+
+/* Items waiting for a human decision: listed only when there are some. */
+.review-queue {
+  display: grid;
+  gap: 8px;
+  padding: 16px 20px;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--surface);
+  min-width: 0;
+}
+.review-queue h2 {
+  margin: 0;
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+}
+.review-queue > ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.review-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--separator);
+  min-width: 0;
+}
+.review-row:first-child {
+  border-top: 0;
+}
+.review-row-text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.review-row-text p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.review-row-body {
+  font-size: var(--app-text-base);
+  line-height: 1.5;
+}
+.review-row-text pre {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.review-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* The list and its detail panel. */
+.resource-browser {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+}
+@container (min-width: 760px) {
+  .resource-browser.has-detail {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  }
+}
+@container (max-width: 759px) {
+  /* Narrow: the details replace the list until closed, full width. */
+  .resource-browser.has-detail > .resource-list-column {
+    display: none;
+  }
+}
+.resource-list-column {
+  container-type: inline-size;
+  min-width: 0;
+}
+.resource-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--separator);
+}
+.resource-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--separator);
+  min-width: 0;
+}
+.resource-row.selected {
+  background: var(--default);
+  border-radius: 12px;
+}
+.resource-row.forgotten .resource-row-title {
+  color: var(--muted);
+}
+.resource-row-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.resource-row-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--app-text-base);
+  font-weight: 500;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.resource-row-meta {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--app-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resource-row-badge:empty {
+  display: none;
+}
+
+.resource-detail {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--surface);
+  min-width: 0;
+  position: sticky;
+  top: 16px;
+}
+.resource-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.resource-detail-head h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.resource-detail-body {
+  margin: 0;
+  font-size: var(--app-text-base);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.resource-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.resource-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px 16px;
+  margin: 0;
+  font-size: var(--app-text-sm);
+}
+.resource-facts dt {
+  color: var(--muted);
+}
+.resource-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.resource-versions {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--separator);
+}
+.resource-versions h3 {
+  margin: 0;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+}
+.resource-versions ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.resource-versions li {
+  display: grid;
+  gap: 2px;
+  font-size: var(--app-text-sm);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .review-row {
+    flex-direction: column;
+  }
+  .resource-detail {
+    position: static;
+    padding: 16px;
+  }
+  .resource-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .resource-facts dd {
+    margin-bottom: 8px;
+  }
+}

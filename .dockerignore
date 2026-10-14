@@ -1,0 +1,18 @@
+# Build context for images/workspace/Dockerfile and images/egress/Dockerfile is the repo root.
+# Allowlist only what they copy.
+*
+!images/workspace/
+!images/egress/
+!packages/contracts/package.json
+!packages/contracts/dist/
+!packages/gateway/starter-skills/
+!packages/sidecar/package.json
+!packages/sidecar/dist/
+**/node_modules
+**/*.tsbuildinfo
+**/*.map
+# Compiled tests. `tsc -b` puts *.test.js next to the code it tests, so dist/ carries the whole
+# T0/T1 suite (and, through it, test fixtures) into the workspace image. Nothing in the container
+# runs them; they are attack surface and image weight only.
+**/*.test.js
+**/*.test.d.ts

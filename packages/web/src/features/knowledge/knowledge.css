@@ -1,0 +1,800 @@
+/* Styles of the knowledge feature,
+   loaded after app.css by src/styles/feature-styles.ts. Unlayered rules come first: like
+   design-refresh.css they override every layered rule.
+   Rules inside @layer components rank with the shared components of app.css and lose to
+   any unlayered rule; within the layer the later rule wins.
+   This file skips Tailwind's compile. `background: none 0 0` and `transparent 0 0` spell
+   what that compile shipped for `none` and `transparent` (it set the position to 0 0). */
+.knowledge-panel,
+.knowledge-governance,
+.memory-confirmation {
+  padding: 24px;
+  border: 0;
+  border-radius: 24px;
+  box-shadow: var(--app-shadow-sm);
+}
+.knowledge-search .memory-search,
+.memory-toolbar .memory-search {
+  flex-direction: row;
+}
+.workspace-screen .workspace-library {
+  min-width: 0;
+}
+.workspace-library .knowledge-screen {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.workspace-library .knowledge-panel {
+  gap: 20px;
+  padding: 24px;
+}
+.knowledge-head {
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.knowledge-heading {
+  display: grid;
+  gap: 6px;
+}
+.workspace-screen .knowledge-heading h2,
+.workspace-screen .knowledge-subhead,
+.workspace-screen .knowledge-editor-heading h2 {
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+}
+.knowledge-count {
+  display: inline-flex;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--default);
+  font-size: var(--app-text-xs);
+  font-weight: 400;
+  vertical-align: middle;
+}
+.knowledge-panel .knowledge-heading p {
+  color: var(--muted);
+  font-size: var(--app-text-xs);
+}
+.workspace-library .knowledge-search .memory-search {
+  background: var(--background);
+  border-color: transparent;
+  min-height: 40px;
+}
+.workspace-library .doc-list {
+  gap: 0;
+}
+.workspace-library .doc-row {
+  padding: 16px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--separator);
+  border-radius: 0;
+  background: transparent 0 0;
+  gap: 6px;
+}
+.workspace-library .doc-row:last-child {
+  border-bottom: 0;
+}
+.workspace-library .doc-row.selected {
+  background: var(--default);
+  border-radius: 12px;
+  padding-inline: 12px;
+}
+.workspace-library .doc-row-button {
+  font-size: var(--app-text-base);
+  font-weight: 500;
+  line-height: 1.5;
+}
+.workspace-library .doc-excerpt {
+  color: var(--muted);
+  font-size: var(--app-text-xs);
+  -webkit-line-clamp: 1;
+}
+.workspace-library .knowledge-subhead {
+  margin-top: 4px;
+  padding-top: 20px;
+  border-top: 1px solid var(--separator);
+}
+.workspace-library .proposal {
+  border: 0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: var(--background);
+}
+.workspace-library .proposal summary {
+  font-size: var(--app-text-base);
+  font-weight: 500;
+}
+.knowledge-edit-region {
+  display: grid;
+  gap: 16px;
+  border-top: 1px solid var(--separator);
+  padding-top: 20px;
+  min-width: 0;
+}
+.knowledge-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.knowledge-editor label {
+  display: grid;
+  gap: 8px;
+}
+.knowledge-editor textarea {
+  min-height: 180px;
+  max-height: 400px;
+}
+.workspace-history {
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--app-shadow-sm);
+}
+.workspace-history > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 24px;
+  cursor: pointer;
+  font-size: var(--app-text-base);
+  font-weight: 500;
+  list-style: none;
+}
+.workspace-history > summary::-webkit-details-marker {
+  display: none;
+}
+.workspace-history > summary::after {
+  content: "+";
+  margin-left: auto;
+  color: var(--muted);
+}
+.workspace-history[open] > summary::after {
+  content: "−";
+}
+.workspace-history .knowledge-governance {
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent 0 0;
+  padding: 0 24px 24px;
+  gap: 20px;
+}
+.workspace-history .knowledge-governance > h2 {
+  display: none;
+}
+.workspace-history .knowledge-governance > p {
+  color: var(--muted);
+  font-size: var(--app-text-xs);
+}
+.knowledge-governance .history-document {
+  width: 100%;
+  height: auto;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  padding: 10px 12px;
+}
+@media (max-width: 720px) {
+  .workspace-library .knowledge-panel {
+    padding: 20px 16px;
+  }
+  .knowledge-head {
+    align-items: flex-start;
+  }
+  .workspace-history > summary {
+    padding: 18px 16px;
+  }
+  .workspace-history .knowledge-governance {
+    padding: 0 16px 20px;
+  }
+}
+.memory-table {
+  min-width: 1120px;
+}
+.memory-table td:first-child {
+  min-width: 260px;
+  max-width: 400px;
+  overflow-wrap: anywhere;
+}
+.memory-table td:last-child {
+  min-width: 200px;
+}
+.resource-tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  min-height: 36px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: var(--app-text-base);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.resource-tabs a.active {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: var(--app-shadow-sm);
+}
+.resource-tabs a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.resource-intro {
+  max-width: 70ch;
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+.observations {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+/* ADR-0011 amendment 3: review groups, the last batch's receipt and topic tags. */
+.review-group {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--app-border);
+}
+.review-group:last-child {
+  border-bottom: 0;
+}
+.review-group-head {
+  margin: 0;
+}
+.review-batch-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.topic-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.topic-tag {
+  padding: 3px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--app-text-xs);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.topic-tag[aria-pressed="true"] {
+  border-color: var(--accent, currentColor);
+  color: inherit;
+  background: var(--default);
+}
+.topic-tag:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.resource-toggle {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--app-text-sm);
+}
+.resource-detail-edit {
+  display: grid;
+  gap: 8px;
+}
+.resource-detail-edit textarea {
+  width: 100%;
+  min-height: 120px;
+}
+.resource-confirm {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: var(--danger-soft, var(--default));
+}
+.resource-confirm p {
+  margin: 0;
+  line-height: 1.5;
+}
+@media (max-width: 720px) {
+  .resource-tabs {
+    width: 100%;
+  }
+  .resource-tabs a {
+    flex: 1;
+    justify-content: center;
+    padding-inline: 10px;
+  }
+}
+@layer components {
+  .knowledge-panel,
+  .knowledge-governance,
+  .memory-confirmation {
+    padding: 20px 22px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-lg);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-xs);
+    min-width: 0;
+  }
+  .knowledge-screen,
+  .learned-memory {
+    padding: 28px 32px 48px;
+  }
+  .knowledge-screen output,
+  .learned-memory output {
+    padding: 8px 12px;
+    border-radius: var(--app-radius-sm);
+    background: var(--app-success-soft);
+    color: var(--success-text);
+    font-size: var(--app-text-sm);
+  }
+  .knowledge-screen [role="alert"],
+  .learned-memory [role="alert"] {
+    padding: 8px 12px;
+    border-radius: var(--app-radius-sm);
+    background: var(--app-danger-soft);
+    font-size: var(--app-text-sm);
+  }
+  /* Knowledge */
+  .knowledge-screen {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr);
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .knowledge-screen {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .knowledge-panel,
+  .knowledge-governance {
+    display: grid;
+    gap: 12px;
+  }
+  .knowledge-panel h2,
+  .knowledge-governance h2 {
+    margin: 0;
+    font-size: var(--app-text-md);
+  }
+  .knowledge-panel h3,
+  .knowledge-governance h3 {
+    margin: 0;
+    font-size: var(--app-text-base);
+  }
+  .knowledge-governance h4 {
+    margin: 0;
+    font-size: var(--app-text-sm);
+    color: var(--app-text-2);
+  }
+  .knowledge-panel p,
+  .knowledge-governance p {
+    margin: 0;
+    color: var(--app-text-2);
+    font-size: var(--app-text-sm);
+    line-height: 1.5;
+  }
+  .knowledge-panel fieldset {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .knowledge-panel label,
+  .knowledge-governance label {
+    font-size: var(--app-text-sm);
+    color: var(--app-text-2);
+  }
+  .knowledge-panel textarea {
+    font-family: var(--app-font-mono);
+    font-size: var(--app-text-sm);
+    line-height: 1.5;
+  }
+  .knowledge-panel pre,
+  .knowledge-governance pre {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-sm);
+    background: var(--surface-2);
+    font-size: var(--app-text-xs);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .knowledge-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .knowledge-subhead {
+    margin-top: 8px;
+  }
+  .knowledge-search {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .knowledge-search .memory-search {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-full);
+    background: var(--surface-2);
+    color: var(--app-text-4);
+  }
+  .knowledge-search .memory-search:focus-within {
+    border-color: var(--primary);
+    box-shadow: var(--ring);
+  }
+  .knowledge-search .memory-search input {
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    background: transparent 0 0;
+    box-shadow: none;
+    font-size: var(--app-text-sm);
+  }
+  .knowledge-search .memory-search input:focus-visible {
+    box-shadow: none;
+    outline: none;
+  }
+  .doc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .doc-row {
+    display: grid;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius);
+    background: var(--app-surface);
+  }
+  .doc-row.selected {
+    border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+    background: var(--primary-soft);
+  }
+  .doc-row.empty {
+    border-style: dashed;
+    background: var(--surface-2);
+  }
+  .doc-row-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: none 0 0;
+    color: var(--text);
+    font: inherit;
+    font-size: var(--app-text-sm);
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  .doc-row-button:hover .doc-title {
+    text-decoration: underline;
+  }
+  .doc-row-button svg {
+    color: var(--app-text-4);
+    flex-shrink: 0;
+  }
+  .doc-excerpt {
+    padding-left: 24px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .knowledge-editor {
+    display: grid;
+    gap: 10px;
+  }
+  .knowledge-editor-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .proposal {
+    padding: 10px 12px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius);
+    background: var(--app-surface);
+  }
+  .proposal summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: var(--app-text-sm);
+    font-weight: 600;
+  }
+  .proposal-body {
+    display: grid;
+    gap: 10px;
+    padding-top: 10px;
+  }
+  .gov-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--app-text-sm);
+  }
+  .gov-history {
+    display: grid;
+    gap: 8px;
+  }
+  .gov-history details,
+  .knowledge-governance section > details {
+    padding: 8px 10px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-sm);
+    font-size: var(--app-text-sm);
+  }
+  .knowledge-governance section {
+    display: grid;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--app-border);
+  }
+  .knowledge-governance section:first-of-type {
+    padding-top: 0;
+    border-top: 0;
+  }
+  .knowledge-governance section > button {
+    justify-self: start;
+  }
+  .draft-guard,
+  .draft-latest {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: var(--app-radius);
+    background: var(--app-warning-soft);
+    border: 1px solid color-mix(in srgb, var(--app-warning) 40%, transparent);
+    font-size: var(--app-text-sm);
+  }
+  .draft-latest {
+    background: var(--surface-2);
+    border-color: var(--app-border);
+  }
+  /* Learned memory */
+  .learned-memory {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 1280px;
+  }
+  .learned-memory > p {
+    color: var(--app-text-3);
+    font-size: var(--app-text-sm);
+    max-width: 80ch;
+  }
+  .learned-memory > label,
+  .learned-memory section[aria-label="Memory actions"] {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 16px;
+  }
+  .learned-memory > label {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+  .learned-memory > label select {
+    width: auto;
+  }
+  .learned-memory section[aria-label="Memory actions"] label:has(select) {
+    white-space: nowrap;
+  }
+  .learned-memory section[aria-label="Memory actions"] label {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .learned-memory section[aria-label="Memory actions"] input:not([type="checkbox"]) {
+    width: 260px;
+  }
+  .learned-memory section[aria-label="Memory actions"] p {
+    flex-basis: 100%;
+    font-size: var(--app-text-sm);
+    color: var(--app-text-3);
+  }
+  .learned-memory h2 {
+    margin-top: 6px;
+  }
+  .learned-memory [role="tablist"] {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: var(--app-radius);
+    background: var(--surface-3);
+    width: fit-content;
+  }
+  .learned-memory [role="tab"] {
+    padding: 6px 14px;
+    border: 0;
+    border-radius: var(--app-radius-sm);
+    background: transparent 0 0;
+    color: var(--app-text-2);
+    font-size: var(--app-text-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .learned-memory [role="tab"][aria-selected="true"] {
+    background: var(--app-surface);
+    color: var(--text);
+    box-shadow: var(--app-shadow-sm);
+  }
+  .learned-memory table td button + button {
+    margin-left: 6px;
+  }
+  .memory-confirmation {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .memory-confirmation > p {
+    flex-basis: 100%;
+  }
+  .memory-confirmation > p:first-child {
+    font-size: var(--app-text-base);
+    color: var(--text);
+  }
+  .memory-confirmation > a {
+    margin-right: auto;
+    font-size: var(--app-text-sm);
+  }
+  .workspace-facts .learned-memory.embedded {
+    padding: 0;
+  }
+  .learned-memory.embedded section[aria-label="Memory actions"] {
+    padding: 0;
+  }
+  /* Embedded memory: a one-line toolbar (search, history toggle, consolidate) above the cards. */
+  .memory-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    padding: 0;
+  }
+  .memory-toolbar .memory-search {
+    display: flex;
+    flex: 1 1 240px;
+    align-items: center;
+    gap: 8px;
+    max-width: 420px;
+    padding: 0 12px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-full);
+    background: var(--surface-2);
+    color: var(--app-text-4);
+  }
+  .memory-toolbar .memory-search:focus-within {
+    border-color: var(--primary);
+    box-shadow: var(--ring);
+  }
+  .memory-toolbar .memory-search input {
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    background: transparent 0 0;
+    box-shadow: none;
+    font-size: var(--app-text-sm);
+  }
+  .memory-toolbar .memory-search input:focus-visible {
+    box-shadow: none;
+    outline: none;
+  }
+  .memory-toolbar .memory-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    color: var(--app-text-3);
+    font-size: var(--app-text-sm);
+    white-space: nowrap;
+  }
+  .memory-toolbar > button {
+    margin-left: auto;
+  }
+  .memory-toolbar > p {
+    flex-basis: 100%;
+    margin: 0;
+  }
+  /* Embedded memory: one card per entry instead of a nine-column table. */
+  .memory-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .memory-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-lg);
+    background: var(--app-surface);
+  }
+  .memory-card.empty {
+    border-style: dashed;
+    background: var(--surface-2);
+    line-height: 1.5;
+  }
+  .memory-card.forgotten {
+    opacity: 0.6;
+  }
+  .memory-card-body {
+    font-size: var(--app-text-sm);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .memory-card-body textarea {
+    width: 100%;
+    min-height: 72px;
+  }
+  .memory-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+  }
+  .memory-card-meta .muted {
+    overflow-wrap: anywhere;
+  }
+  .memory-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .memory-card-actions:empty {
+    display: none;
+  }
+  .memory-card-actions button {
+    padding: 4px 10px;
+    font-size: var(--app-text-xs);
+  }
+  .knowledge-screen.embedded {
+    padding: 0;
+  }
+  @media (max-width: 960px) {
+    .knowledge-screen,
+    .learned-memory {
+      padding: 20px;
+    }
+  }
+}

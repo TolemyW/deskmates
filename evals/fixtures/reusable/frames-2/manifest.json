@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "caseId": "FRAMES-2",
+  "role": "research",
+  "status": "needs_citation_calibration_and_browser_adapter",
+  "protocol": "Deskmates FRAMES-derived frozen-corpus protocol; not a live-web FRAMES score",
+  "source": {
+    "dataset": "google/frames-benchmark",
+    "revision": "58d9fb6330f3ab1316d1eca12e5e8ef23dcc22ef",
+    "split": "test",
+    "path": "test.tsv",
+    "tsvSha256": "4255093c93b595b5b04c7c8dde290b48ec87d72ca0fb0b760d9dd02740d669ff",
+    "rowField": "Unnamed: 0 (blank header in raw TSV)",
+    "rowId": "2",
+    "canonicalRowSha256": "7eaaee2f84fe52e9421504a96fe1f49a17e5228d051b17c2cfecc310ae018f5e",
+    "privateRowFileSha256": "3917b310db4ab23ccc25cfb9dac790f61725aca3f523fa659537d0456015a64d"
+  },
+  "platform": {
+    "host": "testbox",
+    "os": "Linux",
+    "architecture": "x86_64",
+    "browserCorpusImageDigest": null,
+    "dependencyInventory": "Python 3 standard library used for static preflight; browser-serving adapter pending"
+  },
+  "licenses": {
+    "dataset": "Apache-2.0 in Google FRAMES dataset card",
+    "snapshots": "Wikipedia text CC BY-SA 4.0; retain page title, exact revision URL, attribution and terms",
+    "redistribution": "Private pilot only; public corpus distribution needs a separate attribution/license review"
+  },
+  "agentVisible": {
+    "issueFile": "agent-issue.md",
+    "issueSha256": "fe33cbc933ca6b4ed543d0c11148c770108b659dbf8622179aaa68955505af90",
+    "frozenCorpus": "Browser-accessible snapshot adapter pending; only source page text/attribution should be served",
+    "egress": "Deny live web during frozen-corpus trial; exact corpus-host allowlist pending"
+  },
+  "evaluatorOnly": {
+    "location": "/home/owner/agent_workspace/deskmates-reusable-evals/frames-20260925/private/prepared",
+    "mountedInBotWorkspace": false,
+    "assets": [
+      "row-2.json including Answer and source list",
+      "snapshot-receipt.json",
+      "frozen source pages",
+      "grader controls",
+      "human citation review"
+    ],
+    "snapshotReceiptSha256": "954061d0f249b96b340b95a4d2ed5c85383bc765f296b80da93f7e3e37288269",
+    "requiredHops": [
+      "establish Phil's canonical prediction start year",
+      "establish when the national capital moved from Philadelphia to Washington",
+      "verify the arithmetic and address the question's Capitol/state wording ambiguity"
+    ],
+    "sourceRevisions": {
+      "punxsutawney-phil": {
+        "revisionId": 1375565264,
+        "contentSha256": "c7198d03b1ddaeb96d515f73c381b0f8741e40397659eceaa0295502f7be813f"
+      },
+      "united-states-capitol": {
+        "revisionId": 1375748217,
+        "contentSha256": "acf65d239a91e978d45907f8ddf06ef280145ab346eb64f040a05b687f3a0741"
+      }
+    }
+  },
+  "controls": [
+    "reference answer and page coverage",
+    "wrong answer",
+    "unrelated citation",
+    "missing answer",
+    "missing or changed snapshot returns unknown",
+    "two-reviewer semantic-support calibration pending"
+  ],
+  "reset": "Serve exact frozen revisions from a clean corpus instance; preserve page hashes and browser trace; private answer/source list never enters bot mount",
+  "agentBudget": null
+}

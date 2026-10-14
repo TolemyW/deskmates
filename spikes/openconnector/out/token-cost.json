@@ -1,0 +1,466 @@
+[
+  {
+    "group": "tools/list",
+    "item": "list_apps description",
+    "chars": 344,
+    "cjk": 0,
+    "tokens": 86,
+    "note": ""
+  },
+  {
+    "group": "tools/list",
+    "item": "list_apps inputSchema",
+    "chars": 237,
+    "cjk": 0,
+    "tokens": 60,
+    "note": ""
+  },
+  {
+    "group": "tools/list",
+    "item": "list_apps whole entry",
+    "chars": 735,
+    "cjk": 0,
+    "tokens": 184,
+    "note": "name, title, description, inputSchema, annotations, execution"
+  },
+  {
+    "group": "tools/list",
+    "item": "list_connections description",
+    "chars": 310,
+    "cjk": 0,
+    "tokens": 78,
+    "note": ""
+  },
+  {
+    "group": "tools/list",
+    "item": "list_connections inputSchema",
+    "chars": 196,
+    "cjk": 0,
+    "tokens": 49,
+    "note": ""
+  },
+  {
+    "group": "tools/list",
+    "item": "list_connections whole entry",
+    "chars": 674,
+    "cjk": 0,
+    "tokens": 169,
+    "note": "name, title, description, inputSchema, annotations, execution"
+  },
+  {
+    "group": "tools/list",
+    "item": "search_actions description",
+    "chars": 440,
+    "cjk": 0,
+    "tokens": 110,
+    "note": ""
+  },
+  {
+    "group": "tools/list",
+    "item": "search_actions inputSchema",
+    "chars": 464,
+    "cjk": 0,
+    "tokens": 116,
+    "note": ""
+  },
+  {
+    "group": "tools/list",
+    "item": "search_actions whole entry",
+    "chars": 1068,
+    "cjk": 0,
+    "tokens": 267,
+    "note": "name, title, description, inputSchema, annotations, execution"
+  },
+  {
+    "group": "tools/list",
+    "item": "get_action_guide description",
+    "chars": 450,
+    "cjk": 0,
+    "tokens": 113,
+    "note": ""
+  },
+  {
+    "group": "tools/list",
+    "item": "get_action_guide inputSchema",
+    "chars": 342,
+    "cjk": 0,
+    "tokens": 86,
+    "note": ""
+  },
+  {
+    "group": "tools/list",
+    "item": "get_action_guide whole entry",
+    "chars": 960,
+    "cjk": 0,
+    "tokens": 240,
+    "note": "name, title, description, inputSchema, annotations, execution"
+  },
+  {
+    "group": "tools/list",
+    "item": "execute_action description",
+    "chars": 548,
+    "cjk": 0,
+    "tokens": 137,
+    "note": ""
+  },
+  {
+    "group": "tools/list",
+    "item": "execute_action inputSchema",
+    "chars": 509,
+    "cjk": 0,
+    "tokens": 128,
+    "note": ""
+  },
+  {
+    "group": "tools/list",
+    "item": "execute_action whole entry",
+    "chars": 1220,
+    "cjk": 0,
+    "tokens": 305,
+    "note": "name, title, description, inputSchema, annotations, execution"
+  },
+  {
+    "group": "tools/list",
+    "item": "all five tools",
+    "chars": 4663,
+    "cjk": 0,
+    "tokens": 1166,
+    "note": "what an MCP host would load"
+  },
+  {
+    "group": "initialize",
+    "item": "server instructions",
+    "chars": 865,
+    "cjk": 0,
+    "tokens": 217,
+    "note": "only if the host injects MCP instructions"
+  },
+  {
+    "group": "result (as returned)",
+    "item": "list_apps {\"query\":\"slack\"}",
+    "chars": 566,
+    "cjk": 0,
+    "tokens": 142,
+    "note": "2 entries"
+  },
+  {
+    "group": "result (compact JSON)",
+    "item": "list_apps {\"query\":\"slack\"}",
+    "chars": 347,
+    "cjk": 0,
+    "tokens": 87,
+    "note": "2 entries"
+  },
+  {
+    "group": "result (as returned)",
+    "item": "list_apps {\"query\":\"google drive\"}",
+    "chars": 322,
+    "cjk": 0,
+    "tokens": 81,
+    "note": "1 entries"
+  },
+  {
+    "group": "result (compact JSON)",
+    "item": "list_apps {\"query\":\"google drive\"}",
+    "chars": 202,
+    "cjk": 0,
+    "tokens": 51,
+    "note": "1 entries"
+  },
+  {
+    "group": "result (as returned)",
+    "item": "search_actions {\"query\":\"slack\"}",
+    "chars": 33317,
+    "cjk": 0,
+    "tokens": 8330,
+    "note": "20 entries"
+  },
+  {
+    "group": "result (compact JSON)",
+    "item": "search_actions {\"query\":\"slack\"}",
+    "chars": 20930,
+    "cjk": 0,
+    "tokens": 5233,
+    "note": "20 entries"
+  },
+  {
+    "group": "result (as returned)",
+    "item": "search_actions {\"query\":\"google drive\"}",
+    "chars": 36602,
+    "cjk": 0,
+    "tokens": 9151,
+    "note": "20 entries"
+  },
+  {
+    "group": "result (compact JSON)",
+    "item": "search_actions {\"query\":\"google drive\"}",
+    "chars": 23527,
+    "cjk": 0,
+    "tokens": 5882,
+    "note": "20 entries"
+  },
+  {
+    "group": "result (as returned)",
+    "item": "search_actions {\"query\":\"post message\",\"service\":\"slack\"}",
+    "chars": 31841,
+    "cjk": 0,
+    "tokens": 7961,
+    "note": "15 entries"
+  },
+  {
+    "group": "result (compact JSON)",
+    "item": "search_actions {\"query\":\"post message\",\"service\":\"slack\"}",
+    "chars": 20444,
+    "cjk": 0,
+    "tokens": 5111,
+    "note": "15 entries"
+  },
+  {
+    "group": "result (as returned)",
+    "item": "search_actions {\"query\":\"create folder\",\"service\":\"googledrive\"}",
+    "chars": 14563,
+    "cjk": 0,
+    "tokens": 3641,
+    "note": "7 entries"
+  },
+  {
+    "group": "result (compact JSON)",
+    "item": "search_actions {\"query\":\"create folder\",\"service\":\"googledrive\"}",
+    "chars": 9403,
+    "cjk": 0,
+    "tokens": 2351,
+    "note": "7 entries"
+  },
+  {
+    "group": "result (as returned)",
+    "item": "search_actions {\"query\":\"share file\",\"service\":\"googledrive\"}",
+    "chars": 37875,
+    "cjk": 0,
+    "tokens": 9469,
+    "note": "20 entries"
+  },
+  {
+    "group": "result (compact JSON)",
+    "item": "search_actions {\"query\":\"share file\",\"service\":\"googledrive\"}",
+    "chars": 24366,
+    "cjk": 0,
+    "tokens": 6092,
+    "note": "20 entries"
+  },
+  {
+    "group": "result (as returned)",
+    "item": "list_apps {} (whole catalog)",
+    "chars": 405337,
+    "cjk": 9,
+    "tokens": 101337,
+    "note": "1566 entries; never offer unfiltered"
+  },
+  {
+    "group": "get_action_guide (as returned)",
+    "item": "slack.post_message",
+    "chars": 2617,
+    "cjk": 0,
+    "tokens": 655,
+    "note": "write"
+  },
+  {
+    "group": "get_action_guide markdown only",
+    "item": "slack.post_message",
+    "chars": 1949,
+    "cjk": 0,
+    "tokens": 488,
+    "note": "write"
+  },
+  {
+    "group": "get_action_guide (as returned)",
+    "item": "slack.list_channels",
+    "chars": 1796,
+    "cjk": 0,
+    "tokens": 449,
+    "note": "read"
+  },
+  {
+    "group": "get_action_guide markdown only",
+    "item": "slack.list_channels",
+    "chars": 1156,
+    "cjk": 0,
+    "tokens": 289,
+    "note": "read"
+  },
+  {
+    "group": "get_action_guide (as returned)",
+    "item": "slack.get_channel_messages",
+    "chars": 3023,
+    "cjk": 0,
+    "tokens": 756,
+    "note": "read"
+  },
+  {
+    "group": "get_action_guide markdown only",
+    "item": "slack.get_channel_messages",
+    "chars": 2274,
+    "cjk": 0,
+    "tokens": 569,
+    "note": "read"
+  },
+  {
+    "group": "get_action_guide (as returned)",
+    "item": "slack.upload_file",
+    "chars": 2815,
+    "cjk": 0,
+    "tokens": 704,
+    "note": "write"
+  },
+  {
+    "group": "get_action_guide markdown only",
+    "item": "slack.upload_file",
+    "chars": 2133,
+    "cjk": 0,
+    "tokens": 534,
+    "note": "write"
+  },
+  {
+    "group": "get_action_guide (as returned)",
+    "item": "slack.add_reaction",
+    "chars": 2077,
+    "cjk": 0,
+    "tokens": 520,
+    "note": "write"
+  },
+  {
+    "group": "get_action_guide markdown only",
+    "item": "slack.add_reaction",
+    "chars": 1410,
+    "cjk": 0,
+    "tokens": 353,
+    "note": "write"
+  },
+  {
+    "group": "get_action_guide (as returned)",
+    "item": "googledrive.files.list",
+    "chars": 3621,
+    "cjk": 0,
+    "tokens": 906,
+    "note": "read"
+  },
+  {
+    "group": "get_action_guide markdown only",
+    "item": "googledrive.files.list",
+    "chars": 2813,
+    "cjk": 0,
+    "tokens": 704,
+    "note": "read"
+  },
+  {
+    "group": "get_action_guide (as returned)",
+    "item": "googledrive.files.get",
+    "chars": 2519,
+    "cjk": 0,
+    "tokens": 630,
+    "note": "read"
+  },
+  {
+    "group": "get_action_guide markdown only",
+    "item": "googledrive.files.get",
+    "chars": 1739,
+    "cjk": 0,
+    "tokens": 435,
+    "note": "read"
+  },
+  {
+    "group": "get_action_guide (as returned)",
+    "item": "googledrive.files.export",
+    "chars": 2350,
+    "cjk": 0,
+    "tokens": 588,
+    "note": "read"
+  },
+  {
+    "group": "get_action_guide markdown only",
+    "item": "googledrive.files.export",
+    "chars": 1582,
+    "cjk": 0,
+    "tokens": 396,
+    "note": "read"
+  },
+  {
+    "group": "get_action_guide (as returned)",
+    "item": "googledrive.files.create",
+    "chars": 2815,
+    "cjk": 0,
+    "tokens": 704,
+    "note": "write"
+  },
+  {
+    "group": "get_action_guide markdown only",
+    "item": "googledrive.files.create",
+    "chars": 2099,
+    "cjk": 0,
+    "tokens": 525,
+    "note": "write"
+  },
+  {
+    "group": "get_action_guide (as returned)",
+    "item": "googledrive.permissions.create",
+    "chars": 4789,
+    "cjk": 0,
+    "tokens": 1198,
+    "note": "write"
+  },
+  {
+    "group": "get_action_guide markdown only",
+    "item": "googledrive.permissions.create",
+    "chars": 4018,
+    "cjk": 0,
+    "tokens": 1005,
+    "note": "write"
+  },
+  {
+    "group": "get_action_guide (as returned)",
+    "item": "slack.delete_message",
+    "chars": 1963,
+    "cjk": 0,
+    "tokens": 491,
+    "note": "destructive"
+  },
+  {
+    "group": "get_action_guide markdown only",
+    "item": "slack.delete_message",
+    "chars": 1304,
+    "cjk": 0,
+    "tokens": 326,
+    "note": "destructive"
+  },
+  {
+    "group": "get_action_guide (as returned)",
+    "item": "googledrive.files.delete",
+    "chars": 2007,
+    "cjk": 0,
+    "tokens": 502,
+    "note": "destructive"
+  },
+  {
+    "group": "get_action_guide markdown only",
+    "item": "googledrive.files.delete",
+    "chars": 1313,
+    "cjk": 0,
+    "tokens": 329,
+    "note": "destructive"
+  },
+  {
+    "group": "result (as returned)",
+    "item": "list_connections {} with a token granted one connection",
+    "chars": 7661,
+    "cjk": 0,
+    "tokens": 1916,
+    "note": "25 entries: 1 granted + virtual no_auth ones"
+  },
+  {
+    "group": "execute_action (as returned)",
+    "item": "gitea.list_my_repositories (2 repos)",
+    "chars": 1566,
+    "cjk": 0,
+    "tokens": 392,
+    "note": ""
+  }
+]

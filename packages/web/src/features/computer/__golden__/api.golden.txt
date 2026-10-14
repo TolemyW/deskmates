@@ -1,0 +1,536 @@
+{
+  "closeScreenAccess": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/screen-access/acc%2F1/close",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {},
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/screen-access/acc%2F1/close failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "getBotScreen": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/bots/bot%2F1/screen",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/bots/bot%2F1/screen failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "getWorkspace": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/workspaces/ws%2F1",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/workspaces/ws%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "handBack": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/workspaces/ws%2F1/handback",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/workspaces/ws%2F1/handback failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "openTakeoverScreen": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/workspaces/ws%2F1/takeover/open-screen",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/workspaces/ws%2F1/takeover/open-screen failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "screenAccess": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/bots/bot%2F1/screen/access",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "mode": "control"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/bots/bot%2F1/screen/access failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "startBotScreen": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/bots/bot%2F1/screen/start",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {},
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/bots/bot%2F1/screen/start failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "takeOver": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/workspaces/ws%2F1/takeover",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "authorId": "user_1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/workspaces/ws%2F1/takeover failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  }
+}

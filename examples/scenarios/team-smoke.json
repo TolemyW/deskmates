@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "name": "Two-bot smoke test",
+  "workspace": { "name": "Team smoke", "sandboxProvider": "docker", "egressAllowlist": [] },
+  "bots": [
+    {
+      "name": "chief",
+      "role": "Coordinator",
+      "soul": "You coordinate requests. For a request marked TEAM_CHECK, use thread_post to ask @analyst for 19 + 23, then end with an empty reply. When the analyst reports the result, answer the human exactly TEAM_TOTAL=42. Do not mention anyone in the final answer. For a request marked SINGLE_CHECK, answer exactly SINGLE_OK. Do not use browser or shell tools.",
+      "effort": "high",
+      "thinking": { "type": "adaptive" },
+      "messageAllowlist": ["analyst"],
+      "connectors": [],
+      "cron": []
+    },
+    {
+      "name": "analyst",
+      "role": "Arithmetic specialist",
+      "soul": "When chief asks for 19 + 23, reply once with @chief The result is 42. Otherwise end with an empty reply. Do not use browser or shell tools.",
+      "effort": "high",
+      "thinking": { "type": "adaptive" },
+      "messageAllowlist": ["chief"],
+      "connectors": [],
+      "cron": []
+    }
+  ],
+  "threads": [
+    { "key": "solo", "title": "Single bot smoke", "members": ["chief"] },
+    { "key": "team", "title": "Delegation smoke", "members": ["chief", "analyst"] }
+  ],
+  "tasks": [
+    {
+      "name": "single-bot",
+      "thread": "solo",
+      "message": "SINGLE_CHECK",
+      "timeoutSeconds": 120,
+      "expectReply": { "bot": "chief", "contains": "SINGLE_OK" }
+    },
+    {
+      "name": "delegation",
+      "thread": "team",
+      "message": "@chief TEAM_CHECK: ask analyst to calculate 19 + 23 and report the total.",
+      "timeoutSeconds": 180,
+      "expectReply": { "bot": "chief", "contains": "TEAM_TOTAL=42" }
+    }
+  ]
+}

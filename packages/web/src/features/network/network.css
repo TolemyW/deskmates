@@ -1,0 +1,42 @@
+/* Styles of the network feature,
+   loaded after app.css by src/styles/feature-styles.ts. */
+.network-page .network-note {
+  color: var(--text-muted, inherit);
+}
+
+.network-form,
+.network-selection {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 48rem;
+  margin-block: 1rem;
+}
+
+.network-form label,
+.network-selection label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.network-form textarea {
+  font-family: var(--font-mono, monospace);
+}
+
+.network-selection fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.network-profiles > li {
+  margin-block: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.network-badge[data-trusted="true"] {
+  font-weight: 600;
+}
+
+.network-publications li[data-status="failed"] {
+  color: var(--danger, #b42318);
+}

@@ -1,0 +1,30 @@
+# T2 files that run only in the full suite (`npm run test:container`; `stable.sh verify` for a
+# minor tag or with T2_SCOPE=full), not in the smoke subset of t2-smoke.list.
+# Format: <repo-relative path> <one-line reason>. `#` starts a comment line.
+# acceptance/t2-lists.test.ts fails on a *.container.test.ts that is in neither list.
+acceptance/m1-takeover.container.test.ts                  human takeover lock and wait message; the M1 browser lock, not an M3 trial feature
+acceptance/m2-boundaries.container.test.ts                B4 listeners, networks and egress proxy; slow two-workspace network probes, changed only with the proxy or provider
+acceptance/m2-browser-approval.container.test.ts          L2 browser approval park and resume in the same tab; M2 browser path, 55 s
+acceptance/m2-browser-inline-snapshot.container.test.ts   opt-in inline-v2 snapshot mode; not the trial default
+acceptance/m2-browser-snapshot.container.test.ts          pinned MCP snapshot response shape; changes only with a Playwright MCP bump
+acceptance/m2-browser.container.test.ts                   multi-run tab coordination and takeover stress; 105 s, the slowest file
+acceptance/m2-cli.container.test.ts                       governed Playwright CLI tab fencing; changes only with the CLI or its fence
+acceptance/m2-group-limits.container.test.ts              relay_count and turn_budget caps under adversarial loops; M2 group limits
+acceptance/m2-group-silence.container.test.ts             explicit empty-summary silence; M2 group behaviour
+acceptance/m2-origin-coordination.container.test.ts       ADR-0007 origin barrier; candidate coordination mode, not the trial default
+acceptance/m2-snapshot-reference.container.test.ts        pinned MCP ref lifetime; changes only with a Playwright MCP bump
+acceptance/m2-takeover.container.test.ts                  deskbench X04 MFA takeover with a peer run; fixed 20 s observation window
+acceptance/m2-tty.container.test.ts                       native PTY contract in the image; changes only with the image or node-pty
+acceptance/m2-vision-transport.container.test.ts          screenshot bytes reach the next model request; diagnostic for the vision path
+acceptance/m2-vision.container.test.ts                    opt-in vision fallback after stale targets; visual model integration deferred
+acceptance/m4-model-selection.container.test.ts     ADR-0023 proxy refusal, rewrite, served model and SDK overload fallback; changes only with the model proxy or the SDK
+acceptance/m4-tenancy.container.test.ts                  ADR-0022 two-tenant labels, attach refusal, files, desktop and restart; changes only with tenancy
+acceptance/m4-turn-exhaustion.container.test.ts           ADR-0016 turn warning, waiting_continuation park, bot continue resume and outcome notice; changes only with the turn budget path
+packages/connector-postgres/src/service.container.test.ts connector against real PostgreSQL 16; package-level, changes only with the connector
+packages/sandbox-docker/src/docker-provider.container.test.ts DockerProvider against alpine; package-level, changes only with the provider
+packages/sandbox-docker/src/workspace-image.container.test.ts image contents, pins and restart behaviour; changes only with the image, which CI smoke-builds
+packages/sidecar/src/sdk-shape.container.test.ts          fake SDK vs real SDK call shape (needs a model) and the ADR-0015 skill filter (loopback upstream)
+packages/sidecar/src/sdk-tool-inventory.container.test.ts pinned SDK tool inventory vs the risk-tier tables (ADR-0002 amendment 3 A5, loopback upstream); changes only with the SDK pin
+packages/sidecar/src/mcp-proxy/browser-chooser.container.test.ts real pinned-MCP chooser and CDP fencing; opt-in DESKMATES_CHOOSER_MCP_ROOT (shim-patched MCP 0.0.82) and controlled Chromium
+
+packages/gateway/src/ledger/usage-cancellation.container.test.ts  Synthetic process cancellation preserves durable partial usage without model costs.

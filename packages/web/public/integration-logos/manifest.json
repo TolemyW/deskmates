@@ -1,0 +1,20 @@
+{
+  "license": "CC0-1.0",
+  "source": "https://github.com/simple-icons/simple-icons",
+  "retrieved": "2026-10-11",
+  "icons": {
+    "airtable.svg": "Airtable",
+    "confluence.svg": "Confluence",
+    "github.svg": "GitHub",
+    "gitlab.svg": "GitLab",
+    "gmail.svg": "Gmail",
+    "googlecalendar.svg": "Google Calendar",
+    "googledrive.svg": "Google Drive",
+    "hubspot.svg": "HubSpot",
+    "jira.svg": "Jira",
+    "linear.svg": "Linear",
+    "notion.svg": "Notion",
+    "postgresql.svg": "PostgreSQL",
+    "stripe.svg": "Stripe"
+  }
+}

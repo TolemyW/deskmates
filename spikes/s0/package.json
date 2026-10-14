@@ -1,0 +1,17 @@
+{
+  "name": "s0-spike",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.278",
+    "@playwright/mcp": "^0.0.82",
+    "playwright": "^1.64.0-alpha-1789764292000"
+  }
+}

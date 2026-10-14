@@ -1,0 +1,796 @@
+/* Styles of the contacts feature,
+   loaded after app.css by src/styles/feature-styles.ts. Unlayered rules come first: like
+   design-refresh.css they override every layered rule.
+   Rules inside @layer components rank with the shared components of app.css and lose to
+   any unlayered rule; within the layer the later rule wins.
+   This file skips Tailwind's compile. `background: none 0 0` and `transparent 0 0` spell
+   what that compile shipped for `none` and `transparent` (it set the position to 0 0). */
+.management-card,
+.management-section {
+  padding: 24px;
+  border: 0;
+  border-radius: 24px;
+  box-shadow: var(--app-shadow-sm);
+}
+/* Profile navigation responds to its column, including an expanded sidebar. */
+.profile {
+  container-type: inline-size;
+}
+.profile > .app-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+  overflow: visible;
+}
+.profile > .app-tabs button {
+  justify-content: center;
+  min-width: 0;
+  padding-inline: 8px;
+  margin-bottom: 0;
+}
+.profile > .app-tabs svg {
+  flex-shrink: 0;
+}
+@container (max-width: 480px) {
+  .profile > .app-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-radius: 24px;
+  }
+}
+.contacts-main {
+  background: var(--background);
+}
+.contact-list {
+  padding: 8px;
+}
+.contact-list li {
+  border-radius: 20px;
+  margin-bottom: 8px;
+}
+.contact-list li.selected {
+  background: var(--default);
+}
+.contact-row {
+  padding: 16px 12px;
+  grid-template-columns: 32px minmax(0, 1fr);
+}
+.contact-row > .avatar {
+  grid-row: 1 / 3;
+}
+.contact-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.contact-heading .contact-name {
+  flex: 1;
+  min-width: 0;
+}
+.contact-time {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.contact-status {
+  min-width: 0;
+  grid-column: 2;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.contact-status [data-gb-ui="pill"] {
+  max-width: 100%;
+  white-space: nowrap;
+}
+.contact-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contact-name {
+  font-size: var(--app-text-base);
+  font-weight: 500;
+}
+.team-overview {
+  padding: 32px;
+  overflow: auto;
+}
+.team-overview h1 {
+  font-size: var(--app-text-2xl);
+  letter-spacing: -.7px;
+  font-weight: 600;
+}
+.team-overview > p {
+  color: var(--muted);
+  margin: 8px 0 28px;
+  font-size: var(--app-text-base);
+}
+.team-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+.team-card {
+  padding: 24px;
+  gap: 16px;
+}
+.team-card-grid h2 {
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+}
+.team-card-grid p {
+  font-size: var(--app-text-base);
+  color: var(--muted);
+  line-height: 1.6;
+}
+.team-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}
+@media (max-width: 720px) {
+  .team-overview {
+    padding: 20px;
+  }
+}
+@layer components {
+  .status.waiting_approval_live,
+  .status.waiting_browser {
+    background: var(--app-warning-soft);
+    color: var(--warning-text);
+  }
+  .avatar-swatch[data-color="slate"] {
+    --avatar-named: var(--avatar-slate);
+  }
+  .avatar-swatch[data-color="red"] {
+    --avatar-named: var(--avatar-red);
+  }
+  .avatar-swatch[data-color="orange"] {
+    --avatar-named: var(--avatar-orange);
+  }
+  .avatar-swatch[data-color="amber"] {
+    --avatar-named: var(--avatar-amber);
+  }
+  .avatar-swatch[data-color="green"] {
+    --avatar-named: var(--avatar-green);
+  }
+  .avatar-swatch[data-color="teal"] {
+    --avatar-named: var(--avatar-teal);
+  }
+  .avatar-swatch[data-color="blue"] {
+    --avatar-named: var(--avatar-blue);
+  }
+  .avatar-swatch[data-color="indigo"] {
+    --avatar-named: var(--avatar-indigo);
+  }
+  .avatar-swatch[data-color="violet"] {
+    --avatar-named: var(--avatar-violet);
+  }
+  .avatar-swatch[data-color="pink"] {
+    --avatar-named: var(--avatar-pink);
+  }
+  .avatar-button:focus-visible {
+    box-shadow: var(--ring);
+    outline: none;
+  }
+  .avatar-button-hint {
+    position: absolute;
+    right: -4px;
+    bottom: -4px;
+    display: inline-flex;
+    width: 20px;
+    height: 20px;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--app-surface);
+    border-radius: 50%;
+    background: var(--surface-2);
+    color: var(--app-text-3);
+  }
+  .avatar-button:hover .avatar-button-hint {
+    background: var(--primary);
+    color: var(--on-primary);
+  }
+  .avatar-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 14px;
+  }
+  .avatar-picker fieldset {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .avatar-picker legend {
+    margin-bottom: 6px;
+    color: var(--app-text-3);
+  }
+  .avatar-picker-preview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .avatar-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .avatar-swatch {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    background: var(--avatar-named);
+    cursor: pointer;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--avatar-named) 40%, transparent);
+  }
+  .avatar-swatch.auto {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-2);
+    color: var(--app-text-3);
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 0 0 0 1px var(--app-border);
+  }
+  .avatar-swatch.selected {
+    border-color: var(--text);
+  }
+  .avatar-emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+    gap: 6px;
+  }
+  .avatar-emoji-option {
+    display: inline-flex;
+    height: 38px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-sm);
+    background: var(--app-surface);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .avatar-emoji-option.initials {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--app-text-3);
+  }
+  .avatar-emoji-option:hover {
+    background: var(--surface-2);
+  }
+  .avatar-emoji-option.selected {
+    border-color: var(--primary);
+    box-shadow: var(--ring);
+  }
+  .avatar-custom {
+    margin-top: 10px;
+  }
+  .avatar-custom input {
+    max-width: 120px;
+  }
+  .new-contact-identity {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+  }
+  .new-contact-identity > label {
+    flex: 1;
+  }
+  .management-card,
+  .management-section {
+    padding: 20px 22px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-lg);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-xs);
+    min-width: 0;
+  }
+  .kv {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 6px 18px;
+    font-size: var(--app-text-sm);
+  }
+  .kv dt {
+    color: var(--app-text-3);
+  }
+  .kv dd {
+    color: var(--text);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  /* Bots and workspaces (management) */
+  .management-screen {
+    padding: 28px 32px 48px;
+  }
+  .management-screen {
+    max-width: 1180px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .management-screen > header p {
+    color: var(--app-text-3);
+    font-size: var(--app-text-sm);
+    margin-top: 6px;
+  }
+  .management-screen h2 {
+    margin-bottom: 14px;
+  }
+  .management-screen h3 {
+    margin-bottom: 10px;
+  }
+  .management-screen h4 {
+    margin-bottom: 6px;
+  }
+  .management-screen form {
+    display: grid;
+    gap: 12px;
+  }
+  .management-screen fieldset {
+    display: grid;
+    gap: 12px;
+  }
+  .management-section > form,
+  .management-card label {
+    max-width: 640px;
+  }
+  .management-screen form > button,
+  .management-screen fieldset > button {
+    justify-self: start;
+  }
+  .management-screen p {
+    color: var(--app-text-2);
+    font-size: var(--app-text-sm);
+    line-height: 1.55;
+  }
+  .management-bot-layout {
+    display: grid;
+    grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+    align-items: start;
+    gap: 18px;
+    margin-top: 12px;
+  }
+  .management-bot-roster {
+    display: grid;
+    gap: 4px;
+  }
+  .management-bot-roster button {
+    justify-content: flex-start;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    text-align: left;
+    height: auto;
+    min-height: 38px;
+    border-color: transparent;
+    background: transparent 0 0;
+    font-weight: 500;
+  }
+  .management-bot-roster button:hover {
+    background: var(--app-surface-hover);
+  }
+  .management-bot-roster button[aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--primary) 20%, transparent);
+    background: var(--primary-soft);
+    color: var(--primary-text);
+  }
+  .management-schedule {
+    padding: 12px 0;
+    border-top: 1px solid var(--app-border);
+    display: grid;
+    gap: 10px;
+  }
+  .management-effective-model {
+    color: var(--app-text-3);
+    font-size: var(--app-text-sm);
+    overflow-wrap: anywhere;
+  }
+  /* The profile's settings tab: one card per concern, one short line under each heading. */
+  .bot-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 0;
+    border: 0;
+    background: transparent 0 0;
+    box-shadow: none;
+  }
+  .bot-settings .settings-section {
+    display: grid;
+    gap: 10px;
+  }
+  .bot-settings .settings-section h3 {
+    margin: 0;
+    font-size: var(--app-text-md);
+  }
+  .bot-settings .settings-section p {
+    margin: 0;
+    color: var(--app-text-2);
+    font-size: var(--app-text-sm);
+    line-height: 1.55;
+  }
+  .bot-settings .management-subsection {
+    padding: 0;
+    border: 0;
+  }
+  .bot-settings textarea {
+    font-family: var(--app-font-mono, ui-monospace, monospace);
+    font-size: var(--app-text-sm);
+    line-height: 1.5;
+  }
+  .bot-settings label {
+    font-size: var(--app-text-sm);
+    color: var(--app-text-2);
+  }
+  .settings-advanced {
+    padding: 10px 12px;
+    border: 1px dashed var(--app-border);
+    border-radius: var(--app-radius);
+  }
+  .settings-advanced summary {
+    cursor: pointer;
+    font-size: var(--app-text-sm);
+    font-weight: 600;
+    color: var(--app-text-2);
+  }
+  .settings-advanced[open] summary {
+    margin-bottom: 8px;
+  }
+  .settings-advanced fieldset {
+    display: grid;
+    gap: 10px;
+  }
+  .settings-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+  }
+  .rule-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--app-text-sm);
+  }
+  .rule-list li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .rule-list li > button {
+    margin-left: auto;
+  }
+  .management-confirm,
+  .management-conflict {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--app-warning) 40%, transparent);
+    border-radius: var(--app-radius);
+    background: var(--app-warning-soft);
+  }
+  .management-confirm p,
+  .management-conflict p,
+  .management-conflict pre {
+    flex-basis: 100%;
+    color: var(--warning-text);
+  }
+  .management-conflict pre {
+    max-height: 16rem;
+    color: var(--text);
+  }
+  .management-screen output {
+    padding: 8px 12px;
+    border-radius: var(--app-radius-sm);
+    background: var(--app-success-soft);
+    color: var(--success-text);
+    font-size: var(--app-text-sm);
+  }
+  .management-screen [role="alert"] {
+    padding: 8px 12px;
+    border-radius: var(--app-radius-sm);
+    background: var(--app-danger-soft);
+    font-size: var(--app-text-sm);
+  }
+  /* Contacts */
+  .contacts-screen {
+    display: grid;
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+  }
+  .contacts-main {
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    background: var(--bg);
+  }
+  .contacts-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 32px;
+  }
+  .contact-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .contact-list li {
+    position: relative;
+    border-radius: var(--app-radius-sm);
+  }
+  .contact-list li.selected {
+    background: var(--primary-soft);
+  }
+  .contact-list li:hover {
+    background: var(--app-surface-hover);
+  }
+  .contact-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 9px 10px;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .contact-row:hover {
+    text-decoration: none;
+  }
+  .contact-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .contact-name {
+    font-size: var(--app-text-xs);
+    font-weight: 600;
+  }
+  .contact-role {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .contact-status {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  .contact-status .status {
+    padding: 0 7px;
+    line-height: 16px;
+    font-size: var(--app-text-xs);
+  }
+  .contact-actions {
+    display: none;
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--app-radius-sm);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-sm);
+  }
+  .contact-list li:hover .contact-actions,
+  .contact-list li:focus-within .contact-actions {
+    display: flex;
+  }
+  .contact-list li:hover .contact-status {
+    visibility: hidden;
+  }
+  /* Profile, channel and workspace headers */
+  .profile {
+    padding: 28px 32px 48px;
+    max-width: 1100px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .profile-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+  .profile .card:not([data-gb-ui]) h3 {
+    margin-bottom: 10px;
+  }
+  .schedule-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .schedule-list li {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    font-size: var(--app-text-sm);
+  }
+  .schedule-list code {
+    flex-shrink: 0;
+  }
+  .schedule-next {
+    white-space: nowrap;
+  }
+  .profile .management-card {
+    padding: 22px;
+  }
+  /* Activity: the desktop on its own row with a bounded height, then the feed as cards. */
+  .activity {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .activity > h3 {
+    margin-top: 6px;
+  }
+  .activity-top {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+    gap: 16px;
+    align-items: stretch;
+  }
+  .channel-feed {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+  .channel-feed > p {
+    grid-column: 1 / -1;
+  }
+  .channel-feed .feed-item.scheduled {
+    grid-column: 1 / -1;
+  }
+  .feed-item {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-lg);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-xs);
+  }
+  .feed-item.scheduled {
+    background: var(--surface-2);
+  }
+  .feed-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--app-radius-sm);
+    background: var(--primary-soft);
+    color: var(--primary-text);
+  }
+  .feed-main {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .feed-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .feed-detail {
+    color: var(--app-text-2);
+    font-size: var(--app-text-sm);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .feed-links {
+    color: var(--app-text-3);
+  }
+  .management-screen.embedded {
+    padding: 0;
+  }
+  @media (max-width: 960px) {
+    .activity-top {
+      grid-template-columns: 1fr;
+    }
+
+    .management-screen {
+      padding: 20px;
+    }
+
+    .management-bot-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .profile {
+      padding: 20px;
+    }
+  }
+  @media (max-width: 720px) {
+    .contacts-screen {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    .contacts-screen:not(.has-profile) > .contacts-main {
+      display: none;
+    }
+
+    .activity-top {
+      grid-template-columns: 1fr;
+    }
+
+    .channel-feed {
+      grid-template-columns: 1fr;
+    }
+
+    .kv {
+      grid-template-columns: 1fr;
+      gap: 2px 0;
+    }
+
+    .kv dt {
+      margin-top: 6px;
+    }
+  }
+}
+
+/* Issue #77: the AI-drafted SOUL change, line by line against the loaded version. */
+.soul-draft {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.soul-diff {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: var(--app-text-sm, 0.875rem);
+}
+
+.soul-diff-added {
+  display: block;
+  background: var(--success-soft);
+  color: var(--success-soft-foreground);
+}
+
+.soul-diff-removed {
+  display: block;
+  background: var(--danger-soft);
+  color: var(--danger-soft-foreground);
+  text-decoration: line-through;
+}
+
+.soul-diff-same {
+  display: block;
+}
+
+/* Issue #87: what the vision probe established for the bot's model. */
+.vision-capability[data-status="unknown"] strong {
+  color: var(--danger-text);
+}
+
+.vision-capability[data-status="supported"] strong {
+  color: var(--success-text);
+}

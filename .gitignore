@@ -1,0 +1,28 @@
+node_modules
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+data/
+*.sqlite
+*.sqlite-*
+.DS_Store
+coverage/
+# spike scratch output
+spikes/**/work-*/
+spikes/**/*.jsonl
+spikes/**/*.out
+# per-user Claude Code settings
+.claude/settings.local.json
+# Claude Code worktrees
+.claude/worktrees/
+
+# Python bytecode from spike scripts
+__pycache__/
+dist-demo/
+dist-studio/
+
+# local scratch: patches, backups (never committed)
+tmp/

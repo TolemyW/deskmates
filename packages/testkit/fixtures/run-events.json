@@ -1,0 +1,101 @@
+[
+  {
+    "runId": "run-0001",
+    "seq": 1,
+    "kind": "log",
+    "payload": { "level": "info", "message": "run started", "trigger": "thread_message" },
+    "ts": "2026-09-21T09:00:00.000Z"
+  },
+  {
+    "runId": "run-0001",
+    "seq": 2,
+    "kind": "thinking",
+    "payload": { "text": "The user wants an order placed for Acme. I need to log in first." },
+    "ts": "2026-09-21T09:00:01.000Z"
+  },
+  {
+    "runId": "run-0001",
+    "seq": 3,
+    "kind": "tool_call",
+    "payload": {
+      "toolName": "mcp__playwright__browser_navigate",
+      "input": { "url": "http://golden.test/login" },
+      "riskLevel": "L0",
+      "decision": "allow"
+    },
+    "ts": "2026-09-21T09:00:02.000Z"
+  },
+  {
+    "runId": "run-0001",
+    "seq": 4,
+    "kind": "tool_result",
+    "payload": {
+      "toolName": "mcp__playwright__browser_navigate",
+      "untrusted": true,
+      "output": "Page title: Log in - Galaxy Ops Console"
+    },
+    "ts": "2026-09-21T09:00:03.000Z"
+  },
+  {
+    "runId": "run-0001",
+    "seq": 5,
+    "kind": "screenshot",
+    "payload": { "ref": "screenshots/run-0001/005.png", "url": "http://golden.test/dashboard" },
+    "ts": "2026-09-21T09:00:10.000Z"
+  },
+  {
+    "runId": "run-0001",
+    "seq": 6,
+    "kind": "tool_call",
+    "payload": {
+      "toolName": "mcp__playwright__browser_click",
+      "input": { "element": "Submit order", "ref": "e42" },
+      "riskLevel": "L2",
+      "decision": "defer",
+      "targetOrigin": "http://golden.test"
+    },
+    "ts": "2026-09-21T09:00:20.000Z"
+  },
+  {
+    "runId": "run-0001",
+    "seq": 7,
+    "kind": "approval",
+    "payload": {
+      "approvalId": "apr-0001",
+      "riskLevel": "L2",
+      "waitMode": "deferred",
+      "decision": "allow_once",
+      "decidedBy": "operator@example.test"
+    },
+    "ts": "2026-09-21T09:05:00.000Z"
+  },
+  {
+    "runId": "run-0001",
+    "seq": 8,
+    "kind": "tool_result",
+    "payload": {
+      "toolName": "mcp__playwright__browser_click",
+      "untrusted": true,
+      "output": "Order O-2051 placed for C-0002: 1 x SKU-7, total 350.00."
+    },
+    "ts": "2026-09-21T09:05:05.000Z"
+  },
+  {
+    "runId": "run-0001",
+    "seq": 9,
+    "kind": "log",
+    "payload": {
+      "level": "info",
+      "message": "run finished",
+      "summary": {
+        "done": "Placed order O-2051 for Acme Corp (C-0002).",
+        "filesChanged": [],
+        "sitesVisited": ["http://golden.test"],
+        "pendingApprovals": [],
+        "memorySuggestions": [],
+        "reply": "Done: order O-2051 placed for Acme Corp."
+      }
+    },
+    "ts": "2026-09-21T09:05:06.000Z"
+  }
+]

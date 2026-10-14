@@ -1,0 +1,33 @@
+packets: 578
+first packet: 2026-09-29 11:50:04.878612
+last packet:  2026-09-29 11:50:12.978471
+
+DNS questions to Docker's resolver (count, type, name); -T domain decodes the NATed port:
+     13 A? gitea.spike.internal.
+      6 A? hacker-news.firebaseio.com.
+     13 AAAA? gitea.spike.internal.
+      6 AAAA? hacker-news.firebaseio.com.
+
+DNS answers (count, rcode/answer):
+     13 0/0/0 (38)
+     13 1/0/0 A 172.22.0.3 (74)
+     12 ServFail- 0/0/0 (44)
+
+Every TCP SYN (connection attempts, both directions):
+2026-09-29 11:50:07.127117 eth0  In  IP 172.22.0.4.53828 > 172.22.0.2.3000: Flags [S], seq 1481258172, win 64240, options [mss 1460,sackOK,TS val 1115101276 ecr 0,nop,wscale 7], length 0
+2026-09-29 11:50:08.395672 eth0  In  IP 172.22.0.4.53838 > 172.22.0.2.3000: Flags [S], seq 4197481788, win 64240, options [mss 1460,sackOK,TS val 1115102544 ecr 0,nop,wscale 7], length 0
+2026-09-29 11:50:08.706477 eth0  In  IP 172.22.0.4.53846 > 172.22.0.2.3000: Flags [S], seq 4074118573, win 64240, options [mss 1460,sackOK,TS val 1115102855 ecr 0,nop,wscale 7], length 0
+2026-09-29 11:50:08.718275 eth0  In  IP 172.22.0.4.53852 > 172.22.0.2.3000: Flags [S], seq 357384399, win 64240, options [mss 1460,sackOK,TS val 1115102867 ecr 0,nop,wscale 7], length 0
+2026-09-29 11:50:09.140642 eth0  Out IP 172.22.0.2.57780 > 172.22.0.3.8080: Flags [S], seq 2636509685, win 64240, options [mss 1460,sackOK,TS val 2858485789 ecr 0,nop,wscale 7], length 0
+2026-09-29 11:50:12.108326 lo    In  IP 127.0.0.1.52312 > 127.0.0.1.3000: Flags [S], seq 1959366834, win 65495, options [mss 65495,sackOK,TS val 1648254379 ecr 0,nop,wscale 7], length 0
+
+UDP that is not to or from Docker's resolver:
+
+Distinct IP addresses seen:
+     96 127.0.0.1
+     76 127.0.0.11
+      1 172.22.0.1
+    463 172.22.0.2
+     50 172.22.0.3
+    426 172.22.0.4
+      1 224.0.0.22

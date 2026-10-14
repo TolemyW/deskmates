@@ -1,0 +1,182 @@
+/* Styles of the approvals feature,
+   loaded after app.css by src/styles/feature-styles.ts. Unlayered rules come first: like
+   design-refresh.css they override every layered rule.
+   Rules inside @layer components rank with the shared components of app.css and lose to
+   any unlayered rule; within the layer the later rule wins. */
+.page-header h1 {
+  font-size: var(--app-text-2xl);
+  font-weight: 600;
+  letter-spacing: -.7px;
+}
+.approval-card {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 22px;
+  background: var(--surface);
+  box-shadow: none;
+}
+.approval-card.pending {
+  border-color: var(--border);
+  background: var(--surface);
+}
+.approval-head strong {
+  font-size: var(--app-text-base);
+}
+.approval-facts {
+  gap: 10px 16px;
+}
+.approval-source {
+  margin-block: 12px;
+  min-width: 0;
+}
+.approval-source > summary {
+  cursor: pointer;
+  color: var(--app-text-3);
+  font-size: var(--app-text-sm);
+}
+.approval-source[open] .approval-facts {
+  margin-top: 12px;
+}
+.approval-card {
+  overflow-wrap: anywhere;
+}
+.approval-summary {
+  margin-block: 12px;
+  white-space: pre-wrap;
+}
+.approval-summary-label {
+  color: var(--app-text-3);
+  font-size: var(--app-text-xs);
+}
+.approval-input {
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--app-text-xs);
+}
+@layer components {
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .page-header h1 {
+    margin: 4px 0 6px;
+  }
+  .page-header p {
+    color: var(--app-text-3);
+    font-size: var(--app-text-sm);
+    line-height: 1.6;
+    max-width: 62ch;
+  }
+  /* Approvals */
+  .approvals-screen {
+    padding: 28px 32px 48px;
+    max-width: 900px;
+  }
+  .approval-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .approval-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 18px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-lg);
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-xs);
+    max-width: 100%;
+  }
+  .approval-card.pending {
+    border-color: color-mix(in srgb, var(--app-warning) 45%, transparent);
+    box-shadow: 0 0 0 3px var(--app-warning-soft);
+  }
+  .approval-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: var(--app-text-md);
+  }
+  .approval-head strong {
+    font-weight: 600;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .approval-head .muted {
+    font-size: var(--app-text-sm);
+  }
+  .approval-facts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 6px 14px;
+    font-size: var(--app-text-base);
+    line-height: 1.5;
+  }
+  .approval-facts.small {
+    font-size: var(--app-text-base);
+  }
+  .approval-facts dt {
+    color: var(--app-text-3);
+  }
+  .approval-facts dd {
+    overflow-wrap: anywhere;
+    color: var(--text);
+  }
+  .approval-context {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .approval-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .approval-actions > p,
+  .approval-actions > dl,
+  .approval-ask-label {
+    flex-basis: 100%;
+  }
+  .approval-ask-label {
+    display: grid;
+    gap: 6px;
+    color: var(--app-text-2);
+  }
+  .approval-ask-label textarea {
+    width: 100%;
+    font-size: var(--app-text-sm);
+  }
+  .approval-actions dl {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 2px 12px;
+    padding: 8px 12px;
+    border-radius: var(--app-radius-sm);
+    background: var(--surface-2);
+  }
+  .approval-actions label {
+    flex: 1;
+    min-width: 180px;
+  }
+  .approval-decision {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--app-text-sm);
+    color: var(--app-text-2);
+  }
+  @media (max-width: 960px) {
+    .approvals-screen {
+      padding: 20px;
+    }
+  }
+}

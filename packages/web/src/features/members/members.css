@@ -1,0 +1,144 @@
+/* Styles of the members feature,
+   loaded after app.css by src/styles/feature-styles.ts. Unlayered rules come first: like
+   design-refresh.css they override every layered rule.
+   Rules inside @layer components rank with the shared components of app.css and lose to
+   any unlayered rule; within the layer the later rule wins. */
+.members-list-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.member-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 180px;
+}
+.member-identity > div {
+  display: grid;
+  gap: 2px;
+}
+.member-identity small {
+  color: var(--muted);
+}
+.members-table th:last-child,
+.members-table td:last-child {
+  text-align: right;
+}
+.members-table td:nth-child(2) {
+  min-width: 136px;
+}
+.members-table td:nth-child(3) {
+  white-space: nowrap;
+}
+/* People: Invite by link and Create account (issue #25). */
+.onboarding {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.onboarding-form,
+.handoff-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 520px;
+  padding: 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+}
+.onboarding-form h3,
+.handoff-panel h3 {
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  outline: none;
+}
+.onboarding-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 500;
+}
+.handoff-facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+.handoff-facts > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.handoff-facts dt {
+  min-width: 120px;
+  font-weight: 500;
+}
+.handoff-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@layer components {
+  .members-screen select,
+  .invite-form select {
+    min-height: 32px;
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    background: var(--app-surface);
+    color: var(--text);
+    padding: 4px 8px;
+    max-width: 100%;
+  }
+  .members-screen .card:not([data-gb-ui]) {
+    padding: 16px 18px;
+    margin-top: 16px;
+  }
+  .invite-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+  }
+  .invite-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: var(--app-text-xs);
+    color: var(--app-text-2);
+    min-width: 0;
+  }
+  .invite-link {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+  }
+  .invite-link code {
+    display: block;
+    overflow-wrap: anywhere;
+    padding: 8px;
+    border-radius: 8px;
+    background: var(--surface-2);
+  }
+  .invitation-list {
+    list-style: none;
+    padding: 0;
+    margin: 12px 0 0;
+  }
+  .invitation-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--app-border);
+  }
+}

@@ -1,0 +1,173 @@
+/* Styles of the skills feature,
+   loaded after app.css by src/styles/feature-styles.ts. Unlayered rules come first: like
+   design-refresh.css they override every layered rule.
+   Rules inside @layer components rank with the shared components of app.css and lose to
+   any unlayered rule; within the layer the later rule wins. */
+.skills-table {
+  min-width: 920px;
+}
+.skills-table td:first-child {
+  min-width: 220px;
+  max-width: 340px;
+  overflow-wrap: anywhere;
+}
+.skills-table td:nth-child(3) {
+  min-width: 150px;
+}
+.skills-table td:last-child {
+  min-width: 220px;
+}
+.skills-table td:last-child button {
+  margin: 2px;
+}
+/* Skill rows: name, state, enabled bots, last used. When the list column is narrow (a phone,
+   or the detail panel beside it) the columns stack into labelled metadata. */
+.skill-columns,
+.skill-row {
+  /* Fixed tracks so every row (each its own grid) lines up with the header. */
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) 6.5rem 6.5rem 2.25rem;
+}
+.skill-columns {
+  display: grid;
+  gap: 8px 12px;
+  padding: 0 4px 8px;
+  color: var(--muted);
+  font-size: var(--app-text-xs);
+}
+.skill-columns > span:first-child {
+  padding-left: 8px;
+}
+.skill-row .resource-row-badge {
+  min-width: 0;
+}
+.skill-row .resource-row-badge:empty {
+  display: block;
+}
+.skill-cell {
+  min-width: 0;
+  font-size: var(--app-text-sm);
+  overflow-wrap: anywhere;
+}
+.skill-cell-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.starter-skills {
+  display: grid;
+  gap: 10px;
+}
+.starter-skills .resource-section-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.starter-skills .resource-section-heading h2,
+.starter-skills .resource-section-heading p {
+  margin: 0;
+}
+.starter-skill-row {
+  display: block;
+  padding: 0;
+}
+.starter-skill-row details {
+  padding: 10px 12px;
+}
+.starter-skill-row summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.starter-skill-row summary::-webkit-details-marker {
+  display: none;
+}
+.starter-skill-row summary > span:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.starter-skill-row .resource-facts {
+  margin-top: 12px;
+}
+@container (max-width: 699px) {
+  .skill-columns {
+    display: none;
+  }
+  .skill-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 8px 4px;
+  }
+  .skill-row .resource-row-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .skill-row > .gb-action-menu-trigger {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .skill-row .skill-cell,
+  .skill-row .resource-row-badge {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
+    padding: 0 8px;
+  }
+  .skill-row .resource-row-badge:empty {
+    display: none;
+  }
+  .skill-cell-label {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+    flex: 0 0 7.5rem;
+    color: var(--muted);
+  }
+}
+.resource-hash {
+  font-size: var(--app-text-xs);
+  word-break: break-all;
+}
+.skill-findings {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.resource-form {
+  display: grid;
+  gap: 12px;
+}
+.resource-form h2 {
+  margin: 0;
+  font-size: var(--app-text-lg);
+}
+.resource-form p {
+  margin: 0;
+  line-height: 1.5;
+}
+.resource-form textarea,
+.resource-form input:not([type="checkbox"]) {
+  width: 100%;
+}
+.resource-dialog {
+  z-index: 40;
+  display: grid;
+  gap: 10px;
+  width: min(420px, calc(100% - 32px));
+  padding: 20px;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--app-surface, var(--surface));
+  color: var(--foreground);
+  box-shadow: var(--shadow-md, var(--app-shadow-sm));
+}
+.resource-dialog h3 {
+  margin: 0;
+  font-size: var(--app-text-lg);
+}

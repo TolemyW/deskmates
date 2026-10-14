@@ -1,0 +1,15 @@
+{
+  "name": "@deskmates/golden-site",
+  "version": "1.2.2",
+  "private": true,
+  "description": "Galaxy Ops Console: the deterministic golden site that deskbench runs against. Standalone; imports no other package; consumed only by evals and T2/T3 tests.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests",
+    "serve": "tsx src/serve.ts",
+    "image": "bash ../../scripts/build-golden-site-image.sh"
+  }
+}

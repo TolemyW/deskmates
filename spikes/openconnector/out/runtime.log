@@ -1,0 +1,116 @@
+{"level":30,"time":1790682608101,"pid":1,"hostname":"94e91cf53dc0","providers":1566,"actions":18320,"catalogIndex":false,"msg":"catalog loaded"}
+{"level":30,"time":1790682608108,"pid":1,"hostname":"94e91cf53dc0","migration":"0001_runtime.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608109,"pid":1,"hostname":"94e91cf53dc0","migration":"0001_runtime.sql","durationMs":1,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608110,"pid":1,"hostname":"94e91cf53dc0","migration":"0002_run_service.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608111,"pid":1,"hostname":"94e91cf53dc0","migration":"0002_run_service.sql","durationMs":1,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608111,"pid":1,"hostname":"94e91cf53dc0","migration":"0003_action_idempotency.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608111,"pid":1,"hostname":"94e91cf53dc0","migration":"0003_action_idempotency.sql","durationMs":0,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608112,"pid":1,"hostname":"94e91cf53dc0","migration":"0004_action_run_audit.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608113,"pid":1,"hostname":"94e91cf53dc0","migration":"0004_action_run_audit.sql","durationMs":1,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608113,"pid":1,"hostname":"94e91cf53dc0","migration":"0005_run_retention.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608113,"pid":1,"hostname":"94e91cf53dc0","migration":"0005_run_retention.sql","durationMs":0,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608113,"pid":1,"hostname":"94e91cf53dc0","migration":"0006_connection_identity.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608115,"pid":1,"hostname":"94e91cf53dc0","migration":"0006_connection_identity.sql","durationMs":2,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608115,"pid":1,"hostname":"94e91cf53dc0","migration":"0007_runtime_policy.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608115,"pid":1,"hostname":"94e91cf53dc0","migration":"0007_runtime_policy.sql","durationMs":0,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608115,"pid":1,"hostname":"94e91cf53dc0","migration":"0008_runtime_token_policy.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608116,"pid":1,"hostname":"94e91cf53dc0","migration":"0008_runtime_token_policy.sql","durationMs":1,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608116,"pid":1,"hostname":"94e91cf53dc0","migration":"0009_runtime_token_proxy.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608117,"pid":1,"hostname":"94e91cf53dc0","migration":"0009_runtime_token_proxy.sql","durationMs":1,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608117,"pid":1,"hostname":"94e91cf53dc0","migration":"0010_connection_revision.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608118,"pid":1,"hostname":"94e91cf53dc0","migration":"0010_connection_revision.sql","durationMs":1,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608118,"pid":1,"hostname":"94e91cf53dc0","migration":"0011_runtime_token_connection_scope.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608119,"pid":1,"hostname":"94e91cf53dc0","migration":"0011_runtime_token_connection_scope.sql","durationMs":1,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608119,"pid":1,"hostname":"94e91cf53dc0","migration":"0012_marketplace.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608119,"pid":1,"hostname":"94e91cf53dc0","migration":"0012_marketplace.sql","durationMs":0,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608119,"pid":1,"hostname":"94e91cf53dc0","migration":"0013_connection_requests.sql","msg":"sqlite migration started"}
+{"level":30,"time":1790682608120,"pid":1,"hostname":"94e91cf53dc0","migration":"0013_connection_requests.sql","durationMs":1,"msg":"sqlite migration completed"}
+{"level":30,"time":1790682608120,"pid":1,"hostname":"94e91cf53dc0","migrationCount":13,"appliedCount":13,"newlyAppliedCount":13,"durationMs":14,"msg":"sqlite migrations ready"}
+{"level":30,"time":1790682608129,"pid":1,"hostname":"94e91cf53dc0","url":"http://0.0.0.0:3000","msg":"connect server listening"}
+{"level":30,"time":1790682608129,"pid":1,"hostname":"94e91cf53dc0","dataDir":"/app/data","msg":"runtime data directory"}
+{"level":30,"time":1790682608129,"pid":1,"hostname":"94e91cf53dc0","backend":"sqlite","msg":"runtime database ready"}
+{"level":40,"time":1790682608129,"pid":1,"hostname":"94e91cf53dc0","msg":"runtime API authentication is disabled; create a runtime token in the web console, set OOMOL_CONNECT_RUNTIME_TOKEN, or configure JWT authentication"}
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+{"level":30,"time":1790682609122,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"ws-a","msg":"connection started"}
+{"level":30,"time":1790682609153,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"ws-a","msg":"connection completed"}
+{"level":30,"time":1790682609160,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"ws-b","msg":"connection started"}
+{"level":30,"time":1790682609165,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"ws-b","msg":"connection completed"}
+{"level":30,"time":1790682609172,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"ws_01J9ZK.gitea-main","msg":"connection started"}
+{"level":40,"time":1790682609175,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"ws_01J9ZK.gitea-main","errorCode":"invalid_connection_name","msg":"connection failed"}
+{"level":30,"time":1790682609182,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"ws/a/main","msg":"connection started"}
+{"level":40,"time":1790682609185,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"ws/a/main","errorCode":"invalid_connection_name","msg":"connection failed"}
+{"level":30,"time":1790682609191,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"ws:a:main","msg":"connection started"}
+{"level":40,"time":1790682609193,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"ws:a:main","errorCode":"invalid_connection_name","msg":"connection failed"}
+{"level":30,"time":1790682609199,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"WS A main","msg":"connection started"}
+{"level":40,"time":1790682609201,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"WS A main","errorCode":"invalid_connection_name","msg":"connection failed"}
+{"level":30,"time":1790682609207,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","msg":"connection started"}
+{"level":40,"time":1790682609209,"pid":1,"hostname":"94e91cf53dc0","operation":"connect","path":"/api/connections/gitea","service":"gitea","authType":"api_key","connectionName":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","errorCode":"invalid_connection_name","msg":"connection failed"}
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+{"level":30,"time":1790682609297,"pid":1,"hostname":"94e91cf53dc0","actionId":"gitea.get_current_user","service":"gitea","caller":"mcp","executionId":"9ba9ed08-b61d-410b-85c7-4d782ee1b85c","msg":"action run started"}
+{"level":30,"time":1790682609305,"pid":1,"hostname":"94e91cf53dc0","actionId":"gitea.get_current_user","service":"gitea","caller":"mcp","executionId":"9ba9ed08-b61d-410b-85c7-4d782ee1b85c","connectionId":"36a717f4-b0bb-4951-9f93-62e065fa0f7c","durationMs":5,"ok":true,"auditPersisted":true,"msg":"action run completed"}
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+{"level":30,"time":1790682609318,"pid":1,"hostname":"94e91cf53dc0","actionId":"gitea.get_current_user","service":"gitea","caller":"mcp","executionId":"da1e8fc0-0312-4205-b8b3-d83fe4cd0518","msg":"action run started"}
+{"level":40,"time":1790682609320,"pid":1,"hostname":"94e91cf53dc0","actionId":"gitea.get_current_user","service":"gitea","caller":"mcp","executionId":"da1e8fc0-0312-4205-b8b3-d83fe4cd0518","durationMs":1,"ok":false,"errorCode":"connection_not_allowed","auditPersisted":true,"msg":"action run failed"}
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+{"level":30,"time":1790682609332,"pid":1,"hostname":"94e91cf53dc0","actionId":"gitea.get_current_user","service":"gitea","caller":"http","executionId":"1b2d4c2d-861b-4f72-af23-8c137bf01668","msg":"action run started"}
+{"level":40,"time":1790682609333,"pid":1,"hostname":"94e91cf53dc0","actionId":"gitea.get_current_user","service":"gitea","caller":"http","executionId":"1b2d4c2d-861b-4f72-af23-8c137bf01668","durationMs":0,"ok":false,"errorCode":"connection_not_allowed","auditPersisted":true,"msg":"action run failed"}
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+{"level":30,"time":1790682609643,"pid":1,"hostname":"94e91cf53dc0","actionId":"hackernews.get_item","service":"hackernews","caller":"mcp","executionId":"04d23d14-5170-4768-b66e-3fe1143ede75","msg":"action run started"}
+{"level":40,"time":1790682609644,"pid":1,"hostname":"94e91cf53dc0","actionId":"hackernews.get_item","service":"hackernews","caller":"mcp","executionId":"04d23d14-5170-4768-b66e-3fe1143ede75","durationMs":0,"ok":false,"errorCode":"action_not_allowed","auditPersisted":true,"msg":"action run failed"}
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+{"level":30,"time":1790682609650,"pid":1,"hostname":"94e91cf53dc0","actionId":"gitea.get_current_user","service":"gitea","caller":"mcp","executionId":"02659ead-fd79-4bf8-90ba-8786f0cd049a","msg":"action run started"}
+{"level":30,"time":1790682609654,"pid":1,"hostname":"94e91cf53dc0","actionId":"gitea.get_current_user","service":"gitea","caller":"mcp","executionId":"02659ead-fd79-4bf8-90ba-8786f0cd049a","connectionId":"36a717f4-b0bb-4951-9f93-62e065fa0f7c","durationMs":3,"ok":true,"auditPersisted":true,"msg":"action run completed"}
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+{"level":30,"time":1790682609944,"pid":1,"hostname":"94e91cf53dc0","actionId":"gitea.list_my_repositories","service":"gitea","caller":"mcp","executionId":"c0c5094d-4469-4ae9-ae6e-3a384db3ce60","msg":"action run started"}
+{"level":30,"time":1790682609948,"pid":1,"hostname":"94e91cf53dc0","actionId":"gitea.list_my_repositories","service":"gitea","caller":"mcp","executionId":"c0c5094d-4469-4ae9-ae6e-3a384db3ce60","connectionId":"36a717f4-b0bb-4951-9f93-62e065fa0f7c","durationMs":3,"ok":true,"auditPersisted":true,"msg":"action run completed"}
+{"level":30,"time":1790682609953,"pid":1,"hostname":"94e91cf53dc0","actionId":"gitea.list_my_repositories","service":"gitea","caller":"http","executionId":"5163ce70-2d6a-4489-b4cf-febb595f3d52","msg":"action run started"}
+{"level":30,"time":1790682609957,"pid":1,"hostname":"94e91cf53dc0","actionId":"gitea.list_my_repositories","service":"gitea","caller":"http","executionId":"5163ce70-2d6a-4489-b4cf-febb595f3d52","connectionId":"36a717f4-b0bb-4951-9f93-62e065fa0f7c","durationMs":3,"ok":true,"auditPersisted":true,"msg":"action run completed"}
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+{"level":30,"time":1790682609963,"pid":1,"hostname":"94e91cf53dc0","actionId":"hackernews.get_top_stories","service":"hackernews","caller":"mcp","executionId":"adf2f805-7129-400d-b7a2-8fd045eafe87","msg":"action run started"}
+{"level":40,"time":1790682614987,"pid":1,"hostname":"94e91cf53dc0","actionId":"hackernews.get_top_stories","service":"hackernews","caller":"mcp","executionId":"adf2f805-7129-400d-b7a2-8fd045eafe87","connectionId":"hackernews:default","durationMs":5021,"ok":false,"errorCode":"provider_error","auditPersisted":true,"msg":"action run failed"}
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+responseMode: 'json' drops mid-call notifications. subscriptions/listen streams are always served over SSE regardless; other notifications emitted before a result are dropped.
+{"level":30,"time":1790682615016,"pid":1,"hostname":"94e91cf53dc0","actionId":"slack.list_channels","service":"slack","caller":"mcp","executionId":"23e2cf30-89ab-497b-9fd2-3a376a019f8e","msg":"action run started"}
+{"level":40,"time":1790682615028,"pid":1,"hostname":"94e91cf53dc0","actionId":"slack.list_channels","service":"slack","caller":"mcp","executionId":"23e2cf30-89ab-497b-9fd2-3a376a019f8e","durationMs":10,"ok":false,"errorCode":"authorization_failed","auditPersisted":true,"msg":"action run failed"}
+{"level":30,"time":1790682615064,"pid":1,"hostname":"94e91cf53dc0","path":"/api/oauth/authorizations","service":"slack","connectionName":"ws-a-slack","msg":"oauth authorization started"}
+{"level":30,"time":1790682615067,"pid":1,"hostname":"94e91cf53dc0","path":"/api/oauth/authorizations","service":"slack","connectionName":"ws-a-slack","authorizationHost":"slack.com","redirectUri":"https://deskmates-gateway.example.test/integration-runtime/oauth/callback","msg":"oauth authorization created"}
+{"level":30,"time":1790682615080,"pid":1,"hostname":"94e91cf53dc0","path":"/api/oauth/authorizations","service":"googledrive","connectionName":"ws-a-drive","msg":"oauth authorization started"}
+{"level":30,"time":1790682615112,"pid":1,"hostname":"94e91cf53dc0","path":"/api/oauth/authorizations","service":"googledrive","connectionName":"ws-a-drive","authorizationHost":"accounts.google.com","redirectUri":"https://deskmates-gateway.example.test/integration-runtime/oauth/callback","msg":"oauth authorization created"}
+{"level":30,"time":1790682615116,"pid":1,"hostname":"94e91cf53dc0","path":"/oauth/callback","hasState":true,"hasCode":true,"msg":"oauth callback received"}
+{"level":40,"time":1790682615117,"pid":1,"hostname":"94e91cf53dc0","path":"/oauth/callback","hasState":true,"hasCode":true,"errorCode":"invalid_oauth_state","msg":"oauth callback failed"}
+{"level":30,"time":1790682615128,"pid":1,"hostname":"94e91cf53dc0","path":"/api/oauth/authorizations","service":"slack","connectionName":"ws-a-slack","msg":"oauth authorization started"}
+{"level":30,"time":1790682615130,"pid":1,"hostname":"94e91cf53dc0","path":"/api/oauth/authorizations","service":"slack","connectionName":"ws-a-slack","authorizationHost":"slack.com","redirectUri":"https://deskmates-gateway.example.test/operator/integrations/oauth/callback","msg":"oauth authorization created"}

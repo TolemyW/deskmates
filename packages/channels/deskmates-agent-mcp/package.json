@@ -1,0 +1,23 @@
+{
+  "name": "@deskmates/agent-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server that lets an external agent use Deskmates as a batch task execution and management service through the authenticated operator API. An operator-side client like the chat channel adapters (ADR-0017). Imports contracts only; imported by nothing.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "deskmates-agent-mcp": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests --config ../../../vitest.config.ts",
+    "start": "node dist/main.js",
+    "openapi": "tsx src/write-openapi.ts && biome format --write openapi.json"
+  },
+  "files": ["dist", "openapi.json"],
+  "dependencies": {
+    "@deskmates/contracts": "*",
+    "@modelcontextprotocol/sdk": "1.30.0"
+  }
+}

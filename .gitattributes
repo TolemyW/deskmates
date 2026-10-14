@@ -1,0 +1,9 @@
+# Fixture bytes are hashed, so they must survive a checkout unchanged. The agent-visible issue
+# text comes from upstream with CRLF line endings and its SHA-256 is pinned in the case manifest;
+# letting git normalise it would make a fresh clone fail its own integrity check.
+evals/fixtures/reusable/*/agent-issue.md -text
+
+# Reports are binary even when their early PDF objects are ASCII-only. Generated
+# SQL oracles and captured logs have pinned bytes; do not rewrite line endings.
+*.pdf binary
+spikes/**/*.log -text

@@ -1,0 +1,18 @@
+[
+  {
+    "model": "fixture-model-default",
+    "inputPerM": 3.0,
+    "outputPerM": 15.0,
+    "cacheReadPerM": 0.3,
+    "cacheCreatePerM": 3.75,
+    "effectiveFrom": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "model": "fixture-model-cheap",
+    "inputPerM": 0.8,
+    "outputPerM": 4.0,
+    "cacheReadPerM": 0.08,
+    "cacheCreatePerM": 1.0,
+    "effectiveFrom": "2026-01-01T00:00:00.000Z"
+  }
+]

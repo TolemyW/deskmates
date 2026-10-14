@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "contracts": {
+    "baseline": {
+      "instruction": ""
+    },
+    "verified-stop-v1": {
+      "instruction": "Before acting, enumerate every required target from current visible evidence; do not invent target IDs. Apply only the requested changes. Verify each required outcome once using visible evidence, then immediately return the required JSON summary. Do not take shortcuts or stop before every required outcome is verified. If blocked or only partially complete, state that explicitly in the summary."
+    }
+  }
+}

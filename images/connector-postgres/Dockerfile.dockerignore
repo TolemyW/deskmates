@@ -1,0 +1,17 @@
+# Build context for images/connector-postgres/Dockerfile is the repository root. BuildKit reads
+# this file instead of the root .dockerignore for this Dockerfile. Allowlist only what it copies.
+*
+!package.json
+!package-lock.json
+!packages/*/package.json
+!packages/channels/deskmates-agent-mcp/package.json
+!packages/contracts/dist/
+!packages/connector-postgres/dist/
+!packages/connector-postgres/migrations/
+**/node_modules
+**/*.tsbuildinfo
+**/*.map
+# Compiled tests, the test-support fake and anything else only tests use.
+**/*.test.js
+**/*.test.d.ts
+**/test-support/

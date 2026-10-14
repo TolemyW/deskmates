@@ -1,0 +1,1 @@
+In this Apache Commons Lang checkout, `NumberUtils` handles some large hexadecimal inputs inconsistently. Add a focused JUnit regression test that demonstrates the boundary problem, and provide a short reproduction note with the input, command, expected result, actual result, and evidence from your run. Do not change production code.

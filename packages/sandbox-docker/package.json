@@ -1,0 +1,16 @@
+{
+  "name": "@deskmates/sandbox-docker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Docker implementation of the SandboxProvider interface.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests --exclude \"**/*.container.test.ts\" --exclude \"**/*.acceptance.test.ts\"",
+    "test:container": "vitest run .container.test.ts",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": { "@deskmates/contracts": "*" }
+}

@@ -1,0 +1,392 @@
+/* Styles of the workspaces feature,
+   loaded after app.css by src/styles/feature-styles.ts. Unlayered rules come first: like
+   design-refresh.css they override every layered rule.
+   Rules inside @layer components rank with the shared components of app.css and lose to
+   any unlayered rule; within the layer the later rule wins.
+   This file skips Tailwind's compile. `background: none 0 0` and `transparent 0 0` spell
+   what that compile shipped for `none` and `transparent` (it set the position to 0 0). */
+.brand-name {
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+}
+.brand-caption {
+  font-size: var(--app-text-xs);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Vertical rhythm sized so all eleven links and the footer fit at 1366x768; below that the nav
+ * scrolls inside its own region, which ends at the footer's top edge. */
+.workspace-switcher {
+  margin-bottom: 16px;
+}
+@media (max-width: 720px) {
+  .workspace-switcher {
+    margin-bottom: 0;
+  }
+}
+.workspace-lifecycle {
+  margin-top: 24px;
+}
+.workspace-archive-actions,
+.workspace-lifecycle .form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.workspace-lifecycle h2 {
+  overflow-wrap: anywhere;
+}
+@layer components {
+  .egress-mode {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .egress-mode legend {
+    margin-bottom: 4px;
+    color: var(--app-text-3);
+  }
+  .egress-mode-option {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius);
+    background: var(--app-surface);
+    cursor: pointer;
+  }
+  .egress-mode-option:has(input:checked) {
+    border-color: color-mix(in srgb, var(--primary) 45%, var(--app-border));
+    background: var(--primary-soft);
+  }
+  .egress-mode-option input {
+    margin-top: 3px;
+    width: auto;
+  }
+  .egress-mode-option > span {
+    display: grid;
+    gap: 2px;
+  }
+  .egress-mode-option strong {
+    font-size: var(--app-text-sm);
+  }
+  .workspace-switcher {
+    position: relative;
+    margin-bottom: 12px;
+  }
+  .brand-name {
+    font-size: var(--app-text-base);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .workspace-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 30;
+    display: flex;
+    width: min(300px, calc(100vw - 24px));
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px;
+    border: 1px solid var(--app-border);
+    border-radius: 14px;
+    background: var(--app-surface);
+    box-shadow: var(--app-shadow-lg, 0 16px 40px rgb(0 0 0 / 0.18));
+  }
+  .workspace-menu-hint {
+    margin: 0;
+    padding: 4px 8px 8px;
+    line-height: 1.4;
+  }
+  .workspace-menu-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    column-gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent 0 0;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .workspace-menu-item:hover,
+  .workspace-menu-item:focus-visible {
+    background: var(--surface-2);
+  }
+  .workspace-menu-item[aria-checked="true"] .workspace-menu-name {
+    font-weight: 600;
+  }
+  .workspace-menu-item .muted {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .workspace-menu-item.new {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+    border-top: 1px solid var(--app-border);
+    border-radius: 0 0 9px 9px;
+    padding-top: 10px;
+    color: var(--primary-text);
+    font-weight: 600;
+  }
+  .brand-caption {
+    display: block;
+    color: var(--app-text-4);
+    font-size: var(--app-text-xs);
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    line-height: 1;
+    margin-top: 2px;
+  }
+  @media (max-width: 720px) {
+    .workspace-switcher {
+      margin-bottom: 0;
+    }
+
+    .brand-caption {
+      display: none;
+    }
+  }
+}
+
+/* ADR-0034: bounded switcher, the Workspaces list of User Settings and its full-page detail.
+   Long legacy names truncate with an ellipsis; the full name is in the title and the text. */
+.workspace-menu-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.workspace-menu-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 4px 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 9px;
+}
+.workspace-menu-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent 0 0;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.workspace-menu-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 0 2px;
+  padding: 0 10px;
+}
+.workspace-name-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.workspace-name-counter {
+  align-self: flex-end;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.workspace-name-counter.over {
+  color: var(--danger, #c62828);
+  font-weight: 600;
+}
+.workspace-manage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 24px;
+}
+.workspace-manage-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.workspace-manage-header h2 {
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+}
+.workspace-manage-total {
+  font-size: var(--app-text-sm);
+  font-weight: 400;
+}
+.workspace-manage-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.workspace-manage-search {
+  display: flex;
+  flex: 1 1 220px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 9px;
+}
+.workspace-manage-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent 0 0;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+.workspace-manage-segments {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--app-border);
+  border-radius: 9px;
+}
+.workspace-manage-segment {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent 0 0;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.workspace-manage-segment.active {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+.workspace-manage-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.workspace-manage-table-wrap {
+  overflow-x: auto;
+}
+.workspace-manage-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.workspace-manage-table th,
+.workspace-manage-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--app-border);
+  text-align: left;
+  vertical-align: middle;
+}
+.workspace-manage-table th {
+  color: var(--muted);
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+}
+.workspace-manage-table .num {
+  width: 72px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.workspace-manage-pin-col {
+  width: 36px;
+}
+.workspace-manage-pin {
+  display: inline-flex;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent 0 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+.workspace-manage-pin[aria-pressed="true"] {
+  color: var(--primary-text);
+}
+.workspace-manage-name-cell {
+  width: 40%;
+  overflow: hidden;
+}
+.workspace-manage-name {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  vertical-align: middle;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+.workspace-manage-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: var(--app-text-xs);
+}
+.workspace-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.workspace-detail-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+}
+.workspace-detail-header h2 {
+  overflow-wrap: anywhere;
+  font-size: var(--app-text-xl, 1.25rem);
+  font-weight: 600;
+}
+.workspace-detail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 8px 0;
+}
+.workspace-detail-facts dt {
+  color: var(--muted);
+  font-size: var(--app-text-xs);
+}
+.workspace-detail-facts code {
+  overflow-wrap: anywhere;
+}
+.workspace-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 24px;
+}
+.workspace-detail-section h3 {
+  font-size: var(--app-text-base);
+  font-weight: 600;
+}
+@media (max-width: 640px) {
+  .workspace-manage-table th:nth-child(3),
+  .workspace-manage-table td:nth-child(3),
+  .workspace-manage-table th:nth-child(5),
+  .workspace-manage-table td:nth-child(5) {
+    display: none;
+  }
+  .workspace-manage-name-cell {
+    width: auto;
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "version": "L01-long-mission-v1",
+  "benchmarkTask": "L01",
+  "instruction": "Find all tickets with the label bug, the status open, and a creation time more than 30 days ago; add the comment Overdue to each, then close them.",
+  "expectedSeedIds": ["1003", "1011", "1019", "1027", "1035", "1043"],
+  "comment": "Overdue",
+  "maxTurns": 50,
+  "taskTimeoutSeconds": 600,
+  "campaignCapSeconds": 21600,
+  "plannedAttempts": 1
+}
