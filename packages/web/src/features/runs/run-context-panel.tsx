@@ -175,7 +175,37 @@ export function RunContextPanel({
         </dd>
         <dt>{t("runContextPanel.compactions")}</dt>
         <dd>{metrics ? metrics.compactions.length : t("runContextPanel.unknown")}</dd>
+        <dt>{t("runContextPanel.window")}</dt>
+        <dd>
+          {typeof metrics?.maxContextTokens === "number"
+            ? t("runContextPanel.tokens", { count: numberOrUnknown(metrics.maxContextTokens) })
+            : t("runContextPanel.windowUnknown")}
+        </dd>
+        <dt>{t("runContextPanel.promptHash")}</dt>
+        <dd>
+          {metrics?.systemPromptSha256 ? (
+            <code title={metrics.systemPromptSha256}>
+              {metrics.systemPromptSha256.slice(0, 12)}
+            </code>
+          ) : (
+            t("runContextPanel.unknown")
+          )}
+        </dd>
+        <dt>{t("runContextPanel.modelRequests")}</dt>
+        <dd>
+          {metrics
+            ? t("runContextPanel.modelRequestsValue", {
+                count: numberOrUnknown(metrics.modelRequests.count),
+                distinct: numberOrUnknown(metrics.modelRequests.distinctSystemHashes),
+              })
+            : t("runContextPanel.unknown")}
+        </dd>
       </dl>
+      {metrics?.modelRequests.changedWithinAttempt ? (
+        <p role="alert">{t("runContextPanel.promptChanged")}</p>
+      ) : null}
+      <WindowMeter metrics={metrics} />
+      <SectionSizes sections={metrics?.contextSections ?? null} />
       <p>{t("runContextPanel.missingMeaning")}</p>
       {memory ? (
         <p>
@@ -196,5 +226,60 @@ export function RunContextPanel({
         <p role="alert">{t("runContextPanel.ruleChanges", { count: ruleChanges.length })}</p>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Issue #9: the largest input window the run reached against the window the CLI was given. With
+ * no window reported there is no denominator, and the panel says so instead of guessing one.
+ */
+function WindowMeter({ metrics }: { metrics: RunContextMetrics | undefined }) {
+  const t = useT();
+  const locale = useLocale();
+  const peak = metrics?.peakInputTokens;
+  const limit = metrics?.maxContextTokens;
+  if (typeof peak !== "number" || typeof limit !== "number" || limit <= 0) return null;
+  const share = peak / limit;
+  return (
+    <p className="context-meter">
+      <label>
+        {t("runContextPanel.meter")}{" "}
+        <meter min={0} max={limit} low={limit * 0.6} high={limit * 0.85} optimum={0} value={peak}>
+          {share.toLocaleString(locale, { style: "percent" })}
+        </meter>{" "}
+        <span className="muted small">
+          {t("runContextPanel.meterValue", {
+            percent: share.toLocaleString(locale, { style: "percent", maximumFractionDigits: 1 }),
+          })}
+        </span>
+      </label>
+    </p>
+  );
+}
+
+/** Issue #9: the system prompt's sections by size, largest first, as the sidecar measured them. */
+function SectionSizes({ sections }: { sections: Record<string, number> | null }) {
+  const t = useT();
+  if (!sections || Object.keys(sections).length === 0)
+    return <p>{t("runContextPanel.sectionsNone")}</p>;
+  const entries = Object.entries(sections).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const largest = Math.max(1, ...entries.map(([, size]) => size));
+  return (
+    <>
+      <h4>{t("runContextPanel.sectionsHeading")}</h4>
+      <ul className="context-sections" aria-label={t("runContextPanel.sectionsList")}>
+        {entries.map(([name, size]) => (
+          <li key={name}>
+            <code>{name}</code>
+            <span className="context-section-bar" aria-hidden="true">
+              <span style={{ width: `${(size / largest) * 100}%` }} />
+            </span>
+            <span className="muted small">
+              {t("runContextPanel.sectionSize", { count: numberOrUnknown(size) })}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

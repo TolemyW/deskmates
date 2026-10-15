@@ -278,6 +278,35 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
+  /* Issue #9: the context panel's window meter and system prompt section sizes. */
+  .context-meter meter {
+    width: min(240px, 100%);
+    vertical-align: middle;
+  }
+  .context-sections {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .context-sections li {
+    display: grid;
+    grid-template-columns: minmax(6em, 10em) 1fr auto;
+    align-items: center;
+    gap: 8px;
+  }
+  .context-section-bar {
+    height: 6px;
+    border-radius: var(--app-radius-full);
+    background: var(--surface-3);
+  }
+  .context-section-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: var(--app-radius-full);
+    background: var(--primary-text);
+  }
 }
 /* Activity (ADR-0033): one card per run, at most five lines; the summary clamps at three lines. */
 @layer components {
