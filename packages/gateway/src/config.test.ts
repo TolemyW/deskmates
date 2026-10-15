@@ -308,6 +308,11 @@ describe("config", () => {
     expect(loadConfig({ ...BASE_ENV, DESKMATES_GROUP_ROUTING: "owner-v1" }).groupRouting).toBe(
       "owner-v1",
     );
+    // ADR-0005 amendment 6: proposed, never the default.
+    expect(loadConfig({ ...BASE_ENV, DESKMATES_GROUP_ROUTING: "round-v1" }).groupRouting).toBe(
+      "round-v1",
+    );
+    expect(GROUP_ROUTING_DEFAULT).toBe("owner-v1");
     expect(() => loadConfig({ ...BASE_ENV, DESKMATES_GROUP_ROUTING: "owner" })).toThrow(
       /DESKMATES_GROUP_ROUTING/,
     );

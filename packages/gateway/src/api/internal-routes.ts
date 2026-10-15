@@ -229,7 +229,7 @@ export function registerInternalRoutes(
               mention.kind === "bot" ? [names.get(mention.botId) ?? mention.botId] : [],
             ),
             everyone: message.mentions.some((mention) => mention.kind === "everyone"),
-            ...mentionDiagnostics(messageBody, members, run.botId),
+            ...mentionDiagnostics(messageBody, members, run.botId, ctx.router.mentionOptions),
           };
           // A mention the Gateway did not deliver is said where it was written (issue #68); a
           // message that mentions nobody would have woken nobody anyway.

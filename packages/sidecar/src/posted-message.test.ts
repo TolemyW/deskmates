@@ -1,7 +1,7 @@
 // T0: the wording of a `thread_post` result from the Gateway's routing facts.
 
 import { describe, expect, it } from "vitest";
-import { describePosted } from "./posted-message.js";
+import { describeLastReply, describePosted } from "./posted-message.js";
 
 const base = { seq: 4, addressed: [], everyone: false, unknown: [], spaced: [] };
 
@@ -68,5 +68,17 @@ describe("describePosted", () => {
     expect(
       describePosted({ ...base, everyone: true, wakeBlocked: "thread_paused" }, true),
     ).toContain("Nobody was woken: the thread is paused until a human messages it.");
+  });
+});
+
+describe("describeLastReply (ADR-0005 amendment 6, decision 50)", () => {
+  it("says which message missed whom, and what it did address", () => {
+    const text = describeLastReply({ ...base, seq: 9, addressed: ["chief"], unknown: ["stocks"] });
+    expect(text).toContain("previous run was posted as message #9");
+    expect(text).toContain("It was addressed to chief.");
+    expect(text).toContain("No member of this thread is called @stocks");
+    expect(describeLastReply({ ...base, unknown: ["x", "y"] })).toContain(
+      "It mentioned no member, so it woke nobody. No member of this thread is called @x, @y",
+    );
   });
 });

@@ -1,6 +1,6 @@
-# Model jobs: vision probes and SOUL proposals
+# Model jobs: vision probes, round triage and SOUL proposals
 
-ADR-0023 amendment 1; issues #87 and #77. Both are short runs (row first) of a bot's background
+ADR-0023 amendment 1; issues #87, #77 and #12. All are short runs (row first) of a bot's background
 lane with no tools, no session and one turn. The sidecar relays the model's text; the Gateway
 grades or applies it. The Gateway never calls a model.
 
@@ -25,6 +25,19 @@ grades or applies it. The Gateway never calls a model.
   keeps it. Only `withhold` reaches the sidecar, which then replaces image content with a text
   notice (`packages/sidecar/src/vision-withhold.ts`). The capabilities route returns each
   model's `visionPolicy` and the `botIds` that use it.
+
+## Round triage
+
+- ADR-0005 amendment 6 (proposed), `DESKMATES_GROUP_ROUTING=round-v1` only. A human request to a
+  group queues a `round_triage` run of the thread's owner (or first member) on the cheap model,
+  in the thread, on the background lane; it never waits for that lane (`scheduler.ts`).
+- The job reads the roster (name, role, owner mark), whether the request said `@everyone`, and the
+  request (at most 8,000 characters) wrapped as untrusted data, and answers one JSON object:
+  `{"assignments":[{"member","task"}],"closer"}`.
+- `RoundTriage.complete` keeps current members only, drops repeats and empty tasks, bounds a task to
+  one line of 200 characters and replaces an invalid closer (the assigned owner, else the first
+  assignee). No assignment left ends the job `failed` with a `{source: "round_triage"}` event; the
+  router then falls back to `owner-v1` routing. See `docs/group-routing.md`.
 
 ## SOUL proposals
 

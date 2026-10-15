@@ -8,15 +8,18 @@
 import { createHash } from "node:crypto";
 import {
   type KnowledgeHit,
+  type RoundAssignmentOutcome,
   type StartRunRequest,
   type ThreadMessageDelivery,
   type ThreadMessageTrigger,
+  type ThreadRoundBrief,
   type TriggerPayload,
   botWorkDir,
   isApprovalAttachmentMime,
   renderPinnedIndex,
 } from "@deskmates/contracts";
 import type { SidecarFs } from "./deps.js";
+import { describeLastReply } from "./posted-message.js";
 import { deskmatesToolName } from "./risk-tier.js";
 import { SUMMARY_INSTRUCTION } from "./summary.js";
 import { UNTRUSTED_NOTICE, wrapKnowledgeContent, wrapUntrusted } from "./untrusted.js";
@@ -186,6 +189,53 @@ function renderRoster(routing: Routing): string[] {
   return lines;
 }
 
+const OUTCOME_LABEL: Readonly<Record<RoundAssignmentOutcome, string>> = {
+  replied: "replied",
+  silent: "ended without a reply",
+  failed: "failed",
+  cancelled: "was cancelled",
+  stopped: "was stopped",
+};
+
+/**
+ * The plan of a triaged round and how to work in it (ADR-0005 amendment 6, decisions 47 and 48).
+ * It is in the first user turn, never the system prompt, so a `round-v1` run's system prompt stays
+ * byte-identical to an `owner-v1` group run's and the cached prefix survives. Names and tasks are
+ * the Gateway's validated plan; the request itself is in the delivered messages.
+ */
+export function renderRound(round: ThreadRoundBrief): string[] {
+  const plan = [
+    `Message #${round.messageSeq} was triaged into a round. The Gateway's plan for it:`,
+    ...round.assignments.map(
+      (a) => `- ${a.name}${a.you ? " (you)" : ""}: ${a.task || "no task given"}`,
+    ),
+    `Closer: ${round.closer}${round.youClose ? " (you)" : ""}.`,
+  ];
+  if (round.phase === "close") {
+    return [
+      ...plan,
+      "How each part ended:",
+      ...(round.outcomes ?? []).map(
+        (o) =>
+          `- ${o.name}: ${OUTCOME_LABEL[o.outcome]}${o.seqs.length > 0 ? ` (message ${o.seqs.map((seq) => `#${seq}`).join(", ")})` : ""}`,
+      ),
+      "Every part of this round has ended and you close it. Read the replies in this batch and answer the human once, combining them into one answer; say plainly which part failed or produced nothing. Do not ask members to repeat work they did; mention a member only when a missing part must be done again.",
+    ];
+  }
+  return [
+    ...plan,
+    "Working in this round:",
+    `- Do your part only. Do not repeat or redo another member's part, and do not answer the whole request${round.youClose ? "" : `: ${round.closer} answers the human once every part has ended`}.`,
+    ...(round.youClose
+      ? [
+          "- You also close: once every part has ended you are woken once more with all the replies, and you answer the human then. If your part is the whole answer, give it now.",
+        ]
+      : []),
+    `- Post your result once, as your final reply or with ${THREAD_POST}, not both. When you have nothing to add, end with an empty summary \`reply\`.`,
+    "- Do not mention other members to hand them your part or to thank them: a mention wakes them.",
+  ];
+}
+
 export function renderTrigger(trigger: TriggerPayload): string {
   switch (trigger.kind) {
     case "thread_message": {
@@ -202,6 +252,8 @@ export function renderTrigger(trigger: TriggerPayload): string {
       return [
         `Gateway routing context v${routing.version}: you are ${JSON.stringify(routing.recipientName)} (bot ${routing.recipientBotId}).`,
         ...renderRoster(routing),
+        ...(routing.round ? renderRound(routing.round) : []),
+        ...(routing.lastReply ? [describeLastReply(routing.lastReply)] : []),
         ...(routing.sourceMessageSeq === undefined
           ? []
           : [

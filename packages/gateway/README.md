@@ -49,7 +49,7 @@ a section to this README.
 - [Interrupted usage receipts (issue #72)](docs/interrupted-usage-receipts.md)
 - [Look/OCR and speech operations (ADR-0040)](docs/look-and-speech-operations.md)
 - [M1/M2 feature closeout operator APIs](docs/feature-closeout-apis.md)
-- [Model jobs: vision probes and SOUL proposals (ADR-0023 amendment 1)](docs/model-jobs.md)
+- [Model jobs: vision probes, round triage and SOUL proposals (ADR-0023 amendment 1)](docs/model-jobs.md)
 - [Model transport observations](docs/model-transport-observations.md)
 - [Model upstreams (ADR-0039)](docs/model-upstreams.md): `MODEL_UPSTREAMS`, routing by model, local zero prices
 - [Name lookups and bounded chat approvals (#113)](docs/name-lookups.md)

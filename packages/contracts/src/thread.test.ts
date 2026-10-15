@@ -69,6 +69,32 @@ describe("parseMentions (ADR-0005 item 3)", () => {
   });
 });
 
+describe("spaced mentions (ADR-0005 amendment 6, decision 50)", () => {
+  const spaced = { spaced: true };
+
+  it("reads a member written `@ name` as a mention, in order with the others", () => {
+    expect(parseMentions("@  Bob and @alice", members, undefined, spaced)).toEqual([
+      { kind: "bot", botId: bob },
+      { kind: "bot", botId: alice },
+    ]);
+  });
+
+  it("still ignores unknown names, self-mentions, `@ everyone`, emails and a spaced number", () => {
+    expect(parseMentions("@ carol, @ alice", members, alice, spaced)).toEqual([]);
+    expect(parseMentions("@ everyone hi", members, undefined, spaced)).toEqual([]);
+    expect(parseMentions("mail alice@ bob.example", members, undefined, spaced)).toEqual([]);
+    expect(parseMentions("the rate @ 5 percent", members, undefined, spaced)).toEqual([]);
+  });
+
+  it("is off by default, and leaves nothing spaced to report when on", () => {
+    expect(parseMentions("@ bob please", members)).toEqual([]);
+    expect(mentionDiagnostics("@ bob and @carol", members, alice, spaced)).toEqual({
+      unknown: ["carol"],
+      spaced: [],
+    });
+  });
+});
+
 describe("laneForThread (ADR-0005 item 7)", () => {
   it("chat is interactive, bus is background", () => {
     expect(laneForThread("chat")).toBe("interactive");

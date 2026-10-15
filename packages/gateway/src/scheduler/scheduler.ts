@@ -32,6 +32,7 @@ import { canonicalMemoryForBot } from "../memory/canonical-memory.js";
 import { isConsolidationRun } from "../memory/consolidation.js";
 import { queueMemoryMaintenance } from "../memory/maintenance-due.js";
 import { MODEL_JOB_RUN_TYPES } from "../model-jobs/model-jobs.js";
+import { isRoundTriageRun } from "../model-jobs/round-triage.js";
 import type { SandboxOrigin } from "../workspaces/sandboxes.js";
 import type { RunLifecycle } from "./run-lifecycle.js";
 import { markAttemptStarted, recordTimelineMark } from "./run-timeline-marks.js";
@@ -168,6 +169,12 @@ export class Scheduler {
       if (run.threadId && this.ctx.threads.mustGet(run.threadId).status === "paused") continue;
       // A deadline that passed after the cancellation above: never start it (issue #21).
       if (pastDeadline(run)) continue;
+      // ADR-0005 amendment 6, decision 45: a round's triage is one short tool-free call that
+      // never waits for its bot's lane, so a busy member does not hold up the round.
+      if (isRoundTriageRun(run)) {
+        this.launch(run);
+        continue;
+      }
       if (this.ctx.walks.blockedByEarlierWalk(run.id)) continue;
       // A parked run of the same (bot, thread) owns the SDK session this run would open, so it
       // waits until that run has resumed and ended (ADR-0002 amendment 2, "a parked run holds
