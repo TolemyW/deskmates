@@ -43,6 +43,7 @@ const RUN_KEYS = ["string", "string"] as const;
 const RUN_STATUSES: readonly RunStatus[] = [
   "queued",
   "running",
+  "stalled",
   "waiting_approval_live",
   "waiting_approval",
   "waiting_browser",

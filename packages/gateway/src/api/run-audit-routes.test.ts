@@ -131,6 +131,8 @@ describe("run list audit filters (ADR-0042 decision 2)", () => {
     const { h } = await setup();
     for (const query of ["status=done", "lane=side", "failureClass=bad", "since=yesterday"])
       expect((await h.api("GET", `/api/runs?${query}`)).status, query).toBe(400);
+    // Every run status is a filter, the stalled one of issue #9 included.
+    expect((await h.api("GET", "/api/runs?status=stalled")).status).toBe(200);
   });
 });
 
