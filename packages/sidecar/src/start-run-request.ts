@@ -263,6 +263,19 @@ export const startRunRequestSchema = z.object({
   visionPolicy: z.literal("withhold").optional(),
   screenSlot: z.number().int().min(0).max(5).optional(),
   browserSnapshotMode: z.enum(["explicit-v1", "inline-v2"]).optional(),
+  // ADR-0023 amendment 5: extra built-in CLI tools to withhold and inline settings switches. A
+  // built-in name is PascalCase; an MCP name can never get here.
+  cliSurface: z
+    .object({
+      disallowedTools: z
+        .array(z.string().regex(/^[A-Z][A-Za-z0-9_]*$/))
+        .max(100)
+        .optional(),
+      disableBundledSkills: z.boolean().optional(),
+      includeGitInstructions: z.boolean().optional(),
+      skillListingMaxDescChars: z.number().int().positive().optional(),
+    })
+    .optional(),
   // The SDK's turn budget for this run. The Gateway owns the knob (`DESKMATES_MAX_TURNS`) and records
   // it in `runs.config_json`, so a stripped or absent value would silently run the bot on a
   // different budget than the one the experiment was attributed to. `null` is the workspace's

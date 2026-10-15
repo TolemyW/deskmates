@@ -117,6 +117,22 @@ export interface OtherLaneRun {
   startedAt: string;
 }
 
+/**
+ * What the CLI offers the model beyond the sidecar's fixed configuration (ADR-0023 amendment 5).
+ * Every field is optional and an absent one changes nothing: the sidecar's own withheld tools stay
+ * withheld and the CLI keeps its defaults.
+ */
+export interface CliSurface {
+  /** Built-in CLI tool names withheld on top of the sidecar's fixed list (`disallowedTools`). */
+  disallowedTools?: readonly string[];
+  /** SDK inline `settings.disableBundledSkills`: drop the skills that ship with the CLI. */
+  disableBundledSkills?: boolean;
+  /** SDK inline `settings.includeGitInstructions`: the CLI's commit and PR workflow text. */
+  includeGitInstructions?: boolean;
+  /** SDK inline `settings.skillListingMaxDescChars`: per-skill description cap in the listing. */
+  skillListingMaxDescChars?: number;
+}
+
 /** Gateway → sidecar supervisor: start one run as one sidecar process. */
 export interface StartRunRequest {
   /** Tool-free, isolated presentation job (ADR-0027). */
@@ -171,6 +187,8 @@ export interface StartRunRequest {
   browserCoordination?: { mode: "origin-v2"; deadlineAt: string };
   /** Experimental page-read policy. Absent is the established explicit-v1 behavior. */
   browserSnapshotMode?: BrowserSnapshotMode;
+  /** ADR-0023 amendment 5: from the run row; absent keeps the CLI surface as it always was. */
+  cliSurface?: CliSurface;
   /** Shared Chromium, fixed full-desktop region for this bot (ADR-0008). */
   screenSlot?: number;
   /** Opt-in strategy: automatic vision guidance and reviewed CLI workflows. */

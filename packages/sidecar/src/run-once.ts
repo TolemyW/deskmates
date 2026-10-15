@@ -114,6 +114,33 @@ export const DISALLOWED_TOOLS: readonly string[] = [
   "ScheduleWakeup",
 ];
 
+/**
+ * The fixed list plus the Gateway's extra names (ADR-0023 amendment 5), in that order, each once.
+ * The Gateway can only add to the list: a name it sends never brings back a fixed one.
+ */
+export function disallowedToolsFor(request: Pick<StartRunRequest, "cliSurface">): string[] {
+  return [...new Set([...DISALLOWED_TOOLS, ...(request.cliSurface?.disallowedTools ?? [])])];
+}
+
+/** The SDK's inline `settings`, holding only the switches the Gateway sent; none, no key. */
+export function cliSettingsFor(
+  request: Pick<StartRunRequest, "cliSurface">,
+): Pick<Options, "settings"> {
+  const s = request.cliSurface;
+  const settings: NonNullable<Exclude<Options["settings"], string>> = {
+    ...(s?.disableBundledSkills === undefined
+      ? {}
+      : { disableBundledSkills: s.disableBundledSkills }),
+    ...(s?.includeGitInstructions === undefined
+      ? {}
+      : { includeGitInstructions: s.includeGitInstructions }),
+    ...(s?.skillListingMaxDescChars === undefined
+      ? {}
+      : { skillListingMaxDescChars: s.skillListingMaxDescChars }),
+  };
+  return Object.keys(settings).length > 0 ? { settings } : {};
+}
+
 /** How often the run process looks for the capture file of an action it has the result of. */
 const SCREENSHOT_POLL_MS = 50;
 
@@ -723,7 +750,10 @@ export async function runOnce(
       ...(request.maxTurns === null ? {} : { maxTurns: request.maxTurns }),
       // Final response usage arrives in message_delta after assistant content blocks.
       includePartialMessages: true,
-      disallowedTools: [...DISALLOWED_TOOLS],
+      disallowedTools: disallowedToolsFor(request),
+      // ADR-0023 amendment 5: present only when the Gateway sent a switch, so a run without one
+      // passes the CLI exactly the options it always had.
+      ...cliSettingsFor(request),
       mcpServers,
       hooks: {
         PreToolUse: [
