@@ -41,6 +41,7 @@ import {
   prepareCanonicalFiles,
   snapshotPeerRuleFiles,
 } from "./canonical-files.js";
+import { ContextUsageProbe } from "./context-usage.js";
 import { buildContext, diaryPath, knowledgeQuery } from "./context.js";
 import type { SidecarDeps } from "./deps.js";
 import { GatewayClient } from "./gateway-client.js";
@@ -359,8 +360,14 @@ export async function runOnce(
           redact: (text) => redactText(text, secrets),
         });
   const recordScreenshot = screenshotRecorder(sink);
+  // What the CLI puts in the window, per category: once after init, then after every response
+  // (ADR-0023 amendment 5, `context-usage.ts`).
+  const contextUsage = new ContextUsageProbe((payload) => sink.emit("log", payload), deps.sleep);
   // One `turn_usage` per model response (M3 context plan, Phase 1; `turn-usage.ts`).
-  const turnUsage = new TurnUsageTracker((payload) => sink.emit("turn_usage", { ...payload }));
+  const turnUsage = new TurnUsageTracker((payload) => {
+    sink.emit("turn_usage", { ...payload });
+    contextUsage.sample("summary", payload.turn);
+  });
   const turnWarning = new TurnWarning(request.maxTurns);
   // ADR-0023 decision 3: the hook and SDK 0.3.278's overload-fallback message both feed it.
   const modelSwitches = new ModelSwitchRecorder((payload) =>
@@ -654,8 +661,33 @@ export async function runOnce(
         to: input.to_model,
         source: input.source,
         ...(input.requested_model === undefined ? {} : { requested: input.requested_model }),
+        // ADR-0023 amendment 5: what the switch cost the prompt cache.
+        ...(typeof input.prompt_cache_warm === "boolean"
+          ? { promptCacheWarm: input.prompt_cache_warm }
+          : {}),
+        ...(typeof input.context_tokens === "number"
+          ? { contextTokens: input.context_tokens }
+          : {}),
       };
       modelSwitches.record(payload);
+      return {};
+    };
+    // ADR-0023 amendment 5: on a resume, how large the re-sent context is and whether the CLI
+    // expects the prompt cache to have expired; on a fresh start, only that the session started.
+    const sessionStart: HookCallback = async (input) => {
+      if (input.hook_event_name !== "SessionStart") return {};
+      sink.emit("log", {
+        source: "sdk",
+        kind: "session_start",
+        sessionSource: input.source,
+        ...(input.context_tokens === undefined ? {} : { contextTokens: input.context_tokens }),
+        ...(input.prompt_cache_likely_expired === undefined
+          ? {}
+          : { promptCacheLikelyExpired: input.prompt_cache_likely_expired }),
+        ...(input.seconds_since_last_response === undefined
+          ? {}
+          : { secondsSinceLastResponse: input.seconds_since_last_response }),
+      });
       return {};
     };
     const options: Options = {
@@ -725,20 +757,27 @@ export async function runOnce(
           },
         ],
         PostModelSwitch: [{ hooks: [postModelSwitch] }],
+        SessionStart: [{ hooks: [sessionStart] }],
       },
       canUseTool: createCanUseTool(sink, state, { browserCode: request.browserCodeApproval }),
       ...(request.sdkSessionId === undefined ? {} : { resume: request.sdkSessionId }),
     };
 
     timeline.mark("query_started", { resume: request.sdkSessionId !== undefined });
-    for await (const msg of deps.query({ prompt: context.prompt, options })) {
+    const query = deps.query({ prompt: context.prompt, options });
+    contextUsage.attach(query);
+    for await (const msg of query) {
       timeline.observe(msg);
       preview?.observe(msg);
       await handleMessage(msg);
     }
+    contextUsage.detach();
     turnUsage.flush();
+    await contextUsage.settle();
   } catch (err) {
+    contextUsage.detach();
     turnUsage.flush();
+    await contextUsage.settle();
     const error = redactText(
       err instanceof Error ? (err.stack ?? err.message) : String(err),
       secrets,
@@ -925,6 +964,7 @@ export async function runOnce(
         ...(msg.claude_code_version === undefined ? {} : { cliVersion: msg.claude_code_version }),
         ...(msg.model === undefined ? {} : { model: msg.model }),
       });
+      contextUsage.sample("full", 0);
       return;
     }
     if (msg.type === "system" && msg.subtype === "api_retry") {
@@ -1033,6 +1073,7 @@ export async function runOnce(
       return;
     }
     if (msg.type === "result") {
+      contextUsage.detach();
       turnUsage.flush();
       state.sdkSessionId = msg.session_id;
       resultSubtype = msg.subtype;

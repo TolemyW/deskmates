@@ -301,6 +301,14 @@ export interface ModelSwitchPayload {
   to: string;
   source: "command" | "picker" | "sdk" | "auto" | "resume";
   requested?: string | null;
+  /**
+   * The hook's `prompt_cache_warm` and `context_tokens` (ADR-0023 amendment 5): whether the old
+   * model's prompt cache was likely still warm, so the switch forfeited it, and how many prompt
+   * tokens the next request re-sends. Absent
+   * on a switch the SDK reported without the hook (an overload fallback in SDK 0.3.278).
+   */
+  promptCacheWarm?: boolean;
+  contextTokens?: number;
 }
 
 /**

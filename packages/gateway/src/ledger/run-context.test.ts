@@ -2,6 +2,7 @@
 
 import type { RunEvent, RunEventKind, RunId } from "@deskmates/contracts";
 import { describe, expect, it } from "vitest";
+import type { RequestShape } from "../model-proxy/request-facts.js";
 import type { ModelRequestRecord } from "./model-requests.js";
 import { runContextMetrics } from "./run-context.js";
 
@@ -126,6 +127,9 @@ describe("runContextMetrics", () => {
       contextSections: null,
       systemPromptSha256: null,
       modelRequests: { count: 0, distinctSystemHashes: 0, changedWithinAttempt: false },
+      contextUsage: { samples: 0, first: null, latest: null },
+      sessionStarts: [],
+      requestShapes: null,
     });
   });
 
@@ -150,5 +154,115 @@ describe("runContextMetrics", () => {
     const m = runContextMetrics([turn(10, 40, 50)], []);
     expect(m.peakInputTokens).toBe(100);
     expect(m.cacheHitRatio).toBe(0.4);
+  });
+});
+
+// ADR-0023 amendment 5: the CLI's own context samples, session starts and request shapes.
+describe("runContextMetrics, amendment 5", () => {
+  const sample = (turnNo: number, total: number, detail = "summary", attempt = 1) =>
+    event(
+      "log",
+      {
+        source: "context",
+        kind: "context_usage",
+        detail,
+        turn: turnNo,
+        totalTokens: total,
+        maxTokens: 200000,
+        percentage: Math.round((total / 200000) * 100),
+        categories: [{ name: "System tools", kind: "used", tokens: 12000 }],
+      },
+      attempt,
+    );
+  const shaped = (attempt: number, shape: Partial<RequestShape>): ModelRequestRecord => ({
+    ...request(attempt, "a"),
+    shape: {
+      cacheControlBlocks: 2,
+      systemBlocks: 2,
+      systemChars: 4000,
+      systemBlockHashes: ["b0", "b1"],
+      toolsCount: 44,
+      toolsChars: 90000,
+      messagesCount: 3,
+      ...shape,
+    },
+  });
+
+  it("keeps the first and the latest context sample and ignores a warning", () => {
+    seq = 0;
+    const m = runContextMetrics(
+      [
+        sample(0, 40000, "full"),
+        sample(1, 42000),
+        event("log", { source: "context", kind: "context_usage", level: "warn", error: "x" }),
+        sample(2, 44000),
+      ],
+      [],
+    );
+    expect(m.contextUsage?.samples).toBe(3);
+    expect(m.contextUsage?.first).toEqual({
+      attempt: 1,
+      detail: "full",
+      turn: 0,
+      totalTokens: 40000,
+      maxTokens: 200000,
+      percentage: 20,
+      categories: [{ name: "System tools", kind: "used", tokens: 12000 }],
+    });
+    expect(m.contextUsage?.latest?.totalTokens).toBe(44000);
+  });
+
+  it("lists session starts with null resume fields on a fresh start", () => {
+    seq = 0;
+    const m = runContextMetrics(
+      [
+        event("log", { source: "sdk", kind: "session_start", sessionSource: "startup" }),
+        event(
+          "log",
+          {
+            source: "sdk",
+            kind: "session_start",
+            sessionSource: "resume",
+            contextTokens: 48000,
+            promptCacheLikelyExpired: true,
+          },
+          2,
+        ),
+      ],
+      [],
+    );
+    expect(m.sessionStarts).toEqual([
+      { attempt: 1, source: "startup", contextTokens: null, promptCacheLikelyExpired: null },
+      { attempt: 2, source: "resume", contextTokens: 48000, promptCacheLikelyExpired: true },
+    ]);
+  });
+
+  it("says which system block changed and whether the static prefix moved within an attempt", () => {
+    const m = runContextMetrics(
+      [],
+      [
+        shaped(1, { systemStaticSha256: "s1", systemBlockHashes: ["h0", "p"], messagesCount: 3 }),
+        shaped(1, { systemStaticSha256: "s1", systemBlockHashes: ["h0", "p"], messagesCount: 5 }),
+        shaped(2, {
+          systemStaticSha256: "s2",
+          systemDynamicSha256: "d",
+          systemBlockHashes: ["h1", "p"],
+          cacheControlBlocks: 0,
+        }),
+        request(2, "a"),
+      ],
+    );
+    expect(m.requestShapes).toEqual({
+      measured: 3,
+      withCacheControl: 2,
+      distinctStaticHashes: 2,
+      distinctDynamicHashes: 1,
+      staticChangedWithinAttempt: false,
+      changedSystemBlocks: [0],
+      maxSystemChars: 4000,
+      maxToolsCount: 44,
+      maxToolsChars: 90000,
+      maxMessages: 5,
+    });
   });
 });

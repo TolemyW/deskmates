@@ -73,6 +73,7 @@ describe("ModelRequestStore", () => {
         refusal: null,
         servedModel: "served-m",
         imageBlocks: null,
+        shape: null,
       },
       {
         runId: RUN,
@@ -92,10 +93,28 @@ describe("ModelRequestStore", () => {
         refusal: null,
         servedModel: null,
         imageBlocks: null,
+        shape: null,
       },
     ]);
     expect(b).not.toBe(a);
     expect(store.list(OTHER).map((r) => r.seq)).toEqual([1]);
+  });
+
+  // ADR-0023 amendment 5: counts and hashes of the request's shape, read back as written.
+  it("keeps a request's shape, the static and dynamic hashes only when there were any", () => {
+    const shape = {
+      cacheControlBlocks: 3,
+      systemBlocks: 2,
+      systemChars: 5400,
+      systemStaticSha256: "e".repeat(64),
+      systemBlockHashes: ["0123456789abcdef", "fedcba9876543210"],
+      toolsCount: 44,
+      toolsChars: 120000,
+      messagesCount: 7,
+    };
+    store.insert({ runId: RUN, attempt: 1, ts: "t", requestKind: "messages", stream: true, shape });
+    expect(store.list(RUN)[0]?.shape).toEqual(shape);
+    expect(store.list(RUN)[0]?.shape).not.toHaveProperty("systemDynamicSha256");
   });
 
   it("records a refused request with the id it named and a rewritten one with its original id", () => {

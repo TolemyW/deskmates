@@ -201,8 +201,14 @@ describe("runOnce: happy path with an L0 browser call and an L1 write", () => {
     // A response's `turn_usage` follows its blocks: it is ledgered when the next response starts,
     // and the last one when the result arrives (`turn-usage.ts`).
     // Timeline marks (ADR-0037) interleave with these; they are asserted in `run-timeline.test.ts`.
+    // ADR-0023 amendment 5's samples run beside the loop; they are asserted in their own tests.
     const kinds = gateway.events
-      .filter((e) => e.payload.source !== "run_timeline")
+      .filter(
+        (e) =>
+          e.payload.source !== "run_timeline" &&
+          e.payload.kind !== "context_usage" &&
+          e.payload.kind !== "session_start",
+      )
       .map((e) => e.kind);
     expect(kinds).toEqual([
       "log", // context_sections
@@ -224,6 +230,7 @@ describe("runOnce: happy path with an L0 browser call and an L1 write", () => {
       (e) =>
         e.kind !== "turn_usage" &&
         e.payload.kind !== "context_sections" &&
+        e.payload.kind !== "context_usage" &&
         e.payload.source !== "sdk" &&
         e.payload.source !== "run_timeline",
     );
@@ -266,7 +273,9 @@ describe("runOnce: happy path with an L0 browser call and an L1 write", () => {
       { version: "9.9.9-probe" },
     );
     await run(deps, baseRequest());
-    const init = gateway.events.filter((e) => e.kind === "log" && e.payload.source === "sdk");
+    const init = gateway.events.filter(
+      (e) => e.kind === "log" && e.payload.source === "sdk" && e.payload.kind !== "session_start",
+    );
     expect(init.map((e) => e.payload)).toEqual([
       {
         source: "sdk",
@@ -2352,6 +2361,7 @@ describe("runOnce: screenshots", () => {
         (e) =>
           e.kind !== "turn_usage" &&
           e.payload.kind !== "context_sections" &&
+          e.payload.kind !== "context_usage" &&
           e.payload.source !== "sdk" &&
           e.payload.source !== "run_timeline",
       )

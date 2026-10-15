@@ -10,10 +10,22 @@
 // - peak/p95 and the cache ratio are unknown if any contributing turn lacks measurements;
 // - contextSections and systemPromptSha256 are the latest attempt's `context_sections` event;
 // - modelRequests counts forwarded `messages` requests only (`count_tokens` is not a turn, and a
-//   request the proxy refused never reached a model).
+//   request the proxy refused never reached a model);
+// - contextUsage is the `context_usage` samples (ADR-0023 amendment 5): the first in ledger
+//   order, the latest, and how many; a warning without numbers is not a sample;
+// - sessionStarts is every `session_start` event, in ledger order;
+// - requestShapes summarises the forwarded `messages` requests that carried a shape, null when
+//   none did.
 // A value with no data behind it is null, never 0.
 
-import type { RunCompaction, RunContextMetrics, RunEvent } from "@deskmates/contracts";
+import type {
+  RunCompaction,
+  RunContextMetrics,
+  RunContextUsageSample,
+  RunEvent,
+  RunRequestShapeSummary,
+  RunSessionStart,
+} from "@deskmates/contracts";
 import type { ModelRequestRecord } from "./model-requests.js";
 export type { RunCompaction, RunContextMetrics } from "@deskmates/contracts";
 
@@ -23,6 +35,85 @@ function num(v: unknown): number {
 
 function count(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+}
+
+function usageSample(e: RunEvent): RunContextUsageSample | null {
+  const p = e.payload;
+  const total = count(p.totalTokens);
+  const max = count(p.maxTokens);
+  if (total === null || max === null) return null;
+  const categories = Array.isArray(p.categories)
+    ? p.categories.flatMap((c: unknown) => {
+        const row = c as { name?: unknown; kind?: unknown; tokens?: unknown } | null;
+        return row && typeof row.name === "string"
+          ? [
+              {
+                name: row.name,
+                kind: typeof row.kind === "string" ? row.kind : "used",
+                tokens: num(row.tokens),
+              },
+            ]
+          : [];
+      })
+    : [];
+  return {
+    attempt: e.attempt ?? 1,
+    detail: p.detail === "full" ? "full" : "summary",
+    turn: num(p.turn),
+    totalTokens: total,
+    maxTokens: max,
+    percentage: num(p.percentage),
+    categories,
+  };
+}
+
+/** What the proxy saw across the run's forwarded requests; null when none carried a shape. */
+function shapeSummary(messages: readonly ModelRequestRecord[]): RunRequestShapeSummary | null {
+  const shaped = messages.flatMap((r) => (r.shape ? [{ attempt: r.attempt, shape: r.shape }] : []));
+  if (shaped.length === 0) return null;
+  const staticHashes = new Set<string>();
+  const dynamicHashes = new Set<string>();
+  const staticByAttempt = new Map<number, Set<string>>();
+  const blockValues = new Map<number, Set<string>>();
+  let withCacheControl = 0;
+  let maxSystemChars = 0;
+  let maxToolsCount = 0;
+  let maxToolsChars = 0;
+  let maxMessages = 0;
+  for (const { attempt, shape } of shaped) {
+    if (shape.cacheControlBlocks > 0) withCacheControl++;
+    if (shape.systemStaticSha256 !== undefined) {
+      staticHashes.add(shape.systemStaticSha256);
+      const set = staticByAttempt.get(attempt) ?? new Set<string>();
+      set.add(shape.systemStaticSha256);
+      staticByAttempt.set(attempt, set);
+    }
+    if (shape.systemDynamicSha256 !== undefined) dynamicHashes.add(shape.systemDynamicSha256);
+    shape.systemBlockHashes.forEach((hash, i) => {
+      const set = blockValues.get(i) ?? new Set<string>();
+      set.add(hash);
+      blockValues.set(i, set);
+    });
+    maxSystemChars = Math.max(maxSystemChars, shape.systemChars);
+    maxToolsCount = Math.max(maxToolsCount, shape.toolsCount);
+    maxToolsChars = Math.max(maxToolsChars, shape.toolsChars);
+    maxMessages = Math.max(maxMessages, shape.messagesCount);
+  }
+  return {
+    measured: shaped.length,
+    withCacheControl,
+    distinctStaticHashes: staticHashes.size,
+    distinctDynamicHashes: dynamicHashes.size,
+    staticChangedWithinAttempt: [...staticByAttempt.values()].some((s) => s.size > 1),
+    changedSystemBlocks: [...blockValues.entries()]
+      .filter(([, values]) => values.size > 1)
+      .map(([i]) => i)
+      .sort((a, b) => a - b),
+    maxSystemChars,
+    maxToolsCount,
+    maxToolsChars,
+    maxMessages,
+  };
 }
 
 /** Nearest-rank percentile of an ascending list; `p` in (0, 1]. */
@@ -45,6 +136,10 @@ export function runContextMetrics(
   const compactions: RunCompaction[] = [];
   let sections: Record<string, number> | null = null;
   let hash: string | null = null;
+  let firstUsage: RunContextUsageSample | null = null;
+  let latestUsage: RunContextUsageSample | null = null;
+  let usageSamples = 0;
+  const sessionStarts: RunSessionStart[] = [];
 
   for (const e of events) {
     const p = e.payload;
@@ -77,6 +172,21 @@ export function runContextMetrics(
         );
       }
       hash = typeof p.systemPromptSha256 === "string" ? p.systemPromptSha256 : null;
+    } else if (e.kind === "log" && p.kind === "context_usage") {
+      const sample = usageSample(e);
+      if (sample !== null) {
+        usageSamples++;
+        firstUsage ??= sample;
+        latestUsage = sample;
+      }
+    } else if (e.kind === "log" && p.kind === "session_start") {
+      sessionStarts.push({
+        attempt: e.attempt ?? 1,
+        source: typeof p.sessionSource === "string" ? p.sessionSource : "unknown",
+        contextTokens: count(p.contextTokens),
+        promptCacheLikelyExpired:
+          typeof p.promptCacheLikelyExpired === "boolean" ? p.promptCacheLikelyExpired : null,
+      });
     }
   }
 
@@ -109,5 +219,8 @@ export function runContextMetrics(
       distinctSystemHashes: distinct.size,
       changedWithinAttempt: [...hashesByAttempt.values()].some((s) => s.size > 1),
     },
+    contextUsage: { samples: usageSamples, first: firstUsage, latest: latestUsage },
+    sessionStarts,
+    requestShapes: shapeSummary(messages),
   };
 }
