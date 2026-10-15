@@ -42,6 +42,7 @@
   "knowledge.memoryLatest.label": "最新保存的记忆",
   "knowledge.memoryLatest.title": "最新保存的记忆",
   "knowledge.notice.memorySaved": "记忆已保存。",
+  "knowledge.notice.memorySavedNextRun": "记忆已保存。机器人正在运行，下次运行起读取此版本。",
   "knowledge.notice.proposed": "提议等待审核。",
   "knowledge.notice.published": "文档已发布。",
   "knowledge.notice.rejected": "提议已拒绝。",

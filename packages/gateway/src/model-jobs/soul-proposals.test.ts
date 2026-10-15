@@ -245,7 +245,8 @@ describe("SOUL proposals", () => {
     expect(soul(harness, bot)?.body).toBe(`${BASE}\nHuman addition.\n`);
   });
 
-  it("refuses to apply while the bot has a live run", async () => {
+  // ADR-0043 decision 3: like a hand edit, an apply under a live run is saved for the next run.
+  it("applies while the bot has a live run, for the bot's next run", async () => {
     const harness = await start();
     const bot = await botWithSoul(harness, BASE);
     reply = () => '{"edits":[{"find":"Terse,","replace":"Warm,"}]}';
@@ -265,12 +266,17 @@ describe("SOUL proposals", () => {
     harness.app.deskmates.ctx.db
       .prepare("UPDATE runs SET status = 'running' WHERE id = ?")
       .run(live.id);
-    const busy = await harness.api<{ code: string }>(
+    const busy = await harness.api<{ appliesFromNextRun: boolean; proposal: { status: string } }>(
       "POST",
       `/api/bots/${bot.id}/soul-proposals/${ready.id}/apply`,
     );
-    expect(busy.json.code).toBe("lane_busy");
-    expect(soul(harness, bot)?.body).toBe(BASE);
+    expect(busy.json.appliesFromNextRun).toBe(true);
+    expect(busy.json.proposal.status).toBe("applied");
+    expect(soul(harness, bot)?.body).toBe(BASE.replace("Terse,", "Warm,"));
+    expect(
+      harness.app.deskmates.ctx.runs.mustGet(live.id).status,
+      "the live run is left alone",
+    ).toBe("running");
   });
 
   it("drafts the first SOUL of a bot created unstarted, and its welcome follows the apply", async () => {

@@ -211,6 +211,7 @@ export function buildContext(
       onThreadChanged: (threadId) => bus.publish({ type: "thread_members", threadId }),
       batch: (work) => bus.batch(work),
       onBotMessage: (run, message, blocked) => routePrivateMentions(context, run, message, blocked),
+      isPaused: (botId) => bots.isPaused(botId),
     },
   );
   // ADR-0015 decision 6: use is what the sidecar's hook recorded, read off the ledger as it lands.

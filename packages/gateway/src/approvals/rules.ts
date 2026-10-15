@@ -46,7 +46,7 @@ export class ApprovalRuleStore {
   }
 
   private audit(
-    action: "approval_rule.create" | "approval_rule.delete",
+    action: "approval_rule.create" | "approval_rule.delete" | "approval_rule.update",
     rule: ApprovalRule,
     actor: string,
     before: unknown,
@@ -124,6 +124,33 @@ export class ApprovalRuleStore {
     const r = this.get(id);
     if (!r) throw new DeskmatesError("not_found", `approval rule ${id} not found`, { ruleId: id });
     return r;
+  }
+
+  /**
+   * Edit a rule's matcher or decision in place (ADR-0043 decision 6). It keeps its id and its
+   * place in the oldest-first order, so which rule answers a call changes only by what it says.
+   * A run that already asked is not re-answered; the edit applies to the next L2 call.
+   */
+  update(
+    id: string,
+    patch: {
+      matcher?: ApprovalRuleMatcher;
+      decision?: Exclude<ApprovalDecision, "allow_once">;
+    },
+    actor: string,
+  ): ApprovalRule {
+    return this.db.transaction(() => {
+      const before = this.mustGet(id);
+      const matcher = patch.matcher ?? before.matcher;
+      const decision = patch.decision ?? before.decision;
+      this.db
+        .prepare("UPDATE approval_rules SET matcher_json = ?, decision = ? WHERE id = ?")
+        .run(JSON.stringify(matcher), decision, id);
+      const after = this.mustGet(id);
+      if (JSON.stringify(ruleFacts(before)) !== JSON.stringify(ruleFacts(after)))
+        this.audit("approval_rule.update", after, actor, ruleFacts(before), ruleFacts(after));
+      return after;
+    })();
   }
 
   delete(id: string, actor: string): boolean {

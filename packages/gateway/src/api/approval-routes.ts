@@ -225,6 +225,38 @@ export function registerApprovalRoutes(
     return reply.code(201).send({ rule });
   });
 
+  // ADR-0043 decision 6: a rule is edited in place, under the same validation as a new one.
+  app.patch<{ Params: { id: string } }>("/api/approval-rules/:id", async (request) => {
+    const rule = ctx.rules.mustGet(request.params.id);
+    const body = asRecord(request.body);
+    if (
+      body.decision !== undefined &&
+      body.decision !== "allow_always" &&
+      body.decision !== "deny"
+    ) {
+      throw new DeskmatesError("validation", "a rule decision is allow_always or deny", {
+        got: body.decision,
+      });
+    }
+    if (body.matcher === undefined && body.decision === undefined)
+      throw new DeskmatesError("validation", "nothing to update: send matcher or decision");
+    const updated = ctx.rules.update(
+      rule.id,
+      {
+        ...(body.matcher === undefined ? {} : { matcher: asRuleMatcher(body.matcher) }),
+        ...(body.decision === undefined
+          ? {}
+          : { decision: body.decision as "allow_always" | "deny" }),
+      },
+      decidedByHuman(requestActorId(request, body)),
+    );
+    if (rule.createdFromApprovalId) {
+      const approval = ctx.approvals.get(rule.createdFromApprovalId);
+      if (approval) ctx.broker.event(approval.runId, { phase: "rule_updated", ruleId: rule.id });
+    }
+    return { rule: updated };
+  });
+
   app.delete<{ Params: { id: string } }>("/api/approval-rules/:id", async (request) => {
     const rule = ctx.rules.mustGet(request.params.id);
     ctx.rules.delete(rule.id, decidedByHuman(requestActorId(request, request.body ?? {})));

@@ -125,6 +125,7 @@
   "chatRunStatus.toggleLabel": "{count, plural, one {# ejecución} other {# ejecuciones}} de {name}",
   "chatRunStatus.trigger.approval": "Reanudada tras una aprobación",
   "chatRunStatus.trigger.cron": "Tarea programada",
+  "chatRunStatus.trigger.manual": "Tarea programada, ejecutada ahora",
   "chatRunStatus.trigger.message": "Respuesta a «{text}»",
   "chatRunStatus.trigger.messageUnknown": "Respuesta a un mensaje anterior",
   "chatRunStatus.trigger.webhook": "Webhook",

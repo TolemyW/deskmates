@@ -51,6 +51,16 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
     const limit = Number(q.get("limit") ?? 25) || 25;
     return ok({ rules: rules.slice(offset, offset + limit), offset, limit, total: rules.length });
   }
+  // ADR-0043 decision 6: a rule is edited in place.
+  // biome-ignore lint/suspicious/noAssignInExpressions: route matching
+  if ((x = m(/^\/api\/approval-rules\/([^/]+)$/)) && method === "PATCH") {
+    const rule = s.rules.find((item) => item.id === decodeURIComponent(x?.[1] ?? ""));
+    if (!rule) return notFound("approval rule");
+    if (b.decision === "allow_always" || b.decision === "deny") rule.decision = b.decision;
+    if (b.matcher && typeof b.matcher === "object")
+      rule.matcher = b.matcher as ApprovalRule["matcher"];
+    return ok({ rule });
+  }
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
   if ((x = m(/^\/api\/approval-rules\/([^/]+)$/)) && method === "DELETE") {
     const i = s.rules.findIndex((rule) => rule.id === decodeURIComponent(x?.[1] ?? ""));

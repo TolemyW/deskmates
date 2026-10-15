@@ -134,7 +134,10 @@ export class UsageStore {
       .prepare("SELECT thread_id, trigger_kind FROM runs WHERE id = ?")
       .get(runId) as { thread_id: string | null; trigger_kind: string };
     return (
-      run.thread_id === null && (run.trigger_kind === "cron" || run.trigger_kind === "webhook")
+      run.thread_id === null &&
+      (run.trigger_kind === "cron" ||
+        run.trigger_kind === "manual" ||
+        run.trigger_kind === "webhook")
     );
   }
 

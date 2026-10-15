@@ -73,6 +73,7 @@
   "run.title": "Ejecución",
   "run.trigger.approval": "aprobación",
   "run.trigger.cron": "programación (cron)",
+  "run.trigger.manual": "manual",
   "run.trigger.threadMessage": "mensaje en la conversación",
   "run.trigger.webhook": "webhook",
   "run.trigger.welcome": "bienvenida",

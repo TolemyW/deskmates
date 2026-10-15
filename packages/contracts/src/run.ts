@@ -7,7 +7,14 @@ import type { ProposedSkill } from "./skill.js";
 /** Interactive: chat threads and approval replies. Background: cron, webhook, bus threads. */
 export type RunLane = "interactive" | "background";
 
-export type RunTriggerKind = "thread_message" | "cron" | "webhook" | "approval" | "welcome";
+/** `manual`: an operator's "Run now" on one cron entry (ADR-0043); a background run like cron. */
+export type RunTriggerKind =
+  | "thread_message"
+  | "cron"
+  | "webhook"
+  | "approval"
+  | "welcome"
+  | "manual";
 
 export type RunStatus =
   | "queued"

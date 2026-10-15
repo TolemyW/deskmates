@@ -224,6 +224,8 @@ export function ChatRunStatus(props: ChatRunStatusProps) {
         return t("chatRunStatus.trigger.approval");
       case "welcome":
         return t("chatRunStatus.trigger.welcome");
+      case "manual":
+        return t("chatRunStatus.trigger.manual");
       default:
         return run.triggerKind;
     }

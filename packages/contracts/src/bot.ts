@@ -88,6 +88,13 @@ export interface BotDefinition {
   messageAllowlist: readonly string[];
   cron: readonly CronEntry[];
   createdAt: IsoTimestamp;
+  /**
+   * Present while the bot is paused (ADR-0026 amendment 1): cron, webhook and thread wakes are
+   * skipped and its queued runs wait; a live run finishes and a parked run stays parked. Unlike
+   * Trash, nothing is cancelled or denied, and resuming needs no restore.
+   */
+  pausedAt?: IsoTimestamp;
+  pausedBy?: string;
   /** Present only in Trash views. Archived bots cannot be scheduled or woken. */
   archivedAt?: IsoTimestamp;
   archivedBy?: string;

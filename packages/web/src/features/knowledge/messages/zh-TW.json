@@ -42,6 +42,7 @@
   "knowledge.memoryLatest.label": "最新儲存的記憶",
   "knowledge.memoryLatest.title": "最新儲存的記憶",
   "knowledge.notice.memorySaved": "記憶已儲存。",
+  "knowledge.notice.memorySavedNextRun": "記憶已儲存。機器人正在執行，下次執行起讀取此版本。",
   "knowledge.notice.proposed": "提議正在等候審查。",
   "knowledge.notice.published": "文件已發布。",
   "knowledge.notice.rejected": "提議已拒絕。",

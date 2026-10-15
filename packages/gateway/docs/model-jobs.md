@@ -34,8 +34,9 @@ grades or applies it. The Gateway never calls a model.
 - An empty SOUL gets a whole draft (`mode: create`); otherwise the model returns find-and-replace
   edits that the Gateway applies to the stored base, so untouched text is byte-identical.
 - `GET /api/bots/:id/soul-proposals/:proposalId` (Member) reads it;
-  `POST .../apply` (Admin) writes it through the canonical SOUL write: refused with
-  `invalid_transition` when SOUL changed since the base or a run is parked, `lane_busy` while the
-  bot has a live run; idempotent once applied. `POST .../discard` ends it.
+  `POST .../apply` (Admin) writes it through the canonical SOUL write, a new numbered version:
+  refused with `invalid_transition` when SOUL changed since the base; a live or parked run of the
+  bot does not refuse it, the answer carries `appliesFromNextRun` (ADR-0043 decision 3);
+  idempotent once applied. `POST .../discard` ends it.
 - `POST /api/bots` accepts `welcome: false` to create a bot unstarted for a drafted first SOUL;
   `POST /api/bots/:id/welcome` starts it after the apply (#89 ordering).

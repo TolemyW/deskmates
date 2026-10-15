@@ -17,6 +17,7 @@ import {
 } from "./api/routes.js";
 import { registerStaticUi, resolveWebDistDir } from "./api/static-ui.js";
 import { createAppIngress } from "./app-shares/app-share-ingress.js";
+import { PausedCronNotices } from "./bots/paused-cron-notices.js";
 import { loadReleaseChannelPlugins } from "./channels/plugin-loader.js";
 import { type GatewayConfig, loadConfig } from "./config.js";
 import { type GatewayContext, buildContext } from "./context.js";
@@ -131,6 +132,7 @@ export function buildGateway(
   const lifecycle = new RunLifecycle(ctx);
   const scheduler = new Scheduler(ctx, lifecycle, (msg, data) => app.log.warn(data ?? {}, msg));
   ctx.channels.setKick(() => scheduler.kick());
+  const pausedCron = new PausedCronNotices(ctx);
   const cron = new CronRunner({
     bots: ctx.bots,
     runs: ctx.runs,
@@ -140,6 +142,7 @@ export function buildGateway(
     kick: () => scheduler.kick(),
     bus: ctx.bus,
     log: (msg, data) => app.log.info(data ?? {}, msg),
+    onPausedSkip: (bot, entry, schedule) => pausedCron.skipped(bot, entry, schedule),
   });
   const taskSchedules = new TaskScheduleRunner(
     new TaskDispatcher(ctx, () => scheduler.kick()),

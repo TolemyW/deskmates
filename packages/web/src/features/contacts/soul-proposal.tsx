@@ -14,11 +14,20 @@ import { useT } from "../../i18n/i18n-provider.js";
 
 const POLL_MS = 1000;
 
-export function SoulDiff({ before, after }: { before: string; after: string }) {
+export function SoulDiff({
+  before,
+  after,
+  label,
+}: {
+  before: string;
+  after: string;
+  /** What the two sides are; a proposal's diff by default. */
+  label?: string;
+}) {
   const t = useT();
   const lines = diffSoulLines(before, after);
   return (
-    <pre className="soul-diff" aria-label={t("management.soulDraft.diffLabel")}>
+    <pre className="soul-diff" aria-label={label ?? t("management.soulDraft.diffLabel")}>
       {lines.map((line, index) => (
         <span
           // Lines are positional; the diff is recomputed whole on every change.

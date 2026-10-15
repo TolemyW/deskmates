@@ -245,7 +245,7 @@ function triggerInstruction(run: RunRecord): OriginatingInstruction | undefined 
   const payload = run.triggerPayload ?? {};
   const text = (value: unknown): string | undefined =>
     typeof value === "string" && value.trim() !== "" ? value : undefined;
-  if (run.triggerKind === "cron") {
+  if (run.triggerKind === "cron" || run.triggerKind === "manual") {
     const prompt = text(payload.prompt);
     return prompt === undefined ? undefined : { source: "cron_prompt", text: prompt };
   }
