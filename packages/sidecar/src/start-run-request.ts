@@ -292,6 +292,11 @@ export const startRunRequestSchema = z.object({
       "browser_cli_workflow",
       "memory_search",
       "task_deliver",
+      // ADR-0035 and ADR-0040: offered only where the installation configures the service, so a
+      // Gateway with those settings sends them on every run.
+      "app_publish",
+      "image_describe",
+      "audio_transcribe",
       ...CONNECTOR_TOOL_NAMES,
       ...INTEGRATION_TOOL_NAMES,
     ]),

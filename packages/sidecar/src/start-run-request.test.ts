@@ -156,6 +156,21 @@ describe("parseStartRunRequest accepts what the Gateway sends", () => {
     if (result.ok) expect(result.value.trigger).toEqual(trigger);
   });
 
+  it("accepts every tool a configured Gateway offers (app links, look/OCR, ASR)", () => {
+    // v0.6.9 regression: these were offered once APP_SHARE_* and the operation services were set
+    // on the stable host, and every run's sidecar exited on the unknown names.
+    const tools = [
+      "thread_post",
+      "task_deliver",
+      "app_publish",
+      "image_describe",
+      "audio_transcribe",
+    ];
+    const result = parseStartRunRequest(json({ ...VALID, tools }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.tools).toEqual(tools);
+  });
+
   it("accepts the optional fields being absent", () => {
     expect(parseStartRunRequest(json(omit(VALID, "threadId"))).ok).toBe(true);
   });
