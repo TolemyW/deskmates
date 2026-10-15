@@ -50,6 +50,7 @@ import { EventSink } from "./ledger.js";
 import { managedProxyEnvironment } from "./managed-proxy.js";
 import { TaintTracker } from "./memory-taint.js";
 import { ModelSwitchRecorder, fallbackSwitch, isModelFallbackMessage } from "./model-switch.js";
+import { PendingCaptures } from "./pending-captures.js";
 import { redactText, redactValue } from "./redact.js";
 import { ReplyPreviewer } from "./reply-preview.js";
 import {
@@ -359,6 +360,13 @@ export async function runOnce(
           redact: (text) => redactText(text, secrets),
         });
   const recordScreenshot = screenshotRecorder(sink);
+  const captures = new PendingCaptures((err) =>
+    sink.emit("log", {
+      source: "screenshot",
+      level: "warn",
+      reason: redactText(err instanceof Error ? err.message : String(err), secrets),
+    }),
+  );
   // One `turn_usage` per model response (M3 context plan, Phase 1; `turn-usage.ts`).
   const turnUsage = new TurnUsageTracker((payload) => sink.emit("turn_usage", { ...payload }));
   const turnWarning = new TurnWarning(request.maxTurns);
@@ -769,6 +777,8 @@ export async function runOnce(
     sink.emit("rule_file_modified", payload);
   }
 
+  // Every capture still waiting lands before the directory goes and before the last flush.
+  await captures.settle();
   tty?.dispose();
   if (resourceTimer) clearInterval(resourceTimer);
   await sampleResources();
@@ -1028,7 +1038,10 @@ export async function runOnce(
           isError,
         });
         settleConsumedDecision(block.tool_use_id, isError);
-        await emitScreenshot(block.tool_use_id);
+        // Issue #9: the capture wait (up to SCREENSHOT_WAIT_MS) runs beside the message loop, so
+        // it no longer holds back every SDK message after this one. The action is numbered
+        // before the first await, so captures stay aligned; the run awaits them before it ends.
+        captures.add(emitScreenshot(block.tool_use_id));
       }
       return;
     }

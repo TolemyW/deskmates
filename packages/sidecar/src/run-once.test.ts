@@ -2450,6 +2450,47 @@ describe("runOnce: screenshots", () => {
     );
   });
 
+  it("does not hold later SDK messages back while it waits for a capture (issue #9)", async () => {
+    const echo: ScriptStep = {
+      type: "tool_call",
+      name: "Bash",
+      input: { command: "echo next" },
+      result: "next",
+    };
+    const { deps, gateway, fs } = makeDeps([navigate, echo, { type: "end", summary: "" }]);
+    deps.now = () => new Date();
+    deps.sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const late = setTimeout(
+      () => fs.files.set(`${shotDir()}/1.json`, captureFile(1, "browser_navigate")),
+      300,
+    );
+    try {
+      await run(deps, baseRequest());
+    } finally {
+      clearTimeout(late);
+    }
+
+    const order = gateway.events
+      .filter((e) => e.kind === "tool_call" || e.kind === "tool_result" || e.kind === "screenshot")
+      .map((e) => `${e.kind}:${e.payload.toolName ?? ""}`);
+    // The next call went out while the navigation's capture was still on its way.
+    expect(order).toEqual([
+      "tool_call:mcp__browser__browser_navigate",
+      "tool_result:",
+      "tool_call:Bash",
+      "tool_result:",
+      "screenshot:mcp__browser__browser_navigate",
+    ]);
+    const [shot] = gateway.events.filter((e) => e.kind === "screenshot");
+    const [navigateResult] = gateway.events.filter((e) => e.kind === "tool_result");
+    expect(shot?.payload).toMatchObject({
+      action: 1,
+      toolUseId: navigateResult?.payload.toolUseId,
+    });
+    // The run still waited for it before removing the capture directory.
+    expect(fs.dirs).toEqual([]);
+  });
+
   it("stops at the per-run cap and does not warn about the actions past it", async () => {
     const clicks = Array.from({ length: SCREENSHOT_MAX_PER_RUN + 1 }, (_i, n) => click(`e${n}`));
     const files = captureFiles(
