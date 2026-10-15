@@ -35,6 +35,7 @@ import { initialRunView, runViewReducer } from "../../state/run-view.js";
 import { RoleNote, useCan, useCanInOwnSideChat } from "../../state/session-roles.js";
 import { eventsShown, isDiagnosticEvent, ledgerRows } from "./ledger-rows.js";
 import { PhaseTimingTimeline, phaseSpans } from "./phase-timing.js";
+import { RunChangesSection } from "./run-changes.js";
 import { RunContextPanel } from "./run-context-panel.js";
 import { RunEventRow } from "./run-event-row.js";
 import { RunTimelinePanel } from "./run-timeline.js";
@@ -455,6 +456,7 @@ function RunScreenContent(props: RunScreenProps) {
           <PhaseTimingTimeline events={state.events} />
         </details>
       ) : null}
+      {run ? <RunChangesSection api={api} run={run} /> : null}
       <h3>
         {t("run.events.heading")}{" "}
         <span className="muted small">

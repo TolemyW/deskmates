@@ -1,6 +1,6 @@
 // Operator route policies for runs; aggregated in `../route-policy.ts` (ADR-0022 P2).
 
-import { type PolicyTable, guest, member } from "./policy.js";
+import { type PolicyTable, admin, guest, member } from "./policy.js";
 
 export const runsRoutePolicies: PolicyTable = {
   "GET /api/runs": member({
@@ -8,6 +8,10 @@ export const runsRoutePolicies: PolicyTable = {
     scopedList: true,
     handlerCheck: "listed only from the caller's workspaces, without other people's private chats",
   }),
+  // ADR-0042: what a run changed, and the Owner's or Admin's mark that makes it do-not-learn.
+  "GET /api/runs/:id/changes": member({ params: { id: "run" } }),
+  "PUT /api/runs/:id/mark": admin({ params: { id: "run" } }),
+  "DELETE /api/runs/:id/mark": admin({ params: { id: "run" } }),
   "GET /api/runs/latest-by-bot": member({
     query: { workspaceId: "workspace" },
     scopedList: true,

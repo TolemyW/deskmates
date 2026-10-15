@@ -42,6 +42,7 @@ export * from "./reasoning.js";
 export * from "./reply-preview.js";
 export * from "./role-actions.js";
 export * from "./round.js";
+export * from "./run-audit.js";
 export * from "./run-context.js";
 export * from "./run-timeline.js";
 export * from "./run.js";

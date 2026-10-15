@@ -537,6 +537,24 @@ describe("export over the operator API", () => {
     expect(traces.map((t) => t.run.id)).toEqual(["run-a"]);
     expect(stub.urls).not.toContain("http://gateway.test/api/runs");
   });
+
+  it("sends the operator bearer on every request when given one, never in a URL", async () => {
+    const stub = stubGateway();
+    const auth: (string | null)[] = [];
+    const fetchFn = (async (input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+      auth.push(new Headers(init?.headers).get("authorization"));
+      return stub.fetch(input, init);
+    }) as typeof globalThis.fetch;
+    await exportTraces({
+      gateway: "http://gateway.test",
+      runIds: ["run-a"],
+      fetch: fetchFn,
+      token: "operator-secret",
+    });
+    expect(auth.length).toBeGreaterThan(0);
+    expect(auth.every((value) => value === "Bearer operator-secret")).toBe(true);
+    expect(stub.urls.some((u) => u.includes("operator-secret"))).toBe(false);
+  });
 });
 
 describe("the markdown report", () => {

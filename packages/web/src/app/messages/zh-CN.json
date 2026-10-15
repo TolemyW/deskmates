@@ -214,6 +214,8 @@
   "roles.action.privateChat.open": "打开机器人的主聊天",
   "roles.action.run.cancel": "取消运行",
   "roles.action.run.continue": "允许运行超出轮次限制继续",
+  "roles.action.run.mark": "将运行标记为错误",
+  "roles.action.run.read": "查看运行记录",
   "roles.action.runs.read": "查看运行和动态",
   "roles.action.servicePrincipal.manage": "管理服务主体",
   "roles.action.sideChat.open": "与机器人开启自己的私聊",

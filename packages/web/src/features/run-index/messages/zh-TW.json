@@ -1,0 +1,22 @@
+{
+  "runIndex.empty": "沒有符合這些條件的執行。",
+  "runIndex.filter.any": "全部",
+  "runIndex.filter.bot": "機器人",
+  "runIndex.filter.clear": "清除篩選",
+  "runIndex.filter.failureClass": "失敗類別",
+  "runIndex.filter.lane": "通道",
+  "runIndex.filter.search": "搜尋",
+  "runIndex.filter.since": "開始日期",
+  "runIndex.filter.status": "狀態",
+  "runIndex.filter.text": "錯誤文字",
+  "runIndex.filter.textPlaceholder": "錯誤中的詞",
+  "runIndex.filter.until": "結束日期",
+  "runIndex.intro": "這個工作區的所有執行，最新的在前。開啟一筆可查看它改變了什麼，或將其標記為錯誤。",
+  "runIndex.lane.background": "背景",
+  "runIndex.lane.interactive": "前景",
+  "runIndex.list": "執行紀錄",
+  "runIndex.loadOlder": "載入更早的執行",
+  "runIndex.loadingOlder": "正在載入更早的執行…",
+  "runIndex.nav": "執行紀錄",
+  "runIndex.title": "執行紀錄"
+}

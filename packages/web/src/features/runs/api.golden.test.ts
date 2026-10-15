@@ -10,14 +10,30 @@ const CASES: GoldenCases<RunsApi> = {
   cancelRun: (a) => a.cancelRun(RUN),
   decideContinuation: (a) => a.decideContinuation(RUN, "stop"),
   getRun: (a) => a.getRun(RUN),
+  getRunChanges: (a) => a.getRunChanges(RUN),
   getRunContext: (a) => a.getRunContext(RUN),
   getRunTimeline: (a) => a.getRunTimeline(RUN),
   latestRunScreenshot: (a) => a.latestRunScreenshot(RUN),
   latestRunsByBot: (a) => a.latestRunsByBot(WS),
   listRunEventSlice: (a) => a.listRunEventSlice(RUN, { beforeSeq: 401, limit: 200 }),
   listRunEvents: (a) => a.listRunEvents(RUN, 0),
-  listRuns: (a) => a.listRuns({ threadId: THR, phase: "finished", cursor: "c/1", limit: 20 }),
+  listRunMemoryVersions: (a) => a.listRunMemoryVersions(RUN),
+  listRuns: (a) =>
+    a.listRuns({
+      threadId: THR,
+      phase: "finished",
+      cursor: "c/1",
+      limit: 20,
+      status: ["failed", "cancelled"],
+      lane: "background",
+      since: "2026-10-01T00:00:00.000Z",
+      until: "2026-10-08T00:00:00.000Z",
+      failureClass: "model_unavailable",
+      q: "no worker",
+    }),
+  markRun: (a) => a.markRun(RUN, "wrong site"),
   memoryIndexObservation: (a) => a.memoryIndexObservation(WS),
+  unmarkRun: (a) => a.unmarkRun(RUN),
 };
 
 describe("runs API wire golden", () => {

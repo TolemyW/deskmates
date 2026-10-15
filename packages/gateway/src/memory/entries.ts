@@ -24,6 +24,7 @@ import {
 } from "@deskmates/contracts";
 import { newId, nowIso, parseJson } from "../db/ids.js";
 import type { GatewayDb } from "../db/open.js";
+import { notMarkedWrong } from "../ledger/run-marks.js";
 
 export type StoredScope = MemoryEntry["scope"];
 
@@ -768,7 +769,10 @@ export class MemoryEntryStore {
     for (const id of ids) stmt.run(runId, id);
   }
 
-  /** Episodes and this bot's candidates not yet taken by a consolidation run. */
+  /**
+   * Episodes and this bot's candidates not yet taken by a consolidation run. A candidate of a run
+   * an operator marked wrong is do-not-learn while the mark stands (ADR-0042 decision 3).
+   */
   consolidationInput(workspaceId: WorkspaceId, botId: BotId): StoredEntry[] {
     const rows = this.db
       .prepare(
@@ -777,7 +781,8 @@ export class MemoryEntryStore {
            AND (e.kind = 'episode' OR (e.kind = 'candidate' AND e.bot_id = ?
              AND (e.source_run_id IS NULL OR EXISTS (SELECT 1 FROM runs r WHERE r.id = e.source_run_id
                AND r.status IN ('succeeded','silent')
-               AND r.run_type IS NOT 'memory_consolidation'))))
+               AND r.run_type IS NOT 'memory_consolidation'
+               AND ${notMarkedWrong("r.id")}))))
          ORDER BY e.observed_at, e.id`,
       )
       .all(workspaceId, botId) as EntryRow[];

@@ -1,0 +1,22 @@
+{
+  "runIndex.empty": "No runs match these filters.",
+  "runIndex.filter.any": "Any",
+  "runIndex.filter.bot": "Bot",
+  "runIndex.filter.clear": "Clear filters",
+  "runIndex.filter.failureClass": "Failure class",
+  "runIndex.filter.lane": "Lane",
+  "runIndex.filter.search": "Search",
+  "runIndex.filter.since": "From",
+  "runIndex.filter.status": "Status",
+  "runIndex.filter.text": "Error text",
+  "runIndex.filter.textPlaceholder": "Words in the error",
+  "runIndex.filter.until": "To",
+  "runIndex.intro": "Every run of this workspace, newest first. Open one to see what it changed or to mark it wrong.",
+  "runIndex.lane.background": "Background",
+  "runIndex.lane.interactive": "Foreground",
+  "runIndex.list": "Runs",
+  "runIndex.loadOlder": "Load older runs",
+  "runIndex.loadingOlder": "Loading older runs…",
+  "runIndex.nav": "Runs",
+  "runIndex.title": "Runs"
+}

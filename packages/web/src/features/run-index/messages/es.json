@@ -1,0 +1,22 @@
+{
+  "runIndex.empty": "Ninguna ejecución coincide con estos filtros.",
+  "runIndex.filter.any": "Cualquiera",
+  "runIndex.filter.bot": "Bot",
+  "runIndex.filter.clear": "Quitar filtros",
+  "runIndex.filter.failureClass": "Clase de fallo",
+  "runIndex.filter.lane": "Carril",
+  "runIndex.filter.search": "Buscar",
+  "runIndex.filter.since": "Desde",
+  "runIndex.filter.status": "Estado",
+  "runIndex.filter.text": "Texto del error",
+  "runIndex.filter.textPlaceholder": "Palabras del error",
+  "runIndex.filter.until": "Hasta",
+  "runIndex.intro": "Todas las ejecuciones de este espacio de trabajo, la más reciente primero. Abre una para ver qué cambió o marcarla como incorrecta.",
+  "runIndex.lane.background": "Segundo plano",
+  "runIndex.lane.interactive": "Primer plano",
+  "runIndex.list": "Ejecuciones",
+  "runIndex.loadOlder": "Cargar ejecuciones anteriores",
+  "runIndex.loadingOlder": "Cargando ejecuciones anteriores…",
+  "runIndex.nav": "Ejecuciones",
+  "runIndex.title": "Ejecuciones"
+}

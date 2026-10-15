@@ -78,6 +78,27 @@ pick exactly which run ends. Stop asks first and says what it does:
 If the run finished before your Stop arrived, the chat says nothing was cancelled. A Member sees
 Stop only in a side chat they opened; elsewhere a note says which role can cancel.
 
+### Find and audit runs
+
+**Runs** under Operate lists the runs of your workspaces, newest first, and filters them by
+status, bot, lane, time range, failure class and words in the error. The failure class is the
+Gateway's reading of the error (for example "Model unavailable" when the model or its upstream is
+missing or down); "Other" means no rule matched. A row opens the run screen.
+
+The run screen's **What this run changed** lists what the run learned (and whether each item was
+trusted), the files it changed, the sites it visited, the memory it wrote and was given, the
+approvals it asked for and their decisions, the task checkpoints and artifacts it recorded, and
+the model, skills and SOUL version it ran with.
+
+An Owner or Admin can **Mark as wrong**, with an optional note, on the run screen or on its
+Activity card. While the mark stands, nothing the run learned is used when the bot's experience
+is consolidated; memory the run already wrote stays until you forget or edit it. **Unmark**
+undoes it. A finished run also offers **Save as replay fixture**: the command a developer runs to
+save it as a replay test.
+
+An installation may prune old runs' event logs (`RUN_EVENTS_RETENTION_DAYS`); a pruned run keeps
+its row, summary and costs and says when it was pruned.
+
 ## What this cannot do
 
 - Membership is routing, not access control. A bot that is not a member of a chat can still read

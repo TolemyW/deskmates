@@ -434,3 +434,19 @@
     font-size: var(--app-text-sm);
   }
 }
+/* Run audit (ADR-0042): the failure class label and the "wrong" mark badge. */
+.run-failure-class,
+.run-mark-badge {
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: var(--app-text-sm);
+}
+.run-failure-class {
+  background: var(--surface);
+  outline: 1px solid currentColor;
+}
+.run-mark-badge {
+  background: var(--danger-soft);
+  color: var(--danger-text);
+  font-weight: 600;
+}

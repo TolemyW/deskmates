@@ -12,14 +12,18 @@ import {
   DeskmatesError,
   type PageLimitPolicy,
   type RunId,
+  type RunStatus,
   type ThreadId,
   type WorkspaceId,
+  isRunFailureClass,
   welcomeDelivery,
 } from "@deskmates/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { GatewayContext } from "../context.js";
+import { classifyFailure } from "../ledger/failure-class.js";
+import { RunMarkStore } from "../ledger/run-marks.js";
 import { withVisibility } from "../ledger/run-visibility.js";
-import type { RunRecord } from "../ledger/runs.js";
+import type { RunPageFilter, RunRecord } from "../ledger/runs.js";
 import { combineReceipts, usageReceipts } from "../ledger/usage-receipts.js";
 import { welcomeGreetingsPosted } from "../threads/welcome-delivery.js";
 import { keysetPage, parseCursorQuery } from "./pagination.js";
@@ -36,6 +40,20 @@ export const RUN_EVENT_TAIL: PageLimitPolicy = { default: 500, max: 500 };
 
 const RUN_KEYS = ["string", "string"] as const;
 
+const RUN_STATUSES: readonly RunStatus[] = [
+  "queued",
+  "running",
+  "waiting_approval_live",
+  "waiting_approval",
+  "waiting_browser",
+  "waiting_continuation",
+  "succeeded",
+  "silent",
+  "failed",
+  "cancelled",
+  "stopped",
+];
+
 interface RunListQuery {
   threadId?: string;
   botId?: string;
@@ -43,6 +61,56 @@ interface RunListQuery {
   phase?: string;
   cursor?: string;
   limit?: string;
+  /** Issue #11: one status or a comma-separated list. */
+  status?: string;
+  lane?: string;
+  since?: string;
+  until?: string;
+  failureClass?: string;
+  /** Free text over `error`. */
+  q?: string;
+}
+
+type RunAuditFilter = Pick<
+  RunPageFilter,
+  "statuses" | "lane" | "since" | "until" | "failureClass" | "errorText"
+>;
+
+/** The audit filters of the run list (issue #11, ADR-0042 decision 2), validated. */
+function auditFilters(q: RunListQuery): RunAuditFilter {
+  const filters: RunAuditFilter = {};
+  if (q.status !== undefined && q.status !== "") {
+    const statuses = q.status.split(",").map((s) => s.trim());
+    for (const status of statuses)
+      if (!RUN_STATUSES.includes(status as RunStatus))
+        throw new DeskmatesError("validation", `unknown run status ${status}`, { field: "status" });
+    filters.statuses = [...new Set(statuses)].sort() as RunStatus[];
+  }
+  if (q.lane !== undefined && q.lane !== "") {
+    if (q.lane !== "interactive" && q.lane !== "background")
+      throw new DeskmatesError("validation", "lane must be interactive or background", {
+        field: "lane",
+      });
+    filters.lane = q.lane;
+  }
+  for (const key of ["since", "until"] as const) {
+    const raw = q[key];
+    if (raw === undefined || raw === "") continue;
+    const at = Date.parse(raw);
+    if (!Number.isFinite(at))
+      throw new DeskmatesError("validation", `${key} must be an ISO 8601 time`, { field: key });
+    filters[key] = new Date(at).toISOString();
+  }
+  if (q.failureClass !== undefined && q.failureClass !== "") {
+    if (!isRunFailureClass(q.failureClass))
+      throw new DeskmatesError("validation", `unknown failure class ${q.failureClass}`, {
+        field: "failureClass",
+      });
+    filters.failureClass = q.failureClass;
+  }
+  const text = q.q?.trim();
+  if (text) filters.errorText = text.slice(0, 200);
+  return filters;
 }
 
 function viewerOf(request: FastifyRequest): string | undefined {
@@ -56,6 +124,8 @@ export function registerRunRoutes(app: FastifyInstance, ctx: GatewayContext): vo
     // ADR-0033: each run's current summary and the rounds it answers, for Activity grouping.
     const summaries = ctx.activitySummaries.forRuns(runs);
     const rounds = ctx.rounds.roundsOfRuns(runs.map((run) => run.id));
+    // ADR-0042: the derived failure class and the operator's mark, on the index and the cards.
+    const marks = new RunMarkStore(ctx.db).forRuns(runs.map((run) => run.id));
     // ADR-0024 amendment 2, decision 11: a welcome reports whether its greeting reached the chat.
     const greeted = welcomeGreetingsPosted(ctx.db, runs);
     return withVisibility(ctx.db, runs).map((run) => ({
@@ -65,6 +135,8 @@ export function registerRunRoutes(app: FastifyInstance, ctx: GatewayContext): vo
         : {}),
       ...(summaries.has(run.id) ? { activitySummary: summaries.get(run.id) } : {}),
       ...(rounds.has(run.id) ? { roundMessageIds: rounds.get(run.id) } : {}),
+      ...(run.error !== undefined ? { failureClass: classifyFailure(run.error) } : {}),
+      ...(marks.has(run.id) ? { mark: marks.get(run.id) } : {}),
     }));
   };
 
@@ -85,6 +157,7 @@ export function registerRunRoutes(app: FastifyInstance, ctx: GatewayContext): vo
       ...(q.botId ? { botId: q.botId as BotId } : {}),
       ...(q.phase ? { phase: q.phase as "active" | "finished" } : {}),
       ...(viewerUserId ? { viewerUserId } : {}),
+      ...auditFilters(q),
     };
     // Every unfinished run is bounded by the lanes, so it is listed whole, never paged.
     if (q.phase === "active") {
@@ -103,6 +176,12 @@ export function registerRunRoutes(app: FastifyInstance, ctx: GatewayContext): vo
       q.botId ?? null,
       q.phase ?? null,
       viewerUserId ?? null,
+      filter.statuses?.join(",") ?? null,
+      filter.lane ?? null,
+      filter.since ?? null,
+      filter.until ?? null,
+      filter.failureClass ?? null,
+      filter.errorText ?? null,
     ];
     const query = parseCursorQuery(q, RUN_PAGE, scope, RUN_KEYS);
     // Without a phase, the first page also carries every unfinished run, so one request shows a

@@ -13,6 +13,8 @@ import type {
   GroupRouting,
   Run,
   RunEvent,
+  RunFailureClass,
+  RunMark,
   Thread,
   ThreadId,
   ThreadMember,
@@ -37,6 +39,10 @@ export interface RunView extends Run {
   roundMessageIds?: string[];
   /** ADR-0024 amendment 2, decision 11: for a welcome run, whether its greeting reached the chat. */
   welcomeDelivery?: WelcomeDelivery;
+  /** ADR-0042 decision 1: the class the Gateway derives from `error`; present when it is set. */
+  failureClass?: RunFailureClass;
+  /** ADR-0042 decision 3: an Owner's or Admin's "this run was wrong" mark. */
+  mark?: RunMark;
 }
 
 /** A bot's versioned Markdown file (SOUL.md or MEMORY.md) as the Gateway returns it. */

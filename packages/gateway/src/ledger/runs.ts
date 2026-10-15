@@ -6,6 +6,7 @@ import {
   DeskmatesError,
   PARKED_RUN_STATUSES,
   type Run,
+  type RunFailureClass,
   type RunId,
   type RunLane,
   type RunResumePayload,
@@ -20,6 +21,7 @@ import {
 } from "@deskmates/contracts";
 import { newId, nowIso, parseJson } from "../db/ids.js";
 import type { GatewayDb } from "../db/open.js";
+import { failureClassSql } from "./failure-class.js";
 
 interface RunRow {
   id: string;
@@ -76,6 +78,17 @@ export interface RunPageFilter {
   phase?: "active" | "finished";
   /** The person reading; another person's private chat is left out. */
   viewerUserId?: string;
+  /** Only these statuses (issue #11). */
+  statuses?: readonly RunStatus[];
+  lane?: RunLane;
+  /** `created_at` at or after this canonical ISO time. */
+  since?: string;
+  /** `created_at` before this canonical ISO time. */
+  until?: string;
+  /** Only runs whose `error` classifies as this (`failure-class.ts`, ADR-0042 decision 1). */
+  failureClass?: RunFailureClass;
+  /** Case-insensitive substring of `error`. */
+  errorText?: string;
 }
 
 export interface CreateRunInput {
@@ -234,6 +247,30 @@ export class RunStore {
         `r.status ${filter.phase === "finished" ? "IN" : "NOT IN"} (${terminal.map(() => "?").join(", ")})`,
       );
       params.push(...terminal);
+    }
+    if (filter.statuses !== undefined) {
+      clauses.push("r.status IN (SELECT value FROM json_each(?))");
+      params.push(JSON.stringify(filter.statuses));
+    }
+    if (filter.lane !== undefined) {
+      clauses.push("r.lane = ?");
+      params.push(filter.lane);
+    }
+    if (filter.since !== undefined) {
+      clauses.push("r.created_at >= ?");
+      params.push(filter.since);
+    }
+    if (filter.until !== undefined) {
+      clauses.push("r.created_at < ?");
+      params.push(filter.until);
+    }
+    if (filter.failureClass !== undefined) {
+      clauses.push(`${failureClassSql("r.error")} = ?`);
+      params.push(filter.failureClass);
+    }
+    if (filter.errorText !== undefined) {
+      clauses.push("instr(lower(r.error), lower(?)) > 0");
+      params.push(filter.errorText);
     }
     clauses.push(notPrivateToOthers("r"));
     params.push(filter.viewerUserId ?? null);

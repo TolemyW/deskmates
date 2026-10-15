@@ -976,6 +976,7 @@ export function ChatPane(props: ChatPaneProps) {
               botName={botName}
               actorName={actorName}
               loadEvents={(runId) => api.listRunEvents(runId)}
+              markRun={{ mark: api.markRun, unmark: api.unmarkRun }}
               older={
                 runsCursor
                   ? { loading: loadingOlderRuns, onLoad: () => void loadOlderRuns() }

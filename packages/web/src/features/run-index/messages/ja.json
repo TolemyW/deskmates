@@ -1,0 +1,22 @@
+{
+  "runIndex.empty": "条件に合う実行はありません。",
+  "runIndex.filter.any": "すべて",
+  "runIndex.filter.bot": "ボット",
+  "runIndex.filter.clear": "フィルターをクリア",
+  "runIndex.filter.failureClass": "失敗の分類",
+  "runIndex.filter.lane": "レーン",
+  "runIndex.filter.search": "検索",
+  "runIndex.filter.since": "開始日",
+  "runIndex.filter.status": "状態",
+  "runIndex.filter.text": "エラー文",
+  "runIndex.filter.textPlaceholder": "エラーに含まれる語",
+  "runIndex.filter.until": "終了日",
+  "runIndex.intro": "このワークスペースのすべての実行（新しい順）。開くと変更内容を確認したり、誤りとしてマークしたりできます。",
+  "runIndex.lane.background": "バックグラウンド",
+  "runIndex.lane.interactive": "フォアグラウンド",
+  "runIndex.list": "実行一覧",
+  "runIndex.loadOlder": "古い実行を読み込む",
+  "runIndex.loadingOlder": "古い実行を読み込み中…",
+  "runIndex.nav": "実行",
+  "runIndex.title": "実行"
+}

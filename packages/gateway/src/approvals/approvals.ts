@@ -159,6 +159,14 @@ export class ApprovalStore {
     return rows.map(toApproval);
   }
 
+  /** Every approval the run asked for, decided or not, oldest first (ADR-0042 decision 4). */
+  forRun(runId: RunId): Approval[] {
+    const rows = this.db
+      .prepare("SELECT * FROM approvals WHERE run_id = ? ORDER BY created_at, id")
+      .all(runId) as ApprovalRow[];
+    return rows.map(toApproval);
+  }
+
   /** The run's approvals nobody has decided yet, oldest first. */
   pendingForRun(runId: RunId): Approval[] {
     const rows = this.db
