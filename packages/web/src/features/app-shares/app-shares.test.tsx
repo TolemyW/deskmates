@@ -20,6 +20,7 @@ const share = (extra: Partial<AppShare> = {}): AppShare => ({
   url: "http://abc.apps.localhost:8790/",
   botId: "bot_1",
   runId: "run_1",
+  publishedBy: null,
   createdAt: "2026-10-14T09:00:00.000Z",
   revokedAt: null,
   revokedBy: null,
@@ -47,13 +48,27 @@ function client(shares: AppShare[]) {
     const body =
       init?.method === "DELETE"
         ? { share: share({ state: "revoked", revokedAt: "2026-10-14T10:00:00.000Z" }) }
-        : path.endsWith("/open")
+        : init?.method === "POST" && path.endsWith("/app-shares")
           ? {
-              enterUrl: "http://abc.apps.localhost:8790/__deskmates/enter",
-              ticket: "t".repeat(64),
-              expiresIn: 30,
+              share: share({
+                id: "app_9",
+                label: "Preview",
+                port: 5173,
+                botId: null,
+                runId: null,
+                publishedBy: "user:usr_mel",
+                state: "unavailable",
+                reason: "not_running",
+              }),
+              existing: false,
             }
-          : { enabled: true, shares };
+          : path.endsWith("/open")
+            ? {
+                enterUrl: "http://abc.apps.localhost:8790/__deskmates/enter",
+                ticket: "t".repeat(64),
+                expiresIn: 30,
+              }
+            : { enabled: true, shares };
     return new Response(JSON.stringify(body), {
       status: 200,
       headers: { "content-type": "application/json" },
@@ -81,14 +96,12 @@ it("lists each app with its state and address and opens it in a new tab", async 
   expect(open?.getAttribute("href")).toBe("#/apps/app_1?ws=ws_1");
   expect(open?.getAttribute("target")).toBe("_blank");
   expect(open?.getAttribute("rel")).toContain("noopener");
-  // A Member cannot stop sharing.
-  expect(screen.queryByText("Stop sharing")).toBeNull();
 });
 
-it("lets an Admin stop sharing after confirming", async () => {
+it("lets a Member stop sharing after confirming (owner-decided 2026-10-14)", async () => {
   const { api, calls } = client([share()]);
   vi.spyOn(window, "confirm").mockReturnValue(true);
-  render(<AppSharesSection api={api} entry={entry("admin")} onChanged={() => {}} />);
+  render(<AppSharesSection api={api} entry={entry("member")} onChanged={() => {}} />);
   fireEvent.click(await screen.findByText("Stop sharing"));
   expect(await screen.findByText(/sharing stopped/)).toBeTruthy();
   expect(calls).toContain("DELETE /api/workspaces/ws_1/app-shares/app_1");
@@ -122,4 +135,23 @@ it("posts the ticket to the app origin in a form, never in the address", async (
   expect(form?.action).not.toContain("t".repeat(64));
   expect((form?.elements.namedItem("ticket") as HTMLInputElement).value).toBe("t".repeat(64));
   expect(calls).toEqual(["POST /api/workspaces/ws_1/app-shares/app_1/open"]);
+});
+
+it("lets a Member share a running port and lists it first", async () => {
+  const { api, calls } = client([share()]);
+  render(<AppSharesSection api={api} entry={entry("member")} onChanged={() => {}} />);
+  await screen.findByText("Todo app");
+  const submit = screen.getByRole("button", { name: "Share" }) as HTMLButtonElement;
+  expect(submit.disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText("Port"), { target: { value: "5173" } });
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: " Preview " } });
+  expect(submit.disabled).toBe(false);
+  fireEvent.click(submit);
+  expect(await screen.findByText("Preview")).toBeTruthy();
+  expect(screen.getByText(/shared by a person/)).toBeTruthy();
+  expect(calls).toContain("POST /api/workspaces/ws_1/app-shares");
+  const items = screen
+    .getAllByRole("listitem")
+    .map((li) => li.querySelector("strong")?.textContent);
+  expect(items).toEqual(["Preview", "Todo app"]);
 });

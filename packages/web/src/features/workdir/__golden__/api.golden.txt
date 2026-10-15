@@ -50,8 +50,7 @@
           "x-deskmates-tenant": "tn/1"
         },
         "body": {
-          "mode": "per-bot",
-          "worktreeRepo": "/work/app",
+          "mode": "shared",
           "laneNotice": null
         },
         "credentials": "same-origin",

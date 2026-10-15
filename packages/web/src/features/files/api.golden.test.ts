@@ -18,6 +18,7 @@ const CASES: GoldenCases<FilesApi> = {
   completeWorkspaceUpload: (a) => a.completeWorkspaceUpload(WS, "upl/1"),
   createWorkspaceUpload: (a) =>
     a.createWorkspaceUpload(WS, { name: "a b.pdf", sizeBytes: 5, idempotencyKey: "k1" }),
+  deleteWorkspaceUploadFile: (a) => a.deleteWorkspaceUploadFile(WS, "upl/1"),
   downloadWorkspaceFile: (a) => a.downloadWorkspaceFile(WS, "out/report a.pdf"),
   getWorkspaceUpload: (a) => a.getWorkspaceUpload(WS, "upl/1"),
   listWorkspaceFiles: (a) =>

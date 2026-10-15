@@ -4,6 +4,7 @@ Date: 2026-09-20
 Status: Accepted
 Supersedes: ADR-0003
 Source: product decision, 2026-09-20
+Amended by: ADR-0038 (owner-decided 2026-10-14) for directories: bots work in their own `/work/bots/<bot>` by default, and another bot's directory and `/work/uploads` are read-only to a bot through a soft `PreToolUse` guard that is not a security boundary. Decisions 2, 3 and 7 no longer hold for those paths; everything else below stands.
 
 ## Context
 
@@ -62,7 +63,7 @@ The v0.3 machinery was built to answer a question nobody asked: how to stop bot 
 
 ## Amendment 1 — an opt-in per-bot working directory (2026-10-12)
 
-Status: Proposed (needs product-owner sign-off). Decisions 1 to 7 are unchanged. This amendment gives decision 3's "working directory" a concrete, optional form. Source: issue #88. ADR-0036 (proposed) extends decision 8 with a per-workspace setting and would replace decisions 10 and 13.
+Status: Proposed (needs product-owner sign-off). Decisions 8, 9 and 12 are superseded by ADR-0038 (owner-decided 2026-10-14): `per-bot` is the default, the hook refuses writes into another bot's directory, and no campaign gates the default. Decisions 1 to 7 are unchanged. This amendment gives decision 3's "working directory" a concrete, optional form. Source: issue #88. ADR-0036 (proposed) extends decision 8 with a per-workspace setting and would replace decisions 10 and 13.
 
 ### Context
 

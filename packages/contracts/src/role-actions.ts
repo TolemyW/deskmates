@@ -6,7 +6,7 @@
 //
 // Roles are per workspace (ADR-0022 amendment 6): a screen asks with the workspace it shows.
 
-import type { TenantRole } from "./auth.js";
+import { type TenantRole, WORKSPACE_ROLES } from "./auth.js";
 
 /**
  * A workspace role, installation-wide platform maintenance (ADR-0022), or the protected root
@@ -112,6 +112,10 @@ export const ROLE_ACTIONS = {
   },
   "memory.organize": { route: "POST /api/workspaces/:id/memory/organize", role: "admin" },
   "memory.decideSplit": { route: "POST /api/workspaces/:id/memory/splits/:itemId", role: "admin" },
+  "memory.maintenanceSettings": {
+    route: "PUT /api/workspaces/:id/memory/maintenance",
+    role: "admin",
+  },
   // Approvals and costs
   "approval.decide": { route: "POST /api/approvals/:id/decide", role: "member" },
   "approval.decideAny": {
@@ -146,6 +150,9 @@ export const ROLE_ACTIONS = {
   "limits.set": { route: "PUT /api/workspaces/:id/limits", role: "admin" },
   // Working-directory settings (ADR-0036)
   "workdir.set": { route: "PUT /api/workspaces/:id/workdir", role: "admin" },
+  // Published apps: every Member shares and stops sharing (ADR-0035, owner-decided 2026-10-14)
+  "appShare.publish": { route: "POST /api/workspaces/:id/app-shares", role: "member" },
+  "appShare.stop": { route: "DELETE /api/workspaces/:id/app-shares/:shareId", role: "member" },
   // Knowledge (ADR-0031 Q2: an Owner or Admin publishes)
   "knowledge.propose": { route: "POST /api/knowledge/proposals", role: "member" },
   "knowledge.review": { route: "POST /api/knowledge/proposals/:id/review", role: "admin" },
@@ -174,13 +181,21 @@ export const ROLE_ACTIONS = {
   "costs.read": { route: "GET /api/costs", role: "member" },
   "desktops.read": { route: "GET /api/capacity", role: "member" },
   "files.read": { route: "GET /api/workspaces/:id/files", role: "member" },
+  // ADR-0014 A5 decision 43: any Admin deletes an uploaded file
+  "files.deleteUpload": {
+    route: "DELETE /api/workspaces/:id/uploads/:uploadId/file",
+    role: "admin",
+  },
   "integrations.read": {
     route: "GET /api/integrations/workspaces/:workspaceId/connections",
     role: "member",
   },
   "knowledge.read": { route: "GET /api/knowledge", role: "member" },
-  // Network profiles are the root's (ADR-0027 amendment 1 decision 12)
-  "network.read": { route: "GET /api/network-profiles", role: "root" },
+  // Network profiles: Owners define, Admins select (ADR-0027 amendment 1 decision 12)
+  "network.read": { route: "GET /api/network-profiles", role: "owner", scope: "any" },
+  "network.define": { route: "POST /api/network-profiles", role: "owner", scope: "any" },
+  "network.select": { route: "PUT /api/workspaces/:id/network-profiles", role: "admin" },
+  "network.settings": { route: "PUT /api/workspaces/:id/network-settings", role: "admin" },
   "runs.read": { route: "GET /api/runs", role: "member" },
   "skills.read": { route: "GET /api/workspaces/:id/skills", role: "member" },
   "tasks.read": { route: "GET /api/workspaces/:workspaceId/tasks", role: "member" },
@@ -237,6 +252,55 @@ export function mayTakeAction(
   if (role === "root") return roles.root === true;
   const held = sessionRoleIn(roles, rule.scope === "any" ? undefined : workspaceId);
   return held !== undefined && RANK[held] >= RANK[role];
+}
+
+/** One action of the role panel: which workspace role may take it (ADR-0022 amendment 7 S9). */
+export interface RoleMatrixRow {
+  action: RoleAction;
+  /** The lowest role that may take it. */
+  role: TenantRole;
+  /** Per workspace role, what `mayTakeAction` answers for a person holding only that role. */
+  allowed: Readonly<Record<TenantRole, boolean>>;
+  /** Roles below `role` reach the route, but a handler lets them do only part (`handlerCheck`). */
+  limitedBelow: boolean;
+}
+
+/**
+ * What each workspace role may do, read from `ROLE_ACTIONS` and nothing else (amendment 7 S9),
+ * in table order: `workspace` holds the actions a workspace role takes, with one answer per role
+ * from the same rank check as `mayTakeAction`; `administrator` holds the actions only the root
+ * or a platform maintainer takes, which no workspace role grants.
+ */
+export function roleActionMatrix(): {
+  workspace: RoleMatrixRow[];
+  administrator: RoleAction[];
+} {
+  const workspace: RoleMatrixRow[] = [];
+  const administrator: RoleAction[] = [];
+  for (const action of Object.keys(ROLE_ACTIONS) as RoleAction[]) {
+    const rule: RoleActionRule = ROLE_ACTIONS[action];
+    if (rule.role === "platform" || rule.role === "root") {
+      administrator.push(action);
+      continue;
+    }
+    const allowed = Object.fromEntries(
+      WORKSPACE_ROLES.map((role) => [
+        role,
+        mayTakeAction(
+          { tenantRole: role, platformMaintainer: false, workspaceRoles: { w: role } },
+          action,
+          "w",
+        ),
+      ]),
+    ) as Record<TenantRole, boolean>;
+    workspace.push({
+      action,
+      role: rule.role,
+      allowed,
+      limitedBelow: rule.handlerCheck !== undefined,
+    });
+  }
+  return { workspace, administrator };
 }
 
 /** Who may take an action, in words a screen can show: "an Admin or Owner". */

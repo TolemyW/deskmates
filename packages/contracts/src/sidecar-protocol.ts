@@ -56,6 +56,21 @@ export type ModelJobRequest =
   /** ADR-0011 amendment 4, A30: label and propose splits for at most 40 notes; decides nothing. */
   | { kind: "memory_organize"; notes: { id: string; body: string }[] }
   /**
+   * ADR-0011 amendment 4, A28: judge whether each flagged note is still true against `activity`,
+   * the Gateway's bounded excerpt of recent shared threads and tasks; decides nothing itself.
+   */
+  | {
+      kind: "memory_recheck";
+      notes: {
+        id: string;
+        scope: "workspace" | "bot";
+        body: string;
+        effectiveAt: string;
+        lastConfirmedAt?: string;
+      }[];
+      activity: string;
+    }
+  /**
    * ADR-0002 amendment 4, B4: judge one pending L2 request. `reviewPackage` is the JSON the
    * Gateway built: the action and the originating human instruction, nothing a tool returned.
    */
@@ -87,9 +102,9 @@ export type BrowserSnapshotMode = "explicit-v1" | "inline-v2";
  */
 export type BrowserCodeApproval = "name-v1" | "effects-v1";
 /**
- * Where a run starts (issue #88, ADR-0004 amendment 1). `shared`: `/work`, as every run did
- * before the knob. `per-bot`: `botWorkDir(botName)`, with `/work` still shared. A soft
- * distinction, never access control between bots.
+ * Where a run starts (issue #88, ADR-0038). `per-bot`, the default: `botWorkDir(botName)`, and the
+ * sidecar's soft guard refuses this bot's obvious writes into another bot's directory (a guard
+ * against mistakes, not a security boundary). `shared`: `/work`, as every run did before.
  */
 export type BotWorkdirMode = "shared" | "per-bot";
 
@@ -178,15 +193,10 @@ export interface StartRunRequest {
    */
   groupGuidance?: "owner-v1";
   /**
-   * Present only under the opt-in `per-bot` working-directory mode recorded on the run row
-   * (`runs.config_json.botWorkdir`); absent keeps `/work` and the prompt of every earlier run.
+   * Present for a `per-bot` run, the mode recorded on the run row (`runs.config_json.botWorkdir`,
+   * ADR-0038 decision 1); absent keeps the shared `/work` and the prompt of every earlier run.
    */
   workdirMode?: "per-bot";
-  /**
-   * ADR-0036 decision 4: the git repository under `/work` the sidecar prepares this bot's
-   * worktree of before the query. Sent only with `workdirMode: "per-bot"`, from the run row.
-   */
-  worktreeRepo?: string;
   /**
    * ADR-0036 decision 6: the same bot's live run on its other lane when this process started.
    * Sent only when the run froze `laneNotice` on and such a run exists; a note, never a lock.
@@ -267,6 +277,9 @@ export type SidecarToolName =
   | "memory_search"
   | "task_deliver"
   | "app_publish"
+  // ADR-0040: offered only where the installation configures the service.
+  | "image_describe"
+  | "audio_transcribe"
   | ConnectorToolName
   | IntegrationToolName;
 

@@ -279,7 +279,7 @@
       "notified": 0
     }
   },
-  "setAutoApproval": {
+  "setApprovalMode": {
     "requests": [
       {
         "url": "https://gw.test/api/workspaces/ws%2F1/auto-approval",
@@ -291,7 +291,7 @@
           "x-deskmates-tenant": "tn/1"
         },
         "body": {
-          "enabled": true
+          "mode": "approve_all"
         },
         "credentials": "same-origin",
         "signal": false

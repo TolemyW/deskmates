@@ -8,6 +8,7 @@ import {
   type NetworkRule,
   type WorkspaceNetworkSelection,
   type WorkspaceNetworkView,
+  isOpenInternetAllowlist,
   networkGrantAllowsUrl,
 } from "@deskmates/contracts";
 import type { DemoFeature, DemoRequest } from "../../demo/feature.js";
@@ -36,6 +37,8 @@ const store = (s: DemoState) =>
       },
     ] as NetworkProfile[],
     selections: {} as Record<string, WorkspaceNetworkSelection[]>,
+    /** Workspaces whose open-internet switch is off; absent is the default, allowed. */
+    lockedOut: [] as string[],
   }));
 
 function view(s: DemoState, workspaceId: string): WorkspaceNetworkView {
@@ -44,7 +47,16 @@ function view(s: DemoState, workspaceId: string): WorkspaceNetworkView {
   const grants = selections.flatMap(
     (sel) => st.profiles.find((p) => p.id === sel.profileId)?.rules ?? [],
   );
-  return { workspaceId, trustedTest: selections.length > 0, selections, grants };
+  const workspace = s.workspaces.find((w) => w.id === workspaceId);
+  return {
+    workspaceId,
+    trustedTest: selections.length > 0,
+    selections,
+    grants,
+    openInternet: workspace ? isOpenInternetAllowlist(workspace.egressAllowlist) : false,
+    profilesOnOpenInternet: !st.lockedOut.includes(workspaceId),
+    available: st.profiles,
+  };
 }
 
 /** The demo has no proxy: the policy verdict is real, the network layers are not checked. */
@@ -98,7 +110,12 @@ function route(req: DemoRequest, s: DemoState): Result | undefined {
       .filter(([, list]) => list.some((sel) => sel.profileId === profileId))
       .map(([workspaceId]) => ({ workspaceId, status: "applied" as const }));
   if (path === "/api/network-profiles") {
-    if (method === "GET") return ok({ profiles: st.profiles, note: NOTE });
+    if (method === "GET")
+      return ok({
+        profiles: st.profiles.map((p) => ({ ...p, editable: true })),
+        note: NOTE,
+        manageAll: true,
+      });
     if (method === "POST") {
       const parsed = input(b);
       if (typeof parsed === "string") return invalid(parsed);
@@ -157,6 +174,16 @@ function route(req: DemoRequest, s: DemoState): Result | undefined {
     const workspaceId = decodeURIComponent(preflightMatch[1] ?? "");
     if (!s.workspaces.some((w) => w.id === workspaceId)) return notFound("workspace");
     return ok(preflight(s, workspaceId, typeof b.url === "string" ? b.url : ""));
+  }
+  const settingsMatch = req.match(/^\/api\/workspaces\/([^/]+)\/network-settings$/);
+  if (settingsMatch && method === "PUT") {
+    const workspaceId = decodeURIComponent(settingsMatch[1] ?? "");
+    if (!s.workspaces.some((w) => w.id === workspaceId)) return notFound("workspace");
+    if (typeof b.profilesOnOpenInternet !== "boolean")
+      return invalid("profilesOnOpenInternet must be a boolean");
+    st.lockedOut = st.lockedOut.filter((id) => id !== workspaceId);
+    if (!b.profilesOnOpenInternet) st.lockedOut.push(workspaceId);
+    return ok({ network: view(s, workspaceId) });
   }
   const wsMatch = req.match(/^\/api\/workspaces\/([^/]+)\/network(-profiles)?$/);
   if (wsMatch) {

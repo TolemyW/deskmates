@@ -82,6 +82,7 @@ export class AppShareModule {
       url: this.config ? `${this.originOf(row)}/` : "",
       botId: row.botId,
       runId: row.runId,
+      publishedBy: row.publishedBy,
       createdAt: row.createdAt,
       revokedAt: row.revokedAt,
       revokedBy: row.revokedBy,

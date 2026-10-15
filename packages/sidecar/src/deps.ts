@@ -45,8 +45,8 @@ export interface SidecarDeps {
   saveToolEvidence?: import("./tool-evidence.js").SaveToolEvidence;
   spawnPty?: import("./tty-session.js").PtyFactory;
   observeResources?: () => Promise<import("./resource-observation.js").ResourceObservation>;
-  /** The image's `git`, for the opt-in per-bot worktree (ADR-0036 decision 4). */
-  git?: import("./worktree.js").GitRunner;
+  /** Files for the look/OCR and speech tools (ADR-0040); absent means the container itself. */
+  operationFiles?: import("./operation-input.js").OperationFiles;
   query: QueryFn;
   tool: ToolFn;
   createSdkMcpServer: CreateSdkMcpServerFn;

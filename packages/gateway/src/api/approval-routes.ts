@@ -3,13 +3,16 @@
 // like every other operator route.
 
 import {
+  APPROVAL_MODES,
   type ApprovalId,
+  type ApprovalMode,
   type BotId,
   DeskmatesError,
   type RunId,
   type ThreadId,
   type WorkspaceId,
   decidedByHuman,
+  isApprovalMode,
 } from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
 import { AutoApprovalSettings } from "../approvals/auto-approval.js";
@@ -151,30 +154,39 @@ export function registerApprovalRoutes(
     return { run: ctx.runs.mustGet(run.id), approval: result.approval };
   });
 
-  // ADR-0002 amendment 4, B1: the workspace automatic-approval setting. Reading it is a member's;
-  // changing it an Owner's or Admin's (route policy), and every change is audited.
+  // ADR-0002 amendment 6, D1: the workspace approval mode. Reading it is a member's; changing it
+  // an Owner's or Admin's (route policy), and every change is audited.
   app.get<{ Params: { id: string } }>("/api/workspaces/:id/auto-approval", async (request) => ({
     autoApproval: new AutoApprovalSettings(ctx.db).get(request.params.id as WorkspaceId),
   }));
 
   app.put<{ Params: { id: string } }>("/api/workspaces/:id/auto-approval", async (request) => {
     const body = asRecord(request.body);
+    // The legacy boolean of amendment 4 still means automatic or manual.
     const enabled = optionalBoolean(body, "enabled");
+    if (body.mode !== undefined && !isApprovalMode(body.mode))
+      throw new DeskmatesError("validation", `mode must be one of ${APPROVAL_MODES.join(", ")}`, {
+        field: "mode",
+      });
+    const mode: ApprovalMode | undefined =
+      body.mode ?? (enabled === undefined ? undefined : enabled ? "automatic" : "manual");
     // ADR-0002 amendment 3, A7: the expiry of an unattended request rides on the same setting.
     const expiryMinutes = body.expiryMinutes;
     if (expiryMinutes !== undefined && typeof expiryMinutes !== "number")
       throw new DeskmatesError("validation", "expiryMinutes must be a number", {
         field: "expiryMinutes",
       });
-    if (enabled === undefined && expiryMinutes === undefined)
-      throw new DeskmatesError("validation", "enabled must be true or false", { field: "enabled" });
+    if (mode === undefined && expiryMinutes === undefined)
+      throw new DeskmatesError("validation", `mode must be one of ${APPROVAL_MODES.join(", ")}`, {
+        field: "mode",
+      });
     const workspaceId = request.params.id as WorkspaceId;
     ctx.workspaces.mustGet(workspaceId);
     return {
       autoApproval: new AutoApprovalSettings(ctx.db).change(
         workspaceId,
         {
-          ...(enabled === undefined ? {} : { enabled }),
+          ...(mode === undefined ? {} : { mode }),
           ...(expiryMinutes === undefined ? {} : { expiryMinutes }),
         },
         requestActorId(request, body),

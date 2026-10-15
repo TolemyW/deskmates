@@ -34,6 +34,7 @@ export * from "./model-capability.js";
 export * from "./model-config.js";
 export * from "./network-overlap.js";
 export * from "./network-profile.js";
+export * from "./operations.js";
 export * from "./operator-config.js";
 export * from "./pagination.js";
 export { type PrivateEgressTarget, parsePrivateEgressTargets } from "./private-egress.js";

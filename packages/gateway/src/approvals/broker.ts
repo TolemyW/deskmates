@@ -9,6 +9,7 @@
 
 import {
   APPROVAL_ATTACHMENT_MIME,
+  APPROVAL_MODE_ACTOR,
   type Approval,
   type ApprovalDecision,
   type ApprovalId,
@@ -81,6 +82,15 @@ export interface BrokerDeps {
   ownSecrets?: readonly string[];
 }
 
+/** What the caller already did for this request before the broker sees it. */
+export interface RequestOptions {
+  /**
+   * ADR-0002 amendment 6, D4: in `approve_all` the internal route has added this egress ask's
+   * host to the allowlist, so the broker may record the ask as allowed by the mode.
+   */
+  egressHostAdded?: boolean;
+}
+
 export interface DecideResult {
   approval: Approval;
   /** The rule an `allow_always` decision stored. */
@@ -150,7 +160,11 @@ export class ApprovalBroker {
    * The sidecar's hook met an L2 call. Returns the response to hand back at once, or `"pending"`
    * when the sidecar should poll for the duration of its short wait.
    */
-  request(run: RunRecord, rawReq: ApprovalRequest): ApprovalResponse | "pending" {
+  request(
+    run: RunRecord,
+    rawReq: ApprovalRequest,
+    options: RequestOptions = {},
+  ): ApprovalResponse | "pending" {
     if (rawReq.action.toolName === "__run_continuation__") {
       throw new DeskmatesError(
         "validation",
@@ -205,6 +219,33 @@ export class ApprovalBroker {
     }
 
     const instruction = this.instructionFor(run);
+    // ADR-0002 amendment 6, D4: `approve_all` allows every gated action without asking anyone,
+    // after the stored rules. An egress ask is allowed only once its host is on the allowlist.
+    if (
+      this.deps.reviews?.mode(run) === "approve_all" &&
+      (req.kind !== "egress" || options.egressHostAdded === true)
+    ) {
+      const decision = req.kind === "egress" ? "allow_always" : "allow_once";
+      const approval = this.deps.approvals.create({
+        ...this.base(run, req),
+        ...(instruction === undefined ? {} : { instruction }),
+        decision,
+        decidedBy: APPROVAL_MODE_ACTOR,
+      });
+      this.event(run.id, {
+        phase: "mode_allowed",
+        mode: "approve_all",
+        approvalId: approval.id,
+        decision,
+        decidedBy: APPROVAL_MODE_ACTOR,
+        toolName: req.action.toolName,
+        riskLevel: req.riskLevel,
+        targetOrigin: req.action.targetOrigin ?? null,
+        argumentSummary: req.action.argumentSummary ?? null,
+      });
+      this.publishApproval(approval);
+      return this.response(approval);
+    }
     const approval = this.deps.approvals.create({
       ...this.base(run, req),
       ...(instruction === undefined ? {} : { instruction }),
@@ -394,7 +435,10 @@ export class ApprovalBroker {
           "run is not awaiting this continuation decision",
         );
       }
+      // ADR-0002 amendment 6, D6: past the limit in approve_all the reviewer, or a person after
+      // its escalation, may still continue the run once more.
       if (
+        owner.config.continuationBeyondLimit !== true &&
         !continuationAllowed(owner.config, Number(owner.config.continuationCount ?? 0)) &&
         decision === "allow_once"
       ) {

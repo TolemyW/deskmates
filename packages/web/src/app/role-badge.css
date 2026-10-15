@@ -1,0 +1,121 @@
+/* The role badge at the top right of the shell and the role panel it opens
+   (ADR-0022 amendment 7 S8, S9). Loaded by src/styles/feature-styles.ts. Unlayered, like the
+   first part of shell.css: the panel's table must win over design-refresh.css's th and td. */
+.content > .shell-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 0;
+  justify-content: flex-end;
+  padding: 8px 16px 0;
+  pointer-events: none;
+}
+.content > .shell-topbar > * {
+  pointer-events: auto;
+}
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface);
+  color: var(--app-text-2);
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.role-badge:hover {
+  background: var(--surface-2);
+}
+.role-badge:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.role-badge[data-role="guest"],
+.role-badge[data-role="none"] {
+  border-color: color-mix(in srgb, var(--app-warning) 45%, var(--app-border));
+  background: color-mix(in srgb, var(--app-warning) 10%, var(--app-surface));
+}
+.role-panel {
+  gap: 10px;
+}
+.role-panel-title {
+  margin: 0;
+  padding-right: 32px;
+  font-size: var(--app-text-lg);
+  font-weight: 700;
+}
+.role-panel-note {
+  margin: 0;
+  font-size: var(--app-text-sm);
+}
+.role-panel-scroll {
+  min-height: 0;
+  overflow: auto;
+}
+.role-panel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--app-text-sm);
+}
+.role-panel-table th,
+.role-panel-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--app-border);
+  background: transparent;
+  font-size: var(--app-text-sm);
+  text-align: center;
+  vertical-align: middle;
+}
+.role-panel-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--background);
+  font-weight: 600;
+}
+.role-panel-table th[scope="row"],
+.role-panel-table thead th:first-child {
+  text-align: left;
+  font-weight: 400;
+}
+.role-panel-table td[data-own] {
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+}
+.role-panel-table thead th[data-own] {
+  background: color-mix(in srgb, var(--primary) 16%, var(--background));
+}
+.role-panel-table td[data-allowed="false"] {
+  color: var(--app-text-4);
+}
+.role-panel-table td > svg {
+  display: inline-block;
+}
+.role-panel-you {
+  display: block;
+  color: var(--primary);
+  font-size: var(--app-text-xs);
+}
+.role-panel-limited {
+  display: block;
+}
+.role-panel-subtitle {
+  margin: 14px 0 6px;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+}
+.role-panel-admin {
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--app-text-sm);
+}
+.role-panel-admin[data-own] {
+  color: var(--primary);
+}

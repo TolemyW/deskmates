@@ -76,19 +76,22 @@ interface World {
   share: AppShareRow;
   host: string;
   origin: string;
+  /** The operator UI's public origin, the only one an entry ticket is accepted from. */
+  operator: string;
   seen: Seen[];
 }
 
-async function world(): Promise<World> {
+/**
+ * `baseUrl` and `operatorOrigin` default to a local `apps.localhost` deployment; the TLS reverse
+ * proxy topology (decision 11) passes its public URLs while the listener stays plain HTTP.
+ */
+async function world(topology: { baseUrl?: string; operatorOrigin?: string } = {}): Promise<World> {
   const h = await startHarness();
   cleanup.push(() => h.close());
+  const baseUrl = topology.baseUrl ?? "http://apps.localhost";
+  const operator = topology.operatorOrigin ?? h.baseUrl;
   Object.assign(h.app.deskmates.ctx.config, {
-    appShares: {
-      baseUrl: "http://apps.localhost",
-      operatorOrigin: h.baseUrl,
-      port: 0,
-      bind: "127.0.0.1",
-    },
+    appShares: { baseUrl, operatorOrigin: operator, port: 0, bind: "127.0.0.1" },
   });
   const r = await seedRoles(h);
   const seen: Seen[] = [];
@@ -110,11 +113,11 @@ async function world(): Promise<World> {
     workspaceId: r.workspace.id,
     port: 3000,
     label: "Todo",
-    botId: r.bot.id,
-    runId: "run_x",
+    by: { kind: "bot", botId: r.bot.id, runId: "run_x" },
   });
-  const host = `${share.id.slice(4)}.apps.localhost`;
-  return { h, r, port, share, host, origin: `http://${host}`, seen };
+  const base = new URL(baseUrl);
+  const host = `${share.id.slice(4)}.${base.host}`;
+  return { h, r, port, share, host, origin: `${base.protocol}//${host}`, operator, seen };
 }
 
 /** The UI's entry: ticket from the operator API, form POST from the operator origin. */
@@ -130,7 +133,7 @@ async function enter(w: World, jar = w.r.member, path = "/") {
     method: "POST",
     path: "/__deskmates/enter",
     headers: {
-      origin: w.h.baseUrl,
+      origin: w.operator,
       "content-type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({ ticket: opened.json.ticket }).toString(),
@@ -195,8 +198,7 @@ describe("entry and grants (decision 3)", () => {
       workspaceId: w.r.workspace.id,
       port: 3001,
       label: "Other",
-      botId: w.r.bot.id,
-      runId: "run_x",
+      by: { kind: "bot", botId: w.r.bot.id, runId: "run_x" },
     }).share;
     const opened = await w.r.member.json<AppShareOpenResponse>(
       "POST",
@@ -276,8 +278,7 @@ describe("forwarding (decisions 4 and 5)", () => {
       workspaceId: other.id,
       port: 3000,
       label: "Theirs",
-      botId: w.r.bot.id,
-      runId: "run_x",
+      by: { kind: "bot", botId: w.r.bot.id, runId: "run_x" },
     }).share;
     const cookie = grantCookie((await enter(w)).res.headers["set-cookie"]);
     const res = await appRequest(w.port, {
@@ -294,8 +295,7 @@ describe("forwarding (decisions 4 and 5)", () => {
       workspaceId: w.r.workspace.id,
       port: 3999,
       label: "Stopped",
-      botId: w.r.bot.id,
-      runId: "run_x",
+      by: { kind: "bot", botId: w.r.bot.id, runId: "run_x" },
     }).share;
     const host = `${stopped.id.slice(4)}.apps.localhost`;
     const opened = await w.r.member.json<AppShareOpenResponse>(
@@ -359,5 +359,56 @@ describe("streams and revocation (decisions 6 and 8)", () => {
       socket.once("open", () => resolve(101));
     });
     expect(status).toBe(403);
+  });
+});
+
+describe("an IP-literal operator and a nip.io base behind a TLS proxy (decision 11)", () => {
+  it("matches the Host with the public port, sets a __Host- Secure grant and checks Origin", async () => {
+    const w = await world({
+      baseUrl: "https://10.20.40.132.nip.io:18443",
+      operatorOrigin: "https://10.20.40.132:18443",
+    });
+    expect(w.host).toMatch(/^[0-9a-f]{32}\.172\.16\.181\.132\.nip\.io:18443$/);
+    // Caddy keeps the Host; a request for the base host without its port names nothing.
+    expect((await appRequest(w.port, { host: w.host.replace(":18443", "") })).status).toBe(404);
+    const { res } = await enter(w, w.r.member, "/board");
+    expect(res.status).toBe(303);
+    expect(res.headers.location).toBe("/board");
+    const set = res.headers["set-cookie"]?.[0] ?? "";
+    expect(set).toMatch(/^__Host-deskmates-app=[0-9a-f]{64}; Path=\/; HttpOnly; SameSite=Lax; /);
+    expect(set).toMatch(/; Secure$/);
+    expect(set).not.toMatch(/domain=/i);
+    const cookie = set.split(";")[0] ?? "";
+    const page = await appRequest(w.port, { host: w.host, path: "/board", headers: { cookie } });
+    expect(page.status).toBe(200);
+    const post = (origin: string) =>
+      appRequest(w.port, {
+        host: w.host,
+        method: "POST",
+        path: "/api/notes",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: "{}",
+      });
+    expect((await post(w.origin)).status).toBe(200);
+    expect(w.origin).toBe(`https://${w.host}`);
+    expect((await post(w.origin.replace("https:", "http:"))).status).toBe(403);
+    // The entry is accepted only from the operator's exact origin, port included.
+    const opened = await w.r.member.json<AppShareOpenResponse>(
+      "POST",
+      `/api/workspaces/${w.r.workspace.id}/app-shares/${w.share.id}/open`,
+      { body: {} },
+    );
+    expect(opened.json.enterUrl).toBe(`https://${w.host}/__deskmates/enter`);
+    const wrongPort = await appRequest(w.port, {
+      host: w.host,
+      method: "POST",
+      path: "/__deskmates/enter",
+      headers: {
+        origin: "https://10.20.40.132",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: `ticket=${opened.json.ticket}`,
+    });
+    expect(wrongPort.status).toBe(403);
   });
 });

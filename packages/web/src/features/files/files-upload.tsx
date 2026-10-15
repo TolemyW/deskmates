@@ -27,6 +27,8 @@ export interface UploadJob {
   state: "uploading" | "completed" | "failed" | "cancelled";
   error?: string;
   path?: string;
+  /** The session id, known once the Gateway created it. */
+  uploadId?: string;
 }
 
 export interface WorkspaceUploads {
@@ -35,6 +37,8 @@ export interface WorkspaceUploads {
   cancel(key: string): void;
   retry(key: string): void;
   dismiss(key: string): void;
+  /** Cancel every upload in flight and forget every job (a chat composer switching threads). */
+  clear(): void;
 }
 
 /** Upload jobs of one workspace; `onCompleted` sees every finished session. */
@@ -88,11 +92,13 @@ export function useWorkspaceUploads(
         const done = await uploadWorkspaceFile(api, workspaceId, entry.file, {
           idempotencyKey: key,
           signal: controller.signal,
-          onProgress: (progress) => update(key, { sent: progress.sentBytes }),
+          onProgress: (progress) =>
+            update(key, { sent: progress.sentBytes, uploadId: progress.uploadId }),
         });
         update(key, {
           state: "completed",
           sent: entry.file.size,
+          uploadId: done.id,
           ...(done.path ? { path: done.path } : {}),
         });
         if (mounted.current) completed.current?.(done);
@@ -124,8 +130,14 @@ export function useWorkspaceUploads(
       void run(key);
     },
     dismiss(key) {
+      files.current.get(key)?.controller?.abort();
       files.current.delete(key);
       setJobs((current) => current.filter((job) => job.key !== key));
+    },
+    clear() {
+      for (const entry of files.current.values()) entry.controller?.abort();
+      files.current.clear();
+      setJobs([]);
     },
   };
 }

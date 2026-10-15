@@ -45,7 +45,7 @@ function openFlags(workspaceId: WorkspaceId = f.a.workspace.id) {
 describe("A26 sweep", () => {
   it("flags exactly the qualifying notes, once, and creates no run", () => {
     const old = note("The billing export runs on Mondays.");
-    note("The staging host is staging.example.test.", { effectiveAt: daysAgo(3) });
+    note("The staging host is staging.example.test.", { effectiveAt: daysAgo(0.5) });
     note("Thread state: 3 of 5 rows imported.", {
       scope: "task",
       threadId: f.a.thread.id,
@@ -78,7 +78,7 @@ describe("A26 sweep", () => {
     );
     expect(page.total).toBe(2);
     expect(page.byReason).toEqual({ age: 1, ttl_expiring: 1 });
-    expect(page.items.find((r) => r.reason === "age")?.horizonDays).toBe(90);
+    expect(page.items.find((r) => r.reason === "age")?.horizonDays).toBe(1);
     // A28: the sweep writes flag rows only.
     expect(count("SELECT COUNT(*) AS n FROM runs")).toBe(runs);
     expect(count("SELECT COUNT(*) AS n FROM memory_versions")).toBe(versions);

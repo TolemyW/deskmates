@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// The workspace detail's Working directories section (ADR-0036): shows the effective settings
-// with their source and the convention note; saves through the API, clearing what is blank.
+// The workspace detail's Working directories section (ADR-0036 as amended by ADR-0038): shows the
+// effective mode with its source and the read-only note; saves through the API, clearing what is
+// blank. There is no repository field: each bot clones its own code.
 
 import type { WorkdirSettingsView, WorkspaceDirectoryEntry } from "@deskmates/contracts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -16,8 +17,8 @@ function view(extra: Partial<WorkdirSettingsView> = {}): WorkdirSettingsView {
   return {
     workspaceId: "ws_1",
     settings: {},
-    effective: { mode: "shared", source: "gateway", worktreeRepo: null, laneNotice: false },
-    gatewayMode: "shared",
+    effective: { mode: "per-bot", source: "gateway", laneNotice: false },
+    gatewayMode: "per-bot",
     ...extra,
   };
 }
@@ -28,13 +29,8 @@ function client(initial: WorkdirSettingsView) {
     if (init?.method === "PUT") {
       puts.push(JSON.parse(String(init.body)));
       const next = view({
-        settings: { mode: "per-bot", worktreeRepo: "/work/app" },
-        effective: {
-          mode: "per-bot",
-          source: "workspace",
-          worktreeRepo: "/work/app",
-          laneNotice: false,
-        },
+        settings: { mode: "shared" },
+        effective: { mode: "shared", source: "workspace", laneNotice: false },
       });
       return Response.json({ workdir: next });
     }
@@ -43,39 +39,25 @@ function client(initial: WorkdirSettingsView) {
   return { api: createApiClient({ fetch: fetcher }), puts };
 }
 
-it("shows the inherited mode, no repository and the convention note", async () => {
+it("shows the inherited per-bot mode and the read-only note, with no repository", async () => {
   const { api } = client(view());
   render(<WorkdirSection api={api} entry={entry} onChanged={() => {}} />);
-  expect(await screen.findByText("Shared /work · server default")).toBeTruthy();
-  expect(screen.getByText("None")).toBeTruthy();
-  expect(screen.getByText(/A convention, not a permission/)).toBeTruthy();
+  expect(
+    await screen.findByText("Own directory per bot (/work/bots/…) · server default"),
+  ).toBeTruthy();
+  expect(screen.getByText(/not a security boundary/)).toBeTruthy();
+  expect(screen.queryByText(/git repository/)).toBeNull();
 });
 
-it("saves a per-bot mode with a repository and clears the lane notice", async () => {
+it("saves the shared mode and clears the lane notice", async () => {
   const { api, puts } = client(view());
   render(<WorkdirSection api={api} entry={entry} onChanged={() => {}} />);
   fireEvent.click(await screen.findByText("Edit working directories"));
-  const repo = screen.getByLabelText("Shared git repository") as HTMLInputElement;
-  expect(repo.disabled).toBe(true);
-  fireEvent.change(screen.getByLabelText("Start directory"), { target: { value: "per-bot" } });
-  fireEvent.change(repo, { target: { value: "/work/app" } });
-  expect(screen.getByText(/it is an experiment/)).toBeTruthy();
+  expect(screen.queryByLabelText("Shared git repository")).toBeNull();
+  fireEvent.change(screen.getByLabelText("Start directory"), { target: { value: "shared" } });
+  expect(screen.getByText(/clones its own copy/)).toBeTruthy();
   fireEvent.click(screen.getByText("Save working directories"));
   await waitFor(() => expect(puts).toHaveLength(1));
-  expect(puts[0]).toEqual({ mode: "per-bot", worktreeRepo: "/work/app", laneNotice: null });
-  expect(await screen.findByText("/work/app")).toBeTruthy();
-  expect(screen.getByText(/workspace setting/)).toBeTruthy();
-});
-
-it("refuses a repository under /work/bots without calling the API", async () => {
-  const { api, puts } = client(view());
-  render(<WorkdirSection api={api} entry={entry} onChanged={() => {}} />);
-  fireEvent.click(await screen.findByText("Edit working directories"));
-  fireEvent.change(screen.getByLabelText("Start directory"), { target: { value: "per-bot" } });
-  fireEvent.change(screen.getByLabelText("Shared git repository"), {
-    target: { value: "/work/bots/nova" },
-  });
-  fireEvent.click(screen.getByText("Save working directories"));
-  expect((await screen.findByRole("alert")).textContent).toContain("not under /work/bots");
-  expect(puts).toHaveLength(0);
+  expect(puts[0]).toEqual({ mode: "shared", laneNotice: null });
+  expect(await screen.findByText(/workspace setting/)).toBeTruthy();
 });

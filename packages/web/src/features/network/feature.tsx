@@ -1,5 +1,6 @@
-// Network profiles: a navigation link for the administrator account only (ADR-0027 amendment 1
-// decision 12); anyone else who opens `#/network` lands on Chats, like any link they do not see.
+// Network profiles: a navigation link for the administrator account and workspace Owners (ADR-0027
+// amendment 1 decision 12, owner-decided 2026-10-14); anyone else who opens `#/network` lands on
+// Chats, like any link they do not see. Admins select profiles on the workspace detail page.
 
 import { Network } from "lucide-react";
 import { defineFeature } from "../../app/feature.js";

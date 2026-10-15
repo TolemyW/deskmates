@@ -275,12 +275,10 @@ describe("config", () => {
     );
   });
 
-  it("keeps the per-bot working directory opt-in and rejects unknown modes (issue #88)", () => {
-    expect(loadConfig(BASE_ENV).botWorkdir).toBe("shared");
-    expect(loadConfig({ ...BASE_ENV, DESKMATES_BOT_WORKDIR: "" }).botWorkdir).toBe("shared");
-    expect(loadConfig({ ...BASE_ENV, DESKMATES_BOT_WORKDIR: "per-bot" }).botWorkdir).toBe(
-      "per-bot",
-    );
+  it("defaults the working directory to per-bot and rejects unknown modes (ADR-0038)", () => {
+    expect(loadConfig(BASE_ENV).botWorkdir).toBe("per-bot");
+    expect(loadConfig({ ...BASE_ENV, DESKMATES_BOT_WORKDIR: "" }).botWorkdir).toBe("per-bot");
+    expect(loadConfig({ ...BASE_ENV, DESKMATES_BOT_WORKDIR: "shared" }).botWorkdir).toBe("shared");
     expect(() => loadConfig({ ...BASE_ENV, DESKMATES_BOT_WORKDIR: "worktree" })).toThrow(
       /DESKMATES_BOT_WORKDIR/,
     );

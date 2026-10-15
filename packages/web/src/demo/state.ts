@@ -131,6 +131,11 @@ export class DemoState {
       cheapModel: "demo-small",
       release: "demo",
       cronTimeZone: "UTC",
+      models: [
+        { model: "demo-large", upstream: "default" },
+        { model: "demo-local", upstream: "local" },
+        { model: "demo-small", upstream: "default" },
+      ],
     };
   }
 

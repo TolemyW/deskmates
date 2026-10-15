@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// T0: the upload controls of ADR-0014 amendment A5. The chat composer's attach button uploads and
-// hands the final path to the draft without sending anything (decision 34); the Files screen's
-// control shows progress, failure with retry and completion, and is hidden from a Guest.
+// T0: the Files screen's upload control of ADR-0014 amendment A5: progress, failure with retry and
+// completion, hidden from a Guest. The chat composer's attachments are covered in
+// features/chats/composer-attachments.test.tsx.
 
 import type { WorkspaceId, WorkspaceUpload } from "@deskmates/contracts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -10,7 +10,6 @@ import { ApiError } from "../../api/types.js";
 import { SessionRolesProvider } from "../../state/session-roles.js";
 import { workspace } from "../../test-support/fixtures.js";
 import { FilesUploadControl } from "./files-upload.js";
-import { UploadAttachButton, draftWithPath } from "./upload-attach-button.js";
 import type { UploadApi } from "./upload-driver.js";
 
 afterEach(cleanup);
@@ -64,37 +63,6 @@ const choose = (testId: string, name: string, text = "hello") =>
   fireEvent.change(screen.getByTestId(testId), {
     target: { files: [new File([text], name)] },
   });
-
-describe("draftWithPath", () => {
-  it("adds the path on its own line so the path token ends cleanly", () => {
-    expect(draftWithPath("", "/work/uploads/d/a.pdf")).toBe("/work/uploads/d/a.pdf");
-    expect(draftWithPath("please read", "/work/uploads/d/a.pdf")).toBe(
-      "please read\n/work/uploads/d/a.pdf",
-    );
-    expect(draftWithPath("read ", "/work/uploads/d/a.pdf")).toBe("read /work/uploads/d/a.pdf");
-  });
-});
-
-describe("UploadAttachButton", () => {
-  it("uploads the chosen file and hands its workspace path to the draft, sending nothing", async () => {
-    const api = fakeApi();
-    const onUploaded = vi.fn();
-    render(<UploadAttachButton api={api} workspaceId={WS} onUploaded={onUploaded} />);
-    expect(screen.getByRole("button", { name: "Attach a file" })).toBeTruthy();
-    choose("composer-attach-input", "notes.txt");
-    await waitFor(() =>
-      expect(onUploaded).toHaveBeenCalledWith("/work/uploads/2026-10-14/notes.txt"),
-    );
-    expect(api.completeWorkspaceUpload).toHaveBeenCalledTimes(1);
-  });
-
-  it("is disabled without a workspace", () => {
-    render(<UploadAttachButton api={fakeApi()} workspaceId={undefined} onUploaded={vi.fn()} />);
-    expect(
-      (screen.getByRole("button", { name: "Attach a file" }) as HTMLButtonElement).disabled,
-    ).toBe(true);
-  });
-});
 
 describe("FilesUploadControl", () => {
   it("shows a failure with Retry, resumes the same session, then completes and refreshes", async () => {

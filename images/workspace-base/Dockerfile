@@ -22,6 +22,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb fluxbox x11vnc novnc websockify xdotool imagemagick \
     postgresql-client git gh python3 make g++ curl ca-certificates procps \
+    poppler-utils \
  && rm -rf /var/lib/apt/lists/* \
  && ln -sf vnc.html /usr/share/novnc/index.html
 

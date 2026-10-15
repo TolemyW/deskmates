@@ -5,9 +5,12 @@
 import {
   APPROVAL_ATTACHMENT_MIME,
   APPROVAL_EXPIRY_DEFAULT_MINUTES,
+  APPROVAL_MODE_DEFAULT,
   type ApprovalDecision,
   type ApprovalId,
+  type ApprovalMode,
   type ApprovalRule,
+  isApprovalMode,
 } from "@deskmates/contracts";
 import type { GatewayEvent } from "../../api/types.js";
 import type { DemoFeature, DemoRequest, DemoSeedContext } from "../../demo/feature.js";
@@ -17,8 +20,8 @@ import { resumeAfterApproval } from "../../demo/team.js";
 
 export const demo: DemoFeature = { route, seed: { after: "team", run: seed } };
 
-/** The demo's automatic-approval switch per workspace (ADR-0002 amendment 4); off by default. */
-const autoApproval = new Map<string, boolean>();
+/** The demo's approval mode per workspace (ADR-0002 amendment 6); automatic by default. */
+const approvalMode = new Map<string, ApprovalMode>();
 /** The demo's request expiry per workspace (ADR-0002 amendment 3, A7). */
 const approvalExpiry = new Map<string, number>();
 
@@ -74,14 +77,17 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
   if ((x = m(/^\/api\/workspaces\/([^/]+)\/auto-approval$/))) {
     const workspaceId = decodeURIComponent(x[1] ?? "");
+    if (method === "PUT" && isApprovalMode(b.mode)) approvalMode.set(workspaceId, b.mode);
     if (method === "PUT" && typeof b.enabled === "boolean")
-      autoApproval.set(workspaceId, b.enabled);
+      approvalMode.set(workspaceId, b.enabled ? "automatic" : "manual");
     if (method === "PUT" && typeof b.expiryMinutes === "number")
       approvalExpiry.set(workspaceId, b.expiryMinutes);
+    const mode = approvalMode.get(workspaceId) ?? APPROVAL_MODE_DEFAULT;
     return ok({
       autoApproval: {
         workspaceId,
-        enabled: autoApproval.get(workspaceId) ?? false,
+        mode,
+        enabled: mode === "automatic",
         expiryMinutes: approvalExpiry.get(workspaceId) ?? APPROVAL_EXPIRY_DEFAULT_MINUTES,
       },
     });

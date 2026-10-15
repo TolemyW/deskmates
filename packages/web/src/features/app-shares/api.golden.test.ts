@@ -9,6 +9,7 @@ import { type AppSharesApi, createAppSharesApi } from "./api.js";
 const CASES: GoldenCases<AppSharesApi> = {
   listAppShares: (a) => a.listAppShares(WS),
   openAppShare: (a) => a.openAppShare(WS, "app_1", "/todos/7"),
+  publishAppShare: (a) => a.publishAppShare(WS, 3000, "Todo app"),
   revokeAppShare: (a) => a.revokeAppShare(WS, "app_1"),
 };
 

@@ -26,20 +26,15 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `PUT /api/prices` |
 | `GET /api/runtime` |
 
-#### The root alone (the protected account `admin`, or the operator credential; ADR-0022 amendment 6 W2) (10)
+#### The root alone (the protected account `admin`, or the operator credential; ADR-0022 amendment 6 W2) (5)
 
 | Route |
 |---|
 | `GET /api/network-overlaps` |
-| `GET /api/network-profiles` |
-| `POST /api/network-profiles` |
-| `DELETE /api/network-profiles/:id` |
-| `PUT /api/network-profiles/:id` |
 | `GET /api/service-principals` |
 | `POST /api/service-principals` |
 | `POST /api/service-principals/:id/disable` |
 | `POST /api/service-principals/:id/rotate` |
-| `PUT /api/workspaces/:id/network-profiles` |
 
 #### Any signed-in principal (installation-wide facts, no tenant data) (11)
 
@@ -57,7 +52,16 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `PATCH /auth/preferences` |
 | `PATCH /auth/profile` |
 
-#### Admin or Owner of the workspace every identifier names (naming none: of a workspace of the request's tenant) (78)
+#### Owner of the workspace every identifier names (naming none: of a workspace of the request's tenant) (4)
+
+| Route | Identifiers the guard resolves to the tenant and to their workspace |
+|---|---|
+| `GET /api/network-profiles` | handler: the root sees every profile; an Owner the root's, their own and their co-Owners' |
+| `POST /api/network-profiles` | handler: an Owner's profile names its creator |
+| `DELETE /api/network-profiles/:id` | handler: the root, or the Owner who created the profile; anyone else 403 profile_owner |
+| `PUT /api/network-profiles/:id` | handler: the root, or the Owner who created the profile; anyone else 403 profile_owner |
+
+#### Admin or Owner of the workspace every identifier names (naming none: of a workspace of the request's tenant) (81)
 
 | Route | Identifiers the guard resolves to the tenant and to their workspace |
 |---|---|
@@ -111,7 +115,6 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/workspaces` | none |
 | `DELETE /api/workspaces/:id` | path `id`: workspace |
 | `PATCH /api/workspaces/:id` | path `id`: workspace |
-| `DELETE /api/workspaces/:id/app-shares/:shareId` | path `id`: workspace; handler: the publication must belong to the workspace in the path, else 404 |
 | `POST /api/workspaces/:id/archive` | path `id`: workspace |
 | `PUT /api/workspaces/:id/auto-approval` | path `id`: workspace |
 | `POST /api/workspaces/:id/board/:postId/moderate` | path `id`: workspace; handler: people only (a service principal is refused); the post is looked up in the workspace |
@@ -120,6 +123,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/workspaces/:id/memory-review/preview` | path `id`: workspace |
 | `POST /api/workspaces/:id/memory-review/undo` | path `id`: workspace |
 | `POST /api/workspaces/:id/memory/document-drafts` | path `id`: workspace; body `entryIds`: memoryEntry[]; body `targetDocumentId`: knowledgeDoc |
+| `PUT /api/workspaces/:id/memory/maintenance` | path `id`: workspace |
 | `POST /api/workspaces/:id/memory/organize` | path `id`: workspace |
 | `POST /api/workspaces/:id/memory/organize/reset-labels` | path `id`: workspace |
 | `POST /api/workspaces/:id/memory/revalidations/:itemId` | path `id`: workspace; handler: the revalidation must belong to the workspace in the path |
@@ -127,10 +131,13 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/workspaces/:id/model-capabilities/vision/probe` | path `id`: workspace |
 | `GET /api/workspaces/:id/network` | path `id`: workspace |
 | `POST /api/workspaces/:id/network-preflight` | path `id`: workspace |
+| `PUT /api/workspaces/:id/network-profiles` | path `id`: workspace; handler: only profiles available in the workspace, or already selected there; the root any |
+| `PUT /api/workspaces/:id/network-settings` | path `id`: workspace |
 | `POST /api/workspaces/:id/restart` | path `id`: workspace |
 | `GET /api/workspaces/:id/restart-preflight` | path `id`: workspace |
 | `POST /api/workspaces/:id/restore` | path `id`: workspace |
 | `POST /api/workspaces/:id/skills` | path `id`: workspace; body `botIds`: bot[] |
+| `DELETE /api/workspaces/:id/uploads/:uploadId/file` | path `id`: workspace; handler: the upload is looked up inside the guarded workspace |
 | `PUT /api/workspaces/:id/workdir` | path `id`: workspace |
 | `POST /api/workspaces/:workspaceId/channels/:pluginId/commands/:command` | path `workspaceId`: workspace; handler: pluginId is resolved against the release-bundled channel catalog and command against the fixed command set |
 | `POST /api/workspaces/:workspaceId/channels/:pluginId/connect` | path `workspaceId`: workspace; body `botId`: bot; handler: pluginId is resolved against the release-bundled channel catalog |
@@ -140,7 +147,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/workspaces/:workspaceId/tasks/:id/accept` | path `workspaceId`: workspace |
 | `POST /api/workspaces/:workspaceId/tasks/:id/run` | path `workspaceId`: workspace |
 
-#### Member, Admin or Owner of the workspace every identifier names (naming none: a Member of a workspace of the request's tenant) (80)
+#### Member, Admin or Owner of the workspace every identifier names (naming none: a Member of a workspace of the request's tenant) (83)
 
 | Route | Identifiers the guard resolves to the tenant and to their workspace |
 |---|---|
@@ -195,6 +202,8 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/threads/:id/rounds/:messageId/cancel` | path `id`: thread; handler: a Member (person or member principal) cancels a round only in a side chat it opened |
 | `POST /api/threads/:id/rounds/:messageId/members/:botId/retry` | path `id`: thread; path `botId`: bot; handler: a Member (person or member principal) retries a round member only in a side chat it opened |
 | `GET /api/workspaces/:id/app-shares` | path `id`: workspace |
+| `POST /api/workspaces/:id/app-shares` | path `id`: workspace |
+| `DELETE /api/workspaces/:id/app-shares/:shareId` | path `id`: workspace; handler: the publication must belong to the workspace in the path, else 404 |
 | `POST /api/workspaces/:id/app-shares/:shareId/open` | path `id`: workspace; handler: the publication must belong to the workspace in the path, else 404; a signed-in person only |
 | `GET /api/workspaces/:id/assets` | path `id`: workspace |
 | `GET /api/workspaces/:id/auto-approval` | path `id`: workspace |
@@ -203,6 +212,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `GET /api/workspaces/:id/limits` | path `id`: workspace |
 | `GET /api/workspaces/:id/memory` | path `id`: workspace; query `botId`: bot |
 | `GET /api/workspaces/:id/memory-review/groups` | path `id`: workspace |
+| `GET /api/workspaces/:id/memory/maintenance` | path `id`: workspace |
 | `GET /api/workspaces/:id/memory/organize` | path `id`: workspace |
 | `GET /api/workspaces/:id/memory/revalidations` | path `id`: workspace |
 | `GET /api/workspaces/:id/memory/search` | path `id`: workspace |
@@ -304,6 +314,8 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `GET /internal/runs/:runId/knowledge/search` | That run's token. Its tenant's Knowledge. |
 | `GET /internal/runs/:runId/memory/search` | That run's token. Its workspace's learned memory. |
 | `POST /internal/runs/:runId/messages` | That run's token. `thread_post` posts in the run's own thread; `message_bot` reaches another bot of the same workspace. |
+| `POST /internal/runs/:runId/operations/asr` | That run's token. Forwards one transcription request on bytes the sidecar read to the installation's speech service (audio_transcribe; ADR-0040). |
+| `POST /internal/runs/:runId/operations/look` | That run's token. Forwards one look/OCR request on bytes the sidecar read to the installation's vision service (image_describe; ADR-0040). Never fetches a URL. |
 | `POST /internal/runs/:runId/reply-preview` | That run's token, for its current attempt while live. Relays a reply preview to the run's own thread stream; writes no ledger row or message (ADR-0037). |
 | `POST /internal/runs/:runId/tasks/:taskId/checkpoints` | That run's token, for a task of its workspace linked to the run or its thread (task_checkpoint; ADR-0021 A3h). Changes no task state; publishes nothing. |
 | `POST /internal/runs/:runId/tasks/:taskId/deliver` | That run's token, for a task of its workspace linked to the run or its thread (task_deliver; ADR-0021 amendment 2). Files are verified through the workspace before publication (ADR-0014 A4). Never accepts. |

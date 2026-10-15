@@ -38,11 +38,13 @@ import {
   resolveReasoning,
 } from "@deskmates/contracts";
 import { approvalAttachment } from "../approvals/broker.js";
+import { continuationPlan, settleContinuationByMode } from "../approvals/continuation-mode.js";
 import { APPROVAL_EXPIRY_ACTOR } from "../approvals/expiry.js";
 import type { GatewayContext } from "../context.js";
 import { nowIso } from "../db/ids.js";
 import { newId } from "../db/ids.js";
 import type { GatewayEvent } from "../events/bus.js";
+import { refreshRunUsageSummary } from "../ledger/run-usage-summaries.js";
 import type { RunRecord } from "../ledger/runs.js";
 import { isConsolidationRun } from "../memory/consolidation.js";
 import { indexConfig } from "../memory/index.js";
@@ -53,12 +55,8 @@ import { recordAuthoredSkills } from "../skills/authoring.js";
 import { STARTER_SKILL_PACK } from "../skills/starter-catalog.js";
 import { announceDelegationOutcome } from "../threads/delegation-outcomes.js";
 import { type DeliveryGroup, buildDelivery } from "../threads/delivery.js";
-import {
-  continuationAllowed,
-  continuationPolicy,
-  freezeRunLimits,
-  runMaxTurns,
-} from "./run-limits.js";
+import { modelUpstreamsOf } from "./model-upstream-freeze.js";
+import { continuationPolicy, freezeRunLimits, runMaxTurns } from "./run-limits.js";
 import { recordTimelineMark } from "./run-timeline-marks.js";
 import { sidecarToolsFor } from "./sidecar-tools.js";
 
@@ -120,6 +118,9 @@ export class RunLifecycle {
       ...(recordedModel === undefined ? { model } : {}),
       ...(recordedCheap === undefined ? { cheapModel } : {}),
       ...(fallbackRecorded ? {} : { fallbackModel: fallbackModel ?? null }),
+      ...("modelUpstreams" in run.config
+        ? {}
+        : { modelUpstreams: modelUpstreamsOf(this.ctx, [model, cheapModel, fallbackModel]) }),
       ...vision.patch,
     };
     if (Object.keys(patch).length > 0) this.ctx.runs.setConfig(run.id, patch);
@@ -209,13 +210,13 @@ export class RunLifecycle {
    * Issue #88 (ADR-0004 amendment 1): the run row's working-directory mode, not the Gateway's
    * current one, so every process of a run starts where its first one did. `shared`, and a row
    * from before the knob, send nothing and the sidecar keeps `/work`. ADR-0036: the workspace's
-   * stored settings win over the Gateway knob and are frozen on the first process, with the
-   * worktree repository and, when the lane notice is on, the bot's other live lane.
+   * stored settings win over the Gateway knob (default `per-bot`, ADR-0038) and are frozen on the
+   * first process, with, when the lane notice is on, the bot's other live lane.
    */
   private workdirSettings(
     run: RunRecord,
     workspaceId: WorkspaceId,
-  ): Pick<StartRunRequest, "workdirMode" | "worktreeRepo" | "otherLaneRun"> {
+  ): Pick<StartRunRequest, "workdirMode" | "otherLaneRun"> {
     return this.ctx.workdir.startFields(this.ctx.runs, run, workspaceId);
   }
 
@@ -721,6 +722,14 @@ export class RunLifecycle {
             payload: { source: "budget", phase: "charge_failed", error: String(err) },
           });
         }
+        // ADR-0032 amendment 1 decision 12: the attempt's usage summary is stored once, here; a
+        // later usage write invalidates it and the next Costs reader recomputes it. Reporting
+        // only: a fault here leaves the summary missing for the reader, not the run unended.
+        try {
+          refreshRunUsageSummary(ctx.db, runId);
+        } catch {
+          // The Costs reader computes a missing summary.
+        }
         // ADR-0018 decision 2: rules are read against the window this usage is filed under (the
         // run's creation day, as the cost report does), inside the same transaction, and the
         // frames go out with the rest after the commit.
@@ -987,7 +996,10 @@ export class RunLifecycle {
     };
     // ADR-0016 amendment 2: the limit and window the run froze at its first start.
     const policy = continuationPolicy(run.config);
-    if (!ended.sdkSessionId || !continuationAllowed(run.config, continuationCount)) {
+    // ADR-0002 amendment 6, D6: in approve_all the mode continues within the limit, and past it
+    // the reviewer decides instead of the run failing.
+    const plan = continuationPlan(ctx, run, continuationCount, Boolean(ended.sdkSessionId));
+    if (plan === "fail" || !ended.sdkSessionId) {
       notify(
         `${ctx.bots.mustGet(run.botId).name} exhausted its turn budget and cannot continue. Handoff: ${handoffPath ?? "unavailable"}.`,
       );
@@ -1005,6 +1017,7 @@ export class RunLifecycle {
       continuationLimit: policy.limit,
       continuationExpiresAt: expiresAt,
       handoffPath: handoffPath ?? null,
+      continuationBeyondLimit: plan === "review",
     });
     const left =
       policy.limit === null
@@ -1041,10 +1054,12 @@ export class RunLifecycle {
     const observedTurns = ctx.events
       .list(run.id)
       .filter((event) => event.kind === "turn_usage").length;
-    notify(
-      `${ctx.bots.mustGet(run.botId).name} reached the ${String(run.config.maxTurns ?? ctx.config.maxTurns)}-turn attempt limit (${capSource}). ${observedTurns} model turns observed across ${run.attempt} attempt(s); ${usage.length ? `${tokens} recorded tokens` : "token usage unavailable"}. Delegating message: ${source?.id ?? run.triggerRef}. Handoff: ${handoffPath ?? "unavailable"}. ${left}. Continue or stop by ${expiresAt}. A bot member can decide with approval_decide(${approvalId}, allow_once) to continue or approval_decide(${approvalId}, deny) to stop.`,
-      approvalId,
-    );
+    const askPeople = (): void =>
+      notify(
+        `${ctx.bots.mustGet(run.botId).name} reached the ${String(run.config.maxTurns ?? ctx.config.maxTurns)}-turn attempt limit (${capSource}). ${observedTurns} model turns observed across ${run.attempt} attempt(s); ${usage.length ? `${tokens} recorded tokens` : "token usage unavailable"}. Delegating message: ${source?.id ?? run.triggerRef}. Handoff: ${handoffPath ?? "unavailable"}. ${left}. Continue or stop by ${expiresAt}. A bot member can decide with approval_decide(${approvalId}, allow_once) to continue or approval_decide(${approvalId}, deny) to stop.`,
+        approvalId,
+      );
+    if (plan === "ask") askPeople();
     const approval = ctx.approvals.mustGet(approvalId);
     published.push(
       noticeThreadId
@@ -1063,10 +1078,13 @@ export class RunLifecycle {
         continuationWindowHours: policy.windowHours,
       },
     });
-    return this.applyStatus(published, run.id, "waiting_continuation", {
+    const parked = this.applyStatus(published, run.id, "waiting_continuation", {
       ...sessionPatch,
       resumePayload: { sdkSessionId: ended.sdkSessionId, approvalId, continuation: true },
     });
+    if (plan === "ask") return parked;
+    if (!settleContinuationByMode(ctx, published, parked, approvalId, plan)) askPeople();
+    return ctx.runs.mustGet(run.id);
   }
 
   /**

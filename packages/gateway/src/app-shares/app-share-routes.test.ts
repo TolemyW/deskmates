@@ -248,18 +248,65 @@ describe("opening (decisions 3 and 9)", () => {
   });
 });
 
+describe("a person publishes (decision 1, owner-decided 2026-10-14)", () => {
+  it("lets a Member publish a port with the same rules, audited as the person", async () => {
+    const { h, r } = await setup();
+    const path = `/api/workspaces/${r.workspace.id}/app-shares`;
+    const res = await r.member.json<AppPublishResponse>("POST", path, {
+      body: { port: 5173, label: "Preview" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.json.existing).toBe(false);
+    expect(res.json.share).toMatchObject({
+      port: 5173,
+      label: "Preview",
+      botId: null,
+      runId: null,
+      publishedBy: `user:${r.ids.mel}`,
+    });
+    expect(res.json.share.url).toBe(`http://${res.json.share.id.slice(4)}.apps.localhost/`);
+    expect(audits(h)).toEqual([
+      {
+        action: "app_share.publish",
+        actor: `user:${r.ids.mel}`,
+        target_id: res.json.share.id,
+        run_id: null,
+      },
+    ]);
+    // The same port again relabels it; reserved ports and bad labels are refused.
+    const again = await r.otherMember.json<AppPublishResponse>("POST", path, {
+      body: { port: 5173, label: "Preview 2" },
+    });
+    expect(again.json).toMatchObject({ existing: true, share: { label: "Preview 2" } });
+    expect((await r.member.fetch("POST", path, { body: { port: 6080, label: "x" } })).status).toBe(
+      400,
+    );
+    expect((await r.guest.fetch("POST", path, { body: { port: 5174, label: "x" } })).status).toBe(
+      403,
+    );
+  });
+
+  it("refuses to publish without configuration", async () => {
+    const { r } = await setup(false);
+    const res = await r.member.fetch("POST", `/api/workspaces/${r.workspace.id}/app-shares`, {
+      body: { port: 3000, label: "Todo" },
+    });
+    expect(res.status).toBe(409);
+  });
+});
+
 describe("revoking (decision 8)", () => {
-  it("needs Admin, is audited as the person and ends opening", async () => {
+  it("lets any Member stop sharing, audited as the person, and ends opening", async () => {
     const { h, r } = await setup();
     const { share } = (await publish(h, r.bot.id, { port: 3000, label: "Todo" })).json;
     const path = `/api/workspaces/${r.workspace.id}/app-shares/${share.id}`;
-    expect((await r.member.fetch("DELETE", path)).status).toBe(403);
-    const revoked = await r.admin.json<{ share: AppShare }>("DELETE", path);
+    expect((await r.guest.fetch("DELETE", path)).status).toBe(403);
+    const revoked = await r.member.json<{ share: AppShare }>("DELETE", path);
     expect(revoked.status).toBe(200);
     expect(revoked.json.share.state).toBe("revoked");
     expect(audits(h).map((a) => [a.action, a.actor])).toEqual([
       ["app_share.publish", `bot:${r.bot.id}`],
-      ["app_share.revoke", `user:${r.ids.ada}`],
+      ["app_share.revoke", `user:${r.ids.mel}`],
     ]);
     expect((await r.member.fetch("POST", `${path}/open`, { body: {} })).status).toBe(404);
     // The port can be published again, as a new publication.

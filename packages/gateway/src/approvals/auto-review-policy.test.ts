@@ -1,4 +1,4 @@
-// T0, ADR-0002 amendment 4 B3: what automatic review never decides.
+// T0, ADR-0002 amendment 4 B3 as amendment 6 D3 narrowed it: what automatic review never decides.
 
 import type { Approval, ApprovalId, BotId, RunId, ToolAction } from "@deskmates/contracts";
 import { describe, expect, it } from "vitest";
@@ -68,7 +68,18 @@ describe("reviewIneligibility", () => {
       expect(reviewIneligibility(bash(command), clean), command).toBe("permission");
   });
 
-  it("never reviews egress, continuations, browser actions, unclassified tools or credentials", () => {
+  it("reviews browser actions since amendment 6 (D3)", () => {
+    expect(
+      reviewIneligibility(approval({ toolName: "mcp__browser__browser_click" }), clean),
+    ).toBeUndefined();
+    expect(reviewIneligibility(bash("playwright-cli click e12"), clean)).toBeUndefined();
+    // A browser action that deletes is still a deletion.
+    expect(reviewIneligibility(bash("playwright-cli eval x && rm -rf /work/out"), clean)).toBe(
+      "deletion",
+    );
+  });
+
+  it("never reviews egress, continuations, unclassified tools or credentials", () => {
     expect(reviewIneligibility(approval({ toolName: "Bash" }, { kind: "egress" }), clean)).toBe(
       "egress",
     );
@@ -78,10 +89,6 @@ describe("reviewIneligibility", () => {
         clean,
       ),
     ).toBe("continuation");
-    expect(reviewIneligibility(approval({ toolName: "mcp__browser__browser_click" }), clean)).toBe(
-      "browser",
-    );
-    expect(reviewIneligibility(bash("playwright-cli click e12"), clean)).toBe("browser");
     expect(
       reviewIneligibility(approval({ toolName: "NewSdkTool", unclassified: true }), clean),
     ).toBe("unclassified");

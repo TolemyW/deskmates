@@ -1,14 +1,13 @@
-// Detail › Working directories (ADR-0036): where this workspace's bots start, the git repository
-// the platform prepares one worktree of per bot, and whether a run is told about its bot's other
-// live lane. A convention and tooling, never a permission; each setting changes the bots' prompts,
-// so it is an experiment, not a default. Opening the section only reads.
+// Detail › Working directories (ADR-0036 as amended by ADR-0038): where this workspace's bots
+// start, own directory per bot (the default) or the shared /work, and whether a run is told about
+// its bot's other live lane. In per-bot mode a teammate's directory is read-only to a bot through
+// a soft guard against mistakes, not a security boundary. Opening the section only reads.
 
 import type {
   BotWorkdirMode,
   WorkdirSettingsInput,
   WorkdirSettingsView,
 } from "@deskmates/contracts";
-import { worktreeRepoProblem } from "@deskmates/contracts";
 import { type FormEvent, useEffect, useState } from "react";
 import { Button } from "../../components/ui/button.js";
 import { errorMessage } from "../../format.js";
@@ -20,23 +19,19 @@ type ModeChoice = "inherit" | BotWorkdirMode;
 
 interface Draft {
   mode: ModeChoice;
-  repo: string;
   laneNotice: boolean;
 }
 
 function draftOf(view: WorkdirSettingsView): Draft {
   return {
     mode: view.settings.mode ?? "inherit",
-    repo: view.settings.worktreeRepo ?? "",
     laneNotice: view.settings.laneNotice === true,
   };
 }
 
 function inputOf(draft: Draft): WorkdirSettingsInput {
-  const perBot = draft.mode === "per-bot";
   return {
     mode: draft.mode === "inherit" ? null : draft.mode,
-    worktreeRepo: perBot && draft.repo.trim() !== "" ? draft.repo.trim() : null,
     laneNotice: draft.laneNotice ? true : null,
   };
 }
@@ -67,10 +62,6 @@ export function WorkdirSection({ api, entry }: DetailSectionProps) {
     event.preventDefault();
     if (!draft) return;
     const input = inputOf(draft);
-    if (typeof input.worktreeRepo === "string" && worktreeRepoProblem(input.worktreeRepo)) {
-      setError(t("workdir.invalidRepo"));
-      return;
-    }
     setBusy(true);
     setError("");
     api
@@ -108,16 +99,7 @@ export function WorkdirSection({ api, entry }: DetailSectionProps) {
               <option value="per-bot">{modeText("per-bot")}</option>
             </select>
           </label>
-          <label>
-            {t("workdir.repoLabel")}
-            <input
-              value={draft.repo}
-              disabled={draft.mode !== "per-bot"}
-              placeholder={t("workdir.repoPlaceholder")}
-              onChange={(event) => setDraft({ ...draft, repo: event.target.value })}
-            />
-          </label>
-          <p className="muted small">{t("workdir.repoHelp")}</p>
+          <p className="muted small">{t("workdir.perBotHelp")}</p>
           <label className="workdir-check">
             <input
               type="checkbox"
@@ -126,7 +108,7 @@ export function WorkdirSection({ api, entry }: DetailSectionProps) {
             />
             {t("workdir.laneNoticeLabel")}
           </label>
-          <p className="muted small">{t("workdir.experiment")}</p>
+          <p className="muted small">{t("workdir.frozen")}</p>
           <div className="form-actions">
             <Button type="submit" disabled={busy}>
               {t("workdir.save")}
@@ -147,10 +129,6 @@ export function WorkdirSection({ api, entry }: DetailSectionProps) {
                   source: t(`workdir.source.${view.effective.source}`),
                 })}
               </dd>
-            </div>
-            <div>
-              <dt>{t("workdir.repoLabel")}</dt>
-              <dd>{view.effective.worktreeRepo ?? t("workdir.none")}</dd>
             </div>
             <div>
               <dt>{t("workdir.laneNoticeLabel")}</dt>

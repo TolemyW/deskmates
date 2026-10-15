@@ -1,17 +1,21 @@
 // Knowledge › Observations › Maintenance (ADR-0011 amendment 4, issue #85 phase 2), below the
 // entry list so the landing view stays the list (A21):
-// - "Needs revalidation": notes that are old, expiring, expired, or an untrusted value that
-//   replaced a trusted one (A25, A26). An Admin answers "Still true" or "Dismiss" (A27); the
-//   flags change nothing a run receives.
+// - "Needs revalidation": notes that are old (1 day, owner ruling 2026-10-14), expiring, expired,
+//   or an untrusted value that replaced a trusted one (A25, A26). The cheap model rechecks the
+//   first three automatically (A28); the default view lists what needs a person: a replaced
+//   trusted fact or a model "possibly stale". An Admin answers "Still true" or "Dismiss" (A27);
+//   the flags change nothing a run receives.
+// - "Automatic recheck": today's count, the latest job and the per-workspace settings (A34).
 // - "Draft a document": pick trusted current notes of one topic and send them to Documents as a
 //   pending proposal with citations (A29). Publishing stays the Admin review there.
-// - "Organise with the cheap model" (proposed, A30 to A32): an explicit request; labels become
+// - "Organise with the cheap model" (A30 to A32): daily on its own and on request; labels become
 //   topic tags, split proposals wait here for Accept or Reject, and an accepted split can be
 //   undone.
 
 import type {
   MemoryFreshnessReason,
   MemoryOrganizeJob,
+  MemoryRecheckVerdict,
   MemoryRevalidation,
   MemorySplitProposal,
   WorkspaceId,
@@ -23,12 +27,14 @@ import { errorMessage } from "../../format.js";
 import type { MessageKey } from "../../i18n/catalogs.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { useCan } from "../../state/session-roles.js";
-import type { MemoryTopicCount } from "./api.js";
+import type { MemoryMaintenanceView, MemoryTopicCount } from "./api.js";
 
 export type MemoryMaintenanceApi = Pick<
   ApiClient,
   | "listMemoryRevalidations"
   | "decideMemoryRevalidation"
+  | "getMemoryMaintenance"
+  | "updateMemoryMaintenanceSettings"
   | "draftKnowledgeFromObservations"
   | "getMemoryOrganizeJob"
   | "requestMemoryOrganize"
@@ -45,6 +51,14 @@ const REASON_KEYS: Record<MemoryFreshnessReason, MessageKey> = {
   ttl_expiring: "observations.maintenance.reason.ttlExpiring",
   age: "observations.maintenance.reason.age",
 };
+
+const VERDICT_KEYS: Record<MemoryRecheckVerdict, MessageKey> = {
+  still_true: "observations.maintenance.model.stillTrue",
+  possibly_stale: "observations.maintenance.model.possiblyStale",
+  unclear: "observations.maintenance.model.unclear",
+};
+
+type FlagView = "needs_human" | "all";
 
 /** Notes one draft may cite (A29). */
 const DRAFT_MAX = 50;
@@ -69,11 +83,17 @@ export function MemoryMaintenance({
   const canDraft = useCan("memory.draftDocument", workspaceId).allowed;
   const canOrganize = useCan("memory.organize", workspaceId).allowed;
   const canSplit = useCan("memory.decideSplit", workspaceId).allowed;
+  const canSettings = useCan("memory.maintenanceSettings", workspaceId).allowed;
+  const [view, setView] = useState<FlagView>("needs_human");
   const [flags, setFlags] = useState<MemoryRevalidation[]>([]);
   const [flagTotals, setFlagTotals] = useState<{
     total: number;
+    needsHuman: number;
     byReason: Partial<Record<MemoryFreshnessReason, number>>;
-  }>({ total: 0, byReason: {} });
+  }>({ total: 0, needsHuman: 0, byReason: {} });
+  const [upkeep, setUpkeep] = useState<MemoryMaintenanceView>();
+  const [limitDraft, setLimitDraft] = useState("");
+  const [organizeDaily, setOrganizeDaily] = useState(true);
   const [flagCursor, setFlagCursor] = useState<string>();
   const [topics, setTopics] = useState<MemoryTopicCount[]>([]);
   const [topic, setTopic] = useState("");
@@ -98,16 +118,20 @@ export function MemoryMaintenance({
 
   const reload = useCallback(async () => {
     try {
-      const [page, topicPage, latest, splitPage] = await Promise.all([
-        api.listMemoryRevalidations(workspaceId),
+      const [page, topicPage, latest, splitPage, maintenance] = await Promise.all([
+        api.listMemoryRevalidations(workspaceId, { view }),
         api.listMemoryTopics(workspaceId),
         api.getMemoryOrganizeJob(workspaceId),
         api.listMemorySplits(workspaceId),
+        api.getMemoryMaintenance(workspaceId),
       ]);
       if (!live.current) return;
       setFlags(page.revalidations);
       setFlagCursor(page.nextCursor);
-      setFlagTotals({ total: page.total, byReason: page.byReason });
+      setFlagTotals({ total: page.total, needsHuman: page.needsHuman, byReason: page.byReason });
+      setUpkeep(maintenance);
+      setLimitDraft(String(maintenance.settings.recheckDailyLimit));
+      setOrganizeDaily(maintenance.settings.organizeDaily);
       setTopics(topicPage.topics);
       setJob(latest);
       setSplits(splitPage.splits);
@@ -118,18 +142,19 @@ export function MemoryMaintenance({
     } finally {
       if (live.current) setLoaded(true);
     }
-  }, [api, workspaceId]);
+  }, [api, workspaceId, view]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  // A pending organisation job is polled until it settles; nothing else polls.
+  // A pending organisation or recheck job is polled until it settles; nothing else polls.
+  const recheckPending = upkeep?.recheck?.status === "pending";
   useEffect(() => {
-    if (job?.status !== "pending") return;
+    if (job?.status !== "pending" && !recheckPending) return;
     const timer = setTimeout(() => void reload(), 3000);
     return () => clearTimeout(timer);
-  }, [job, reload]);
+  }, [job, recheckPending, reload]);
 
   useEffect(() => {
     setChosen(new Set());
@@ -171,7 +196,7 @@ export function MemoryMaintenance({
   const loadMoreFlags = async () => {
     if (!flagCursor) return;
     try {
-      const page = await api.listMemoryRevalidations(workspaceId, { cursor: flagCursor });
+      const page = await api.listMemoryRevalidations(workspaceId, { view, cursor: flagCursor });
       if (!live.current) return;
       setFlags((rows) => [
         ...rows,
@@ -193,6 +218,15 @@ export function MemoryMaintenance({
     )
     .join(" · ");
 
+  const shownTotal = view === "needs_human" ? flagTotals.needsHuman : flagTotals.total;
+  const limitValue = Number(limitDraft);
+  const limitValid =
+    limitDraft.trim() !== "" &&
+    Number.isInteger(limitValue) &&
+    limitValue >= 0 &&
+    limitValue <= 1000;
+  const recheck = upkeep?.recheck;
+
   if (!loaded)
     return (
       <p className="muted small" aria-busy="true">
@@ -212,16 +246,35 @@ export function MemoryMaintenance({
       <section className="review-queue" aria-label={t("observations.maintenance.revalidate.label")}>
         <h3>{t("observations.maintenance.revalidate.title", { count: flagTotals.total })}</h3>
         <p className="muted small">{t("observations.maintenance.revalidate.intro")}</p>
-        {flagTotals.total === 0 ? (
-          <p className="muted small">{t("observations.maintenance.revalidate.empty")}</p>
+        <div className="memory-flag-views">
+          {(["needs_human", "all"] as const).map((option) => (
+            <Button
+              key={option}
+              size="sm"
+              variant={view === option ? "primary" : "secondary"}
+              aria-pressed={view === option}
+              onClick={() => setView(option)}
+            >
+              {option === "needs_human"
+                ? t("observations.maintenance.view.needsHuman", { count: flagTotals.needsHuman })
+                : t("observations.maintenance.view.all", { count: flagTotals.total })}
+            </Button>
+          ))}
+        </div>
+        {shownTotal === 0 ? (
+          <p className="muted small">
+            {view === "needs_human" && flagTotals.total > 0
+              ? t("observations.maintenance.revalidate.emptyHuman")
+              : t("observations.maintenance.revalidate.empty")}
+          </p>
         ) : (
           <>
             <p className="muted small">{reasonSummary}</p>
-            {flags.length < flagTotals.total ? (
+            {flags.length < shownTotal ? (
               <p className="muted small">
                 {t("observations.maintenance.partial", {
                   shown: flags.length,
-                  total: flagTotals.total,
+                  total: shownTotal,
                 })}
               </p>
             ) : null}
@@ -236,6 +289,14 @@ export function MemoryMaintenance({
                       trust: flag.entry.trust,
                     })}
                   </p>
+                  {flag.model ? (
+                    <p className="muted small memory-model-verdict">
+                      {t(VERDICT_KEYS[flag.model.verdict], {
+                        reason: flag.model.reason,
+                        date: flag.model.checkedAt.slice(0, 10),
+                      })}
+                    </p>
+                  ) : null}
                 </div>
                 {canRevalidate ? (
                   <div className="review-row-actions">
@@ -275,6 +336,76 @@ export function MemoryMaintenance({
             ) : null}
           </>
         )}
+      </section>
+
+      <section
+        className="review-queue memory-recheck"
+        aria-label={t("observations.maintenance.recheck.title")}
+      >
+        <h3>{t("observations.maintenance.recheck.title")}</h3>
+        <p className="muted small">{t("observations.maintenance.recheck.intro")}</p>
+        {upkeep ? (
+          <p className="muted small">
+            {upkeep.settings.recheckDailyLimit === 0
+              ? t("observations.maintenance.recheck.off")
+              : t("observations.maintenance.recheck.usage", {
+                  used: upkeep.recheckedToday,
+                  limit: upkeep.settings.recheckDailyLimit,
+                })}
+          </p>
+        ) : null}
+        {recheck ? (
+          <p className="muted small">
+            {recheck.status === "pending"
+              ? t("observations.maintenance.recheck.pending")
+              : recheck.status === "failed"
+                ? t("observations.maintenance.recheck.failed", { error: recheck.error ?? "" })
+                : t("observations.maintenance.recheck.ready", {
+                    stillTrue: recheck.stillTrue,
+                    stale: recheck.possiblyStale,
+                    unclear: recheck.unclear,
+                  })}
+          </p>
+        ) : null}
+        {canSettings ? (
+          <div className="memory-maintenance-settings">
+            <label className="memory-draft-field">
+              {t("observations.maintenance.settings.limit")}
+              <input
+                type="number"
+                min={0}
+                max={1000}
+                step={1}
+                value={limitDraft}
+                onChange={(event) => setLimitDraft(event.target.value)}
+              />
+            </label>
+            <label className="memory-draft-field">
+              <input
+                type="checkbox"
+                checked={organizeDaily}
+                onChange={(event) => setOrganizeDaily(event.target.checked)}
+              />{" "}
+              {t("observations.maintenance.settings.organizeDaily")}
+            </label>
+            <Button
+              size="sm"
+              disabled={busy || !limitValid}
+              onClick={() =>
+                void perform(
+                  () =>
+                    api.updateMemoryMaintenanceSettings(workspaceId, {
+                      recheckDailyLimit: limitValue,
+                      organizeDaily,
+                    }),
+                  t("observations.maintenance.settings.saved"),
+                )
+              }
+            >
+              {t("observations.maintenance.settings.save")}
+            </Button>
+          </div>
+        ) : null}
       </section>
 
       {canDraft ? (

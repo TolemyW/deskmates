@@ -3,6 +3,8 @@
 //   a. redaction of the tool input for the ledger copy (every payload passes through the
 //      EventSink's redactor) and of the `ToolAction` an approval request carries (the same
 //      redactor, `ctx.redact`), so the raw input never leaves the process by either exit,
+//   a'. the bot-directory guard (ADR-0038): a write into another bot's directory (per-bot mode) or
+//      into /work/uploads -> deny with where to write instead. A soft guard, not a boundary,
 //   b. egress allowlist for navigation tools -> deny. The list is refreshed from the Gateway
 //      before every navigation check, so an operator's edit reaches a run already in flight; when
 //      the Gateway cannot answer, the last list the hook used applies,
@@ -44,6 +46,7 @@ import {
   type StartRunRequest,
   type StoredConnectorValidation,
   type ToolAction,
+  botWorkDir,
   egressAllows,
   isDeskmatesError,
   isPublicHostname,
@@ -52,11 +55,13 @@ import {
   tierForAction,
 } from "@deskmates/contracts";
 import { waitForApproval } from "../approval-wait.js";
+import { botDirectoryRefusal } from "../bot-directory-guard.js";
 import type { BrowserState } from "../browser-state.js";
 import type { GatewayClient } from "../gateway-client.js";
 import { integrationApprovalPreview } from "../integration-approval-preview.js";
 import type { EventSink } from "../ledger.js";
 import {
+  WORK_DIR,
   classifyTool,
   isBrowserTool,
   isConnectorSubmit,
@@ -78,6 +83,7 @@ import {
   imageReadNotice,
   isImagePath,
   isPdfPath,
+  offersLook,
   pdfReadNotice,
   withholdsImages,
 } from "../vision-withhold.js";
@@ -97,6 +103,11 @@ export interface HookContext {
    * navigation check and keeps whatever it last got.
    */
   egressAllowlist: readonly string[];
+  /**
+   * The directory the run started in, which relative paths resolve against for the
+   * bot-directory guard (ADR-0038). Absent means the mode's default directory.
+   */
+  cwd?: string;
   /**
    * The redactor the ledger sink uses, applied to the `ToolAction` before it is posted. The
    * approval request is the process's second exit: the Gateway stores the action in the approvals
@@ -599,7 +610,7 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
         toolUseId,
         path: input.file_path,
       });
-      return deny(imageReadNotice(input.file_path));
+      return deny(imageReadNotice(input.file_path, offersLook(request)));
     }
     // Amendment 3, decision 15: a PDF reaches the model as page images, so it is withheld too.
     if (toolName === READ_TOOL && withholdsImages(request) && isPdfPath(input.file_path)) {
@@ -611,17 +622,46 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
         path: input.file_path,
         media: "application/pdf",
       });
-      return deny(pdfReadNotice(input.file_path));
+      return deny(pdfReadNotice(input.file_path, offersLook(request)));
     }
 
-    // A call that cannot reach the network never asks the Gateway anything: the refresh is one
-    // round trip per navigation check, not one per tool call.
     const command =
       typeof input.command === "string"
         ? input.command
         : toolName === "mcp__deskmates__tty_session" && typeof input.data === "string"
           ? input.data
           : "";
+
+    // ADR-0038 decisions 2 to 4: another bot's directory (per-bot mode) and /work/uploads (every
+    // mode) are read-only to this bot. A soft guard against mistakes, NOT a security boundary: it
+    // reads the literal input only (see bot-directory-guard.ts for what it cannot see).
+    const dirs = botDirectoryRefusal(
+      toolName,
+      input,
+      command,
+      isShellTool(toolName) || toolName === "mcp__deskmates__tty_session",
+      {
+        botName: request.botName,
+        ...(request.workdirMode === "per-bot" ? { workdirMode: "per-bot" as const } : {}),
+        cwd:
+          ctx.cwd ?? (request.workdirMode === "per-bot" ? botWorkDir(request.botName) : WORK_DIR),
+      },
+    );
+    if (dirs !== undefined) {
+      sink.emit("log", {
+        source: "bot_dirs",
+        op: "write_refused",
+        toolName,
+        toolUseId,
+        path: dirs.path,
+        area: dirs.area,
+        ...(dirs.owner === undefined ? {} : { owner: dirs.owner }),
+      });
+      return deny(dirs.message);
+    }
+
+    // A call that cannot reach the network never asks the Gateway anything: the refresh is one
+    // round trip per navigation check, not one per tool call.
     const workflow = toolName === "mcp__deskmates__browser_cli_workflow";
     const navigation = isNavigation(toolName, input);
     const shellFetch = isShellTool(toolName) && isShellFetch(command);

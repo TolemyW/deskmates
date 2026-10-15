@@ -49,7 +49,8 @@ const FILTER = `e.workspace_id = ? AND e.tombstoned = 0 AND e.episode_id IS NULL
        OR julianday(COALESCE(e.last_confirmed_at, e.observed_at)) + e.ttl_seconds / 86400.0
           > julianday(?))`;
 
-function tokensOf(query: string): string[] {
+/** The FTS tokens of a query (at most 16); none means search returns nothing. */
+export function memoryQueryTokens(query: string): string[] {
   if (query.length > 500) throw new DeskmatesError("validation", "Memory query is too long");
   return query.match(/[\p{L}\p{N}_]+/gu)?.slice(0, 16) ?? [];
 }
@@ -59,7 +60,7 @@ export function searchMemoryPage(
   db: GatewayDb,
   options: MemorySearchOptions,
 ): { hits: MemorySearchHit[]; more: boolean } {
-  const tokens = tokensOf(options.query);
+  const tokens = memoryQueryTokens(options.query);
   if (tokens.length === 0) return { hits: [], more: false };
   const limit = Math.max(1, Math.min(50, Math.floor(options.limit ?? 10) || 10));
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
@@ -91,21 +92,48 @@ export function searchMemoryPage(
             offset,
           )
   ) as HitRow[];
-  return {
-    more: rows.length > limit,
-    hits: rows.slice(0, limit).map((row) => ({
-      id: row.id,
-      version: row.version,
-      scope: row.scope,
-      kind: row.kind,
-      body: row.body,
-      authority: row.authority,
-      trust: row.trust,
-      observedAt: row.observed_at,
-      ...(row.learned_by ? { learnedBy: row.learned_by } : {}),
-      ...(row.source_run_id ? { sourceRunId: row.source_run_id } : {}),
-    })),
-  };
+  return { more: rows.length > limit, hits: rows.slice(0, limit).map(hitOf) };
+}
+
+const hitOf = (row: HitRow): MemorySearchHit => ({
+  id: row.id,
+  version: row.version,
+  scope: row.scope,
+  kind: row.kind,
+  body: row.body,
+  authority: row.authority,
+  trust: row.trust,
+  observedAt: row.observed_at,
+  ...(row.learned_by ? { learnedBy: row.learned_by } : {}),
+  ...(row.source_run_id ? { sourceRunId: row.source_run_id } : {}),
+});
+
+/**
+ * The live-entry condition of search, for another query over `memory_entries e` (the vector scan
+ * of ADR-0041 decision 5): the same SQL and arguments, so a vector hit is never one search hides.
+ */
+export function memoryLiveFilter(
+  options: Pick<MemorySearchOptions, "workspaceId" | "scope" | "now">,
+): { sql: string; args: (string | null)[] } {
+  const now = (options.now ?? new Date()).toISOString();
+  const scope = options.scope ?? null;
+  return { sql: FILTER, args: [options.workspaceId, scope, scope, now, now] };
+}
+
+/** Live hits for these ids (any order); an id search would hide is absent from the map. */
+export function memoryHitsByIds(
+  db: GatewayDb,
+  options: Pick<MemorySearchOptions, "workspaceId" | "scope" | "now">,
+  ids: readonly string[],
+): Map<string, MemorySearchHit> {
+  const out = new Map<string, MemorySearchHit>();
+  if (ids.length === 0) return out;
+  const filter = memoryLiveFilter(options);
+  const rows = db
+    .prepare(`${BASE} WHERE e.id IN (SELECT value FROM json_each(?)) AND ${filter.sql}`)
+    .all(JSON.stringify(ids), ...filter.args) as HitRow[];
+  for (const row of rows) out.set(row.id, hitOf(row));
+  return out;
 }
 
 /** The first page only: what a run's `memory_search` tool receives (10 by default, at most 20). */

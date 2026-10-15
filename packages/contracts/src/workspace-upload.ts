@@ -55,6 +55,70 @@ export interface WorkspaceUpload {
   createdAt: IsoTimestamp;
   updatedAt: IsoTimestamp;
   completedAt?: IsoTimestamp;
+  /** An Admin deleted the completed file (decision 43). */
+  deletedAt?: IsoTimestamp;
+  /** The actor label of who deleted it. */
+  deletedBy?: string;
+}
+
+/** `DELETE /api/workspaces/:id/uploads/:uploadId/file` (decision 43). */
+export interface DeleteWorkspaceUploadResponse {
+  upload: WorkspaceUpload;
+  /** False when the file was already gone from the workspace. */
+  removed: boolean;
+}
+
+/** Most uploads one human message may attach (decision 42). */
+export const MESSAGE_ATTACHMENTS_MAX = 20;
+
+/** One entry of `attachments` on `POST /api/threads/:id/messages` (decision 42). */
+export interface MessageUploadAttachment {
+  uploadId: string;
+}
+
+/** A completed upload's final path: `/work/uploads/<date>/<safe name>` (decision 43). */
+export const WORKSPACE_UPLOAD_FINAL_PATH =
+  /^\/work\/uploads\/(\d{4}-\d{2}-\d{2})\/([A-Za-z0-9][A-Za-z0-9._-]*)$/;
+
+const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
+  avif: "image/avif",
+  bmp: "image/bmp",
+  csv: "text/csv",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  gif: "image/gif",
+  htm: "text/html",
+  html: "text/html",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  json: "application/json",
+  md: "text/markdown",
+  mp3: "audio/mpeg",
+  mp4: "video/mp4",
+  pdf: "application/pdf",
+  png: "image/png",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  svg: "image/svg+xml",
+  tsv: "text/tab-separated-values",
+  txt: "text/plain",
+  wav: "audio/wav",
+  webp: "image/webp",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  xml: "application/xml",
+  zip: "application/zip",
+};
+
+/**
+ * Decision 42: an attachment's type from its file extension only; the browser's declared type is
+ * never trusted (decision 32). Unknown extensions are `application/octet-stream`.
+ */
+export function uploadAttachmentMime(path: string): string {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return "application/octet-stream";
+  return MIME_BY_EXTENSION[name.slice(dot + 1).toLowerCase()] ?? "application/octet-stream";
 }
 
 /** `POST /api/workspaces/:id/uploads`. */
@@ -98,14 +162,17 @@ export type WorkspaceFileWriteRequest =
   | { op: "begin"; uploadId: string }
   | { op: "append"; uploadId: string; offset: number; base64: string }
   | { op: "commit"; uploadId: string; sizeBytes: number; dir: string; name: string }
-  | { op: "abort"; uploadId: string };
+  | { op: "abort"; uploadId: string }
+  /** Decision 43: delete a completed upload's file at its final path. */
+  | { op: "remove"; uploadId: string; path: string };
 
 /** stdout of `file-write` on exit 0. */
 export type WorkspaceFileWriteResult =
   | { op: "begin"; receivedBytes: 0 }
   | { op: "append"; receivedBytes: number }
   | { op: "commit"; path: string; sizeBytes: number; sha256: string }
-  | { op: "abort"; removed: boolean };
+  | { op: "abort"; removed: boolean }
+  | { op: "remove"; removed: boolean };
 
 export type WorkspaceFileWriteErrorCode =
   | "validation"

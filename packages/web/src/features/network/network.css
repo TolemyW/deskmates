@@ -66,3 +66,13 @@
 .network-preflight [data-ok="false"] {
   color: var(--danger, #b42318);
 }
+
+.network-selection label.network-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.network-page .network-scope {
+  color: var(--text-muted, inherit);
+}

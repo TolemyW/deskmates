@@ -57,6 +57,24 @@ export function registerAppShareRoutes(app: FastifyInstance, ctx: GatewayContext
     },
   );
 
+  // A Member publishes a running port from the Files page (owner-decided 2026-10-14).
+  app.post<{ Params: { id: string } }>(
+    "/api/workspaces/:id/app-shares",
+    async (request): Promise<AppPublishResponse> => {
+      const workspaceId = ctx.workspaces.mustGet(request.params.id as WorkspaceId).id;
+      const shares = appSharesOf(ctx);
+      shares.enabled();
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const { share, existing } = shares.store.publish({
+        workspaceId,
+        port: body.port,
+        label: body.label,
+        by: { kind: "person", actor: actorLabel(request.principal) },
+      });
+      return { share: await shares.view(share), existing };
+    },
+  );
+
   app.post<{ Params: ShareParams }>(
     "/api/workspaces/:id/app-shares/:shareId/open",
     async (request, reply): Promise<AppShareOpenResponse> => {
@@ -101,8 +119,7 @@ export function registerAppShareInternalRoutes(app: FastifyInstance, ctx: Gatewa
         workspaceId: bot.workspaceId,
         port: body.port,
         label: body.label,
-        botId: bot.id,
-        runId,
+        by: { kind: "bot", botId: bot.id, runId },
       });
       ctx.events.append({
         runId,

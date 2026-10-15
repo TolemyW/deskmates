@@ -4,6 +4,7 @@
 import type { FastifyInstance } from "fastify";
 import { registerAppShareRoutes } from "../app-shares/app-share-routes.js";
 import { budgetAdmission } from "../budget/admission.js";
+import { modelRegistryOf } from "../config/model-upstreams.js";
 import type { GatewayContext } from "../context.js";
 import { frozenModelsOf } from "../model-proxy/frozen-models.js";
 import { registerModelProxy } from "../model-proxy/model-proxy.js";
@@ -154,8 +155,7 @@ export function registerSandboxRoutes(
   registerInternalRoutes(app, ctx, lifecycle, scheduler);
   registerModelProxy(app, {
     tokens: ctx.tokens,
-    upstreamBaseUrl: ctx.config.modelBaseUrl,
-    upstreamToken: ctx.config.modelAuthToken,
+    upstreamFor: (model) => modelRegistryOf(ctx.config).resolve(model),
     timingForRun: (runId) => {
       // Capture the attempt with the request. A parked run may resume while an old connection is
       // winding down; its timing still belongs to the process that opened it.

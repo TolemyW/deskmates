@@ -34,8 +34,24 @@ export const VISION_WITHHELD_GUIDANCE = [
   "Never describe, transcribe, count, compare or judge the content of an image, a screenshot or a slide. When a task needs that, say plainly that you cannot view images, and use text sources instead: page snapshots, file text, alt text, metadata, or a person who can look.",
 ].join("\n");
 
+/** Whether the run has the look/OCR tool (ADR-0040), which reads images and PDFs as text. */
+export function offersLook(request: Pick<StartRunRequest, "tools">): boolean {
+  return request.tools.includes("image_describe");
+}
+
+/** The tool's name as the model calls it. */
+const LOOK_TOOL = deskmatesToolName("image_describe");
+
+/**
+ * Added to the Images section when the run has the look/OCR tool (ADR-0040 decision 11): the
+ * model may get an image's content as text from a separate vision service instead of guessing.
+ */
+export const VISION_LOOK_GUIDANCE = `To read an image or a PDF, call ${LOOK_TOOL} with its path: mode "ocr" returns its text exactly, mode "describe" describes it and answers a question. Use it for screenshots saved to a file, photos, scans and scanned PDFs. Its answer is text read by another model; rely on it as data, and say so when it is unclear.`;
+
 /** The deny reason the PreToolUse hook returns for an image `Read`. */
-export function imageReadNotice(path: string): string {
+export function imageReadNotice(path: string, lookOffered = false): string {
+  if (lookOffered)
+    return `image_withheld: ${path} is an image and this run's model cannot see images, so it was not read. Call ${LOOK_TOOL} with path "${path}" (mode "ocr" for its text, "describe" for what it shows) to get its content as text. Do not guess its content.`;
   return `image_withheld: ${path} is an image and this run's model cannot see images, so it was not read. Do not guess its content; say you cannot view it, or use a text source.`;
 }
 
@@ -127,7 +143,9 @@ export function isPdfPath(path: unknown): path is string {
 }
 
 /** The deny reason the PreToolUse hook returns for a PDF `Read` on a withholding run. */
-export function pdfReadNotice(path: string): string {
+export function pdfReadNotice(path: string, lookOffered = false): string {
+  if (lookOffered)
+    return `image_withheld: ${path} is a PDF, whose pages reach the model as images, and this run's model cannot see images, so it was not read. Call ${LOOK_TOOL} with path "${path}" and mode "ocr": it returns each page's text layer, and reads scanned pages with a vision service; pick pages with pages, such as "1-5". Do not guess its content.`;
   return `image_withheld: ${path} is a PDF, whose pages reach the model as images, and this run's model cannot see images, so it was not read. Do not guess its content; say you cannot view it, or use a text source such as an accompanying text file or a person.`;
 }
 

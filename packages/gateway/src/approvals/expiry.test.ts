@@ -89,11 +89,11 @@ describe("unattended approvals (ADR-0002 amendment 3, A7 and A8)", () => {
       .runs.list({ threadId: threadId as never })
       .map((r) => r.id);
 
-    // Before two thirds of the window nothing happens.
-    expect(sweep.sweep(new Date(t0 + minutes(9)))).toEqual({ expired: [], reminded: [] });
-    // A8: one reminder, routing-inert, carrying the approval attachment.
-    expect(sweep.sweep(new Date(t0 + minutes(10)))).toEqual({ expired: [], reminded: [APPROVAL] });
-    expect(sweep.sweep(new Date(t0 + minutes(12)))).toEqual({ expired: [], reminded: [] });
+    // Amendment 6, D7: a 60-minute window. Before two thirds of it nothing happens.
+    expect(sweep.sweep(new Date(t0 + minutes(39)))).toEqual({ expired: [], reminded: [] });
+    // A8: one reminder at 40 minutes, routing-inert, carrying the approval attachment.
+    expect(sweep.sweep(new Date(t0 + minutes(40)))).toEqual({ expired: [], reminded: [APPROVAL] });
+    expect(sweep.sweep(new Date(t0 + minutes(50)))).toEqual({ expired: [], reminded: [] });
     const reminders = ctx()
       .messages.list(threadId as never)
       .filter((m) => m.body.startsWith("Reminder:"));
@@ -107,14 +107,15 @@ describe("unattended approvals (ADR-0002 amendment 3, A7 and A8)", () => {
     expect(ctx().approvals.mustGet(APPROVAL).decision).toBeUndefined();
 
     // A7: at the deadline the request is denied by nobody, and the hook's text says so.
-    expect(sweep.sweep(new Date(t0 + minutes(15)))).toEqual({ expired: [APPROVAL], reminded: [] });
+    expect(sweep.sweep(new Date(t0 + minutes(59)))).toEqual({ expired: [], reminded: [] });
+    expect(sweep.sweep(new Date(t0 + minutes(60)))).toEqual({ expired: [APPROVAL], reminded: [] });
     const expired = ctx().approvals.mustGet(APPROVAL);
     expect(expired).toMatchObject({ decision: "deny", decidedBy: APPROVAL_EXPIRY_ACTOR });
     expect(ctx().broker.response(expired)).toMatchObject({
       decision: "deny",
-      reason: expiryReason(15),
+      reason: expiryReason(60),
     });
-    expect(expiryReason(15)).toContain("Nobody approved this within 15 minutes. It was not done.");
+    expect(expiryReason(60)).toContain("Nobody approved this within 60 minutes. It was not done.");
     const phases = ctx()
       .events.list(run.id)
       .filter((e) => e.kind === "approval")
@@ -132,10 +133,10 @@ describe("unattended approvals (ADR-0002 amendment 3, A7 and A8)", () => {
     expect(resumed[0]?.trigger).toMatchObject({
       kind: "approval",
       decision: "deny",
-      reason: expiryReason(15),
+      reason: expiryReason(60),
     });
     // A later sweep finds nothing to do.
-    expect(sweep.sweep(new Date(t0 + minutes(60)))).toEqual({ expired: [], reminded: [] });
+    expect(sweep.sweep(new Date(t0 + minutes(240)))).toEqual({ expired: [], reminded: [] });
   });
 
   it("uses the workspace's own window", async () => {
@@ -160,7 +161,7 @@ describe("unattended approvals (ADR-0002 amendment 3, A7 and A8)", () => {
       riskLevel: "L0",
     });
     expect(continuation.kind).toBe("continuation");
-    const swept = new ApprovalExpiry(ctx()).sweep(new Date(t0 + minutes(120)));
+    const swept = new ApprovalExpiry(ctx()).sweep(new Date(t0 + minutes(240)));
     expect(swept).toEqual({ expired: [], reminded: [] });
     expect(ctx().approvals.mustGet("apr-cont" as ApprovalId).decision).toBeUndefined();
   });

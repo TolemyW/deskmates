@@ -41,11 +41,12 @@ export function postDirectMessage(
   }
   if (run.threadId) {
     const source = ctx.threads.mustGet(run.threadId);
+    // ADR-0005 amendment 5 decision 38: with no message-count bound only a pause refuses.
+    const budget = source.kind === "chat" ? ctx.router.effectiveCaps(source.id).turnBudget : null;
     if (
       source.kind === "chat" &&
       (source.status === "paused" ||
-        ctx.messages.botCountSinceLastHuman(source.id) >=
-          ctx.router.effectiveCaps(source.id).turnBudget)
+        (budget !== null && ctx.messages.botCountSinceLastHuman(source.id) >= budget))
     ) {
       throw new DeskmatesError(
         "validation",

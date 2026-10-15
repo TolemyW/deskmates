@@ -2,10 +2,19 @@
 // drafts from observations, and model organisation (topic labels and split proposals). Reads
 // never queue a job; a draft publishes nothing; every decision is an Admin's and is audited.
 
-import { type PageLimitPolicy, type WorkspaceId, decidedByHuman } from "@deskmates/contracts";
+import {
+  DeskmatesError,
+  type PageLimitPolicy,
+  type WorkspaceId,
+  decidedByHuman,
+} from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
 import type { GatewayContext } from "../context.js";
 import { draftFromObservations } from "../knowledge/observation-drafts.js";
+import {
+  readMaintenanceSettings,
+  updateMaintenanceSettings,
+} from "../memory/maintenance-settings.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
 import { requestActorId } from "./actor.js";
 import { encodeCursor, parseCursorQuery } from "./pagination.js";
@@ -26,16 +35,25 @@ export function registerMemoryMaintenanceRoutes(
 ): void {
   const workspaceOf = (id: string): WorkspaceId => ctx.workspaces.mustGet(id as WorkspaceId).id;
 
-  /** A26: open flags after a sweep of this workspace, with exact totals per reason. */
-  app.get<WorkspaceParams & PageQuery>(
+  /**
+   * A26: open flags after a sweep of this workspace, with exact totals per reason and of those
+   * that need a human; `?view=needs_human` lists only those (A28).
+   */
+  app.get<WorkspaceParams & PageQuery & { Querystring: { view?: string } }>(
     "/api/workspaces/:id/memory/revalidations",
     async (request) => {
       const workspaceId = workspaceOf(request.params.id);
-      const scope = ["memory-revalidations", requestTenant(request), workspaceId];
+      const view = request.query.view ?? "all";
+      if (view !== "all" && view !== "needs_human")
+        throw new DeskmatesError("validation", "view must be all or needs_human", {
+          field: "view",
+        });
+      const scope = ["memory-revalidations", requestTenant(request), workspaceId, view];
       const query = parseCursorQuery(request.query, PAGE, scope, ["string", "string"]);
       ctx.memory.freshness.sweep(workspaceId);
       const page = ctx.memory.freshness.page(workspaceId, {
         limit: query.limit,
+        needsHuman: view === "needs_human",
         ...(query.after ? { after: query.after as [string, string] } : {}),
       });
       const last = page.items.at(-1);
@@ -45,10 +63,35 @@ export function registerMemoryMaintenanceRoutes(
           ? { nextCursor: encodeCursor([last.flaggedAt, last.id], scope) }
           : {}),
         total: page.total,
+        needsHuman: page.needsHuman,
         byReason: page.byReason,
       };
     },
   );
+
+  /** A28, A34: the settings, the latest recheck job and the notes rechecked in 24 hours. */
+  app.get<WorkspaceParams>("/api/workspaces/:id/memory/maintenance", async (request) => {
+    const workspaceId = workspaceOf(request.params.id);
+    const recheck = ctx.modelJobs.recheck.latest(workspaceId);
+    return {
+      settings: readMaintenanceSettings(ctx.db, workspaceId),
+      recheckedToday: ctx.modelJobs.recheck.usedToday(workspaceId, new Date()),
+      ...(recheck ? { recheck } : {}),
+    };
+  });
+
+  /** A34: an Owner or Admin changes the settings; audited. */
+  app.put<WorkspaceParams>("/api/workspaces/:id/memory/maintenance", async (request) => {
+    const workspaceId = workspaceOf(request.params.id);
+    const body = asRecord(request.body);
+    return {
+      settings: updateMaintenanceSettings(ctx.db, ctx.audit, {
+        workspaceId,
+        patch: body,
+        by: decidedByHuman(requestActorId(request, body)),
+      }),
+    };
+  });
 
   /** A27: still true or dismiss. */
   app.post<ItemParams>("/api/workspaces/:id/memory/revalidations/:itemId", async (request) => {

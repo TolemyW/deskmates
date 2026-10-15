@@ -12,8 +12,16 @@ import { Markdown, looksLikeMarkdown } from "../../lib/markdown.js";
 import { approvalEchoLabel } from "../../state/actor-label.js";
 import { useActorLabel } from "../../state/session-roles.js";
 import { DesktopView } from "../computer/desktop-view.js";
+import { AttachmentCards } from "./attachment-cards.js";
 import { ChatInfo } from "./chat-info.js";
 import { ChatRunStop } from "./chat-run-stop.js";
+import {
+  ComposerAttachButton,
+  ComposerAttachmentChips,
+  onComposerPaste,
+  useChatDropTarget,
+  useComposerAttachments,
+} from "./composer-attachments.js";
 import { IncomingHandoffs } from "./incoming-handoffs.js";
 import { PrivateChatActivity } from "./private-chat-activity.js";
 import {
@@ -79,6 +87,7 @@ import {
   transcriptTimeline,
 } from "../../state/thread-view.js";
 import { ApprovalCard, approvalRefOf } from "../approvals/approval-card.js";
+import { ApproveAllBadge } from "../approvals/approval-mode.js";
 import { splitWorkspacePaths } from "../files/path-links.js";
 import { ActivityPanel } from "../runs/activity.js";
 import { firstRunPages } from "../runs/run-feed.js";
@@ -132,7 +141,6 @@ function membersSummary(
       .join(", "),
   });
 }
-import { UploadAttachButton, draftWithPath } from "../files/upload-attach-button.js";
 import { WorkspaceFilePreview } from "../files/workspace-file-preview.js";
 import { ReplyPreviews, replyPreviewReducer } from "./reply-preview.js";
 import { type WorkspaceLockState, useWorkspaceLock } from "./use-workspace-lock.js";
@@ -206,6 +214,15 @@ export function ChatPane(props: ChatPaneProps) {
   const composer = useSyncExternalStore(subscribeComposer, readComposer, readComposer);
   const draft = composer.draft;
   const sendBlocked = composer.pending !== undefined || composer.failed !== undefined;
+  // ADR-0014 A5 decisions 41 and 42: files attached by paperclip, drop or paste wait as chips.
+  const composerFiles = useComposerAttachments(api, detail?.thread.workspaceId, threadId);
+  // A Guest never uploads, and a channel mirror takes no Web post (the Gateway refuses both).
+  const attachAllowed =
+    canPost.allowed &&
+    !guest &&
+    mirrorChannel === undefined &&
+    detail?.thread.workspaceId !== undefined;
+  const dropTarget = useChatDropTarget(composerFiles, attachAllowed);
   // The subscription callbacks outlive a render, so the refetch reads the transcript from a ref.
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -379,7 +396,14 @@ export function ChatPane(props: ChatPaneProps) {
   const send = async (e?: FormEvent) => {
     e?.preventDefault();
     const body = draft.body.trim();
-    if (!body || sendBlocked || mirrorChannel !== undefined) return;
+    const attached = composerFiles.ready;
+    if (
+      (!body && attached.length === 0) ||
+      composerFiles.blocked ||
+      sendBlocked ||
+      mirrorChannel !== undefined
+    )
+      return;
     const started = beginConversationSubmission(api, threadId, draft.revision);
     const submission = started.pending;
     if (!submission) return;
@@ -393,7 +417,9 @@ export function ChatPane(props: ChatPaneProps) {
         body,
         undefined,
         sequential ? "sequential" : undefined,
+        attached,
       );
+      composerFiles.sent(attached);
       setRoundMode("parallel");
       completeConversationSubmission(api, threadId, submission.id);
       if (lifecycleRevisionRef.current !== lifecycleRevision) return;
@@ -522,7 +548,10 @@ export function ChatPane(props: ChatPaneProps) {
 
   return (
     <>
-      <section className="chat">
+      <section
+        className={`chat${dropTarget.active ? " chat-drop-active" : ""}`}
+        {...dropTarget.handlers}
+      >
         <header className="chat-header">
           <div className="chat-header-row">
             <div className="thread-heading">
@@ -538,6 +567,7 @@ export function ChatPane(props: ChatPaneProps) {
                 <span className="status-dot" />
                 {t(CONNECTION_LABELS[connection])}
               </span>
+              <ApproveAllBadge api={api} workspaceId={detail?.thread.workspaceId} />
               {channelName !== undefined ? (
                 <span className="thread-channel small muted" data-testid="thread-channel">
                   {t("chatPane.channelMirror.badge", { channel: channelName })}
@@ -708,7 +738,13 @@ export function ChatPane(props: ChatPaneProps) {
               )}
               <VisionNotice api={api} workspaceId={detail?.thread.workspaceId} members={members} />
               {mirrorChannel !== undefined ? null : (
-                <form className="composer" onSubmit={send} hidden={!canPost.allowed}>
+                <form
+                  className="composer"
+                  onSubmit={send}
+                  hidden={!canPost.allowed}
+                  onPaste={onComposerPaste(composerFiles, attachAllowed)}
+                >
+                  <ComposerAttachmentChips attachments={composerFiles} />
                   <div className="composer-box">
                     <MentionTextarea
                       aria-label={t("chatPane.composer.label")}
@@ -727,19 +763,9 @@ export function ChatPane(props: ChatPaneProps) {
                       }
                       footer={
                         <>
-                          <UploadAttachButton
-                            api={api}
-                            workspaceId={detail?.thread.workspaceId}
-                            onUploaded={(path) =>
-                              writeConversationDraft(
-                                api,
-                                threadId,
-                                draftWithPath(
-                                  readConversationComposer(api, threadId).draft.body,
-                                  path,
-                                ),
-                              )
-                            }
+                          <ComposerAttachButton
+                            attachments={composerFiles}
+                            disabled={!attachAllowed}
                           />
                           {members.length > 1 && mentionsEveryone(draft.body) ? (
                             <RoundModeToggle value={roundMode} onChange={setRoundMode} />
@@ -749,7 +775,11 @@ export function ChatPane(props: ChatPaneProps) {
                             size="icon"
                             aria-label={t("chatPane.composer.send")}
                             type="submit"
-                            disabled={sendBlocked || draft.body.trim().length === 0}
+                            disabled={
+                              sendBlocked ||
+                              composerFiles.blocked ||
+                              (draft.body.trim().length === 0 && composerFiles.ready.length === 0)
+                            }
                           >
                             <ArrowUp size={20} />
                           </Button>
@@ -925,6 +955,7 @@ export function ChatPane(props: ChatPaneProps) {
             />
           ) : null}
         </ChatViewport>
+        {dropTarget.overlay}
       </section>
       {detail ? (
         <ChatInfo
@@ -1118,15 +1149,7 @@ function MessageRow({
             {handoff.name}
           </a>
         ) : null}
-        {otherAttachments.length > 0 ? (
-          <ul className="attachments small">
-            {otherAttachments.map((a) => (
-              <li key={`${a.name}:${a.ref}`}>
-                {a.name} <span className="muted">({a.mimeType})</span> {a.ref}
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <AttachmentCards attachments={otherAttachments} api={api} workspaceId={workspaceId} />
       </li>
     </>
   );

@@ -34,10 +34,17 @@ function fakeApi(overrides: Record<string, unknown> = {}) {
       ? [{ profileId: "netp_1", profileName: profile.name, selectedAt: "x", selectedBy: "y" }]
       : [],
     grants: trusted ? profile.rules : [],
+    openInternet: false,
+    profilesOnOpenInternet: true,
+    available: [profile],
   });
   return {
     listWorkspaces: vi.fn(async () => [workspace as Workspace]),
-    listNetworkProfiles: vi.fn(async () => ({ profiles: [profile], note: "Reload closes." })),
+    listNetworkProfiles: vi.fn(async () => ({
+      profiles: [profile],
+      note: "Reload closes.",
+      manageAll: true,
+    })),
     getWorkspaceNetwork: vi.fn(async (_id: WorkspaceId) => view(false)),
     setWorkspaceNetworkProfiles: vi.fn(async () => ({
       selections: view(true).selections,
@@ -49,6 +56,9 @@ function fakeApi(overrides: Record<string, unknown> = {}) {
       },
     })),
     getNetworkOverlaps: vi.fn(async () => ({ checked: true, networks: [], overlaps: [] })),
+    setWorkspaceNetworkSettings: vi.fn(async (_id: WorkspaceId, allowed: boolean) => ({
+      network: { ...view(false), profilesOnOpenInternet: allowed },
+    })),
     createNetworkProfile: vi.fn(),
     replaceNetworkProfile: vi.fn(),
     deleteNetworkProfile: vi.fn(),
@@ -173,4 +183,37 @@ it("shows the Gateway's refusal and sends the revision with an edit", async () =
     expect.objectContaining({ name: profile.name, rules: profile.rules }),
     3,
   );
+});
+
+it("an Owner edits only their own profiles and sees no overlap report (decision 12)", async () => {
+  const theirs = { ...profile, id: "netp_2", name: "Owen's service", ownerUserId: "usr_owen" };
+  const api = fakeApi({
+    listNetworkProfiles: vi.fn(async () => ({
+      profiles: [
+        { ...profile, editable: false },
+        { ...theirs, editable: true },
+      ],
+      manageAll: false,
+    })),
+  });
+  render(<NetworkScreen api={api as never} />);
+  expect(await screen.findByText("Owen's service")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
+  expect(screen.getByText("Workspaces of its Owner")).toBeInTheDocument();
+  expect(screen.getByText("All workspaces")).toBeInTheDocument();
+  expect(api.getNetworkOverlaps).not.toHaveBeenCalled();
+});
+
+it("turns the open-internet switch off and on (decision 13)", async () => {
+  const api = fakeApi();
+  render(<NetworkScreen api={api as never} />);
+  const toggle = await screen.findByRole("checkbox", {
+    name: "Allow network profiles while this workspace browses the open internet (*)",
+  });
+  expect(toggle).toBeChecked();
+  fireEvent.click(toggle);
+  await waitFor(() =>
+    expect(api.setWorkspaceNetworkSettings).toHaveBeenCalledWith(workspace.id, false),
+  );
+  await waitFor(() => expect(toggle).not.toBeChecked());
 });

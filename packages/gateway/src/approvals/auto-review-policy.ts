@@ -1,19 +1,19 @@
-// What automatic review may never decide (ADR-0002 amendment 4, B3). Deterministic and checked
-// before any model is asked: an ineligible request goes to humans exactly as it does with the
-// setting off. The owner kept permanent deletion and permission expansion with a human; egress,
-// continuations and (until #78) browser actions are outside the reviewer's scope altogether.
+// What automatic review may never decide (ADR-0002 amendment 4, B3, as amendment 6 D3 narrowed
+// it). Deterministic and checked before any model is asked: an ineligible request goes to humans
+// exactly as it does in `manual` mode. The owner kept permanent deletion and permission expansion
+// with a human; egress and continuations are outside the reviewer's scope in `automatic`. Browser
+// actions and runs without a human instruction became reviewable on 2026-10-14 (D3).
 
 import type { Approval } from "@deskmates/contracts";
 
 export type ReviewIneligibility =
   | "egress"
   | "continuation"
-  | "browser"
   | "unclassified"
   | "credential"
   | "deletion"
   | "permission"
-  | "no_human_instruction"
+  | "no_instruction"
   | "breaker";
 
 /** Shell forms that delete for good. Matched on the whole command line, each segment. */
@@ -43,12 +43,6 @@ function commandOf(approval: Approval): string | undefined {
   return undefined;
 }
 
-/** A browser action: the Playwright MCP tools, or the Playwright CLI driven from a shell. */
-function isBrowser(approval: Approval, command: string | undefined): boolean {
-  if (/(^|__)browser_/.test(approval.action.toolName)) return true;
-  return command !== undefined && /(^|[\s;&|])(npx\s+)?(playwright-cli|playwright)\s/.test(command);
-}
-
 /** Why a request is not eligible for review, or undefined when it may be reviewed. */
 export function reviewIneligibility(
   approval: Approval,
@@ -57,7 +51,6 @@ export function reviewIneligibility(
   if (approval.kind === "egress") return "egress";
   if (approval.kind === "continuation") return "continuation";
   const command = commandOf(approval);
-  if (isBrowser(approval, command)) return "browser";
   if (approval.action.unclassified) return "unclassified";
   if (facts.scrubbedSecrets) return "credential";
   const texts = [command, approval.action.argumentSummary, approval.action.filePath].filter(

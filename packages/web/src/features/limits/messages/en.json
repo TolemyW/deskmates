@@ -1,5 +1,5 @@
 {
-  "limits.breaker": "Loop breaker, always on: a chain deeper than {relayMax} hops wakes nobody; {botMessages} bot messages since the last human message, or {repeats} identical messages from one bot, pause the chat until a person writes.",
+  "limits.breaker": "Loop breaker, always on: a chain deeper than {relayMax} hops wakes nobody, and {repeats} identical messages from one bot pause the chat until a person writes.",
   "limits.cancel": "Cancel",
   "limits.edit": "Edit limits",
   "limits.effective": "{value} · {source}",
@@ -13,14 +13,17 @@
   "limits.key.turnBudget": "Turn budget (bot messages per chat since the last human message)",
   "limits.loading": "Loading limits…",
   "limits.off": "Off",
-  "limits.offNeedsBudget": "Off is available once this workspace has a weekly or cumulative budget (Costs page).",
+  "limits.offNeedsBudget": "This workspace requires a weekly or cumulative budget (Costs page) before a limit can be off.",
+  "limits.on": "On",
   "limits.roleNote": "change execution limits",
   "limits.save": "Save limits",
   "limits.source.default": "default",
-  "limits.source.default_no_backstop": "default; off needs a budget",
+  "limits.source.default_no_backstop": "default; this workspace requires a budget for off",
   "limits.source.gateway": "server default",
   "limits.source.loop_breaker": "loop breaker",
   "limits.source.thread": "per chat",
   "limits.source.workspace": "workspace setting",
+  "limits.switch.requireBudgetForOff": "Require a budget for unlimited limits",
+  "limits.switch.volumeBreaker": "Pause a chat after {botMessages} bot messages since the last human message",
   "limits.title": "Execution limits"
 }

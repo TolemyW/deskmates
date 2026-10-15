@@ -1,4 +1,4 @@
-// Published workspace apps (ADR-0035): a bot publishes a port of a service it started in its
+// Published workspace apps (ADR-0035): a bot or a Member publishes a port of a service in its
 // workspace; signed-in workspace Members open it on its own origin through the Gateway.
 
 /** Whether a publication can be opened: revoked never, active only while the service answers. */
@@ -12,9 +12,11 @@ export interface AppShare {
   label: string;
   /** The application URL on its own origin (ADR-0035 decision 2). */
   url: string;
-  /** Bot that published it, and the run it published from. */
+  /** Bot that published it, and the run it published from; null when a person published. */
   botId: string | null;
   runId: string | null;
+  /** The person who published it from the UI (`user:<id>`); null for a bot's publication. */
+  publishedBy: string | null;
   createdAt: string;
   revokedAt: string | null;
   revokedBy: string | null;
@@ -24,7 +26,10 @@ export interface AppShare {
   reason?: "relay_missing" | "not_running" | "workspace_stopped";
 }
 
-/** `POST /internal/runs/:runId/app-shares`: the bot tool's request. */
+/**
+ * `POST /internal/runs/:runId/app-shares`: the bot tool's request; also the body of a person's
+ * `POST /api/workspaces/:id/app-shares` (owner-decided 2026-10-14).
+ */
 export interface AppPublishRequest {
   port: number;
   label: string;

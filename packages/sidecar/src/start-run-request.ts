@@ -15,7 +15,6 @@ import {
   type StartRunRequest,
   isSkillFilePath,
   isSkillName,
-  worktreeRepoProblem,
 } from "@deskmates/contracts";
 import { z } from "zod";
 
@@ -178,6 +177,23 @@ export const startRunRequestSchema = z.object({
           .min(1)
           .max(40),
       }),
+      // ADR-0011 amendment 4, A28: at most 20 flagged notes and a bounded activity excerpt.
+      z.object({
+        kind: z.literal("memory_recheck"),
+        notes: z
+          .array(
+            z.object({
+              id: z.string().min(1),
+              scope: z.enum(["workspace", "bot"]),
+              body: z.string().min(1).max(16_000),
+              effectiveAt: z.string().min(1),
+              lastConfirmedAt: z.string().min(1).optional(),
+            }),
+          )
+          .min(1)
+          .max(20),
+        activity: z.string().max(40_000),
+      }),
       z.object({
         kind: z.literal("approval_review"),
         reviewPackage: z.string().min(2).max(24_000),
@@ -200,14 +216,8 @@ export const startRunRequestSchema = z.object({
     ])
     .optional(),
   groupGuidance: z.literal("owner-v1").optional(),
-  // Issue #88: present only under the opt-in per-bot working directory; absent keeps /work.
+  // Issue #88, ADR-0038: present for a per-bot run (the default); absent keeps the shared /work.
   workdirMode: z.literal("per-bot").optional(),
-  // ADR-0036 decision 2: checked again here, so a path the Gateway should have refused never
-  // reaches a `git` argument list.
-  worktreeRepo: z
-    .string()
-    .refine((path) => worktreeRepoProblem(path) === undefined, "invalid worktreeRepo")
-    .optional(),
   otherLaneRun: z
     .object({
       runId: id,

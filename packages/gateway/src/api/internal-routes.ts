@@ -18,10 +18,12 @@ import {
 } from "@deskmates/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { registerAppShareInternalRoutes } from "../app-shares/app-share-routes.js";
+import { allowEgressForApproveAll } from "../approvals/approve-all.js";
 import { assertBotMayDecide } from "../approvals/bot-decision.js";
 import type { GatewayContext } from "../context.js";
 import { bearerToken } from "../model-proxy/model-proxy.js";
 import { networkProfiles } from "../network/network-policy.js";
+import { registerOperationInternalRoutes } from "../operations/operation-routes.js";
 import type { RunLifecycle } from "../scheduler/run-lifecycle.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
 import { postDirectMessage } from "../threads/direct-messages.js";
@@ -73,6 +75,7 @@ export function registerInternalRoutes(
     registerBrowserRetentionRoutes(scope, ctx);
     registerKnowledgeInternalRoutes(scope, ctx);
     registerMemoryInternalRoutes(scope, ctx);
+    registerOperationInternalRoutes(scope, ctx);
     registerReplyPreviewRoutes(scope, ctx);
     registerTaskInternalRoutes(scope, ctx);
 
@@ -255,7 +258,10 @@ export function registerInternalRoutes(
     scope.post<RunParams>("/internal/runs/:runId/approvals", async (request, reply) => {
       const runId = request.params.runId as RunId;
       const run = ctx.runs.mustGet(runId);
-      const result = ctx.broker.request(run, asApprovalRequest(runId, request.body));
+      const req = asApprovalRequest(runId, request.body);
+      // ADR-0002 amendment 6, D4: in approve_all an egress host joins the allowlist first.
+      const egressHostAdded = await allowEgressForApproveAll(ctx, run, req);
+      const result = ctx.broker.request(run, req, { egressHostAdded });
       // Posting the request wakes the thread's other members; those runs are queued rows now.
       scheduler.kick();
       if (result === "pending") return reply.code(202).send();

@@ -51,6 +51,7 @@ export function MembersScreen({
   ssoProviders,
   tenantName = "",
   workspaceId: workspaceIdProp,
+  embedded = false,
 }: {
   client: MembersClient;
   /** The signed-in person's highest role; the role in the selected workspace wins when known. */
@@ -62,6 +63,8 @@ export function MembersScreen({
   tenantName?: string;
   /** The workspace whose people this shows; the selected workspace when absent. */
   workspaceId?: string;
+  /** Inside another page (a workspace's detail, ADR-0034 decision 9): no page heading. */
+  embedded?: boolean;
 }) {
   const [roleFilter, setRoleFilter] = useState<TenantRole | "all">("all");
   const [error, setError] = useState("");
@@ -147,9 +150,10 @@ export function MembersScreen({
     { value: "guest", label: t("members.roleOption.guest") },
   ];
 
+  const Root = embedded ? "div" : "section";
   return (
-    <section className="members-screen page page-container">
-      <header className="costs-header">
+    <Root className={embedded ? "members-embedded" : "members-screen page page-container"}>
+      <header className="costs-header" hidden={embedded}>
         <div>
           <h1>{t("members.title")}</h1>
           <p>{t("members.intro")}</p>
@@ -342,6 +346,6 @@ export function MembersScreen({
         </ul>
         <PageBar query={invitationPages} label={t("members.invitation.pages")} />
       </section>
-    </section>
+    </Root>
   );
 }

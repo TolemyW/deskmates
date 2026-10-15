@@ -4,6 +4,7 @@
 import type {
   BotId,
   IncomingHandoff,
+  MessageUploadAttachment,
   RequestedRoundMode,
   Thread,
   ThreadId,
@@ -61,6 +62,8 @@ export interface ChatsApi {
     body: string,
     authorId?: string,
     roundMode?: RequestedRoundMode,
+    /** The person's own completed uploads (ADR-0014 A5 decision 42). */
+    attachments?: readonly MessageUploadAttachment[],
   ): Promise<{ message: ThreadMessage; runs: RunView[] }>;
   readHandoffs(threadId: ThreadId, through: number): Promise<void>;
   removeThreadMember(id: ThreadId, botId: BotId): Promise<ThreadDetailView>;
@@ -150,11 +153,16 @@ export function createChatsApi(t: HttpTransport): ChatsApi {
       }>("POST", `/api/threads/${encodeURIComponent(id)}/pin`, {});
       return result.pin;
     },
-    postMessage(id, body, authorId, roundMode) {
+    postMessage(id, body, authorId, roundMode, attachments) {
       return t.json(
         "POST",
         `/api/threads/${encodeURIComponent(id)}/messages`,
-        stripUndefined({ body, authorId, roundMode }),
+        stripUndefined({
+          body,
+          authorId,
+          roundMode,
+          attachments: attachments && attachments.length > 0 ? attachments : undefined,
+        }),
       );
     },
     async readHandoffs(threadId, through) {

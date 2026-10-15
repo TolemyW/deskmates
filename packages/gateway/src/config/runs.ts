@@ -2,6 +2,7 @@
 // directory, cron zone and webhook limits. Most are recorded in `runs.config_json` (AGENTS.md).
 
 import {
+  BOT_WORKDIR_DEFAULT,
   type BotWorkdirMode,
   DeskmatesError,
   type GroupRouting,
@@ -61,7 +62,7 @@ export interface RunsConfig {
    * Omitted means `GROUP_ROUTING_DEFAULT`. Recorded in `runs.config_json` as `groupRouting`.
    */
   groupRouting?: GroupRouting;
-  /** Issue #88: opt-in per-bot working directory. Omitted means `shared`. */
+  /** Where runs start (issue #88, ADR-0038). Omitted means `BOT_WORKDIR_DEFAULT`, `per-bot`. */
   botWorkdir?: BotWorkdirMode;
   /** Non-secret strategy versions/hashes supplied by an evaluation or embedding host. */
   strategyEvidence?: Readonly<Record<string, string>>;
@@ -104,12 +105,13 @@ function groupRouting(env: Env): GroupRouting {
 }
 
 /**
- * Issue #88 (ADR-0004 amendment 1): where a run starts. `shared` keeps `/work` and the prompt of
- * every earlier run; `per-bot` is an unmeasured strategy candidate, so it stays opt-in until a
- * paired campaign says otherwise. Recorded in `runs.config_json` as `botWorkdir`.
+ * Issue #88, ADR-0038 decision 1 (owner-decided 2026-10-14): where a run starts. `per-bot`, the
+ * default, starts in `/work/bots/<bot>` with teammates' directories read-only through the
+ * sidecar's soft guard; `shared` keeps `/work` and the prompt of every earlier run. A workspace's
+ * stored mode wins (ADR-0036). Recorded in `runs.config_json` as `botWorkdir`.
  */
 function botWorkdir(env: Env): BotWorkdirMode {
-  const value = env.DESKMATES_BOT_WORKDIR?.trim() || "shared";
+  const value = env.DESKMATES_BOT_WORKDIR?.trim() || BOT_WORKDIR_DEFAULT;
   if (value !== "shared" && value !== "per-bot")
     throw new DeskmatesError("validation", "DESKMATES_BOT_WORKDIR must be shared or per-bot");
   return value;

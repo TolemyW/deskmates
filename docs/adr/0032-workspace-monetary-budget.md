@@ -158,3 +158,53 @@ at all, which a money budget cannot work with.
 - Follow-up, not done here: amend ADR-0005 and ADR-0016 to replace fixed truncation with the
   budget (decision 10); a cross-bot loop breaker; #63 checkpoint identity; per-run overshoot
   measurement on a real model.
+
+## Amendment 1 (2026-10-14): a stored per-run usage summary feeds the Costs page
+
+Status: Owner-decided (2026-10-14; issue #113, owner decision group 14: "不同模型的能分开就行").
+
+### What was wrong
+
+Every Costs request (`GET /api/costs`, `/api/costs/rows`, `/api/costs/ranking`) and every cost
+alert evaluation rebuilt the usage receipt of every run in the filtered range from `run_usage`,
+`run_events` and `model_requests`, priced it, estimated it and grouped it in JavaScript. The cost
+of a page view grew with the history, and a price-table edit silently re-priced every past day.
+
+### Decision
+
+11. **A run's usage summary is computed once and stored, per model.** `run_usage_summaries` holds
+    one row per run (its receipt coverage, the estimate method version and when it was computed);
+    `run_usage_summary_models` holds one row per run and model: the four token counts, how many
+    receipt rows it combines, how many were priced, unpriced, unpriced but still observational
+    (a lower bound of an in-flight attempt), estimated, unestimated and unmeasured, the known cost,
+    the estimated cost and whether attribution is uncertain. The values are exactly what the
+    receipt projection and the decision 4 estimate give at that moment.
+
+12. **When it is computed.** The Gateway writes the summary when an attempt ends, in the same
+    transaction that records the final usage. Any later change to the summary's inputs deletes it:
+    a SQLite trigger fires on a new or updated `run_usage` row, a new or updated `model_requests`
+    row, a new usage event (`turn_usage`, or a `log` from `sdk`, `usage_final` or
+    `usage_session_baseline`), and a change of the run's `attempt` or `started_at` (a resume or a
+    first start). A run without a summary (a run that existed before this amendment, an in-flight
+    attempt, usage that landed after the end) is computed by the first reader that needs it and
+    stored then; that is the backfill, done lazily rather than in the migration because the
+    projection is code, not SQL.
+
+13. **Costs read the summaries with SQL grouping.** Totals, days, Activity rows and rankings are
+    `GROUP BY` queries over the stored summaries joined to `runs`, `bots` and `workspaces`, with the
+    same filters as before. Whether a run is in flight is read from its current status at query
+    time, so an in-flight run's observational rows are still not counted as unpriced. Row order,
+    keyset cursors, ranking order and every field of the responses are unchanged.
+
+14. **History is not re-priced.** Editing the price table changes no stored summary; a run is
+    priced again only when its own usage changes (decision 12). Budget charges (decision 3) keep
+    their own append-only ledger and are unchanged.
+
+### Verification (amendment 1)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 11 | on fixtures with finals, proxy-only, in-flight, attribution-uncertain, unpriced-estimated, unpriced-unestimated and never-started runs, the stored per-model summary matches the receipt projection and its estimate | T0 `packages/gateway/src/ledger/run-usage-summaries.test.ts` | none |
+| 12 | `ended` writes the summary; a new usage row, model request, usage event or attempt change deletes it; a run without one is computed and stored by the first report | T0 `run-usage-summaries.test.ts`; T1 `packages/gateway/src/ledger/run-usage-summary-lifecycle.test.ts` | none |
+| 13 | report, rows, days and every ranking from the summaries equal the earlier per-request computation on the same fixtures, with and without filters; existing cost route tests pass unchanged | T0 `run-usage-summaries.test.ts` (legacy comparison); T1 `packages/gateway/src/api/cost-routes.test.ts`, `cost-pages.test.ts`; T0 `packages/gateway/src/ledger/costs.test.ts` | Costs request latency (reported) |
+| 14 | after a price edit a summarised run's known cost and estimate are unchanged; a run whose usage changes afterwards is priced with the edited table | T0 `run-usage-summaries.test.ts` | none |

@@ -21,6 +21,24 @@ describe("the soft-boundary sentence is in the docs an agent reads", () => {
   });
 });
 
+// ADR-0002 amendment 6: the L2 rule an agent reads names the workspace approval mode, what stays
+// with a human in `automatic`, and that no mode touches the hard denies (test strategy §11).
+describe("the approval mode is in the AGENTS.md risk-tier rule", () => {
+  it("names the three modes, the human-only classes and the unchanged hard denies", () => {
+    const rule = read("../../../AGENTS.md").replace(/\s+/g, " ");
+    for (const phrase of [
+      "the workspace's approval mode decides who answers (ADR-0002 amendment 6)",
+      "`manual` asks the thread",
+      "`automatic`, the default for a new workspace",
+      "deletion, permission expansion, egress asks, credential-bearing and unclassified actions still go to a human",
+      "`approve_all` allows every gated action without asking anyone",
+      "recorded as decided by `mode:approve_all`",
+      "No mode touches the hard denies",
+    ])
+      expect(rule).toContain(phrase);
+  });
+});
+
 // ADR-0012 item 6: a connector approval shows the proposed action, never the submission body,
 // matching ADR-0002's "proposed action, never page content". The behaviour is tested in
 // `connector-tools.test.ts`; this keeps the rule written where an agent reads it.

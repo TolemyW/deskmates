@@ -8,6 +8,7 @@ import { type GatewayDb, openDatabase } from "../db/open.js";
 import type { RunRecord } from "../ledger/runs.js";
 import { FakeProvider } from "../test-support/fake-provider.js";
 import { testConfig } from "../test-support/harness.js";
+import { AutoApprovalSettings } from "./auto-approval.js";
 import { cardInstruction } from "./instruction.js";
 
 const databases: GatewayDb[] = [];
@@ -27,6 +28,8 @@ function setup() {
   databases.push(db);
   const ctx = buildContext(testConfig(), db, new FakeProvider(), () => "http://gateway.test");
   const ws = ctx.workspaces.create({ name: "qa", sandboxProvider: "docker" });
+  // The human path (ADR-0002 amendment 6, D2); a new workspace would start in automatic review.
+  new AutoApprovalSettings(db).setMode(ws.id, "manual", "user:test");
   const chief = ctx.bots.create({ name: "chief", role: "coordinator", workspaceId: ws.id });
   const expert = ctx.bots.create({ name: "expert", role: "worker", workspaceId: ws.id });
   const reviewer = ctx.bots.create({ name: "reviewer", role: "security", workspaceId: ws.id });

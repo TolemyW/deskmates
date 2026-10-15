@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-// T0: the Network navigation entry shows to the administrator account only, and the screen.
+// T0: the Network navigation entry shows to the administrator account and workspace Owners
+// (ADR-0027 amendment 1 decision 12, owner-decided 2026-10-14), and the screen.
 
 import { type SessionRoles, mayTakeAction } from "@deskmates/contracts";
 import { Network } from "lucide-react";
@@ -26,12 +27,20 @@ describeNavEntry({
   visibleTo: { manager: true, member: true },
 });
 
-it("shows the link to the root and hides it from an Owner of every workspace", () => {
+it("shows the link to the root and to an Owner of any workspace, not to an Admin", () => {
   const visible = (roles: SessionRoles) =>
     feature.nav?.visible?.({ manager: true, can: (a) => mayTakeAction(roles, a, "ws_1") });
   expect(visible({ tenantRole: "owner", platformMaintainer: true, root: true })).toBe(true);
+  // An Owner elsewhere sees it while another workspace is selected (the route names none).
   expect(
-    visible({ tenantRole: "owner", platformMaintainer: true, workspaceRoles: { ws_1: "owner" } }),
+    visible({
+      tenantRole: "owner",
+      platformMaintainer: false,
+      workspaceRoles: { ws_1: "member", ws_2: "owner" },
+    }),
+  ).toBe(true);
+  expect(
+    visible({ tenantRole: "admin", platformMaintainer: false, workspaceRoles: { ws_1: "admin" } }),
   ).toBe(false);
 });
 

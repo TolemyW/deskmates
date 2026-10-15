@@ -47,6 +47,14 @@
   gap: 6px;
 }
 
+.limits-switches {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .limits-actions {
   display: flex;
   gap: 8px;

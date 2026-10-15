@@ -33,7 +33,7 @@ export function registerKnowledgeRoutes(app: FastifyInstance, ctx: GatewayContex
     if (q) {
       // Search pages over the rank with an honest total of matches, never only the top few.
       const { offset, limit } = parseOffsetQuery(request.query, KNOWLEDGE_SEARCH_LIMIT);
-      const page = ctx.knowledge.searchPage(tenantId, q, offset, limit);
+      const page = await ctx.retrieval.knowledgeSearchPage(tenantId, q, offset, limit);
       return { documents: page.items, offset, limit, total: page.total };
     }
     const scope = ["knowledge.documents", tenantId];
@@ -83,14 +83,15 @@ export function registerKnowledgeRoutes(app: FastifyInstance, ctx: GatewayContex
     const body = asRecord(request.body);
     if (body.decision !== "approve" && body.decision !== "reject")
       throw new DeskmatesError("validation", "Expected approve or reject");
-    return {
-      proposal: ctx.knowledge.review(
-        requestTenant(request),
-        request.params.id,
-        body.decision,
-        reviewer(request, body),
-      ),
-    };
+    const proposal = ctx.knowledge.review(
+      requestTenant(request),
+      request.params.id,
+      body.decision,
+      reviewer(request, body),
+    );
+    // ADR-0041 decision 4: a published document is embedded soon, never while this waits.
+    if (proposal.documentId) ctx.retrieval.kick();
+    return { proposal };
   });
   app.post("/api/knowledge/versions/cleanup", async () => ctx.knowledge.cleanupOrphanVersions());
   app.get<{ Params: { id: string }; Querystring: PageQuery }>(
@@ -120,16 +121,16 @@ export function registerKnowledgeRoutes(app: FastifyInstance, ctx: GatewayContex
     const body = asRecord(request.body);
     if (typeof body.version !== "number" || !Number.isSafeInteger(body.version) || body.version < 1)
       throw new DeskmatesError("validation", "Expected current document version");
-    return {
-      document: ctx.knowledge.edit(
-        requestTenant(request),
-        request.params.id,
-        body.title,
-        body.body,
-        body.version,
-        reviewer(request, body),
-      ),
-    };
+    const document = ctx.knowledge.edit(
+      requestTenant(request),
+      request.params.id,
+      body.title,
+      body.body,
+      body.version,
+      reviewer(request, body),
+    );
+    ctx.retrieval.kick();
+    return { document };
   });
 }
 
@@ -140,7 +141,10 @@ export function registerKnowledgeInternalRoutes(app: FastifyInstance, ctx: Gatew
     async (request) => {
       // A run reads its own tenant's Knowledge only (ADR-0022 P2).
       const tenantId = ctx.ownership.runTenant(request.params.runId as RunId);
-      return { documents: ctx.knowledge.search(tenantId, request.query.q ?? "") };
+      const runId = request.params.runId;
+      return {
+        documents: await ctx.retrieval.knowledgeSearch(tenantId, request.query.q ?? "", { runId }),
+      };
     },
   );
   app.get<{ Params: { runId: string; id: string } }>(

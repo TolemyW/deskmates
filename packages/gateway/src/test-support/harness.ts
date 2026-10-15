@@ -1,7 +1,13 @@
 // T1 harness: a Gateway on an in-memory database listening on a random localhost port, the fake
 // provider, and small helpers for the API, SSE and polling.
 
-import type { BotDefinition, ChannelPlugin, Thread, Workspace } from "@deskmates/contracts";
+import type {
+  ApprovalMode,
+  BotDefinition,
+  ChannelPlugin,
+  Thread,
+  Workspace,
+} from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
 import type { GatewayConfig } from "../config.js";
 import type { GatewayEvent } from "../events/bus.js";
@@ -50,7 +56,10 @@ export interface Harness {
   provider: FakeProvider;
   baseUrl: string;
   api<T>(method: string, path: string, body?: unknown): Promise<{ status: number; json: T }>;
-  seed(): Promise<{ workspace: Workspace; bot: BotDefinition; thread: Thread }>;
+  /** A workspace, a bot and its thread; the workspace is in `manual` approval mode by default. */
+  seed(options?: {
+    approvalMode?: ApprovalMode;
+  }): Promise<{ workspace: Workspace; bot: BotDefinition; thread: Thread }>;
   close(): Promise<void>;
 }
 
@@ -91,11 +100,17 @@ export async function startHarness(
     return { status: res.status, json: (await res.json()) as T };
   };
 
-  const seed = async () => {
+  const seed = async (options: { approvalMode?: ApprovalMode } = {}) => {
     const ws = await api<{ workspace: Workspace }>("POST", "/api/workspaces", {
       name: "ws-1",
       egressAllowlist: ["*.example.test"],
     });
+    // A new workspace starts in automatic review (ADR-0002 amendment 6, D1); most tests pin the
+    // human approval path, so the fixture is `manual` unless a test asks for another mode. The
+    // default itself is tested through POST /api/workspaces in `auto-approval-routes.test.ts`.
+    app.deskmates.ctx.db
+      .prepare("UPDATE workspaces SET approval_mode = ? WHERE id = ?")
+      .run(options.approvalMode ?? "manual", ws.json.workspace.id);
     // Most tests need an inert registry fixture, not the product's asynchronous first greeting.
     // Bot-creation route tests call POST directly and assert the canonical chat/welcome behavior.
     const bot = app.deskmates.ctx.bots.create({

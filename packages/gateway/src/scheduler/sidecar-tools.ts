@@ -7,6 +7,16 @@ import {
   type SidecarToolName,
 } from "@deskmates/contracts";
 
+/** ADR-0040 decision 2: a tool per operation the run config names. */
+function operationTools(stamp: unknown): SidecarToolName[] {
+  if (!stamp || typeof stamp !== "object") return [];
+  const ops = stamp as Record<string, unknown>;
+  return [
+    ...(ops.look ? (["image_describe"] as const) : []),
+    ...(ops.asr ? (["audio_transcribe"] as const) : []),
+  ];
+}
+
 /**
  * `approval_decide` is offered whenever the run has a thread: ADR-0002 amendment 2 lets any
  * member of a thread settle a request posted in it, including the requester from a later run.
@@ -40,5 +50,6 @@ export function sidecarToolsFor(
     ...(hasIntegrationConnections && config.integrationVersion === 1 ? INTEGRATION_TOOL_NAMES : []),
     ...(hasDeliverableTasks ? (["task_deliver"] as const) : []),
     ...(config.appShareVersion === 1 ? (["app_publish"] as const) : []),
+    ...operationTools(config.operations),
   ];
 }

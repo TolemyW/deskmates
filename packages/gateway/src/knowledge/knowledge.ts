@@ -72,7 +72,7 @@ export type KeysetAfter = readonly [string, string];
 export const KNOWLEDGE_SEARCH_LIMIT = { default: 25, max: 100 } as const;
 
 /** An FTS5 match of up to 16 quoted terms, or undefined when the query has none. */
-function ftsMatch(query: string): string | undefined {
+export function ftsMatch(query: string): string | undefined {
   if (query.length > 500) throw new DeskmatesError("validation", "Knowledge query is too long");
   const tokens = query.match(/[\p{L}\p{N}_]+/gu)?.slice(0, 16) ?? [];
   return tokens.length ? tokens.map((token) => `"${token}"`).join(" OR ") : undefined;
@@ -503,6 +503,35 @@ export class KnowledgeStore {
       )
       .all(match, tenantId, limit, offset) as KnowledgeHit[];
     return { items, total };
+  }
+  /**
+   * Published hits for these ids under one tenant, keyed by id (ADR-0041: the hybrid order is
+   * computed elsewhere; the hit shape stays the one `search` returns).
+   */
+  hitsByIds(tenantId: string, ids: readonly string[]): Map<string, KnowledgeHit> {
+    if (ids.length === 0) return new Map();
+    const rows = this.db
+      .prepare(
+        `SELECT d.id,d.title,substr(d.body,1,300) AS excerpt,d.version FROM knowledge_docs d
+         WHERE d.id IN (SELECT value FROM json_each(?)) AND d.tenant_id = ?
+           AND d.approved_by IS NOT NULL`,
+      )
+      .all(JSON.stringify(ids), tenantId) as KnowledgeHit[];
+    return new Map(rows.map((row) => [row.id, row]));
+  }
+  /** Title and body of published documents under one tenant, for reranking (ADR-0041). */
+  textsByIds(
+    tenantId: string,
+    ids: readonly string[],
+  ): Map<string, { title: string; body: string }> {
+    if (ids.length === 0) return new Map();
+    const rows = this.db
+      .prepare(
+        `SELECT id,title,body FROM knowledge_docs
+         WHERE id IN (SELECT value FROM json_each(?)) AND tenant_id = ? AND approved_by IS NOT NULL`,
+      )
+      .all(JSON.stringify(ids), tenantId) as { id: string; title: string; body: string }[];
+    return new Map(rows.map((row) => [row.id, { title: row.title, body: row.body }]));
   }
   edit(
     tenantId: string,

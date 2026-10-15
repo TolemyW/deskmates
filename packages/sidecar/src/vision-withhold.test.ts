@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { buildContext } from "./context.js";
 import { createMemoryFs } from "./testing/in-memory-fs.js";
 import {
+  VISION_LOOK_GUIDANCE,
   VISION_WITHHELD_GUIDANCE,
   imageReadNotice,
   isImagePath,
@@ -230,5 +231,30 @@ describe("the system prompt", () => {
     expect(withholding.systemPrompt).toBe(
       `${delivering.systemPrompt}\n\n${VISION_WITHHELD_GUIDANCE}`,
     );
+  });
+
+  // ADR-0040 decision 11: a withholding run that has the look/OCR tool is pointed at it.
+  it("adds the look/OCR line to a withholding run's Images section and nowhere else", async () => {
+    const fs = createMemoryFs({ "/home/nova/SOUL.md": "You are Nova." });
+    const withTool: StartRunRequest = { ...base, tools: ["image_describe"] };
+    const delivering = await buildContext(withTool, fs, now);
+    const withholding = await buildContext({ ...withTool, visionPolicy: "withhold" }, fs, now);
+    expect(delivering.systemPrompt).not.toContain(VISION_LOOK_GUIDANCE);
+    expect(withholding.systemPrompt).toBe(
+      `${delivering.systemPrompt}\n\n${VISION_WITHHELD_GUIDANCE}\n${VISION_LOOK_GUIDANCE}`,
+    );
+  });
+});
+
+describe("notices with the look/OCR tool (ADR-0040 decision 11)", () => {
+  it("name the tool and the path only when it is offered", () => {
+    expect(imageReadNotice("/work/a.png", true)).toMatch(
+      /^image_withheld: .*Call mcp__deskmates__image_describe with path "\/work\/a\.png"/,
+    );
+    expect(pdfReadNotice("/work/a.pdf", true)).toMatch(
+      /Call mcp__deskmates__image_describe with path "\/work\/a\.pdf" and mode "ocr"/,
+    );
+    expect(imageReadNotice("/work/a.png")).not.toContain("image_describe");
+    expect(pdfReadNotice("/work/a.pdf")).not.toContain("image_describe");
   });
 });

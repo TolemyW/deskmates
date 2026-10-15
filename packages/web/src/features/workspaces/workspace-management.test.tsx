@@ -33,10 +33,11 @@ function entry(i: number, extra: Partial<WorkspaceDirectoryEntry> = {}): Workspa
 }
 
 function limitsView(workspaceId: string): WorkspaceLimitsView {
-  const range = { min: 1, max: 100, off: true };
+  const range = { min: 1, max: 300, off: true };
   return {
     workspaceId,
     settings: { turnBudget: 12 },
+    switches: { requireBudgetForOff: false, volumeBreaker: false },
     effective: {
       continuationLimit: { value: 2, source: "default" },
       continuationWindowHours: { value: 24, source: "default" },
@@ -49,7 +50,7 @@ function limitsView(workspaceId: string): WorkspaceLimitsView {
       continuationWindowHours: 24,
       maxTurns: 80,
       relayCountMax: 5,
-      turnBudget: 8,
+      turnBudget: null,
     },
     ranges: {
       continuationLimit: range,
@@ -58,7 +59,7 @@ function limitsView(workspaceId: string): WorkspaceLimitsView {
       relayCountMax: range,
       turnBudget: range,
     },
-    loopBreaker: { relayMax: 50, botMessages: 100, repeats: 3 },
+    loopBreaker: { relayMax: 50, botMessages: 300, repeats: 3 },
     budgetBackstop: false,
   };
 }
@@ -86,22 +87,35 @@ function fakeApi(rows = ROWS) {
     async (id: WorkspaceId, name: string) =>
       ({ id, name, egressAllowlist: ["*"] }) as unknown as Workspace,
   );
-  const setAutoApproval = vi.fn(async (workspaceId: string, enabled: boolean) => ({
+  const setApprovalMode = vi.fn(async (workspaceId: string, mode: string) => ({
     workspaceId,
-    enabled,
+    mode,
+    enabled: mode === "automatic",
+    expiryMinutes: 60,
   }));
   const api = {
-    getAutoApproval: vi.fn(async (workspaceId: string) => ({ workspaceId, enabled: false })),
+    getAutoApproval: vi.fn(async (workspaceId: string) => ({
+      workspaceId,
+      mode: "automatic",
+      enabled: true,
+      expiryMinutes: 60,
+    })),
     getWorkspaceLimits: vi.fn(async (workspaceId: string) => limitsView(workspaceId)),
+    // The Network policy section (ADR-0034 decision 9) reads the allowlist.
+    getWorkspace: vi.fn(async (id: string) => ({
+      workspace: { id, name: id, egressAllowlist: ["*"] },
+      bots: [],
+      browserLock: null,
+    })),
     listWorkspaces: vi.fn(async () => [] as Workspace[]),
     listWorkspaceDirectory,
     renameWorkspace,
-    setAutoApproval,
+    setApprovalMode,
     setWorkspacePinned: vi.fn(async () => {}),
     // The Working directories section (ADR-0036) reads on open; it stays loading here.
     getWorkspaceWorkdir: vi.fn(() => new Promise(() => {})),
   } as unknown as ApiClient;
-  return { api, listWorkspaceDirectory, renameWorkspace, setAutoApproval };
+  return { api, listWorkspaceDirectory, renameWorkspace, setApprovalMode };
 }
 
 beforeEach(() => {
@@ -181,8 +195,8 @@ describe("Workspace detail", () => {
     ).toBeInTheDocument();
   });
 
-  it("holds the automatic-approval switch and the execution limits, editable by an Admin", async () => {
-    const { api, setAutoApproval } = fakeApi();
+  it("holds the approval mode and the execution limits, editable by an Admin", async () => {
+    const { api, setApprovalMode } = fakeApi();
     render(
       <SessionRolesProvider
         roles={{
@@ -194,17 +208,22 @@ describe("Workspace detail", () => {
         <WorkspaceManagement api={api} workspaceId="ws_04" />
       </SessionRolesProvider>,
     );
-    expect(await screen.findByRole("heading", { name: "Automatic approval" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Approvals" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Execution limits" })).toBeInTheDocument();
-    const toggle = await screen.findByRole("switch", { name: /Automatic approval is off/ });
-    await waitFor(() => expect(toggle).toBeEnabled());
-    fireEvent.click(toggle);
-    await waitFor(() => expect(setAutoApproval).toHaveBeenCalledWith("ws_04", true));
+    const automatic = await screen.findByRole("radio", { name: /Automatic review/ });
+    await waitFor(() => expect(automatic).toBeChecked());
+    await waitFor(() => expect(automatic).toBeEnabled());
+    fireEvent.click(screen.getByRole("radio", { name: /Approve all/ }));
+    await waitFor(() => expect(setApprovalMode).toHaveBeenCalledWith("ws_04", "approve_all"));
+    // ADR-0002 amendment 6, D1: the header and the section both mark approve all.
+    await waitFor(() =>
+      expect(screen.getAllByTestId("approve-all-badge").length).toBeGreaterThan(0),
+    );
     expect(await screen.findByRole("button", { name: "Edit limits" })).toBeInTheDocument();
   });
 
   it("shows both read-only to a Member of that workspace", async () => {
-    const { api, setAutoApproval } = fakeApi([entry(4, { myRole: "member" })]);
+    const { api, setApprovalMode } = fakeApi([entry(4, { myRole: "member" })]);
     render(
       <SessionRolesProvider
         roles={{
@@ -216,10 +235,11 @@ describe("Workspace detail", () => {
         <WorkspaceManagement api={api} workspaceId="ws_04" />
       </SessionRolesProvider>,
     );
-    const toggle = await screen.findByRole("switch", { name: /Automatic approval is off/ });
-    expect(toggle).toBeDisabled();
+    const automatic = await screen.findByRole("radio", { name: /Automatic review/ });
+    await waitFor(() => expect(automatic).toBeChecked());
+    expect(automatic).toBeDisabled();
     expect(await screen.findByText(/^12 · /)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit limits" })).toBeNull();
-    expect(setAutoApproval).not.toHaveBeenCalled();
+    expect(setApprovalMode).not.toHaveBeenCalled();
   });
 });

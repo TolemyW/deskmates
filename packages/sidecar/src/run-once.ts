@@ -70,6 +70,7 @@ import {
   parseScreenshotFile,
   screenshotFileName,
 } from "./screenshots.js";
+import { carrySessionIntoBotDir } from "./session-carry.js";
 import { materializeSkillPlugin, skillPluginDir } from "./skill-plugin.js";
 import { parseRunSummary } from "./summary.js";
 import { createThreadTools } from "./thread-tools.js";
@@ -79,7 +80,6 @@ import { TtySessions } from "./tty-session.js";
 import { TurnUsageTracker } from "./turn-usage.js";
 import { TurnWarning } from "./turn-warning.js";
 import { withholdsImages } from "./vision-withhold.js";
-import { prepareWorktree } from "./worktree.js";
 
 /** Seconds added to the short wait so the SDK does not time the hook out mid-wait. */
 export const HOOK_TIMEOUT_MARGIN_SECONDS = 60;
@@ -471,11 +471,10 @@ export async function runOnce(
         });
       }
     }
-    // Issue #88: under the opt-in per-bot mode the run starts in the bot's own directory under the
-    // shared /work. It is a convention the prompt states, not a boundary: no hook or callback
-    // looks at it. A directory that cannot be created leaves the run in /work, not failed.
+    // ADR-0038 decision 1: a per-bot run (the default) starts in the bot's own directory, which
+    // other bots may read but not write (the hook's soft guard, decision 2). A directory that
+    // cannot be created leaves the run in /work, not failed.
     let cwd = WORK_DIR;
-    let workdirProblem: string | undefined;
     if (request.workdirMode === "per-bot") {
       const own = botWorkDir(request.botName);
       try {
@@ -488,21 +487,11 @@ export async function runOnce(
           reason: `bot working directory unavailable, starting in ${WORK_DIR}: ${String(err)}`,
         });
       }
-      // ADR-0036 decision 4: the bot's own worktree of the workspace's repository, before the
-      // prompt is built so a failure can be said in it. A failure never fails the run.
-      if (request.worktreeRepo !== undefined) {
-        const worktree = await prepareWorktree(request.botName, request.worktreeRepo, deps);
-        sink.emit("log", {
-          source: "workdir",
-          op: "worktree",
-          ...worktree,
-          ...(worktree.outcome === "failed" ? { level: "warn" } : {}),
-        });
-        if (worktree.outcome === "failed") workdirProblem = worktree.reason;
-      }
+      if (cwd !== WORK_DIR && request.sdkSessionId !== undefined)
+        await carrySessionIntoBotDir(request, cwd, deps.fs, sink);
     }
 
-    const context = await buildContext(request, deps.fs, deps.now(), knowledge, workdirProblem);
+    const context = await buildContext(request, deps.fs, deps.now(), knowledge);
     // What each part of the system prompt costs and which prompt this was, without the text
     // (M3 context plan, Phase 1). The hash also goes to `runs.config_json` through RunEnded.
     sink.emit("log", {
@@ -540,6 +529,7 @@ export async function runOnce(
       state,
       readBrowserState,
       egressAllowlist: resolveAllowlist(request.egressAllowlist, deps.env),
+      cwd,
       redact: (value) => redactValue(value, secrets),
       protectToolInput,
       now: deps.now,
@@ -588,6 +578,7 @@ export async function runOnce(
         request,
         client,
         sink,
+        ...(deps.operationFiles ? { operationFiles: deps.operationFiles } : {}),
         ...(tty ? { tty, redactTerminal: (text: string) => redactText(text, secrets) } : {}),
         browserCli: {
           context: {

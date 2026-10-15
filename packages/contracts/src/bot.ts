@@ -99,9 +99,9 @@ export function botHomeDir(botName: string): string {
 }
 
 /**
- * Where a bot's runs start under the opt-in `per-bot` working-directory mode (issue #88,
- * ADR-0004 amendment 1). A convention inside the shared `/work`, not a boundary: every bot in
- * the workspace can read and write it.
+ * Where a bot's runs start under the `per-bot` working-directory mode, the default (ADR-0038).
+ * Every bot may read it; the sidecar's soft guard refuses other bots' obvious writes into it. A
+ * guard against mistakes, not a security boundary: all bots run as one Unix user.
  */
 export function botWorkDir(botName: string): string {
   return `/work/bots/${botName}`;

@@ -125,3 +125,48 @@ describe("bot model overrides must be priced (SEC-03)", () => {
     expect(after.status).toBe(200);
   });
 });
+
+describe("bot model overrides must have an upstream (ADR-0039 decision 4)", () => {
+  it("accepts a registered model on another upstream and refuses an unroutable one", async () => {
+    await h.close();
+    h = await startHarness({
+      modelBaseUrl: "",
+      modelAuthToken: "",
+      defaultModel: "local-27b",
+      cheapModel: "local-27b",
+      modelUpstreams: [
+        {
+          id: "local",
+          baseUrl: "http://local.test",
+          models: ["local-27b", "local-9b"],
+          protocol: "anthropic",
+        },
+      ],
+      // A free local model is priced at an explicit zero; `model-priced` has a row but no upstream.
+      modelPrices: [{ ...price("local-9b"), inputPerM: 0, outputPerM: 0 }, price("model-priced")],
+    });
+    const { bot, workspace } = await h.seed();
+    const ok = await h.api<{ bot: BotDefinition }>("PATCH", `/api/bots/${bot.id}`, {
+      model: "local-9b",
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.json.bot.model).toBe("local-9b");
+    for (const [i, bad] of [{ model: "model-priced" }, { cheapModel: "model-priced" }].entries()) {
+      const patch = await h.api<{ code: string; message: string }>(
+        "PATCH",
+        `/api/bots/${bot.id}`,
+        bad,
+      );
+      expect(patch.status, JSON.stringify(bad)).toBe(400);
+      expect(patch.json.message).toContain("no model upstream");
+      const create = await h.api<{ code: string }>("POST", "/api/bots", {
+        name: `unroutable${i}`,
+        workspaceId: workspace.id,
+        ...bad,
+      });
+      expect(create.status, JSON.stringify(bad)).toBe(400);
+      expect(create.json.code).toBe("validation");
+    }
+    expect(h.app.deskmates.ctx.bots.mustGet(bot.id).model).toBe("local-9b");
+  });
+});

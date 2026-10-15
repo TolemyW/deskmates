@@ -23,6 +23,7 @@ import { usePagedQuery } from "../../lib/use-paged-query.js";
 import { useCan } from "../../state/session-roles.js";
 import { useWorkspaceScope } from "../../state/workspace-scope.js";
 import { type WorkspaceListState, workspaceDetailHref, workspacesHref } from "../account/route.js";
+import type { DetailShell } from "./detail-sections.js";
 import { markOpenedFromList } from "./list-return.js";
 import { WorkspaceDetail } from "./workspace-detail.js";
 
@@ -33,12 +34,16 @@ export function WorkspaceManagement({
   api,
   list = {},
   workspaceId,
+  shell,
 }: {
   api: ApiClient;
   list?: WorkspaceListState;
   workspaceId?: string;
+  /** The people client and session the detail's People section edits with. */
+  shell?: DetailShell;
 }) {
-  if (workspaceId) return <WorkspaceDetail api={api} workspaceId={workspaceId} list={list} />;
+  if (workspaceId)
+    return <WorkspaceDetail api={api} workspaceId={workspaceId} list={list} shell={shell} />;
   return <WorkspaceList api={api} list={list} />;
 }
 

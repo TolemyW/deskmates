@@ -209,8 +209,14 @@ export function snapshotDatabase(ctx: GatewayContext): string {
   ).map((row) => row.name);
   return JSON.stringify(
     tables
-      // Sessions slide their idle expiry on use; that bookkeeping is not a side effect.
-      .filter((name) => name !== "auth_sessions")
+      // Sessions slide their idle expiry on use; that bookkeeping is not a side effect. Nor is
+      // a Costs read filling the run usage summary cache (ADR-0032 amendment 1 decision 12).
+      .filter(
+        (name) =>
+          name !== "auth_sessions" &&
+          name !== "run_usage_summaries" &&
+          name !== "run_usage_summary_models",
+      )
       .map((name) => [name, ctx.db.prepare(`SELECT * FROM "${name}" ORDER BY rowid`).all()]),
   );
 }

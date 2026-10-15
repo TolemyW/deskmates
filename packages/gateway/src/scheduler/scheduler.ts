@@ -30,6 +30,7 @@ import type { GatewayContext } from "../context.js";
 import type { RunRecord } from "../ledger/runs.js";
 import { canonicalMemoryForBot } from "../memory/canonical-memory.js";
 import { isConsolidationRun } from "../memory/consolidation.js";
+import { queueMemoryMaintenance } from "../memory/maintenance-due.js";
 import { MODEL_JOB_RUN_TYPES } from "../model-jobs/model-jobs.js";
 import type { SandboxOrigin } from "../workspaces/sandboxes.js";
 import type { RunLifecycle } from "./run-lifecycle.js";
@@ -144,8 +145,10 @@ export class Scheduler {
     for (const run of this.ctx.memory.consolidation.requestEligible()) {
       this.ctx.bus.publish({ type: "run_status", run });
     }
-    // ADR-0011 amendment 4, A26: flag rows only, at most once an hour per workspace; no run.
-    this.ctx.memory.freshness.sweepDue(new Date(), (message) => this.log(message, {}));
+    // ADR-0011 amendment 4: the hourly freshness sweep (A26, flag rows only), then at most one
+    // model recheck (A28) and one daily organisation (A30) per workspace.
+    for (const run of queueMemoryMaintenance(this.ctx, new Date(), (m) => this.log(m, {})))
+      this.ctx.bus.publish({ type: "run_status", run });
     for (const id of this.capacityWaiting) {
       const run = this.ctx.runs.get(id);
       if (!run || isTerminal(run.status)) this.capacityWaiting.delete(id);

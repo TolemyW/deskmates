@@ -33,7 +33,11 @@ export function averageUnitPrice(
     const best = inForce.get(p.model);
     if (!best || p.effectiveFrom > best.effectiveFrom) inForce.set(p.model, p);
   }
-  const rows = [...inForce.values()];
+  // A model priced at an explicit zero (a local model, ADR-0039 decision 5) says nothing about
+  // what an unpriced paid model costs, so it is left out of the population (decision 7).
+  const rows = [...inForce.values()].filter(
+    (p) => p.inputPerM + p.outputPerM + p.cacheReadPerM + p.cacheCreatePerM > 0,
+  );
   if (!rows.length) return undefined;
   const mean = (key: "inputPerM" | "outputPerM" | "cacheReadPerM" | "cacheCreatePerM") =>
     rows.reduce((sum, p) => sum + p[key], 0) / rows.length;

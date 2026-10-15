@@ -1,5 +1,6 @@
-// Working-directory settings (ADR-0036): read the stored and effective values, and set or clear
-// them (Owner or Admin). A convention and tooling, never access control between bots.
+// Working-directory settings (ADR-0036, ADR-0038): read the stored and effective values, and set
+// or clear them (Owner or Admin). The mode decides whether the sidecar's soft write guard keeps
+// teammates' directories read-only; a guard against mistakes, not a security boundary.
 
 import type { WorkdirSettingsInput, WorkdirSettingsView } from "@deskmates/contracts";
 import type { HttpTransport } from "../../platform/http-transport.js";

@@ -21,6 +21,8 @@ const DESTINATIONS = [
   "Costs",
   "Integrations",
   "People",
+  // A tenant Owner sees Network (ADR-0027 amendment 1 decision 12, owner-decided 2026-10-14).
+  "Network",
 ];
 
 function json(body: unknown): Response {
@@ -72,7 +74,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The main navigation once all twelve links and the pending-approval badge have rendered. */
+/** The main navigation once all thirteen links and the pending-approval badge have rendered. */
 async function renderNavigation(): Promise<HTMLElement> {
   render(<App />);
   const nav = await screen.findByRole("navigation", { name: "Main navigation" });
@@ -110,7 +112,10 @@ it("groups Files, Knowledge and Skills under Resources and puts Computer first u
   expect(groups).toEqual([
     { label: "Talk", links: ["#/threads", "#/contacts", "#/tasks", "#/approvals", "#/board"] },
     { label: "Resources", links: ["#/resources/files", "#/knowledge/documents", "#/skills"] },
-    { label: "Operate", links: ["#/computer", "#/costs", "#/integrations", "#/members"] },
+    {
+      label: "Operate",
+      links: ["#/computer", "#/costs", "#/integrations", "#/members", "#/network"],
+    },
   ]);
 });
 

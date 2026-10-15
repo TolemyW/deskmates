@@ -6,6 +6,7 @@ import { DeskmatesError, canRetryWelcome, decidedByHuman, isBotAvatar } from "@d
 import type { FastifyInstance } from "fastify";
 import type { BotPatch } from "../bots/bots.js";
 import { hashWebhookToken, newWebhookToken } from "../bots/webhook-token.js";
+import { modelRegistryOf } from "../config/model-upstreams.js";
 import type { GatewayContext } from "../context.js";
 import { newId } from "../db/ids.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
@@ -293,11 +294,19 @@ function createWelcomeRun(ctx: GatewayContext, bot: BotDefinition, thread: Threa
 /**
  * A bot's model override must have a row in the price table (ADR-0023 decision 1), so every model
  * a run can be frozen on is one the Gateway can price; an unpriced override is refused at write
- * time rather than discovered as `pricing_missing` after the money is spent.
+ * time rather than discovered as `pricing_missing` after the money is spent. It must also have an
+ * upstream (ADR-0039 decision 4), so it is not discovered as `model_upstream_missing` at run time.
  */
 function requirePricedModel(ctx: GatewayContext, key: string, model: string): void {
   if (model === "") {
     throw new DeskmatesError("validation", `${key} must be a model id, not empty`, { key });
+  }
+  if (modelRegistryOf(ctx.config).resolve(model) === undefined) {
+    throw new DeskmatesError(
+      "validation",
+      `${key} "${model}" is served by no model upstream; list it in MODEL_UPSTREAMS first`,
+      { key, model },
+    );
   }
   if (ctx.prices.listForModel(model).length === 0) {
     throw new DeskmatesError(

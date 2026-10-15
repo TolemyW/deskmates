@@ -22,6 +22,8 @@ import { integrationTools } from "./integration-tools.js";
 import { knowledgeTools } from "./knowledge-tools.js";
 import type { EventSink } from "./ledger.js";
 import { memoryTools } from "./memory-tools.js";
+import type { OperationFiles } from "./operation-input.js";
+import { operationTools } from "./operation-tools.js";
 import { describePosted } from "./posted-message.js";
 import { DESKMATES_MCP_SERVER } from "./risk-tier.js";
 import { taskTools } from "./task-tools.js";
@@ -37,6 +39,8 @@ export interface ThreadToolsContext {
   sink: EventSink;
   tool: ToolFn;
   createSdkMcpServer: CreateSdkMcpServerFn;
+  /** How `image_describe` and `audio_transcribe` read files (ADR-0040); tests use a temp root. */
+  operationFiles?: OperationFiles;
 }
 
 const attachmentSchema = z.object({
@@ -189,6 +193,7 @@ export function createThreadTools(ctx: ThreadToolsContext): McpSdkServerConfigWi
   tools.push(...integrationTools(ctx));
   tools.push(...taskTools(ctx));
   tools.push(...appShareTools(ctx));
+  tools.push(...operationTools(ctx));
   if (
     request.tools.includes("browser_cli_workflow") &&
     request.browserExecutionMode === "vision-cli-v2" &&

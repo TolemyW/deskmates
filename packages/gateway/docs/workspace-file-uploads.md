@@ -12,6 +12,7 @@ on every request of the session.
 | `POST /api/workspaces/:id/uploads/:uploadId/complete` | Commits it to `/work/uploads/<UTC date>/<name>` and returns the final path and SHA-256. Repeating the call returns the same result |
 | `GET /api/workspaces/:id/uploads/:uploadId` | State and received bytes, for resuming |
 | `DELETE /api/workspaces/:id/uploads/:uploadId` | Cancels a receiving session and removes its partial file |
+| `DELETE /api/workspaces/:id/uploads/:uploadId/file` | Admin or Owner: deletes a completed upload's file (decision 43) and returns `{upload, removed}` |
 
 Only the uploader sends parts and completes a session. The uploader, an Admin or an Owner reads
 or cancels it. Anyone else gets 404. Each container operation is the fixed command
@@ -36,6 +37,9 @@ the way and at the partial file, and never overwrites: a taken name gets `-2`, `
 | Workspace disk full | 507 `storage_exhausted`; the partial file is truncated back and the session resumes |
 | Configured workspace quota exceeded | 413 `workspace_upload_quota` with `details.quotaBytes` |
 | Link or non-directory on the way | 403 `upload_path_policy` |
+| Delete by a Member or Guest | 403 |
+| Delete of a receiving, cancelled or expired upload | 409 `upload_<state>` |
+| Delete of an already deleted upload | 409 `upload_deleted` |
 
 ## Limits that are not product caps
 
@@ -61,5 +65,20 @@ Completion writes one `file.upload` audit event in the same transaction. The eve
 size, digest and label, and never content. Creation, completion, cancellation and every refusal
 write an info log line. A completed upload appears in the Files collection as `source: uploaded`,
 `verification: input` with an `upload` reference. An upload starts no run, posts no message and
-touches no Knowledge, memory or task. The Web composer's attach button inserts the final path into
-the draft. The bot sees the path only when the person sends the message.
+touches no Knowledge, memory or task.
+
+## Chat attachments and deletion
+
+The Web composer uploads files chosen with the paperclip, dropped on the chat pane or pasted, and
+shows them as chips until Send. Send posts `attachments: [{uploadId}]` (at most 20) on
+`POST /api/threads/:id/messages` (`api/message-attachments.ts`). Each id must be the poster's own
+completed, not deleted upload in the thread's workspace; anything else is 400
+`attachment_not_attachable` with nothing stored. The stored attachment is
+`{name, mimeType, ref, uploadId, sizeBytes}`, the type coming from the extension
+(`uploadAttachmentMime`). The bot's wake lists each attachment's name, type and path.
+
+Any Admin or Owner deletes a completed upload's file with `DELETE .../uploads/:uploadId/file`.
+The container command's `remove` operation accepts only `/work/uploads/<date>/<safe name>` and
+refuses links and non-files. The row keeps its provenance with `deleted_at` and `deleted_by`, one
+`file.delete` audit event is written in the same transaction, and Files stops listing the upload
+and message attachments that name it.

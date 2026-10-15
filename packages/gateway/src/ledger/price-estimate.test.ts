@@ -91,4 +91,21 @@ describe("average configured unit price (ADR-0032 decision 4)", () => {
       }),
     ).toBe(2);
   });
+
+  it("leaves free (all-zero) models out of the population (ADR-0039 decision 7)", () => {
+    const avg = averageUnitPrice(
+      [
+        row("paid", [2, 10, 0.2, 2.5]),
+        row("qwen3.5-9b", [0, 0, 0, 0]),
+        row("qwen3.8-27b", [0, 0, 0, 0]),
+        // Free now, paid before: the in-force row decides, so it is left out.
+        row("was-paid", [0, 0, 0, 0]),
+        row("was-paid", [50, 50, 50, 50], "2019-01-01T00:00:00.000Z"),
+      ],
+      AT,
+    );
+    expect(avg).toMatchObject({ inputPerM: 2, outputPerM: 10, populationSize: 1 });
+    // A table of free models only gives no estimate: unknown, like an empty table.
+    expect(averageUnitPrice([row("qwen3.5-9b", [0, 0, 0, 0])], AT)).toBeUndefined();
+  });
 });

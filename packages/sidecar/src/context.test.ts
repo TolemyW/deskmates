@@ -173,6 +173,29 @@ describe("renderThreadMessage wraps everything a bot chose", () => {
     expect(system).toBe("[system] orion joined\n  attachments: a.csv (text/csv) /work/a.csv");
   });
 
+  it("lists attachment paths of a person's uploads, even with a blank body (ADR-0014 A5 decision 42)", () => {
+    const rendered = renderThreadMessage(
+      message({
+        authorKind: "human",
+        authorName: "Alice",
+        body: "",
+        attachments: [
+          {
+            name: "Screenshot 1.png",
+            mimeType: "image/png",
+            ref: "/work/uploads/2026-10-14/Screenshot_1.png",
+            uploadId: `upl_${"a".repeat(32)}`,
+            sizeBytes: 1234,
+          },
+          { name: "q.csv", mimeType: "text/csv", ref: "/work/uploads/2026-10-14/q.csv" },
+        ],
+      }),
+    );
+    expect(rendered).toBe(
+      "[human: Alice] \n  attachments: Screenshot 1.png (image/png) /work/uploads/2026-10-14/Screenshot_1.png, q.csv (text/csv) /work/uploads/2026-10-14/q.csv",
+    );
+  });
+
   it("marks a system message carrying an approval as an approval notice (ADR-0002 A4)", () => {
     const notice = renderThreadMessage(
       message({
@@ -643,9 +666,9 @@ describe("Deskmates tool names in the system prompt", () => {
   });
 });
 
-// Issue #88: a per-bot working directory is an opt-in knob (`DESKMATES_BOT_WORKDIR`, recorded per
-// run). It is a convention the prompt states, not a boundary, and with the knob off the system
-// prompt is the one every run had before the knob existed.
+// ADR-0038: per-bot is the default mode (the Gateway sends `workdirMode: "per-bot"`); its prompt
+// states the rule the hook's soft guard applies. The shared mode, a workspace option, keeps the
+// system prompt every run had before issue #88.
 describe("buildContext working directory", () => {
   const trigger: TriggerPayload = {
     kind: "thread_message",
@@ -656,10 +679,10 @@ describe("buildContext working directory", () => {
   const fs = () => createMemoryFs({ "/home/nova/SOUL.md": "You are Nova." });
   const at = new Date("2026-10-12T00:00:00Z");
 
-  it("leaves the default system prompt byte-identical to the one before the knob", async () => {
+  it("leaves the shared-mode system prompt byte-identical to the one before issue #88", async () => {
     const context = await buildContext(request(trigger), fs(), at);
     // sha256 of the system prompt this exact request produced on main before issue #88. A
-    // deliberate guidance change elsewhere updates it; the per-bot knob must never move it.
+    // deliberate guidance change elsewhere updates it; the per-bot mode must never move it.
     expect(context.systemPromptSha256).toBe(DEFAULT_PROMPT_SHA256);
     expect(context.systemPrompt).toContain(
       "Your shared working directory is /work. Your home is /home/nova.",
@@ -668,18 +691,28 @@ describe("buildContext working directory", () => {
     expect(context.systemPrompt).not.toContain("git worktree");
   });
 
-  it("names the bot's own directory, the shared /work and git worktrees under per-bot", async () => {
+  it("names the bot's own directory and the read-only rule under per-bot", async () => {
     const context = await buildContext({ ...request(trigger), workdirMode: "per-bot" }, fs(), at);
     expect(context.systemPrompt).toContain("Your own working directory is /work/bots/nova");
-    expect(context.systemPrompt).toContain("/work is shared with every bot in this workspace");
-    expect(context.systemPrompt).toContain("not a boundary");
-    expect(context.systemPrompt).toContain("worktree add /work/bots/nova/<repo>");
+    expect(context.systemPrompt).toContain("your work and deliverables belong there");
+    expect(context.systemPrompt).toContain("/work/bots/<its name>");
+    expect(context.systemPrompt).toContain("never write into it: writes there are refused");
+    expect(context.systemPrompt).toContain("/work/uploads");
+    expect(context.systemPrompt).toContain("git clone /work/<repo> /work/bots/nova/<repo>");
     expect(context.systemPrompt).toContain("Your home is /home/nova.");
     expect(context.systemPrompt).not.toContain("Your shared working directory is /work.");
+    // ADR-0038 decision 7: the platform prepares no worktree, and the prompt never says it does.
+    expect(context.systemPrompt).not.toContain("worktree");
   });
 
-  it("keeps the per-bot guidance on an approval resume", async () => {
+  it("keeps the per-bot guidance byte-stable and on an approval resume", async () => {
     const fresh = await buildContext({ ...request(trigger), workdirMode: "per-bot" }, fs(), at);
+    const later = await buildContext(
+      { ...request(trigger), workdirMode: "per-bot" },
+      fs(),
+      new Date("2026-10-13T00:00:00Z"),
+    );
+    expect(later.systemPromptSha256).toBe(fresh.systemPromptSha256);
     const resumed = await buildContext(
       {
         ...request({
@@ -694,52 +727,10 @@ describe("buildContext working directory", () => {
     );
     expect(resumed.systemPrompt).toBe(fresh.systemPrompt);
   });
-
-  // ADR-0036 decision 5.
-  it("says where teammates work and names the prepared worktree when the workspace has one", async () => {
-    const plain = await buildContext({ ...request(trigger), workdirMode: "per-bot" }, fs(), at);
-    expect(plain.systemPrompt).toContain("/work/bots/<its name>");
-    const withRepo = await buildContext(
-      { ...request(trigger), workdirMode: "per-bot", worktreeRepo: "/work/app" },
-      fs(),
-      at,
-    );
-    expect(withRepo.systemPrompt).toContain("/work/bots/<its name>");
-    expect(withRepo.systemPrompt).toContain(
-      "worktree of it at /work/bots/nova/app on branch bots/nova",
-    );
-    expect(withRepo.systemPrompt).toContain("not in /work/app");
-    expect(withRepo.systemPrompt).toContain("never resets, pulls or merges");
-    expect(withRepo.systemPrompt).not.toContain("worktree add /work/bots/nova/<repo>");
-    // Byte-stable from run to run: nothing per run enters it.
-    const again = await buildContext(
-      { ...request(trigger), workdirMode: "per-bot", worktreeRepo: "/work/app" },
-      fs(),
-      new Date("2026-10-13T00:00:00Z"),
-    );
-    expect(again.systemPromptSha256).toBe(withRepo.systemPromptSha256);
-  });
-
-  it("puts a worktree failure in the run's prompt, not the system prompt", async () => {
-    const ok = await buildContext(
-      { ...request(trigger), workdirMode: "per-bot", worktreeRepo: "/work/app" },
-      fs(),
-      at,
-    );
-    const failed = await buildContext(
-      { ...request(trigger), workdirMode: "per-bot", worktreeRepo: "/work/app" },
-      fs(),
-      at,
-      [],
-      "not a git repository",
-    );
-    expect(failed.systemPrompt).toBe(ok.systemPrompt);
-    expect(failed.prompt).toContain("could not be prepared this run (not a git repository)");
-    expect(ok.prompt).not.toContain("could not be prepared");
-  });
 });
 
-// ADR-0036 decision 6: a note in the run's prompt, never in the cached system prompt.
+// ADR-0036 decision 6, kept by ADR-0038 decision 8: a note in the run's prompt, never in the
+// cached system prompt.
 describe("buildContext lane notice", () => {
   const trigger: TriggerPayload = { kind: "cron", prompt: "nightly check" };
   const fs = () => createMemoryFs({ "/home/nova/SOUL.md": "You are Nova." });
@@ -752,23 +743,24 @@ describe("buildContext lane notice", () => {
     startedAt: "2026-10-14T07:59:00.000Z",
   } as const;
 
-  it("names the other lane's run and the shared worktree", async () => {
+  it("names the other lane's run and the shared directory", async () => {
     const without = await buildContext({ ...request(trigger) }, fs(), at);
     const context = await buildContext(
-      { ...request(trigger), workdirMode: "per-bot", worktreeRepo: "/work/app", otherLaneRun },
+      { ...request(trigger), workdirMode: "per-bot", otherLaneRun },
       fs(),
       at,
     );
     expect(context.prompt).toContain(
       "run run_chat on your interactive lane (trigger thread_message in thread thread-1, started 2026-10-14T07:59:00.000Z)",
     );
-    expect(context.prompt).toContain("shares your working directory and your worktree");
+    expect(context.prompt).toContain("shares your working directory. Before");
+    expect(context.prompt).not.toContain("worktree");
     expect(context.prompt).toContain("git status");
     expect(context.systemPrompt).not.toContain("run_chat");
     expect(without.prompt).not.toContain("other lane");
   });
 
-  it("adds the note on a resume as well, without a worktree", async () => {
+  it("adds the note on a resume as well", async () => {
     const context = await buildContext(
       {
         ...request({

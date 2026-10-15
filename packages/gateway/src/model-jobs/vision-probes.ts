@@ -21,6 +21,7 @@ import {
   isTerminal,
   visionPolicyFor,
 } from "@deskmates/contracts";
+import { modelRegistryOf } from "../config/model-upstreams.js";
 import type { GatewayContext } from "../context.js";
 import { newId } from "../db/ids.js";
 import type { RunRecord } from "../ledger/runs.js";
@@ -87,15 +88,20 @@ export function gradeVisionAnswer(answer: string, code: string): "match" | "refu
 export class VisionProbes {
   constructor(private readonly ctx: GatewayContext) {}
 
-  private get key() {
+  /**
+   * The configuration part of one model's cache key: its own upstream's URL (ADR-0039 decision
+   * 6), so a model on `default` keeps its pre-registry key. An unroutable model keys on the empty
+   * URL; its probe cannot reach a model anyway.
+   */
+  private keyFor(model: string) {
     return {
-      endpoint: endpointSha256(this.ctx.config.modelBaseUrl),
+      endpoint: endpointSha256(modelRegistryOf(this.ctx.config).resolve(model)?.baseUrl ?? ""),
       revision: VISION_PROBE_ADAPTER_REVISION,
     };
   }
 
   private rows(workspaceId: WorkspaceId, model: string, limit: number): ProbeRow[] {
-    const { endpoint, revision } = this.key;
+    const { endpoint, revision } = this.keyFor(model);
     return this.ctx.db
       .prepare(
         `SELECT * FROM model_capability_probes
@@ -201,7 +207,7 @@ export class VisionProbes {
             { model },
           );
       }
-      const { endpoint, revision } = this.key;
+      const { endpoint, revision } = this.keyFor(model);
       const id = newId("probe");
       const code = String(randomInt(1000, 10000));
       const now = new Date().toISOString();

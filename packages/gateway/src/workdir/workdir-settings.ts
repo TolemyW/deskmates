@@ -1,8 +1,11 @@
-// Per-workspace working-directory settings (ADR-0036): stored values, validation, the audit row,
-// the values a run freezes at first start and the other-lane note. A convention and tooling,
-// never access control between bots: no hook, callback or route reads these to refuse anything.
+// Per-workspace working-directory settings (ADR-0036 as amended by ADR-0038): stored values,
+// validation, the audit row, the values a run freezes at first start and the other-lane note.
+// The frozen mode decides whether the sidecar's soft write guard protects teammates' directories
+// (ADR-0038 decision 2); that guard is against mistakes, not a security boundary. The platform
+// prepares no git worktree (ADR-0038 decision 7): `worktreeRepo` is no longer a setting.
 
 import {
+  BOT_WORKDIR_DEFAULT,
   type BotId,
   type BotWorkdirMode,
   type EffectiveWorkdir,
@@ -15,7 +18,6 @@ import {
   type WorkdirSettingsView,
   type WorkspaceId,
   occupiesLane,
-  worktreeRepoProblem,
 } from "@deskmates/contracts";
 import { AuditLog } from "../audit/audit-log.js";
 import type { GatewayDb } from "../db/open.js";
@@ -23,14 +25,13 @@ import type { RunRecord, RunStore } from "../ledger/runs.js";
 
 interface SettingsRow {
   mode: BotWorkdirMode | null;
-  worktree_repo: string | null;
   lane_notice: 0 | 1;
   updated_by: string;
   updated_at: string;
 }
 
 const MODES: readonly BotWorkdirMode[] = ["shared", "per-bot"];
-const FIELDS = ["mode", "worktreeRepo", "laneNotice"] as const;
+const FIELDS = ["mode", "laneNotice"] as const;
 
 /** Statuses in which a run holds its lane with a live sidecar (not `queued`). */
 const LIVE_STATUSES = (["running", "waiting_approval_live"] as const).filter(occupiesLane);
@@ -39,7 +40,6 @@ function toSettings(row: SettingsRow | undefined): WorkdirSettings {
   if (!row) return {};
   return {
     ...(row.mode ? { mode: row.mode } : {}),
-    ...(row.worktree_repo ? { worktreeRepo: row.worktree_repo } : {}),
     ...(row.lane_notice === 1 ? { laneNotice: true as const } : {}),
   };
 }
@@ -47,10 +47,17 @@ function toSettings(row: SettingsRow | undefined): WorkdirSettings {
 export class WorkdirSettingsStore {
   constructor(
     private readonly db: GatewayDb,
-    /** `DESKMATES_BOT_WORKDIR`, read on every call: the config may change after construction. */
-    private readonly gatewayMode: () => BotWorkdirMode,
+    /**
+     * `DESKMATES_BOT_WORKDIR`, read on every call: the config may change after construction.
+     * Undefined is the default, `per-bot` (ADR-0038 decision 1).
+     */
+    private readonly configuredMode: () => BotWorkdirMode | undefined,
     private readonly now: () => Date = () => new Date(),
   ) {}
+
+  private gatewayMode(): BotWorkdirMode {
+    return this.configuredMode() ?? BOT_WORKDIR_DEFAULT;
+  }
 
   private row(workspaceId: WorkspaceId): SettingsRow | undefined {
     return this.db
@@ -67,7 +74,6 @@ export class WorkdirSettingsStore {
     return {
       mode: stored.mode ?? this.gatewayMode(),
       source: stored.mode ? "workspace" : "gateway",
-      worktreeRepo: stored.worktreeRepo ?? null,
       laneNotice: stored.laneNotice === true,
     };
   }
@@ -84,8 +90,9 @@ export class WorkdirSettingsStore {
   }
 
   /**
-   * Decisions 1 and 2: fields left out keep their value, null clears. Storing `mode: shared`
-   * clears the repository. One audit row per call that changed something, same transaction.
+   * Decision 1: fields left out keep their value, null clears. `worktreeRepo` is an unknown
+   * setting since ADR-0038 decision 7. One audit row per call that changed something, same
+   * transaction.
    */
   set(workspaceId: WorkspaceId, input: Record<string, unknown>, actor: string): void {
     for (const key of Object.keys(input)) {
@@ -94,7 +101,6 @@ export class WorkdirSettingsStore {
     }
     const before = this.settings(workspaceId);
     let mode = before.mode;
-    let repo = before.worktreeRepo;
     let laneNotice = before.laneNotice === true;
     if ("mode" in input) {
       const value = input.mode;
@@ -102,17 +108,6 @@ export class WorkdirSettingsStore {
       else if (MODES.includes(value as BotWorkdirMode)) mode = value as BotWorkdirMode;
       else
         throw new DeskmatesError("validation", "mode must be shared, per-bot or null", { value });
-      if (mode !== "per-bot") repo = undefined;
-    }
-    if ("worktreeRepo" in input) {
-      const value = input.worktreeRepo;
-      if (value === null) repo = undefined;
-      else {
-        const problem =
-          typeof value === "string" ? worktreeRepoProblem(value) : "worktreeRepo must be a string";
-        if (problem) throw new DeskmatesError("validation", problem, { worktreeRepo: value });
-        repo = value as string;
-      }
     }
     if ("laneNotice" in input) {
       const value = input.laneNotice;
@@ -121,15 +116,8 @@ export class WorkdirSettingsStore {
     }
     const after: WorkdirSettings = {
       ...(mode ? { mode } : {}),
-      ...(repo ? { worktreeRepo: repo } : {}),
       ...(laneNotice ? { laneNotice: true as const } : {}),
     };
-    if (after.worktreeRepo !== undefined && after.mode !== "per-bot") {
-      throw new DeskmatesError(
-        "validation",
-        "a worktree repository needs the workspace's mode set to per-bot",
-      );
-    }
     if (JSON.stringify(before) === JSON.stringify(after)) return;
     const at = this.now().toISOString();
     this.db.transaction(() => {
@@ -141,20 +129,13 @@ export class WorkdirSettingsStore {
         this.db
           .prepare(
             `INSERT INTO workspace_workdir_settings
-               (workspace_id, mode, worktree_repo, lane_notice, updated_by, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?)
+               (workspace_id, mode, lane_notice, updated_by, updated_at)
+             VALUES (?, ?, ?, ?, ?)
              ON CONFLICT (workspace_id) DO UPDATE SET mode = excluded.mode,
-               worktree_repo = excluded.worktree_repo, lane_notice = excluded.lane_notice,
+               lane_notice = excluded.lane_notice,
                updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
           )
-          .run(
-            workspaceId,
-            after.mode ?? null,
-            after.worktreeRepo ?? null,
-            after.laneNotice ? 1 : 0,
-            actor,
-            at,
-          );
+          .run(workspaceId, after.mode ?? null, after.laneNotice ? 1 : 0, actor, at);
       }
       new AuditLog(this.db).record({
         action: "workspace.workdir_set",
@@ -171,6 +152,7 @@ export class WorkdirSettingsStore {
   /**
    * Decision 3: the run's settings, frozen on its first process and read back from the row on
    * every later one. A row from before ADR-0036 keeps its creation-time mode and nothing else.
+   * A `worktreeRepo` an earlier version froze stays in the row as history and is not read.
    */
   freeze(
     runs: Pick<RunStore, "setConfig">,
@@ -189,7 +171,6 @@ export class WorkdirSettingsStore {
       runs.setConfig(run.id, {
         botWorkdir: effective.mode,
         botWorkdirSource: effective.source,
-        worktreeRepo: effective.worktreeRepo,
         laneNotice: effective.laneNotice,
         workdirVersion: 1,
       });
@@ -198,11 +179,6 @@ export class WorkdirSettingsStore {
     return {
       mode: run.config.botWorkdir === "per-bot" ? "per-bot" : "shared",
       source: run.config.botWorkdirSource === "workspace" ? "workspace" : "gateway",
-      worktreeRepo:
-        typeof run.config.worktreeRepo === "string" &&
-        worktreeRepoProblem(run.config.worktreeRepo) === undefined
-          ? run.config.worktreeRepo
-          : null,
       laneNotice: run.config.laneNotice === true,
     };
   }
@@ -237,19 +213,16 @@ export class WorkdirSettingsStore {
     };
   }
 
-  /** The start-request fields of a run (ADR-0004 amendment 1 decision 11, ADR-0036 3 to 6). */
+  /** The start-request fields of a run (ADR-0004 amendment 1 decision 11, ADR-0036 3 and 6). */
   startFields(
     runs: Pick<RunStore, "setConfig">,
     run: RunRecord,
     workspaceId: WorkspaceId,
-  ): Pick<StartRunRequest, "workdirMode" | "worktreeRepo" | "otherLaneRun"> {
+  ): Pick<StartRunRequest, "workdirMode" | "otherLaneRun"> {
     const effective = this.freeze(runs, run, workspaceId);
     const other = effective.laneNotice ? this.otherLaneRun(run.botId, run.lane, run.id) : undefined;
     return {
       ...(effective.mode === "per-bot" ? { workdirMode: "per-bot" as const } : {}),
-      ...(effective.mode === "per-bot" && effective.worktreeRepo
-        ? { worktreeRepo: effective.worktreeRepo }
-        : {}),
       ...(other ? { otherLaneRun: other } : {}),
     };
   }
@@ -259,7 +232,6 @@ function legacyWorkdir(run: RunRecord): EffectiveWorkdir {
   return {
     mode: run.config.botWorkdir === "per-bot" ? "per-bot" : "shared",
     source: "gateway",
-    worktreeRepo: null,
     laneNotice: false,
   };
 }

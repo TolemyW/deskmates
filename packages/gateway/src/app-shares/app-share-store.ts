@@ -1,6 +1,6 @@
-// Publications of workspace services (ADR-0035 decisions 1 and 8). Publishing and revoking write
-// their audit row in the same transaction. The row's id is `app_<32 hex>`; the hex part is the
-// app's host label.
+// Publications of workspace services (ADR-0035 decisions 1 and 8), by a bot or a Member
+// (owner-decided 2026-10-14). Publishing and revoking write their audit row in the same
+// transaction. The row's id is `app_<32 hex>`; the hex part is the app's host label.
 
 import {
   APP_SHARES_PER_WORKSPACE_MAX,
@@ -19,10 +19,17 @@ export interface AppShareRow {
   label: string;
   botId: string | null;
   runId: string | null;
+  /** A person's actor label when they published from the UI; null for a bot. */
+  publishedBy: string | null;
   createdAt: string;
   revokedAt: string | null;
   revokedBy: string | null;
 }
+
+/** Who publishes: a bot from a run, or a person (owner-decided 2026-10-14). */
+export type AppPublisher =
+  | { kind: "bot"; botId: string; runId: string }
+  | { kind: "person"; actor: string };
 
 interface DbRow {
   id: string;
@@ -31,6 +38,7 @@ interface DbRow {
   label: string;
   bot_id: string | null;
   run_id: string | null;
+  published_by: string | null;
   created_at: string;
   revoked_at: string | null;
   revoked_by: string | null;
@@ -43,6 +51,7 @@ const fromDb = (row: DbRow): AppShareRow => ({
   label: row.label,
   botId: row.bot_id,
   runId: row.run_id,
+  publishedBy: row.published_by,
   createdAt: row.created_at,
   revokedAt: row.revoked_at,
   revokedBy: row.revoked_by,
@@ -113,16 +122,18 @@ export class AppShareStore {
 
   /**
    * Publish `port`, or relabel the active publication it already has. Audited as the bot, with
-   * the run, in the same transaction.
+   * the run, or as the person, in the same transaction.
    */
   publish(input: {
     workspaceId: string;
     port: unknown;
     label: unknown;
-    botId: string;
-    runId: string;
+    by: AppPublisher;
   }): { share: AppShareRow; existing: boolean } {
     const { port, label } = validPublishInput(input.port, input.label);
+    const by = input.by;
+    const actor = by.kind === "bot" ? `bot:${by.botId}` : by.actor;
+    const runId = by.kind === "bot" ? { runId: by.runId } : {};
     return this.db.transaction(() => {
       const current = this.db
         .prepare(
@@ -134,13 +145,13 @@ export class AppShareStore {
           this.db.prepare("UPDATE app_shares SET label = ? WHERE id = ?").run(label, current.id);
           this.audit.record({
             action: "app_share.publish",
-            actor: `bot:${input.botId}`,
+            actor,
             workspaceId: input.workspaceId,
             targetKind: "app_share",
             targetId: current.id,
             before: { port, label: current.label },
             after: { port, label },
-            runId: input.runId,
+            ...runId,
           });
         }
         return { share: fromDb({ ...current, label }), existing: true };
@@ -157,26 +168,37 @@ export class AppShareStore {
         workspace_id: input.workspaceId,
         port,
         label,
-        bot_id: input.botId,
-        run_id: input.runId,
+        bot_id: by.kind === "bot" ? by.botId : null,
+        run_id: by.kind === "bot" ? by.runId : null,
+        published_by: by.kind === "person" ? by.actor : null,
         created_at: nowIso(),
         revoked_at: null,
         revoked_by: null,
       };
       this.db
         .prepare(
-          `INSERT INTO app_shares (id, workspace_id, port, label, bot_id, run_id, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO app_shares
+             (id, workspace_id, port, label, bot_id, run_id, published_by, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(row.id, row.workspace_id, port, label, row.bot_id, row.run_id, row.created_at);
+        .run(
+          row.id,
+          row.workspace_id,
+          port,
+          label,
+          row.bot_id,
+          row.run_id,
+          row.published_by,
+          row.created_at,
+        );
       this.audit.record({
         action: "app_share.publish",
-        actor: `bot:${input.botId}`,
+        actor,
         workspaceId: input.workspaceId,
         targetKind: "app_share",
         targetId: row.id,
         after: { port, label },
-        runId: input.runId,
+        ...runId,
       });
       return { share: fromDb(row), existing: false };
     })();

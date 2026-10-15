@@ -15,7 +15,7 @@
 // `{base64, size}` for one workspace file, or `{error, message}` with exit 1 (ADR-0014,
 // `file-read.ts`). The Gateway's operator download route is its only caller.
 //
-// `deskmates-sidecar file-write` reads one upload operation (begin, append, commit, abort) as JSON
+// `deskmates-sidecar file-write` reads one upload operation (begin, append, commit, abort, remove) as JSON
 // from stdin and writes only under /work/uploads/ (ADR-0014 amendment A5, `file-write.ts`). The
 // Gateway's upload routes are its only caller.
 //

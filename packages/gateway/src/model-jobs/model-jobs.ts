@@ -13,6 +13,7 @@ import { APPROVAL_REVIEW } from "../approvals/auto-review.js";
 import type { GatewayContext } from "../context.js";
 import type { RunRecord } from "../ledger/runs.js";
 import { MEMORY_ORGANIZE, MemoryOrganizer } from "../memory/organize.js";
+import { MEMORY_RECHECK, MemoryRecheck } from "../memory/recheck.js";
 import { SOUL_PROPOSAL, SoulProposals } from "./soul-proposals.js";
 import { STATUS_INQUIRY, StatusInquiries } from "./status-inquiries.js";
 import { VISION_PROBE, VisionProbes } from "./vision-probes.js";
@@ -21,6 +22,7 @@ import { VISION_PROBE, VisionProbes } from "./vision-probes.js";
 export const MODEL_JOB_RUN_TYPES: ReadonlySet<unknown> = new Set([
   APPROVAL_REVIEW,
   MEMORY_ORGANIZE,
+  MEMORY_RECHECK,
   SOUL_PROPOSAL,
   STATUS_INQUIRY,
   VISION_PROBE,
@@ -48,10 +50,16 @@ export class ModelJobs {
     return new MemoryOrganizer(this.context());
   }
 
+  /** Automatic model rechecks of flagged notes (ADR-0011 amendment 4, A28). */
+  get recheck(): MemoryRecheck {
+    return new MemoryRecheck(this.context());
+  }
+
   /** The `modelJob` of a model job's `StartRunRequest`; undefined for every other run. */
   request(run: RunRecord, bot: BotDefinition): ModelJobRequest | undefined {
     if (run.config.runType === APPROVAL_REVIEW) return this.context().broker.reviews?.job(run);
     if (run.config.runType === MEMORY_ORGANIZE) return this.organize.jobRequest(run);
+    if (run.config.runType === MEMORY_RECHECK) return this.recheck.jobRequest(run);
     if (run.config.runType === SOUL_PROPOSAL) return this.souls.job(run, bot);
     if (run.config.runType === STATUS_INQUIRY) return this.inquiries.job(run, bot);
     if (run.config.runType !== VISION_PROBE) return undefined;
@@ -76,6 +84,7 @@ export class ModelJobs {
     if (run.config.runType === APPROVAL_REVIEW)
       return this.context().broker.completeReview(run, ended);
     if (run.config.runType === MEMORY_ORGANIZE) return this.organize.complete(run, ended);
+    if (run.config.runType === MEMORY_RECHECK) return this.recheck.complete(run, ended);
     if (run.config.runType === SOUL_PROPOSAL) return this.souls.complete(run, ended);
     if (run.config.runType === STATUS_INQUIRY) return this.inquiries.complete(run, ended, publish);
     if (run.config.runType === VISION_PROBE) return this.vision.complete(run, ended);

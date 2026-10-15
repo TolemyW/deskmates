@@ -165,6 +165,8 @@ export function buildGateway(
     if (opts.startCron !== false) {
       cron.start();
       taskSchedules.start();
+      // ADR-0041 decision 4: the backfill, then a pass every interval; absent when unconfigured.
+      ctx.retrieval.indexer?.start();
     }
   });
   app.addHook("onClose", async () => {
@@ -172,6 +174,7 @@ export function buildGateway(
     cron.stop();
     taskSchedules.stop();
     scheduler.stop();
+    await ctx.retrieval.indexer?.stop();
     db.close();
   });
   return app;

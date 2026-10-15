@@ -13,7 +13,9 @@ import type {
   MemoryEntry,
   MemoryEntrySource,
   MemoryFreshnessReason,
+  MemoryMaintenanceSettings,
   MemoryOrganizeJob,
+  MemoryRecheckJob,
   MemoryRevalidation,
   MemoryRevalidationDecision,
   MemoryReviewBatch,
@@ -166,8 +168,14 @@ export interface KnowledgeApi {
   /** "Needs revalidation" after a sweep (A26), newest first, with exact totals per reason. */
   listMemoryRevalidations(
     workspaceId: WorkspaceId,
-    filters?: { cursor?: string; limit?: number },
+    filters?: { cursor?: string; limit?: number; view?: "all" | "needs_human" },
   ): Promise<MemoryRevalidationsPage>;
+  /** The maintenance settings, the latest recheck job and today's recheck count (A28, A34). */
+  getMemoryMaintenance(workspaceId: WorkspaceId): Promise<MemoryMaintenanceView>;
+  updateMemoryMaintenanceSettings(
+    workspaceId: WorkspaceId,
+    patch: Partial<MemoryMaintenanceSettings>,
+  ): Promise<MemoryMaintenanceSettings>;
   decideMemoryRevalidation(
     workspaceId: WorkspaceId,
     id: string,
@@ -197,7 +205,17 @@ export interface MemoryRevalidationsPage {
   revalidations: MemoryRevalidation[];
   nextCursor?: string;
   total: number;
+  /** Open flags a person must answer (A26, A28). */
+  needsHuman: number;
   byReason: Partial<Record<MemoryFreshnessReason, number>>;
+}
+
+/** Memory maintenance of one workspace (ADR-0011 amendment 4, A28, A34). */
+export interface MemoryMaintenanceView {
+  settings: MemoryMaintenanceSettings;
+  /** Notes sent to recheck jobs in the last 24 hours. */
+  recheckedToday: number;
+  recheck?: MemoryRecheckJob;
 }
 
 export function createKnowledgeApi(t: HttpTransport): KnowledgeApi {
@@ -361,6 +379,18 @@ export function createKnowledgeApi(t: HttpTransport): KnowledgeApi {
     },
     listMemoryRevalidations(workspaceId, filters = {}) {
       return t.json("GET", `${memory(workspaceId, "revalidations")}${query({ ...filters })}`);
+    },
+    getMemoryMaintenance(workspaceId) {
+      return t.json("GET", memory(workspaceId, "maintenance"));
+    },
+    async updateMemoryMaintenanceSettings(workspaceId, patch) {
+      return (
+        await t.json<{ settings: MemoryMaintenanceSettings }>(
+          "PUT",
+          memory(workspaceId, "maintenance"),
+          stripUndefined({ ...patch }),
+        )
+      ).settings;
     },
     async decideMemoryRevalidation(workspaceId, id, decision) {
       return (

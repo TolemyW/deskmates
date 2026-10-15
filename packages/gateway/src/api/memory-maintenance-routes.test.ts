@@ -107,6 +107,9 @@ describe("revalidation routes", () => {
     expect(role("POST /api/workspaces/:id/memory/document-drafts")).toBe("admin");
     expect(role("POST /api/workspaces/:id/memory/organize")).toBe("admin");
     expect(role("POST /api/workspaces/:id/memory/splits/:itemId")).toBe("admin");
+    // A34: settings are read by a Member, changed by an Owner or Admin.
+    expect(role("GET /api/workspaces/:id/memory/maintenance")).toBe("member");
+    expect(role("PUT /api/workspaces/:id/memory/maintenance")).toBe("admin");
   });
 });
 

@@ -1,5 +1,6 @@
-// T0: workspace execution limits (ADR-0005 amendment 5 decisions 37 to 39, ADR-0016 amendment 2
-// decisions 13 to 15): validation, `off` needing the money backstop, precedence and the audit row.
+// T0: workspace execution limits (ADR-0005 amendment 5 decisions 37 to 39 and 42, ADR-0016
+// amendment 2 decisions 13 to 15): validation, the switches, `off` needing the money backstop only
+// under `requireBudgetForOff`, precedence, the owner's defaults (2026-10-14) and the audit row.
 
 import type { WorkspaceId } from "@deskmates/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -30,19 +31,25 @@ beforeEach(() => {
 });
 
 describe("defaults (decision 37, amendment 2 decision 14)", () => {
-  it("stores nothing for a new workspace and resolves every value to today's default", () => {
+  it("stores nothing for a new workspace: turn budget and volume rule off (decision 42)", () => {
     expect(limits.settings(WS)).toEqual({});
+    expect(limits.switches(WS)).toEqual({ requireBudgetForOff: false, volumeBreaker: false });
     expect(limits.effective(WS)).toEqual({
       continuationLimit: { value: 2, source: "default" },
       continuationWindowHours: { value: 24, source: "default" },
       maxTurns: { value: 80, source: "gateway" },
       relayCountMax: { value: 5, source: "default" },
-      turnBudget: { value: 8, source: "default" },
+      turnBudget: { value: null, source: "default" },
     });
     expect(limits.threadCaps(WS, 8)).toEqual({
-      turnBudget: { value: 8, source: "thread" },
+      turnBudget: { value: null, source: "default" },
       relayCountMax: { value: 5, source: "default" },
-      relaxed: false,
+      volumeBreaker: false,
+    });
+    expect(limits.view(WS)).toMatchObject({
+      defaults: { turnBudget: null, relayCountMax: 5 },
+      loopBreaker: { relayMax: 50, botMessages: 300, repeats: 3 },
+      ranges: { turnBudget: { min: 1, max: 300, off: true } },
     });
     expect(audits()).toHaveLength(0);
   });
@@ -83,7 +90,9 @@ describe("set (decisions 37 and 39)", () => {
 
   it.each([
     [{ turnBudget: 0 }],
-    [{ turnBudget: 101 }],
+    [{ turnBudget: 301 }],
+    [{ volumeBreaker: "yes" }],
+    [{ requireBudgetForOff: 1 }],
     [{ relayCountMax: 51 }],
     [{ maxTurns: 2.5 }],
     [{ maxTurns: "12" }],
@@ -101,9 +110,7 @@ describe("set (decisions 37 and 39)", () => {
     expect(limits.runLimits(WS).continuationLimit).toBe(0);
   });
 
-  it("refuses off without a monetary limit and accepts it with one", () => {
-    expect(() => limits.set(WS, { turnBudget: "off" }, "user:admin")).toThrow(/budget/);
-    budget.setLimits(WS, { weeklyLimitUsd: 10 }, "user:admin");
+  it("accepts off without a monetary limit (owner, 2026-10-14)", () => {
     limits.set(
       WS,
       { turnBudget: "off", relayCountMax: "off", maxTurns: "off", continuationLimit: "off" },
@@ -112,26 +119,49 @@ describe("set (decisions 37 and 39)", () => {
     expect(limits.threadCaps(WS, 8)).toEqual({
       turnBudget: { value: null, source: "workspace" },
       relayCountMax: { value: null, source: "workspace" },
-      relaxed: true,
+      volumeBreaker: false,
     });
     expect(limits.relayLimit(WS)).toBe(50);
     expect(limits.runLimits(WS)).toMatchObject({ maxTurns: null, continuationLimit: null });
   });
 
-  it("resolves a stored off to the default once the last monetary limit is cleared", () => {
-    budget.setLimits(WS, { cumulativeLimitUsd: 100 }, "user:admin");
+  it("with requireBudgetForOff refuses off without a monetary limit and accepts it with one", () => {
+    limits.set(WS, { requireBudgetForOff: true }, "user:admin");
+    expect(() => limits.set(WS, { turnBudget: "off" }, "user:admin")).toThrow(/budget/);
+    budget.setLimits(WS, { weeklyLimitUsd: 10 }, "user:admin");
     limits.set(WS, { turnBudget: "off", maxTurns: "off" }, "user:admin");
-    budget.setLimits(WS, { cumulativeLimitUsd: null }, "user:admin");
-    expect(limits.settings(WS)).toEqual({ turnBudget: "off", maxTurns: "off" });
-    expect(limits.effective(WS).turnBudget).toEqual({ value: 8, source: "default_no_backstop" });
-    expect(limits.effective(WS).maxTurns).toEqual({ value: 80, source: "default_no_backstop" });
-    expect(limits.view(WS).budgetBackstop).toBe(false);
+    expect(limits.effective(WS).maxTurns).toEqual({ value: null, source: "workspace" });
   });
 
-  it("marks a cap above its default as relaxed", () => {
-    limits.set(WS, { relayCountMax: 6 }, "user:admin");
-    expect(limits.threadCaps(WS, 8).relaxed).toBe(true);
-    limits.set(WS, { relayCountMax: 5, turnBudget: 4 }, "user:admin");
-    expect(limits.threadCaps(WS, 8).relaxed).toBe(false);
+  it("with requireBudgetForOff resolves off to a number while no monetary limit is set", () => {
+    budget.setLimits(WS, { cumulativeLimitUsd: 100 }, "user:admin");
+    limits.set(WS, { requireBudgetForOff: true, maxTurns: "off" }, "user:admin");
+    budget.setLimits(WS, { cumulativeLimitUsd: null }, "user:admin");
+    expect(limits.settings(WS)).toEqual({ maxTurns: "off" });
+    expect(limits.effective(WS).maxTurns).toEqual({ value: 80, source: "default_no_backstop" });
+    // The turn budget's own default is off; the gate gives a thread its row's value.
+    expect(limits.effective(WS).turnBudget).toEqual({ value: 8, source: "default_no_backstop" });
+    expect(limits.threadCaps(WS, 3).turnBudget).toEqual({
+      value: 3,
+      source: "default_no_backstop",
+    });
+    expect(limits.view(WS).budgetBackstop).toBe(false);
+    // Turning the switch off brings the stored and default offs back.
+    limits.set(WS, { requireBudgetForOff: false }, "user:admin");
+    expect(limits.effective(WS).maxTurns).toEqual({ value: null, source: "workspace" });
+    expect(limits.threadCaps(WS, 3).turnBudget).toEqual({ value: null, source: "default" });
+  });
+
+  it("sets and clears the switches with one audit row each and no row when unchanged", () => {
+    limits.set(WS, { volumeBreaker: true }, "user:admin");
+    limits.set(WS, { volumeBreaker: true }, "user:admin");
+    expect(limits.threadCaps(WS, 8).volumeBreaker).toBe(true);
+    expect(limits.view(WS).switches).toEqual({ requireBudgetForOff: false, volumeBreaker: true });
+    limits.set(WS, { volumeBreaker: false }, "user:admin");
+    expect(limits.switches(WS).volumeBreaker).toBe(false);
+    const rows = audits();
+    expect(rows).toHaveLength(2);
+    expect(JSON.parse(rows[0]?.after_json ?? "")).toEqual({ volumeBreaker: true });
+    expect(JSON.parse(rows[1]?.after_json ?? "")).toEqual({});
   });
 });

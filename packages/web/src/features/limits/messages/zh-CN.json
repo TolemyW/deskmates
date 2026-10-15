@@ -1,5 +1,5 @@
 {
-  "limits.breaker": "循环断路器始终开启：链路超过 {relayMax} 跳将不再唤醒任何人；自上次人类消息以来出现 {botMessages} 条机器人消息，或同一机器人发出 {repeats} 条相同消息时，对话会暂停，直到有人发言。",
+  "limits.breaker": "循环断路器始终开启：链路超过 {relayMax} 跳将不再唤醒任何人；同一机器人发出 {repeats} 条相同消息时，对话会暂停，直到有人发言。",
   "limits.cancel": "取消",
   "limits.edit": "编辑限制",
   "limits.effective": "{value} · {source}",
@@ -13,14 +13,17 @@
   "limits.key.turnBudget": "轮次预算（自上次人类消息以来每个对话的机器人消息数）",
   "limits.loading": "正在加载限制…",
   "limits.off": "关闭",
-  "limits.offNeedsBudget": "此工作区设置每周或累计预算后（费用页面）才能选择关闭。",
+  "limits.offNeedsBudget": "此工作区要求先设置每周或累计预算（费用页面），才能关闭限制。",
+  "limits.on": "开启",
   "limits.roleNote": "修改执行限制",
   "limits.save": "保存限制",
   "limits.source.default": "默认",
-  "limits.source.default_no_backstop": "默认；关闭需要预算",
+  "limits.source.default_no_backstop": "默认；此工作区关闭限制需要预算",
   "limits.source.gateway": "服务器默认",
   "limits.source.loop_breaker": "循环断路器",
   "limits.source.thread": "按对话",
   "limits.source.workspace": "工作区设置",
+  "limits.switch.requireBudgetForOff": "不限制时要求设置预算",
+  "limits.switch.volumeBreaker": "自上次人类消息以来机器人消息达到 {botMessages} 条时暂停对话",
   "limits.title": "执行限制"
 }

@@ -276,6 +276,8 @@ describe("any member of the thread may decide (A2)", () => {
       name: "ws-two",
       egressAllowlist: ["*.example.test"],
     });
+    // The human path (ADR-0002 amendment 6, D2); a new workspace starts in automatic review.
+    await h.api("PUT", `/api/workspaces/${ws.json.workspace.id}/auto-approval`, { mode: "manual" });
     const a = await h.api<{ bot: BotDefinition }>("POST", "/api/bots", {
       name: "ana",
       role: "worker",

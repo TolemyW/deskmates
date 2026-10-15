@@ -2994,11 +2994,11 @@ describe("runOnce: browser evidence", () => {
   });
 });
 
-// Issue #88: under the opt-in `per-bot` working-directory knob the run starts in
-// `/work/bots/<bot>`, which the sidecar creates. It is a convention, not access control
-// (AGENTS.md): a write into another bot's directory or the shared /work is judged exactly as
-// before, by its risk tier alone.
-describe("runOnce: working directory", () => {
+// ADR-0038: a per-bot run (the default) starts in `/work/bots/<bot>`, which the sidecar creates.
+// The hook's soft guard refuses writes into another bot's directory and into /work/uploads and
+// says where to write; the bot's own directory and the rest of /work stay writable. A guard
+// against mistakes, not a security boundary (see bot-directory-guard.ts).
+describe("runOnce: bot directories", () => {
   const writes: ScriptStep[] = [
     {
       type: "tool_call",
@@ -3009,122 +3009,98 @@ describe("runOnce: working directory", () => {
     {
       type: "tool_call",
       name: "Write",
+      input: { file_path: "/work/bots/nova/notes.md", content: "mine" },
+      result: "Wrote /work/bots/nova/notes.md",
+    },
+    {
+      type: "tool_call",
+      name: "Write",
       input: { file_path: "/work/shared.md", content: "seen" },
       result: "Wrote /work/shared.md",
     },
+    {
+      type: "tool_call",
+      name: "Bash",
+      input: { command: "rm /work/uploads/2026-10-14/a.csv" },
+      result: "",
+    },
     { type: "text", text: summaryBlock("ok") },
     { type: "end", summary: summaryBlock("ok"), usage: { inputTokens: 1, outputTokens: 1 } },
   ];
+  const decisions = (made: ReturnType<typeof makeDeps>) =>
+    [...made.sdk.sessions.values()][0]?.toolCalls.map((c) => c.hookDecision);
 
-  it("starts in /work and creates no bot directory by default", async () => {
-    const { deps, sdk, fs } = makeDeps(writes);
-    await run(deps, baseRequest());
-    const options = [...sdk.sessions.values()][0]?.calls[0]?.options;
+  it("in shared mode starts in /work, creates no bot directory and guards uploads only", async () => {
+    const made = makeDeps(writes);
+    await run(made.deps, baseRequest());
+    const options = [...made.sdk.sessions.values()][0]?.calls[0]?.options;
     expect(options?.cwd).toBe("/work");
-    expect(fs.dirs.some((dir) => dir.startsWith("/work/bots"))).toBe(false);
+    expect(made.fs.dirs.some((dir) => dir.startsWith("/work/bots"))).toBe(false);
+    expect(decisions(made)).toEqual(["allow", "allow", "allow", "deny"]);
   });
 
-  it("starts in the bot's own directory under per-bot, created before the query", async () => {
-    const { deps, sdk, fs } = makeDeps(writes);
-    const ended = await run(deps, baseRequest({ workdirMode: "per-bot" }));
-    expect(ended.outcome).toBe("completed");
-    const session = [...sdk.sessions.values()][0];
-    expect(session?.calls[0]?.options?.cwd).toBe("/work/bots/nova");
-    expect(fs.dirs).toContain("/work/bots/nova");
-    // Another bot's directory and the shared /work stay writable: no ownership check.
-    expect(session?.toolCalls.map((c) => [c.hookDecision, c.callbackDecision])).toEqual([
-      ["allow", undefined],
-      ["allow", undefined],
-    ]);
-  });
-});
-
-// ADR-0036 decisions 4 and 7: with a worktree repository the sidecar prepares the bot's own
-// worktree before the query, with the image's git only, and a failure never fails the run. The
-// worktree is tooling, not a boundary: writes into another bot's worktree and into the shared
-// checkout are judged by risk tier alone.
-describe("runOnce: prepared worktree", () => {
-  const writes: ScriptStep[] = [
-    {
-      type: "tool_call",
-      name: "Write",
-      input: { file_path: "/work/bots/orion/app/src/a.ts", content: "x" },
-      result: "Wrote /work/bots/orion/app/src/a.ts",
-    },
-    {
-      type: "tool_call",
-      name: "Write",
-      input: { file_path: "/work/app/src/a.ts", content: "x" },
-      result: "Wrote /work/app/src/a.ts",
-    },
-    { type: "text", text: summaryBlock("ok") },
-    { type: "end", summary: summaryBlock("ok"), usage: { inputTokens: 1, outputTokens: 1 } },
-  ];
-  const request = () => baseRequest({ workdirMode: "per-bot", worktreeRepo: "/work/app" });
-
-  it("creates the worktree before the query and leaves every path writable", async () => {
+  it("per-bot: starts in the bot's directory and refuses a teammate's directory and uploads", async () => {
     const made = makeDeps(writes);
-    const gitCalls: string[][] = [];
-    let queried = false;
-    made.deps.git = async (args) => {
-      expect(queried).toBe(false);
-      gitCalls.push([...args]);
-      return { code: args.includes("--verify") ? 1 : 0, stdout: "", stderr: "" };
-    };
-    const query = made.deps.query;
-    made.deps.query = (params) => {
-      queried = true;
-      return query(params);
-    };
-    const ended = await run(made.deps, request());
-    expect(ended.outcome).toBe("completed");
-    expect(gitCalls.at(-1)).toEqual([
-      "-C",
-      "/work/app",
-      "worktree",
-      "add",
-      "-b",
-      "bots/nova",
-      "/work/bots/nova/app",
-    ]);
-    const log = made.gateway.events.find((e) => e.kind === "log" && e.payload.source === "workdir");
-    expect(log?.payload).toEqual({
-      source: "workdir",
-      op: "worktree",
-      outcome: "created",
-      path: "/work/bots/nova/app",
-      branch: "bots/nova",
-    });
-    const session = [...made.sdk.sessions.values()][0];
-    expect(session?.calls[0]?.options?.cwd).toBe("/work/bots/nova");
-    expect(session?.toolCalls.map((c) => [c.hookDecision, c.callbackDecision])).toEqual([
-      ["allow", undefined],
-      ["allow", undefined],
-    ]);
-  });
-
-  it("runs on in the bot directory and says so in the prompt when git fails", async () => {
-    const made = makeDeps(writes);
-    made.deps.git = async () => ({ code: 128, stdout: "", stderr: "fatal: nope" });
-    const ended = await run(made.deps, request());
+    const ended = await run(made.deps, baseRequest({ workdirMode: "per-bot" }));
     expect(ended.outcome).toBe("completed");
     const session = [...made.sdk.sessions.values()][0];
     expect(session?.calls[0]?.options?.cwd).toBe("/work/bots/nova");
-    expect(String(session?.calls[0]?.prompt)).toContain(
-      "Your worktree could not be prepared this run (/work/app is not a git repository)",
+    expect(made.fs.dirs).toContain("/work/bots/nova");
+    expect(session?.toolCalls.map((c) => [c.hookDecision, c.callbackDecision])).toEqual([
+      ["deny", undefined],
+      ["allow", undefined],
+      ["allow", undefined],
+      ["deny", undefined],
+    ]);
+    const refused = made.gateway.events.filter(
+      (e) => e.kind === "log" && e.payload.source === "bot_dirs",
     );
-    const log = made.gateway.events.find((e) => e.kind === "log" && e.payload.source === "workdir");
-    expect(log?.payload).toMatchObject({ outcome: "failed", level: "warn" });
+    expect(refused.map((e) => e.payload)).toEqual([
+      expect.objectContaining({
+        op: "write_refused",
+        toolName: "Write",
+        path: "/work/bots/orion/notes.md",
+        area: "teammate",
+        owner: "orion",
+      }),
+      expect.objectContaining({
+        op: "write_refused",
+        toolName: "Bash",
+        path: "/work/uploads/2026-10-14/a.csv",
+        area: "uploads",
+      }),
+    ]);
   });
 
-  it("prepares nothing without a worktree repository", async () => {
+  it("tells the model where it may write", async () => {
     const made = makeDeps(writes);
-    const gitCalls: string[][] = [];
-    made.deps.git = async (args) => {
-      gitCalls.push([...args]);
-      return { code: 0, stdout: "", stderr: "" };
-    };
     await run(made.deps, baseRequest({ workdirMode: "per-bot" }));
-    expect(gitCalls).toEqual([]);
+    const reason = [...made.sdk.sessions.values()][0]?.toolCalls[0]?.hookReason;
+    expect(reason).toContain("orion's directory and is read-only to you");
+    expect(reason).toContain("Write in your own directory, /work/bots/nova, instead");
+  });
+
+  // ADR-0038 decision 9.
+  const SESSION = "0b6f3c7e-1d2a-4f5b-9c8d-7e6f5a4b3c2d";
+  const shared = `${HOME}/.claude/projects/-work/${SESSION}.jsonl`;
+  const own = `${HOME}/.claude/projects/-work-bots-nova/${SESSION}.jsonl`;
+
+  it("carries a thread session stored under /work into the bot directory's key", async () => {
+    const made = makeDeps(writes, {}, { [shared]: '{"type":"user"}\n' });
+    await run(made.deps, baseRequest({ workdirMode: "per-bot", sdkSessionId: SESSION }));
+    expect(made.fs.files.get(own)).toBe('{"type":"user"}\n');
+    const log = made.gateway.events.find(
+      (e) => e.kind === "log" && e.payload.op === "session_carried",
+    );
+    expect(log?.payload).toMatchObject({ source: "workdir", to: own });
+  });
+
+  it("leaves a session already under the bot's key alone, and copies nothing in shared mode", async () => {
+    const both = makeDeps(writes, {}, { [shared]: "old\n", [own]: "new\n" });
+    await run(both.deps, baseRequest({ workdirMode: "per-bot", sdkSessionId: SESSION }));
+    expect(both.fs.files.get(own)).toBe("new\n");
+    const sharedRun = makeDeps(writes, {}, { [shared]: "old\n" });
+    await run(sharedRun.deps, baseRequest({ sdkSessionId: SESSION }));
+    expect(sharedRun.fs.files.has(own)).toBe(false);
   });
 });

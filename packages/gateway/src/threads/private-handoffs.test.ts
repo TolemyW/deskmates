@@ -129,7 +129,9 @@ describe("private-chat handoffs (ADR-0024)", () => {
   });
 
   it.each(["budget", "paused", "relay"])("does not bypass the source %s limit", (limit) => {
-    const { ctx, chief, run, chat } = setup(limit === "budget" ? 1 : 8);
+    const { ctx, chief, run, chat, ws } = setup();
+    // The turn budget is off by default (ADR-0005 amendment 5 decision 42); a workspace turns it on.
+    if (limit === "budget") ctx.limits.set(ws.id, { turnBudget: 1 }, "user:admin");
     if (limit === "paused") ctx.threads.setStatus(chat.id, "paused");
     const trigger =
       limit === "relay"

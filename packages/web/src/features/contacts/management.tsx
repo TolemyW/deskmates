@@ -21,6 +21,7 @@ import { RoleNote, useCan } from "../../state/session-roles.js";
 import { EgressModePicker } from "../workspaces/egress-mode-picker.js";
 import { BotSchedules } from "./bot-schedules.js";
 import { VisionCapability } from "./model-capability.js";
+import { ModelPicker, ModelSuggestions, registeredModelLabel } from "./model-picker.js";
 import { SoulProposalPanel } from "./soul-proposal.js";
 
 interface SoulDraft {
@@ -678,18 +679,11 @@ export function BotEditor({
   workspaceName: string;
   onSaved: (bot: BotDefinition) => void;
 }) {
-  type Choice = "default" | "cheap" | "custom";
-  const choiceOf = (value: string | undefined): Choice =>
-    value === undefined || value === "" || value === config.defaultModel
-      ? "default"
-      : value === config.cheapModel
-        ? "cheap"
-        : "custom";
-  const [choice, setChoice] = useState<Choice>(() => choiceOf(bot.model));
-  const [customModel, setCustomModel] = useState(
-    choiceOf(bot.model) === "custom" ? (bot.model ?? "") : "",
-  );
+  const [model, setModel] = useState(bot.model ?? "");
   const [cheapModel, setCheapModel] = useState(bot.cheapModel ?? "");
+  // Remounts the pickers after a save so their choice follows the saved override.
+  const [saves, setSaves] = useState(0);
+  const models = config.models ?? [];
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -711,24 +705,18 @@ export function BotEditor({
       setOpeningChat(false);
     }
   };
-  const chosenModel = (): string | null =>
-    choice === "default"
-      ? null
-      : choice === "cheap"
-        ? config.cheapModel
-        : customModel.trim() || null;
   const save = async () => {
     setBusy(true);
     setError("");
     setNotice("");
     try {
       const saved = await api.updateBot(bot.id, {
-        model: chosenModel(),
+        model: model.trim() || null,
         cheapModel: cheapModel.trim() || null,
       });
-      setChoice(choiceOf(saved.model));
-      setCustomModel(choiceOf(saved.model) === "custom" ? (saved.model ?? "") : "");
+      setModel(saved.model ?? "");
       setCheapModel(saved.cheapModel ?? "");
+      setSaves((n) => n + 1);
       onSaved(saved);
       setNotice(t("management.model.saved"));
     } catch (err) {
@@ -751,51 +739,29 @@ export function BotEditor({
         <p className="muted small">{t("management.model.intro", { name: bot.name })}</p>
         <RoleNote action="bot.configure" does={t("management.model.roleNote")} />
         <fieldset disabled={busy || !canConfigure}>
-          <Select
+          <ModelPicker
+            key={`model-${saves}`}
             label={t("management.model.label")}
-            value={choice}
-            onValueChange={(value) => setChoice(value as Choice)}
+            overrideLabel={t("management.model.override")}
+            value={model}
+            onChange={setModel}
+            deploymentModel={config.defaultModel}
+            models={models}
             disabled={busy || !canConfigure}
-            options={[
-              {
-                value: "default",
-                label: t("management.model.deploymentDefault", { model: config.defaultModel }),
-              },
-              config.cheapModel && config.cheapModel !== config.defaultModel
-                ? {
-                    value: "cheap",
-                    label: config.cheapModel,
-                  }
-                : null,
-
-              {
-                value: "custom",
-                label: t("management.model.another"),
-              },
-            ]}
           />
-
-          {choice === "custom" ? (
-            <label>
-              {t("management.model.override")}
-              <input
-                value={customModel}
-                placeholder={t("management.model.overridePlaceholder")}
-                onChange={(event) => setCustomModel(event.target.value)}
-              />
-            </label>
-          ) : null}
           <details className="settings-advanced">
             <summary>{t("management.model.cheapSummary")}</summary>
             <p className="muted small">{t("management.model.cheapIntro")}</p>
-            <label>
-              {t("management.model.cheapOverride")}
-              <input
-                value={cheapModel}
-                placeholder={config.cheapModel}
-                onChange={(event) => setCheapModel(event.target.value)}
-              />
-            </label>
+            <ModelPicker
+              key={`cheap-${saves}`}
+              label={t("management.model.cheapLabel")}
+              overrideLabel={t("management.model.cheapOverride")}
+              value={cheapModel}
+              onChange={setCheapModel}
+              deploymentModel={config.cheapModel}
+              models={models}
+              disabled={busy || !canConfigure}
+            />
           </details>
           <div className="settings-actions">
             <Button type="button" variant="default" onClick={() => void save()}>
@@ -803,13 +769,13 @@ export function BotEditor({
             </Button>
             <span className="management-effective-model">
               {t.rich("management.model.effective", {
-                model: bot.model || config.defaultModel,
+                model: registeredModelLabel(t, models, bot.model || config.defaultModel),
                 code: (chunks) => <code>{chunks}</code>,
               })}
             </span>
             <span className="management-effective-model">
               {t.rich("management.model.effectiveCheap", {
-                model: bot.cheapModel || config.cheapModel,
+                model: registeredModelLabel(t, models, bot.cheapModel || config.cheapModel),
                 code: (chunks) => <code>{chunks}</code>,
               })}
             </span>
@@ -1055,6 +1021,7 @@ export function ManagementScreen({
                 {t("management.bot.modelOverride")}
                 <input
                   value={model}
+                  list="management-registered-models"
                   placeholder={config?.defaultModel}
                   onChange={(event) => setModel(event.target.value)}
                 />
@@ -1063,10 +1030,12 @@ export function ManagementScreen({
                 {t("management.bot.cheapModelOverride")}
                 <input
                   value={cheapModel}
+                  list="management-registered-models"
                   placeholder={config?.cheapModel}
                   onChange={(event) => setCheapModel(event.target.value)}
                 />
               </label>
+              <ModelSuggestions id="management-registered-models" models={config?.models ?? []} />
               <Button type="submit">{t("management.bot.create")}</Button>
             </fieldset>
           </form>

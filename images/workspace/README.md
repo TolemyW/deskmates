@@ -24,7 +24,7 @@ The script builds `packages/contracts`, `packages/testkit` and `packages/sidecar
 
 Preinstalled (no `npx` or download at run time, see S0 results):
 
-- Xvfb, fluxbox, x11vnc, noVNC/websockify, xdotool, imagemagick
+- Xvfb, fluxbox, x11vnc, noVNC/websockify, xdotool, imagemagick, poppler-utils (`pdfinfo`, `pdftotext`, `pdftoppm` for `image_describe`, ADR-0040)
 - Node (from the base image), `playwright@1.58.2`, `@playwright/mcp@0.0.82`, `@playwright/cli@0.1.21`, `@anthropic-ai/claude-agent-sdk@0.3.278`, installed globally. The versions are Dockerfile `ARG`s and must agree with AGENTS.md; `workspace-image.container.test.ts` checks them.
 - The matching Linux native SDK package is a required, pinned global dependency. The build resolves its executable from the SDK and runs `--version` offline; optional installation failures cannot produce an image that only fails when the first run starts.
 - `undici@7.29.1`, linked into the sidecar runtime for explicit managed-proxy dispatch.

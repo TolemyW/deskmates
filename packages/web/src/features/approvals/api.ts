@@ -1,10 +1,11 @@
 // Approvals (ADR-0002 amendment 2): the inbox, one approval, and a human's decision; the
-// workspace automatic-approval setting (ADR-0002 amendment 4).
+// workspace approval mode (ADR-0002 amendment 6).
 
 import type {
   Approval,
   ApprovalDecision,
   ApprovalId,
+  ApprovalMode,
   ApprovalRule,
   BotId,
   ThreadId,
@@ -46,7 +47,8 @@ export interface ApprovalsApi {
   }): Promise<PendingApprovalsPage>;
   /** ADR-0002 amendment 3, A7: minutes an undecided request waits before it expires. */
   setApprovalExpiry(workspaceId: string, expiryMinutes: number): Promise<WorkspaceAutoApproval>;
-  setAutoApproval(workspaceId: string, enabled: boolean): Promise<WorkspaceAutoApproval>;
+  /** ADR-0002 amendment 6, D1: manual, automatic review or approve all. */
+  setApprovalMode(workspaceId: string, mode: ApprovalMode): Promise<WorkspaceAutoApproval>;
 }
 
 export function createApprovalsApi(t: HttpTransport): ApprovalsApi {
@@ -105,11 +107,11 @@ export function createApprovalsApi(t: HttpTransport): ApprovalsApi {
       );
       return r.autoApproval;
     },
-    async setAutoApproval(workspaceId, enabled) {
+    async setApprovalMode(workspaceId, mode) {
       const r = await t.json<{ autoApproval: WorkspaceAutoApproval }>(
         "PUT",
         `/api/workspaces/${encodeURIComponent(workspaceId)}/auto-approval`,
-        { enabled },
+        { mode },
       );
       return r.autoApproval;
     },

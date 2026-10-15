@@ -654,7 +654,7 @@ export class MemoryEntryStore {
           `UPDATE memory_entries
            SET body = ?, normalized_body = ?, authority = ?, trust = ?, source_kind = ?,
                last_confirmed_at = COALESCE(?, last_confirmed_at), version = ?, updated_at = ?,
-               topic_set = 0,
+               topic_set = CASE WHEN body = ? THEN topic_set ELSE 0 END,
                kind = CASE WHEN ? = 1 AND kind = 'candidate' THEN 'note' ELSE kind END
            WHERE id = ?`,
         )
@@ -667,6 +667,8 @@ export class MemoryEntryStore {
           patch.lastConfirmedAt ?? null,
           version,
           now,
+          // A31: a version that keeps the body (a confirmation) keeps a model topic label.
+          next.body,
           patch.promoteCandidate ? 1 : 0,
           id,
         );

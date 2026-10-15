@@ -8,6 +8,7 @@ import type {
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../api/types.js";
+import { SessionRolesProvider } from "../../state/session-roles.js";
 import { WS_ID, workspace } from "../../test-support/fixtures.js";
 import { selectOption } from "../../test-support/select.js";
 import { type FilesApi, WorkspaceFiles } from "./files.js";
@@ -134,7 +135,7 @@ describe("Files screen", () => {
       q: "",
     });
     // ADR-0014 A5: Members and above get one upload control (a Guest's is hidden; see
-    // upload-attach-button.test.tsx).
+    // files-upload.test.tsx).
     expect(screen.getAllByRole("button", { name: /upload files/i })).toHaveLength(1);
   });
 
@@ -317,6 +318,63 @@ describe("Files screen", () => {
     const legacy = screen.getByRole("complementary", { name: "Details for old.md" });
     expect(within(legacy).getByText("Unverified (legacy)")).toBeTruthy();
     expect(within(legacy).getByText(/never checked/)).toBeTruthy();
+  });
+
+  it("Admin deletes an upload after confirming; a Member is offered no delete (A5 decision 43)", async () => {
+    const uploaded = item("/work/uploads/2026-10-14/notes.txt", {
+      source: "uploaded",
+      verification: "input",
+      references: [
+        {
+          kind: "upload",
+          at: AT,
+          uploadId: "upl_1",
+          uploader: "user:mel",
+          sizeBytes: 3,
+          sha256: "a".repeat(64),
+          label: "notes.txt",
+        },
+      ],
+    });
+    let gone = false;
+    const { api, listWorkspaceFiles } = fakeApi(() => page(gone ? [] : [uploaded]));
+    const deleteWorkspaceUploadFile = vi.fn(async () => {
+      gone = true;
+      return { upload: {} as never, removed: true };
+    });
+    const withDelete = { ...api, deleteWorkspaceUploadFile } as FilesApi;
+    const as = (role: "admin" | "member") => (
+      <SessionRolesProvider
+        roles={{ tenantRole: role, platformMaintainer: false, workspaceRoles: { [WS_ID]: role } }}
+        actorId="user:x"
+        displayName="X"
+      >
+        <WorkspaceFiles api={withDelete} workspace={workspace} />
+      </SessionRolesProvider>
+    );
+    const member = render(as("member"));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Open details for /work/uploads/2026-10-14/notes.txt",
+      }),
+    );
+    expect(screen.queryByRole("button", { name: /Delete uploaded file/ })).toBeNull();
+    member.unmount();
+
+    render(as("admin"));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Open details for /work/uploads/2026-10-14/notes.txt",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Delete uploaded file/ }));
+    expect(screen.getByText(/Delete notes.txt from the workspace/)).toBeTruthy();
+    expect(deleteWorkspaceUploadFile).not.toHaveBeenCalled();
+    const calls = listWorkspaceFiles.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(deleteWorkspaceUploadFile).toHaveBeenCalledWith(WS_ID, "upl_1"));
+    await waitFor(() => expect(listWorkspaceFiles.mock.calls.length).toBeGreaterThan(calls));
+    expect(screen.queryByRole("complementary", { name: "Details for notes.txt" })).toBeNull();
   });
 
   it("previews text inertly and learns the size only from the read", async () => {

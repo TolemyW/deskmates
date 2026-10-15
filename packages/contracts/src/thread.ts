@@ -147,6 +147,10 @@ export interface Attachment {
   mimeType: string;
   /** Path inside the workspace filesystem or a Gateway artifact URL. */
   ref: string;
+  /** A person's attached upload (ADR-0014 A5 decision 42): its session id. */
+  uploadId?: string;
+  /** Size of an attached upload in bytes, when known. */
+  sizeBytes?: number;
 }
 
 /** A parsed mention. `everyone` wakes every member in turn; otherwise a specific member. */

@@ -8,6 +8,7 @@ import {
   type WorkspaceId,
   type WorkspaceUpload,
   sanitizeUploadName,
+  uploadAttachmentMime,
   uploadDateDir,
   uploadLabel,
 } from "@deskmates/contracts";
@@ -58,7 +59,9 @@ export function uploadRoute(req: DemoRequest, s: DemoState): Result | undefined 
     sessions.set(upload.id, upload);
     return created(upload);
   }
-  const one = req.match(/^\/api\/workspaces\/([^/]+)\/uploads\/([^/]+)(\/parts|\/complete)?$/);
+  const one = req.match(
+    /^\/api\/workspaces\/([^/]+)\/uploads\/([^/]+)(\/parts|\/complete|\/file)?$/,
+  );
   if (!one) return undefined;
   const upload = sessions.get(decodeURIComponent(one[2] as string));
   if (!upload || upload.workspaceId !== one[1]) return notFound("Upload");
@@ -77,6 +80,16 @@ export function uploadRoute(req: DemoRequest, s: DemoState): Result | undefined 
     // The demo cannot see the part's bytes; the browser sends full parts but the last one.
     upload.receivedBytes = Math.min(upload.sizeBytes, offset + WORKSPACE_FILE_UPLOAD_PART_BYTES);
     return ok(upload);
+  }
+  if (action === "/file" && req.method === "DELETE") {
+    if (upload.deletedAt) return invalid("upload_deleted");
+    if (upload.state !== "completed" || !upload.path) return invalid(`upload_${upload.state}`);
+    const at = new Date().toISOString();
+    upload.deletedAt = at;
+    upload.deletedBy = "human:web";
+    upload.updatedAt = at;
+    const removed = s.files.delete(upload.path);
+    return ok({ upload, removed });
   }
   if (action === "/complete" && req.method === "POST") {
     if (upload.state === "completed") return ok(upload);
@@ -98,7 +111,9 @@ export function demoUploadReferences(
   workspaceId: WorkspaceId,
 ): Array<{ path: string; ref: FileReference }> {
   return [...sessions.values()]
-    .filter((u) => u.workspaceId === workspaceId && u.state === "completed" && u.path)
+    .filter(
+      (u) => u.workspaceId === workspaceId && u.state === "completed" && u.path && !u.deletedAt,
+    )
     .map((u) => ({
       path: u.path as string,
       ref: {
@@ -111,4 +126,27 @@ export function demoUploadReferences(
         ...(u.sha256 ? { sha256: u.sha256 } : {}),
       },
     }));
+}
+
+/**
+ * A demo message attachment for the person's own completed upload (ADR-0014 A5 decision 42);
+ * undefined for an unknown, unfinished or deleted one.
+ */
+export function demoUploadAttachment(workspaceId: WorkspaceId, uploadId: string) {
+  const upload = sessions.get(uploadId);
+  if (
+    !upload ||
+    upload.workspaceId !== workspaceId ||
+    upload.state !== "completed" ||
+    !upload.path ||
+    upload.deletedAt
+  )
+    return undefined;
+  return {
+    name: upload.label,
+    mimeType: uploadAttachmentMime(upload.path),
+    ref: upload.path,
+    uploadId: upload.id,
+    sizeBytes: upload.sizeBytes,
+  };
 }

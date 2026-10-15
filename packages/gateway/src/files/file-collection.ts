@@ -107,6 +107,10 @@ const INPUT_ATTACHMENTS_SQL = `
          json_extract(a.value, '$.ref') AS ref, json_extract(a.value, '$.name') AS name
     FROM thread_messages m JOIN threads th ON th.id = m.thread_id, json_each(m.attachments_json) a
    WHERE th.workspace_id = ? AND m.author_kind = 'human' AND m.attachments_json <> '[]'
+     AND NOT EXISTS (SELECT 1 FROM workspace_uploads u
+                      WHERE u.workspace_id = th.workspace_id
+                        AND u.id = json_extract(a.value, '$.uploadId')
+                        AND u.deleted_at IS NOT NULL)
    ORDER BY m.ts DESC, m.id
    LIMIT ?`;
 
@@ -120,11 +124,12 @@ interface UploadRow {
   completed_at: string;
 }
 
-// Inputs a person uploaded (A5 decision 33): completed sessions, newest first.
+// Inputs a person uploaded (A5 decision 33): completed sessions an Admin has not deleted
+// (decision 43), newest first. A message attachment naming a deleted upload is dropped above.
 const UPLOADS_SQL = `
   SELECT id, path, label, uploader, size_bytes, sha256, completed_at
     FROM workspace_uploads
-   WHERE workspace_id = ? AND state = 'completed'
+   WHERE workspace_id = ? AND state = 'completed' AND deleted_at IS NULL
    ORDER BY completed_at DESC, id
    LIMIT ?`;
 

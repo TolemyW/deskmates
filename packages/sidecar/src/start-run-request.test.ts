@@ -167,7 +167,7 @@ describe("parseStartRunRequest accepts what the Gateway sends", () => {
     expect(parseStartRunRequest(json({ ...VALID, workdirMode: "shared" })).ok).toBe(false);
   });
 
-  it("keeps the worktree repository and the other lane's run, refusing unsafe paths (ADR-0036)", () => {
+  it("keeps the other lane's run and drops a stale worktree repository (ADR-0036, ADR-0038)", () => {
     const otherLaneRun = {
       runId: "run_other",
       lane: "background",
@@ -179,11 +179,10 @@ describe("parseStartRunRequest accepts what the Gateway sends", () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.worktreeRepo).toBe("/work/app");
+      // ADR-0038 decision 7: the platform prepares no worktree, so the field is not read.
+      expect("worktreeRepo" in result.value).toBe(false);
       expect(result.value.otherLaneRun).toEqual(otherLaneRun);
     }
-    for (const worktreeRepo of ["/work/../etc", "/work/bots/alice", "/work/a;b", "app"])
-      expect(parseStartRunRequest(json({ ...VALID, worktreeRepo })).ok).toBe(false);
     expect(
       parseStartRunRequest(json({ ...VALID, otherLaneRun: { ...otherLaneRun, lane: "other" } })).ok,
     ).toBe(false);

@@ -700,7 +700,12 @@
           "x-deskmates-tenant": "tn/1"
         },
         "body": {
-          "body": "hello @Ada"
+          "body": "hello @Ada",
+          "attachments": [
+            {
+              "uploadId": "upl_1"
+            }
+          ]
         },
         "credentials": "same-origin",
         "signal": false

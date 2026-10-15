@@ -222,17 +222,18 @@ export class ThreadRouter {
 
   /**
    * ADR-0005 amendment 5, decision 38: the effective relay cap and turn budget of a thread, `off`
-   * falling back to the loop breaker's ceilings. `message_bot` and the outcome notices of ADR-0016
+   * falling back to the loop breaker's ceilings; a turn budget that is off with the volume rule
+   * off too is null (no message-count bound). `message_bot` and the outcome notices of ADR-0016
    * decision 11 read the same values the router checks.
    */
-  effectiveCaps(threadId: ThreadId): { relayCountMax: number; turnBudget: number } {
+  effectiveCaps(threadId: ThreadId): { relayCountMax: number; turnBudget: number | null } {
     const thread = this.threads.mustGet(threadId);
     const caps =
       this.options.limits?.threadCaps(thread.workspaceId, thread.turnBudget) ??
       fixedCaps(thread.turnBudget);
     return {
       relayCountMax: caps.relayCountMax.value ?? LOOP_BREAKER_RELAY_MAX,
-      turnBudget: caps.turnBudget.value ?? LOOP_BREAKER_BOT_MESSAGES,
+      turnBudget: caps.turnBudget.value ?? (caps.volumeBreaker ? LOOP_BREAKER_BOT_MESSAGES : null),
     };
   }
 
@@ -304,7 +305,7 @@ export class ThreadRouter {
       const breaches = evaluateCaps(caps ?? fixedCaps(thread.turnBudget), {
         relayCount,
         botCount: this.messages.botCountSinceLastHuman(threadId),
-        repeats: caps?.relaxed ? this.messages.botRepeatsSinceLastHuman(message) : 0,
+        repeats: this.messages.botRepeatsSinceLastHuman(message),
       });
       const wakeBlocked = blockedReason(breaches);
       if (!forceTarget)

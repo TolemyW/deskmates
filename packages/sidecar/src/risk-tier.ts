@@ -444,7 +444,14 @@ export function isIntegrationExecute(toolName: string): boolean {
  * write, not an action on the world: L1, so it never starts a second wait. `task_deliver` and
  * `knowledge_propose` are Gateway-side records a human still accepts.
  */
-const DESKMATES_READ_TOOLS = new Set(["knowledge_search", "knowledge_read", "memory_search"]);
+const DESKMATES_READ_TOOLS = new Set([
+  // ADR-0040 decision 7: read a workspace file and send it to an operator-configured service.
+  "audio_transcribe",
+  "image_describe",
+  "knowledge_search",
+  "knowledge_read",
+  "memory_search",
+]);
 const DESKMATES_WRITE_TOOLS = new Set([
   // ADR-0035 decision 1: a Gateway record whose audience is the workspace's signed-in members.
   "app_publish",

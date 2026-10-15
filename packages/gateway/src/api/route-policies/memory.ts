@@ -37,6 +37,10 @@ export const memoryRoutePolicies: PolicyTable = {
     params: { id: "workspace" },
     body: { entryIds: "memoryEntry[]", targetDocumentId: "knowledgeDoc" },
   }),
+  // A28, A34 (owner ruling 2026-10-14): the latest recheck job and the settings are a Member's to
+  // read; changing the settings is an Owner's or Admin's.
+  "GET /api/workspaces/:id/memory/maintenance": member({ params: { id: "workspace" } }),
+  "PUT /api/workspaces/:id/memory/maintenance": admin({ params: { id: "workspace" } }),
   "GET /api/workspaces/:id/memory/organize": member({ params: { id: "workspace" } }),
   "POST /api/workspaces/:id/memory/organize": admin({ params: { id: "workspace" } }),
   "POST /api/workspaces/:id/memory/organize/reset-labels": admin({ params: { id: "workspace" } }),

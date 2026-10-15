@@ -1,23 +1,26 @@
-// Per-workspace working-directory settings (ADR-0036): where a bot's runs start, the one git
-// repository the platform prepares a worktree of for each bot, and whether a run is told about
-// its bot's other live lane. A convention and tooling, never access control between bots: no
-// hook reads these. Nothing is stored by default and an absent setting inherits.
+// Per-workspace working-directory settings (ADR-0036 as amended by ADR-0038): where a bot's runs
+// start and whether a run is told about its bot's other live lane. Nothing is stored by default
+// and an absent setting inherits; the Gateway default mode is `per-bot` (ADR-0038 decision 1).
+// The platform prepares no git worktree: each bot clones its own code (ADR-0038 decision 7).
+// The mode decides whether the sidecar's soft write guard protects teammates' directories; that
+// guard is a guard against mistakes, not a security boundary.
 
 import type { BotWorkdirMode } from "./sidecar-protocol.js";
 
-/** What a workspace stores; an absent field inherits (decision 1). */
+/** The Gateway's working-directory mode when `DESKMATES_BOT_WORKDIR` is unset (ADR-0038 decision 1). */
+export const BOT_WORKDIR_DEFAULT: BotWorkdirMode = "per-bot";
+
+/** What a workspace stores; an absent field inherits (ADR-0036 decision 1). */
 export interface WorkdirSettings {
   mode?: BotWorkdirMode;
-  worktreeRepo?: string;
   laneNotice?: true;
 }
 
-/** The values a run of this workspace freezes at its first start (decision 3). */
+/** The values a run of this workspace freezes at its first start (ADR-0036 decision 3). */
 export interface EffectiveWorkdir {
   mode: BotWorkdirMode;
   /** `workspace` when the workspace stores a mode, else the Gateway's `DESKMATES_BOT_WORKDIR`. */
   source: "workspace" | "gateway";
-  worktreeRepo: string | null;
   laneNotice: boolean;
 }
 
@@ -35,35 +38,5 @@ export interface WorkdirSettingsView {
 /** `PUT /api/workspaces/:id/workdir`: a field set to null clears it; an absent field is kept. */
 export interface WorkdirSettingsInput {
   mode?: BotWorkdirMode | null;
-  worktreeRepo?: string | null;
   laneNotice?: boolean | null;
-}
-
-export const WORKTREE_REPO_MAX_LENGTH = 200;
-
-const SEGMENT = /^[A-Za-z0-9._-]+$/;
-
-/**
- * Decision 2: why `path` cannot be a worktree repository, or undefined when it can. Shared by the
- * Gateway (when it is set) and the sidecar (when it parses a start request).
- */
-export function worktreeRepoProblem(path: string): string | undefined {
-  if (path.length > WORKTREE_REPO_MAX_LENGTH)
-    return `worktreeRepo must be at most ${WORKTREE_REPO_MAX_LENGTH} characters`;
-  if (!path.startsWith("/work/")) return "worktreeRepo must be an absolute path under /work";
-  const segments = path.slice("/work/".length).split("/");
-  if (segments.some((s) => s === "" || s === "." || s === ".." || !SEGMENT.test(s)))
-    return "worktreeRepo segments may hold only letters, digits, '.', '_' and '-'";
-  if (segments[0] === "bots") return "worktreeRepo must not be under /work/bots";
-  return undefined;
-}
-
-/** Decision 4: the branch the platform keeps for a bot in the worktree repository. */
-export function botWorktreeBranch(botName: string): string {
-  return `bots/${botName}`;
-}
-
-/** Decision 4: where a bot's worktree of `repo` lives, inside its own directory. */
-export function botWorktreePath(botName: string, repo: string): string {
-  return `/work/bots/${botName}/${repo.slice(repo.lastIndexOf("/") + 1)}`;
 }

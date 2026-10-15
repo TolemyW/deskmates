@@ -1,5 +1,6 @@
-// Network profiles (ADR-0027 amendment 1): root-defined LAN grants, selected per workspace. Every
-// change is published online; the Gateway answers with what each affected proxy acknowledged.
+// Network profiles (ADR-0027 amendment 1): LAN grants the root or an Owner defines and Admins
+// select. Every change is published online; the Gateway answers with what each affected proxy
+// acknowledged.
 
 import type {
   NetworkOverlap,
@@ -25,6 +26,8 @@ export interface NetworkProfileList {
   profiles: NetworkProfile[];
   /** What a published change does to open connections; shown before saving. */
   note?: string;
+  /** The root: every profile is listed and editable, and the overlap report is readable. */
+  manageAll?: boolean;
 }
 
 export interface NetworkProfileChange {
@@ -64,6 +67,11 @@ export interface NetworkApi {
     id: WorkspaceId,
     selections: Array<{ profileId: string; expiresAt?: string }>,
   ): Promise<WorkspaceNetworkChange>;
+  /** Decision 13: whether an open-internet workspace may use profiles (Admin). */
+  setWorkspaceNetworkSettings(
+    id: WorkspaceId,
+    profilesOnOpenInternet: boolean,
+  ): Promise<{ network: WorkspaceNetworkView }>;
 }
 
 export function createNetworkApi(t: HttpTransport): NetworkApi {
@@ -96,6 +104,11 @@ export function createNetworkApi(t: HttpTransport): NetworkApi {
     setWorkspaceNetworkProfiles(id, selections) {
       return t.json("PUT", `/api/workspaces/${encodeURIComponent(id)}/network-profiles`, {
         selections,
+      });
+    },
+    setWorkspaceNetworkSettings(id, profilesOnOpenInternet) {
+      return t.json("PUT", `/api/workspaces/${encodeURIComponent(id)}/network-settings`, {
+        profilesOnOpenInternet,
       });
     },
   };

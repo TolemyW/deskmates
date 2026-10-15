@@ -1667,3 +1667,107 @@
     opacity: 0.85;
   }
 }
+/* Composer attachments and message attachment cards (ADR-0014 A5 decisions 41 and 42). */
+.composer-chips {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.composer-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(280px, 100%);
+  padding: 6px 8px 6px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: var(--surface);
+  font-size: var(--app-text-sm);
+}
+.composer-chip > svg {
+  flex-shrink: 0;
+  color: var(--app-text-3);
+}
+.composer-chip.failed {
+  border-color: var(--danger);
+}
+.composer-chip-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+.composer-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.composer-chip-meta {
+  font-size: var(--app-text-xs);
+  overflow-wrap: anywhere;
+}
+.composer-chip.failed .composer-chip-meta {
+  color: var(--danger);
+}
+.composer-chip progress {
+  width: 100%;
+  height: 4px;
+}
+.composer-chip-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  min-width: 28px;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: none 0 0;
+  color: var(--app-text-3);
+  cursor: pointer;
+}
+.composer-chip-action:hover {
+  background: var(--app-surface);
+  color: var(--text);
+}
+.chat-drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed var(--primary-text);
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
+  color: var(--primary-text);
+  font-weight: 600;
+  pointer-events: none;
+}
+.attachment-cards {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.attachment-cards > li {
+  flex: 0 1 300px;
+  min-width: 0;
+}
+.attachment-cards .workspace-file-card {
+  margin: 0;
+  flex-wrap: nowrap;
+}
+.attachment-cards .workspace-file-card .workspace-file-label strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

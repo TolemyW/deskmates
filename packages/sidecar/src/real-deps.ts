@@ -7,7 +7,6 @@ import { createSdkMcpServer, query, tool } from "@anthropic-ai/claude-agent-sdk"
 import type { SidecarDeps, SidecarFs } from "./deps.js";
 import { readResourceObservation } from "./resource-observation.js";
 import { saveToolEvidence } from "./tool-evidence-store.js";
-import { runGit } from "./worktree.js";
 
 export const realFs: SidecarFs = {
   readFile: (path) => readFile(path, "utf8"),
@@ -40,7 +39,6 @@ export function createRealDeps(
 ): SidecarDeps {
   return {
     saveToolEvidence,
-    git: runGit,
     observeResources: () =>
       readResourceObservation(
         (path) => readFile(path, "utf8"),

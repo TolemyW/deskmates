@@ -1,7 +1,7 @@
 // The model proxy: what a sidecar's ANTHROPIC_BASE_URL points at (ADR-0002 item 4). Validates
-// the run's short-lived Bearer token, then forwards the request to MODEL_BASE_URL with the
-// upstream Bearer token, streaming the body back. The upstream token exists only in this
-// process's memory.
+// the run's short-lived Bearer token, then forwards the request to the upstream that serves its
+// model (ADR-0039: `MODEL_BASE_URL` or one of `MODEL_UPSTREAMS`) with that upstream's Bearer
+// token, streaming the body back. Upstream tokens exist only in this process's memory.
 //
 // The sidecar runs in the model's own trust domain, so the proxy offers exactly what the Agent
 // SDK needs and nothing else: `POST /v1/messages` and `POST /v1/messages/count_tokens`, with an
@@ -19,10 +19,13 @@
 // call could buy any model on the upstream. The CLI's own small-fast id, when configured, is
 // rewritten to the run's cheap model; anything else is refused with 403 `model_not_selected`,
 // recorded, and never forwarded. The proxy never retries a model call: the SDK owns retries.
+// It never sends a request to another upstream either: a model with no upstream is 503
+// `model_upstream_missing`, and a failing upstream's answer is the answer (ADR-0039 decision 3).
 
 import { Readable, Transform } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { ResolvedUpstream } from "../config/model-upstreams.js";
 import type { ModelRefusal, ModelRequestKind } from "../ledger/model-requests.js";
 import type { RunTokenStore } from "../secrets/run-tokens.js";
 import { type FrozenModels, modelVerdict, withModel } from "./frozen-models.js";
@@ -36,8 +39,11 @@ import { type ResponseFacts, ResponseUsageObserver } from "./response-usage.js";
 
 export interface ModelProxyOptions {
   tokens: RunTokenStore;
-  upstreamBaseUrl: string;
-  upstreamToken: string;
+  /**
+   * The upstream serving a model id (ADR-0039 decision 2), asked with the id the request is
+   * forwarded with. Undefined refuses the request with 503 `model_upstream_missing`.
+   */
+  upstreamFor: (model: string) => ResolvedUpstream | undefined;
   fetchImpl?: typeof fetch;
   /** Resolves the ledger recorder once, at upstream request start. */
   timingForRun?: (runId: Parameters<RunTokenStore["issue"]>[0]) => TimingRecorder | undefined;
@@ -193,6 +199,22 @@ export function registerModelProxy(app: FastifyInstance, opts: ModelProxyOptions
             .send({ code: "budget_exhausted", message: refusal.message, details: refusal.details });
         }
       }
+      let upstreamTarget: ResolvedUpstream | undefined;
+      try {
+        upstreamTarget = opts.upstreamFor(verdict.model);
+      } catch {
+        upstreamTarget = undefined;
+      }
+      if (!upstreamTarget) {
+        return reply
+          .code(503)
+          .header("x-should-retry", "false")
+          .send({
+            code: "model_upstream_missing",
+            message: "no model upstream serves this model",
+            details: { model: verdict.model },
+          });
+      }
       const body =
         verdict.verdict === "rewrite" && rawBody ? withModel(rawBody, verdict.model) : rawBody;
 
@@ -203,7 +225,11 @@ export function registerModelProxy(app: FastifyInstance, opts: ModelProxyOptions
         }
         headers.set(name, Array.isArray(value) ? value.join(", ") : value);
       }
-      headers.set("authorization", `Bearer ${opts.upstreamToken}`);
+      // The run's Bearer never leaves: it is replaced by the upstream's, or dropped for an
+      // upstream configured without one (a local model server).
+      if (upstreamTarget.authToken) {
+        headers.set("authorization", `Bearer ${upstreamTarget.authToken}`);
+      }
 
       let recorder: TimingRecorder | undefined;
       try {
@@ -270,7 +296,7 @@ export function registerModelProxy(app: FastifyInstance, opts: ModelProxyOptions
 
       let upstream: Response;
       try {
-        upstream = await doFetch(`${opts.upstreamBaseUrl}${request.url}`, {
+        upstream = await doFetch(`${upstreamTarget.baseUrl}${request.url}`, {
           method: "POST",
           headers,
           body: body as Buffer,

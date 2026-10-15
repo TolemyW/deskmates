@@ -23,6 +23,8 @@ interface UploadRow {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
 }
 
 export interface NewUpload {
@@ -50,6 +52,8 @@ function toUpload(row: UploadRow): WorkspaceUpload {
     createdAt: row.created_at as IsoTimestamp,
     updatedAt: row.updated_at as IsoTimestamp,
     ...(row.completed_at === null ? {} : { completedAt: row.completed_at as IsoTimestamp }),
+    ...(row.deleted_at === null ? {} : { deletedAt: row.deleted_at as IsoTimestamp }),
+    ...(row.deleted_by === null ? {} : { deletedBy: row.deleted_by }),
   };
 }
 
@@ -75,7 +79,7 @@ export class WorkspaceUploads {
     const row = this.db
       .prepare(
         `SELECT COALESCE(SUM(size_bytes), 0) AS total FROM workspace_uploads
-          WHERE workspace_id = ? AND state IN ('receiving', 'completed')`,
+          WHERE workspace_id = ? AND state IN ('receiving', 'completed') AND deleted_at IS NULL`,
       )
       .get(workspaceId) as { total: number };
     return row.total;
@@ -139,6 +143,19 @@ export class WorkspaceUploads {
       )
       .run(result.path, result.sha256, result.sizeBytes, at, at, workspaceId, id);
     return this.get(workspaceId, id) as WorkspaceUpload;
+  }
+
+  /** Decision 43: record an Admin's deletion of a completed upload's file; false if already. */
+  markDeleted(workspaceId: WorkspaceId, id: string, actor: string): boolean {
+    const at = nowIso();
+    return (
+      this.db
+        .prepare(
+          `UPDATE workspace_uploads SET deleted_at = ?, deleted_by = ?, updated_at = ?
+            WHERE workspace_id = ? AND id = ? AND state = 'completed' AND deleted_at IS NULL`,
+        )
+        .run(at, actor, at, workspaceId, id).changes === 1
+    );
   }
 
   end(workspaceId: WorkspaceId, id: string, state: "cancelled" | "expired"): void {

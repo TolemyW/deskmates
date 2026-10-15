@@ -552,8 +552,8 @@ describe("context observability from the sidecar", () => {
 });
 
 /**
- * Issue #88: the per-bot working directory is an opt-in knob (`DESKMATES_BOT_WORKDIR`). The run row
- * records the mode it was created under, and every process of that run (first start, thread-less
+ * Issue #88, ADR-0038: the working-directory knob (`DESKMATES_BOT_WORKDIR`) defaults to per-bot;
+ * shared is the other value. The run row records the mode it was created under, and every process of that run (first start, thread-less
  * trigger, approval resume) gets the same mode, whatever the Gateway is configured with later.
  */
 describe("the bot working-directory knob travels with the run", () => {
@@ -574,7 +574,27 @@ describe("the bot working-directory knob travels with the run", () => {
     });
   };
 
-  it("records shared by default and sends no mode, so the sidecar keeps /work", async () => {
+  it("records per-bot by default and sends it (ADR-0038 decision 1)", async () => {
+    // A fresh harness leaves DESKMATES_BOT_WORKDIR unset.
+    const { thread } = await h.seed();
+    h.provider.onRun(finish);
+    const posted = await h.api<{ runs: RunRecord[] }>(
+      "POST",
+      `/api/threads/${thread.id}/messages`,
+      { body: "x" },
+    );
+    const run = posted.json.runs[0] as RunRecord;
+    expect(run.config.botWorkdir).toBe("per-bot");
+    await waitFor(
+      () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "succeeded",
+      3000,
+      "run",
+    );
+    expect(h.provider.execCalls[0]?.request.workdirMode).toBe("per-bot");
+  });
+
+  it("records shared when configured and sends no mode, so the sidecar keeps /work", async () => {
+    h.app.deskmates.ctx.config.botWorkdir = "shared";
     const { thread } = await h.seed();
     h.provider.onRun(finish);
     const posted = await h.api<{ runs: RunRecord[] }>(
@@ -703,13 +723,10 @@ describe("workspace working-directory settings freeze at first start", () => {
     });
   };
 
-  it("sends the workspace's mode and repository, frozen across a resume", async () => {
+  it("sends the workspace's mode, frozen across a resume", async () => {
+    h.app.deskmates.ctx.config.botWorkdir = "shared";
     const { workspace, thread } = await h.seed();
-    h.app.deskmates.ctx.workdir.set(
-      workspace.id,
-      { mode: "per-bot", worktreeRepo: "/work/app" },
-      "user:qa",
-    );
+    h.app.deskmates.ctx.workdir.set(workspace.id, { mode: "per-bot" }, "user:qa");
     let attempt = 0;
     h.provider.onRun(async (req, gw) => {
       attempt += 1;
@@ -748,31 +765,27 @@ describe("workspace working-directory settings freeze at first start", () => {
       3000,
       "parked",
     );
-    expect(h.provider.execCalls[0]?.request).toMatchObject({
-      workdirMode: "per-bot",
-      worktreeRepo: "/work/app",
-    });
+    expect(h.provider.execCalls[0]?.request).toMatchObject({ workdirMode: "per-bot" });
+    // ADR-0038 decision 7: no worktree repository is ever sent.
+    expect(h.provider.execCalls[0]?.request).not.toHaveProperty("worktreeRepo");
     expect(h.provider.execCalls[0]?.request).not.toHaveProperty("otherLaneRun");
     expect(h.app.deskmates.ctx.runs.mustGet(run.id).config).toMatchObject({
       botWorkdir: "per-bot",
       botWorkdirSource: "workspace",
-      worktreeRepo: "/work/app",
       laneNotice: false,
       workdirVersion: 1,
     });
-    h.app.deskmates.ctx.workdir.set(workspace.id, { mode: null, worktreeRepo: null }, "user:qa");
+    h.app.deskmates.ctx.workdir.set(workspace.id, { mode: null }, "user:qa");
     await h.api("POST", "/api/approvals/apr_worktree/decide", {
       decision: "allow_once",
       decidedBy: "human:qa",
     });
     await waitFor(() => h.app.deskmates.ctx.runs.mustGet(run.id).attempt === 2, 3000, "resumed");
-    expect(h.provider.execCalls.at(-1)?.request).toMatchObject({
-      workdirMode: "per-bot",
-      worktreeRepo: "/work/app",
-    });
+    expect(h.provider.execCalls.at(-1)?.request).toMatchObject({ workdirMode: "per-bot" });
   });
 
   it("lane notice: names the bot's live background run to its interactive run", async () => {
+    h.app.deskmates.ctx.config.botWorkdir = "shared";
     const { workspace, bot, thread } = await h.seed();
     h.app.deskmates.ctx.workdir.set(workspace.id, { laneNotice: true }, "user:qa");
     h.provider.onRun(finish);

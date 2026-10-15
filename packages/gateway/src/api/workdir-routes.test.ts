@@ -1,5 +1,6 @@
-// T1: the working-directory settings routes (ADR-0036 decision 1). A Member reads, only an Admin
-// changes, a change is audited, and an invalid repository is a 400 that writes nothing.
+// T1: the working-directory settings routes (ADR-0036 decision 1, ADR-0038 decisions 1 and 7). A
+// Member reads, only an Admin changes, a change is audited, and `worktreeRepo`, no longer a
+// setting, is a 400 that writes nothing.
 
 import type { WorkdirSettingsView } from "@deskmates/contracts";
 import { afterEach, describe, expect, it } from "vitest";
@@ -29,27 +30,26 @@ describe("working-directory settings routes (ADR-0036)", () => {
     expect(read.status).toBe(200);
     expect(read.json.workdir).toMatchObject({
       settings: {},
-      effective: { mode: "shared", source: "gateway", worktreeRepo: null, laneNotice: false },
-      gatewayMode: "shared",
+      effective: { mode: "per-bot", source: "gateway", laneNotice: false },
+      gatewayMode: "per-bot",
     });
 
-    const refused = await people.member.fetch("PUT", path, { body: { mode: "per-bot" } });
+    const refused = await people.member.fetch("PUT", path, { body: { mode: "shared" } });
     expect(refused.status).toBe(403);
 
     const bad = await people.admin.fetch("PUT", path, {
-      body: { mode: "per-bot", worktreeRepo: "/work/bots/x" },
+      body: { mode: "per-bot", worktreeRepo: "/work/app" },
     });
     expect(bad.status).toBe(400);
     expect(audits(harness)).toEqual([]);
 
     const set = await people.admin.json<{ workdir: WorkdirSettingsView }>("PUT", path, {
-      body: { mode: "per-bot", worktreeRepo: "/work/app", laneNotice: true },
+      body: { mode: "shared", laneNotice: true },
     });
     expect(set.status).toBe(200);
     expect(set.json.workdir.effective).toEqual({
-      mode: "per-bot",
+      mode: "shared",
       source: "workspace",
-      worktreeRepo: "/work/app",
       laneNotice: true,
     });
     expect(audits(harness)).toEqual([{ actor: `user:${people.ids.ada}` }]);

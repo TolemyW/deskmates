@@ -15,6 +15,7 @@ import { useT } from "../../i18n/i18n-provider.js";
 import { currentI18n } from "../../i18n/intl.js";
 import { Markdown } from "../../lib/markdown.js";
 import { CSV_PREVIEW_MAX_COLUMNS, parseDelimited } from "./csv-table.js";
+import { formatFileSize } from "./file-size.js";
 import { downloadWorkspaceFile } from "./path-links.js";
 import { PdfRangePreview } from "./pdf-range-preview.js";
 import { IMAGE_ZOOM_STEPS, stepZoom } from "./preview-zoom.js";
@@ -509,6 +510,7 @@ export function WorkspaceFilePreview({
   compact = false,
   source,
   sourceId,
+  card,
 }: {
   api: PreviewApi;
   workspaceId: WorkspaceId;
@@ -518,6 +520,8 @@ export function WorkspaceFilePreview({
   compact?: boolean;
   source?: string;
   sourceId?: string;
+  /** A message attachment card (ADR-0014 A5 decision 42): its name and size instead of the path. */
+  card?: { name: string; sizeBytes?: number | undefined };
 }) {
   const t = useT();
   const previewButton = useRef<HTMLButtonElement>(null);
@@ -619,9 +623,20 @@ export function WorkspaceFilePreview({
     .join(" · ");
 
   return (
-    <div className={`workspace-file-preview${compact ? " workspace-file-compact" : ""}`}>
+    <div
+      className={`workspace-file-preview${compact ? " workspace-file-compact" : ""}${
+        card ? " workspace-file-card" : ""
+      }`}
+    >
       <FileText size={20} aria-hidden="true" />
-      {compact ? (
+      {card ? (
+        <span className="workspace-file-label" title={path}>
+          <strong>{card.name}</strong>
+          {card.sizeBytes === undefined ? null : (
+            <span className="muted small">{formatFileSize(card.sizeBytes)}</span>
+          )}
+        </span>
+      ) : compact ? (
         <details className="workspace-file-identity">
           <summary title={path} aria-label={`${t("workspaceFilePreview.details")}: ${path}`}>
             <strong>{shortName}</strong>
@@ -654,12 +669,14 @@ export function WorkspaceFilePreview({
           </span>
         </span>
       )}
-      {supported || compact ? (
+      {supported || compact || card ? (
         <Button
           ref={previewButton}
           type="button"
           disabled={busy || !supported}
-          aria-label={compact ? t("workspaceFilePreview.previewLabel", { path }) : undefined}
+          aria-label={
+            compact || card ? t("workspaceFilePreview.previewLabel", { path }) : undefined
+          }
           title={
             !supported
               ? t("workspaceFilePreview.unavailableType")
@@ -667,7 +684,7 @@ export function WorkspaceFilePreview({
           }
           onClick={() => void loadPreview()}
         >
-          {compact ? (
+          {compact || card ? (
             <Eye size={18} aria-hidden="true" />
           ) : busy ? (
             t("workspaceFilePreview.loading")
@@ -683,7 +700,11 @@ export function WorkspaceFilePreview({
         aria-label={t("workspaceFilePreview.downloadLabel", { path })}
         onClick={download}
       >
-        {compact ? <Download size={18} aria-hidden="true" /> : t("workspaceFilePreview.download")}
+        {compact || card ? (
+          <Download size={18} aria-hidden="true" />
+        ) : (
+          t("workspaceFilePreview.download")
+        )}
       </Button>
       {downloadError ? (
         <p role="alert">{t("workspaceFilePreview.downloadError", { error: downloadError })}</p>

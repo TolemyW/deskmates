@@ -9,6 +9,7 @@ import {
   type MemoryEntry,
   type MemoryFreshnessPolicy,
   type MemoryFreshnessReason,
+  type MemoryRecheckVerdict,
   type MemoryRevalidation,
   type MemoryRevalidationDecision,
   type MemoryRevalidationOutcome,
@@ -49,7 +50,15 @@ interface FlagRow {
   flagged_at: string;
   decided_by: string | null;
   decided_at: string | null;
+  model_verdict: MemoryRecheckVerdict | null;
+  model_reason: string | null;
+  model_checked_at: string | null;
+  model_run_id: string | null;
+  model_entry_version: number | null;
 }
+
+/** A26: a flag a person must answer: `replaced_trusted`, or a model `possibly_stale` (A28). */
+const NEEDS_HUMAN_SQL = "(reason = 'replaced_trusted' OR model_verdict = 'possibly_stale')";
 
 export interface SweepResult {
   flagged: number;
@@ -202,18 +211,19 @@ export class MemoryFreshness {
   /** One page of open flags, `flagged_at DESC, id DESC`, with exact totals per reason. */
   page(
     workspaceId: WorkspaceId,
-    page: { limit: number; after?: readonly [string, string] },
+    page: { limit: number; after?: readonly [string, string]; needsHuman?: boolean },
   ): {
     items: MemoryRevalidation[];
     more: boolean;
     total: number;
+    needsHuman: number;
     byReason: Partial<Record<MemoryFreshnessReason, number>>;
   } {
     const after = page.after;
     const rows = this.db
       .prepare(
         `SELECT * FROM memory_revalidations
-          WHERE workspace_id = ? AND status = 'open'
+          WHERE workspace_id = ? AND status = 'open' ${page.needsHuman ? `AND ${NEEDS_HUMAN_SQL}` : ""}
             AND (? IS NULL OR flagged_at < ? OR (flagged_at = ? AND id < ?))
           ORDER BY flagged_at DESC, id DESC LIMIT ?`,
       )
@@ -233,10 +243,19 @@ export class MemoryFreshness {
       .all(workspaceId) as { reason: MemoryFreshnessReason; n: number }[];
     const byReason: Partial<Record<MemoryFreshnessReason, number>> = {};
     for (const { reason, n } of counts) byReason[reason] = n;
+    const needsHuman = (
+      this.db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM memory_revalidations
+            WHERE workspace_id = ? AND status = 'open' AND ${NEEDS_HUMAN_SQL}`,
+        )
+        .get(workspaceId) as { n: number }
+    ).n;
     return {
       items: rows.slice(0, page.limit).map((row) => this.view(row)),
       more: rows.length > page.limit,
       total: counts.reduce((sum, { n }) => sum + n, 0),
+      needsHuman,
       byReason,
     };
   }
@@ -323,6 +342,18 @@ export class MemoryFreshness {
       horizonDays: row.horizon_days,
       ...(row.decided_by ? { decidedBy: row.decided_by } : {}),
       ...(row.decided_at ? { decidedAt: row.decided_at } : {}),
+      ...(row.model_verdict && row.model_checked_at
+        ? {
+            model: {
+              verdict: row.model_verdict,
+              reason: row.model_reason ?? "",
+              checkedAt: row.model_checked_at,
+              runId: row.model_run_id ?? "",
+              entryVersion: row.model_entry_version ?? row.entry_version,
+            },
+          }
+        : {}),
+      needsHuman: row.reason === "replaced_trusted" || row.model_verdict === "possibly_stale",
       entry: {
         body: entry.body,
         scope: entry.scope === "bot" ? "bot" : "workspace",

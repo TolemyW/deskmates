@@ -1,7 +1,7 @@
 # ADR-0036: Per-workspace working-directory settings, platform-prepared git worktrees and lane notes
 
 Date: 2026-10-14
-Status: Proposed (engineering proposal on issue #88; no decision below has owner sign-off. Open owner questions: whether a workspace-level setting is the right scope (decision 1), whether the platform should prepare worktrees at all (decision 4), one worktree per bot rather than per lane (decision 6), and whether to authorize the paired campaign in decision 8.)
+Status: Proposed (engineering proposal on issue #88. Superseded in part by ADR-0038 (owner-decided 2026-10-14): decisions 2 and 4 and `worktreeRepo` in decisions 1, 3, 5, 7 and 8 are void, since each bot clones its own code and `worktreeRepo` is removed; per-bot is the default and other bots' directories are read-only through a soft hook guard. The workspace `mode` and `laneNotice` settings, the freeze at first start and the lane notice stand. Before that ruling no decision below had owner sign-off. Open owner questions: whether a workspace-level setting is the right scope (decision 1), whether the platform should prepare worktrees at all (decision 4), one worktree per bot rather than per lane (decision 6), and whether to authorize the paired campaign in decision 8.)
 
 ## Context
 

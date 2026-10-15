@@ -13,3 +13,13 @@ export interface ModelConfig {
   defaultModel: string;
   cheapModel: string;
 }
+
+/**
+ * One model the Gateway's model registry routes, as the UI sees it (ADR-0039 decision 8): the
+ * model id and the id of the upstream that serves it. Never the upstream's URL or token.
+ */
+export interface RegisteredModel {
+  model: string;
+  /** Upstream id: `default` for `MODEL_BASE_URL`, else an id from `MODEL_UPSTREAMS`. */
+  upstream: string;
+}

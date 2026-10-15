@@ -9,7 +9,7 @@ import type {
   MemorySplitProposal,
   WorkspaceId,
 } from "@deskmates/contracts";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { LearnedMemoryEntry } from "../../api/client.js";
 import { MemoryMaintenance, type MemoryMaintenanceApi } from "./memory-maintenance.js";
@@ -30,7 +30,8 @@ function flag(id: string, over: Partial<MemoryRevalidation> = {}): MemoryRevalid
     reason: "age",
     status: "open",
     flaggedAt: "2026-10-14T00:00:00.000Z",
-    horizonDays: 90,
+    horizonDays: 1,
+    needsHuman: true,
     entry: {
       body: `The billing export runs on Mondays (${id}).`,
       scope: "workspace",
@@ -80,7 +81,30 @@ function fakeApi(over: Partial<MemoryMaintenanceApi> = {}) {
       revalidations: [flag("a", { reason: "ttl_expired" })],
       nextCursor: "c1",
       total: 2,
+      needsHuman: 2,
       byReason: { ttl_expired: 1, age: 1 },
+    })),
+    getMemoryMaintenance: vi.fn(async () => ({
+      settings: { recheckDailyLimit: 200, organizeDaily: true },
+      recheckedToday: 12,
+      recheck: {
+        id: "mrck_1",
+        workspaceId: WS,
+        status: "ready" as const,
+        runId: "run_r",
+        noteCount: 12,
+        stillTrue: 9,
+        possiblyStale: 2,
+        unclear: 1,
+        dropped: 0,
+        createdAt: "2026-10-14T00:00:00.000Z",
+        finishedAt: "2026-10-14T00:01:00.000Z",
+      },
+    })),
+    updateMemoryMaintenanceSettings: vi.fn(async (_ws: WorkspaceId, patch: object) => ({
+      recheckDailyLimit: 200,
+      organizeDaily: true,
+      ...patch,
     })),
     decideMemoryRevalidation: vi.fn(async (_ws: WorkspaceId, id: string) => flag(id)),
     draftKnowledgeFromObservations: vi.fn(async () => ({
@@ -131,8 +155,9 @@ it("lists flags with reasons and a partial count, and answers one with Still tru
   const api = fakeApi();
   renderPanel(api);
   expect(await screen.findByText("Needs revalidation (2)")).toBeInTheDocument();
-  expect(screen.getByText("Expired: 1 · Not confirmed for a long time: 1")).toBeInTheDocument();
+  expect(screen.getByText("Expired: 1 · Not confirmed in the last day: 1")).toBeInTheDocument();
   expect(screen.getByText("Showing 1 of 2")).toBeInTheDocument();
+  expect(api.listMemoryRevalidations).toHaveBeenCalledWith(WS, { view: "needs_human" });
   fireEvent.click(screen.getByRole("button", { name: "Still true" }));
   await waitFor(() =>
     expect(api.decideMemoryRevalidation).toHaveBeenCalledWith(WS, "a", "still_true"),
@@ -140,16 +165,79 @@ it("lists flags with reasons and a partial count, and answers one with Still tru
   expect(await screen.findByText("Marked as still true.")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Load more" }));
   await waitFor(() =>
-    expect(api.listMemoryRevalidations).toHaveBeenCalledWith(WS, { cursor: "c1" }),
+    expect(api.listMemoryRevalidations).toHaveBeenCalledWith(WS, {
+      view: "needs_human",
+      cursor: "c1",
+    }),
   );
 });
 
 it("says when nothing needs revalidation", async () => {
   const api = fakeApi({
-    listMemoryRevalidations: vi.fn(async () => ({ revalidations: [], total: 0, byReason: {} })),
+    listMemoryRevalidations: vi.fn(async () => ({
+      revalidations: [],
+      total: 0,
+      needsHuman: 0,
+      byReason: {},
+    })),
   });
   renderPanel(api);
   expect(await screen.findByText("Nothing needs revalidation.")).toBeInTheDocument();
+});
+
+it("lands on what needs a person, shows the model's verdict, and switches to all flags (A28)", async () => {
+  const stale = flag("s", {
+    model: {
+      verdict: "possibly_stale",
+      reason: "Bob said exports moved to Tuesdays",
+      checkedAt: "2026-10-14T03:00:00.000Z",
+      runId: "run_r",
+      entryVersion: 1,
+    },
+  });
+  const api = fakeApi({
+    listMemoryRevalidations: vi.fn(
+      async (_ws: WorkspaceId, filters?: { view?: string; cursor?: string }) =>
+        filters?.view === "all"
+          ? { revalidations: [stale, flag("b")], total: 7, needsHuman: 1, byReason: { age: 7 } }
+          : { revalidations: [], total: 7, needsHuman: 0, byReason: { age: 7 } },
+    ),
+  });
+  renderPanel(api);
+  expect(
+    await screen.findByText(
+      "Nothing needs a person. The model rechecks the other flagged notes on its own.",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.getByText("12 of 200 notes rechecked in the last 24 hours.")).toBeInTheDocument();
+  expect(
+    screen.getByText("Last recheck: 9 still true, 2 possibly stale, 1 unclear."),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "All flagged (7)" }));
+  expect(
+    await screen.findByText(
+      "Model recheck 2026-10-14: possibly stale. Bob said exports moved to Tuesdays",
+    ),
+  ).toBeInTheDocument();
+  expect(api.listMemoryRevalidations).toHaveBeenCalledWith(WS, { view: "all" });
+});
+
+it("saves the maintenance settings and refuses an invalid limit (A34)", async () => {
+  const api = fakeApi();
+  renderPanel(api);
+  const limit = await screen.findByLabelText("Notes rechecked per day (0 turns it off)");
+  fireEvent.change(limit, { target: { value: "-1" } });
+  expect(screen.getByRole("button", { name: "Save settings" })).toBeDisabled();
+  fireEvent.change(limit, { target: { value: "0" } });
+  fireEvent.click(screen.getByLabelText("Organise topics once a day"));
+  fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
+  await waitFor(() =>
+    expect(api.updateMemoryMaintenanceSettings).toHaveBeenCalledWith(WS, {
+      recheckDailyLimit: 0,
+      organizeDaily: false,
+    }),
+  );
+  expect(await screen.findByText("Maintenance settings saved.")).toBeInTheDocument();
 });
 
 it("shows an error when the queue cannot be read", async () => {
@@ -166,7 +254,8 @@ it("drafts a document from the trusted notes of one topic only", async () => {
   const api = fakeApi();
   renderPanel(api);
   fireEvent.change(await screen.findByRole("combobox"), { target: { value: "vendordb" } });
-  const boxes = await screen.findAllByRole("checkbox");
+  const notes = await screen.findByRole("list", { name: "Notes of this topic" });
+  const boxes = await within(notes).findAllByRole("checkbox");
   expect(boxes[0]).toBeChecked();
   expect(boxes[1]).toBeDisabled();
   expect(screen.getByText("(untrusted: confirm it first)")).toBeInTheDocument();

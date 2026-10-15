@@ -1,5 +1,5 @@
 {
-  "limits.breaker": "Cortacircuitos de bucles, siempre activo: una cadena de más de {relayMax} saltos no despierta a nadie; {botMessages} mensajes de bots desde el último mensaje humano, o {repeats} mensajes idénticos de un mismo bot, pausan el chat hasta que una persona escriba.",
+  "limits.breaker": "Cortacircuitos de bucles, siempre activo: una cadena de más de {relayMax} saltos no despierta a nadie, y {repeats} mensajes idénticos de un mismo bot pausan el chat hasta que una persona escriba.",
   "limits.cancel": "Cancelar",
   "limits.edit": "Editar límites",
   "limits.effective": "{value} · {source}",
@@ -13,14 +13,17 @@
   "limits.key.turnBudget": "Presupuesto de turnos (mensajes de bots por chat desde el último mensaje humano)",
   "limits.loading": "Cargando límites…",
   "limits.off": "Desactivado",
-  "limits.offNeedsBudget": "Podrás desactivarlo cuando este espacio de trabajo tenga un presupuesto semanal o acumulado (página Costos).",
+  "limits.offNeedsBudget": "Este espacio de trabajo exige un presupuesto semanal o acumulado (página Costos) antes de desactivar un límite.",
+  "limits.on": "Activado",
   "limits.roleNote": "cambiar los límites de ejecución",
   "limits.save": "Guardar límites",
   "limits.source.default": "predeterminado",
-  "limits.source.default_no_backstop": "predeterminado; desactivarlo requiere presupuesto",
+  "limits.source.default_no_backstop": "predeterminado; este espacio exige presupuesto para desactivarlo",
   "limits.source.gateway": "predeterminado del servidor",
   "limits.source.loop_breaker": "cortacircuitos de bucles",
   "limits.source.thread": "por chat",
   "limits.source.workspace": "ajuste del espacio de trabajo",
+  "limits.switch.requireBudgetForOff": "Exigir presupuesto para límites ilimitados",
+  "limits.switch.volumeBreaker": "Pausar un chat tras {botMessages} mensajes de bots desde el último mensaje humano",
   "limits.title": "Límites de ejecución"
 }

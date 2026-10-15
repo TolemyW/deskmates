@@ -17,7 +17,6 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { GatewayContext } from "../context.js";
 import type { StoredScope } from "../memory/entries.js";
 import { closeThreadTask } from "../memory/episodes.js";
-import { searchMemory, searchMemoryPage } from "../memory/search.js";
 import { isLive } from "../memory/validity.js";
 import { confirmEntry, editEntry, forgetEntry, undoEntry } from "../memory/versions.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
@@ -134,7 +133,7 @@ export function registerLearnedMemoryRoutes(
     ];
     const query = parseCursorQuery(request.query, SEARCH_PAGE, cursorScope, ["number"]);
     const offset = Number(query.after?.[0] ?? 0);
-    const page = searchMemoryPage(ctx.db, {
+    const page = await ctx.retrieval.memorySearchPage({
       workspaceId,
       query: request.query.q ?? "",
       ...(scope ? { scope } : {}),
@@ -290,7 +289,8 @@ export function registerMemoryInternalRoutes(app: FastifyInstance, ctx: GatewayC
       const run = ctx.runs.mustGet(request.params.runId as RunId);
       const workspaceId = ctx.bots.mustGet(run.botId).workspaceId;
       const scope = scopeOf(request.query.scope);
-      const entries = searchMemory(ctx.db, {
+      const entries = await ctx.retrieval.memorySearch({
+        runId: run.id,
         workspaceId,
         query: request.query.q ?? "",
         ...(scope ? { scope } : {}),

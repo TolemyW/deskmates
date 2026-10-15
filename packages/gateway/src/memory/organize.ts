@@ -1,7 +1,8 @@
 // Model organisation of learned memory (ADR-0011 amendment 4, A30 to A32). An Admin asks for it;
 // it runs as a cheap-model job in the sidecar (ADR-0023 amendment 1) and the Gateway validates
 // what comes back deterministically. Labels become browsing tags; splits become proposals a
-// human accepts. Nothing here calls a model, changes trust, scope or a rule, or runs on its own.
+// human accepts. Nothing here calls a model or changes trust, scope or a rule. Owner ruling
+// 2026-10-14: it also runs once a day on its own (`requestDaily`); splits stay human-accepted.
 
 import {
   DeskmatesError,
@@ -19,10 +20,13 @@ import type { GatewayContext } from "../context.js";
 import { newId } from "../db/ids.js";
 import type { RunRecord } from "../ledger/runs.js";
 import { modelsForJob } from "../scheduler/job-models.js";
+import { readMaintenanceSettings } from "./maintenance-settings.js";
 import { writeFact } from "./recency.js";
 import { undoEntry } from "./versions.js";
 
 export const MEMORY_ORGANIZE = "memory_organize";
+/** Who requests the daily job (A30). */
+export const DAILY_REQUESTER = "system:memory-maintenance";
 
 interface JobRow {
   id: string;
@@ -137,7 +141,8 @@ export class MemoryOrganizer {
           `SELECT id, version FROM memory_entries
             WHERE workspace_id = ? AND kind = 'note' AND scope IN ('workspace', 'bot')
               AND tombstoned = 0 AND invalid_at IS NULL AND episode_id IS NULL
-            ORDER BY COALESCE(effective_at, observed_at) DESC, id DESC LIMIT ?`,
+            ORDER BY (topic_source = 'model'), COALESCE(effective_at, observed_at) DESC, id DESC
+            LIMIT ?`,
         )
         .all(input.workspaceId, MEMORY_ORGANIZE_MAX_NOTES) as { id: string; version: number }[];
       if (notes.length === 0)
@@ -172,6 +177,32 @@ export class MemoryOrganizer {
         .run(id, input.workspaceId, run.id, notes.length, input.requestedBy, run.createdAt);
       return { job: this.job(input.workspaceId, id), run };
     })();
+  }
+
+  /**
+   * A30 as ruled 2026-10-14: the daily job of a workspace, queued by the periodic pass when daily
+   * organisation is on, a current note has no model label, and no job was created in 24 hours.
+   */
+  requestDaily(
+    workspaceId: WorkspaceId,
+    now: Date = new Date(),
+  ): { job: MemoryOrganizeJob; run?: RunRecord } | undefined {
+    if (!readMaintenanceSettings(this.db, workspaceId).organizeDaily) return undefined;
+    const since = new Date(now.getTime() - 86_400_000).toISOString();
+    const recent = this.db
+      .prepare("SELECT 1 FROM memory_organize_jobs WHERE workspace_id = ? AND created_at > ?")
+      .get(workspaceId, since);
+    if (recent) return undefined;
+    const unlabelled = this.db
+      .prepare(
+        `SELECT 1 FROM memory_entries
+          WHERE workspace_id = ? AND kind = 'note' AND scope IN ('workspace', 'bot')
+            AND tombstoned = 0 AND invalid_at IS NULL AND episode_id IS NULL
+            AND topic_source <> 'model' LIMIT 1`,
+      )
+      .get(workspaceId);
+    if (!unlabelled || this.ctx.bots.list(workspaceId).length === 0) return undefined;
+    return this.request({ workspaceId, requestedBy: DAILY_REQUESTER });
   }
 
   /** The sidecar's job: the bodies at the versions recorded on the run; forgotten ones left out. */

@@ -1,18 +1,21 @@
-// Demo routes of working-directory settings (ADR-0036): a workspace starts with nothing stored and
-// inherits the demo Gateway's `shared` mode; the repository rules match the Gateway's.
+// Demo routes of working-directory settings (ADR-0036 as amended by ADR-0038): a workspace starts
+// with nothing stored and inherits the demo Gateway's `per-bot` default; `worktreeRepo` is not a
+// setting any more, so the demo refuses it as the Gateway does.
 
 import {
+  BOT_WORKDIR_DEFAULT,
   type BotWorkdirMode,
   type WorkdirSettings,
   type WorkdirSettingsView,
-  worktreeRepoProblem,
 } from "@deskmates/contracts";
 import type { DemoFeature, DemoRequest } from "../../demo/feature.js";
 import { type Result, notFound, ok } from "../../demo/result.js";
 import type { DemoState } from "../../demo/state.js";
 
-/** The demo Gateway's `DESKMATES_BOT_WORKDIR`. */
-const DEMO_GATEWAY_MODE: BotWorkdirMode = "shared";
+/** The demo Gateway's `DESKMATES_BOT_WORKDIR`: unset, so the default. */
+const DEMO_GATEWAY_MODE: BotWorkdirMode = BOT_WORKDIR_DEFAULT;
+
+const FIELDS = ["mode", "laneNotice"];
 
 const store = (s: DemoState) =>
   s.store("workdir", () => ({ settings: {} as Record<string, WorkdirSettings> }));
@@ -25,7 +28,6 @@ function view(s: DemoState, workspaceId: string): WorkdirSettingsView {
     effective: {
       mode: settings.mode ?? DEMO_GATEWAY_MODE,
       source: settings.mode ? "workspace" : "gateway",
-      worktreeRepo: settings.worktreeRepo ?? null,
       laneNotice: settings.laneNotice === true,
     },
     gatewayMode: DEMO_GATEWAY_MODE,
@@ -33,28 +35,17 @@ function view(s: DemoState, workspaceId: string): WorkdirSettingsView {
 }
 
 function update(current: WorkdirSettings, body: Record<string, unknown>): WorkdirSettings | string {
-  let { mode, worktreeRepo, laneNotice } = current;
+  let { mode, laneNotice } = current;
+  for (const key of Object.keys(body))
+    if (!FIELDS.includes(key)) return `unknown workdir setting ${key}`;
   if ("mode" in body) {
     if (body.mode === null) mode = undefined;
     else if (body.mode === "shared" || body.mode === "per-bot") mode = body.mode;
     else return "mode must be shared, per-bot or null";
-    if (mode !== "per-bot") worktreeRepo = undefined;
-  }
-  if ("worktreeRepo" in body) {
-    if (body.worktreeRepo === null) worktreeRepo = undefined;
-    else if (typeof body.worktreeRepo !== "string") return "worktreeRepo must be a string";
-    else {
-      const problem = worktreeRepoProblem(body.worktreeRepo);
-      if (problem) return problem;
-      worktreeRepo = body.worktreeRepo;
-    }
   }
   if ("laneNotice" in body) laneNotice = body.laneNotice === true ? true : undefined;
-  if (worktreeRepo && mode !== "per-bot")
-    return "a worktree repository needs the workspace's mode set to per-bot";
   return {
     ...(mode ? { mode } : {}),
-    ...(worktreeRepo ? { worktreeRepo } : {}),
     ...(laneNotice ? { laneNotice } : {}),
   };
 }

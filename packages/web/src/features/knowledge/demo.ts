@@ -68,7 +68,7 @@ function demoPage<K extends string, T>(
  */
 function maintenance(req: DemoRequest, s: DemoState): Result | undefined {
   const x = req.match(
-    /^\/api\/workspaces\/([^/]+)\/memory\/(revalidations|document-drafts|organize|organize\/reset-labels|splits)(?:\/([^/]+))?$/,
+    /^\/api\/workspaces\/([^/]+)\/memory\/(revalidations|document-drafts|maintenance|organize|organize\/reset-labels|splits)(?:\/([^/]+))?$/,
   );
   if (!x) return undefined;
   const workspaceId = decodeURIComponent(x[1] ?? "") as WorkspaceId;
@@ -89,7 +89,9 @@ function maintenance(req: DemoRequest, s: DemoState): Result | undefined {
           reason,
           status: "open" as const,
           flaggedAt: now.toISOString(),
-          horizonDays: e.scope === "bot" ? 180 : 90,
+          horizonDays: 1,
+          // The demo runs no model, so only a replaced trusted fact needs a person here.
+          needsHuman: reason === "replaced_trusted",
           entry: {
             body: e.body,
             scope: e.scope === "bot" ? ("bot" as const) : ("workspace" as const),
@@ -104,7 +106,29 @@ function maintenance(req: DemoRequest, s: DemoState): Result | undefined {
   if (kind === "revalidations" && req.method === "GET") {
     const byReason: Record<string, number> = {};
     for (const flag of flagged) byReason[flag.reason] = (byReason[flag.reason] ?? 0) + 1;
-    return ok({ ...demoPage("revalidations", flagged, req.query, false), byReason });
+    const human = flagged.filter((flag) => flag.needsHuman);
+    const shown = req.query.get("view") === "needs_human" ? human : flagged;
+    return ok({
+      ...demoPage("revalidations", shown, req.query, false),
+      total: flagged.length,
+      needsHuman: human.length,
+      byReason,
+    });
+  }
+  // A28, A34: the demo keeps the settings and says honestly that it rechecks nothing.
+  if (kind === "maintenance") {
+    const settings = s.store("knowledge-maintenance", () => ({
+      recheckDailyLimit: 200,
+      organizeDaily: true,
+    }));
+    if (req.method === "PUT") {
+      if (typeof req.body.recheckDailyLimit === "number")
+        settings.recheckDailyLimit = req.body.recheckDailyLimit;
+      if (typeof req.body.organizeDaily === "boolean")
+        settings.organizeDaily = req.body.organizeDaily;
+      return ok({ settings: { ...settings } });
+    }
+    return ok({ settings: { ...settings }, recheckedToday: 0 });
   }
   if (kind === "revalidations" && x[3]) {
     const flag = flagged.find((f) => f.id === decodeURIComponent(x[3] ?? ""));

@@ -50,6 +50,9 @@ const CASES: GoldenCases<KnowledgeApi> = {
   writeMemory: (a) => a.writeMemory(BOT, "notes", "v1"),
   listMemoryRevalidations: (a) => a.listMemoryRevalidations(WS, { cursor: "c6", limit: 10 }),
   decideMemoryRevalidation: (a) => a.decideMemoryRevalidation(WS, "mrv/1", "still_true"),
+  getMemoryMaintenance: (a) => a.getMemoryMaintenance(WS),
+  updateMemoryMaintenanceSettings: (a) =>
+    a.updateMemoryMaintenanceSettings(WS, { recheckDailyLimit: 50, organizeDaily: false }),
   draftKnowledgeFromObservations: (a) =>
     a.draftKnowledgeFromObservations(WS, { entryIds: ["mem/1"], title: "Notes" }),
   getMemoryOrganizeJob: (a) => a.getMemoryOrganizeJob(WS),

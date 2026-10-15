@@ -13,7 +13,7 @@ const CASES: GoldenCases<ApprovalsApi> = {
   listApprovals: (a) => a.listApprovals({ status: "pending", threadId: THR }),
   listPendingApprovalsPage: (a) => a.listPendingApprovalsPage({ cursor: "c/1", limit: 50 }),
   setApprovalExpiry: (a) => a.setApprovalExpiry(WS, 30),
-  setAutoApproval: (a) => a.setAutoApproval(WS, true),
+  setApprovalMode: (a) => a.setApprovalMode(WS, "approve_all"),
 };
 
 describe("approvals API wire golden", () => {
