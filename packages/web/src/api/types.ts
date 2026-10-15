@@ -8,6 +8,7 @@ import type {
   BotDefinition,
   BrowserLock,
   CostAlert,
+  EffectiveLimit,
   DeskmatesErrorCode,
   GroupRouting,
   Run,
@@ -54,6 +55,12 @@ export interface ThreadDetailView {
   thread: Thread;
   members: NamedThreadMember[];
   groupRouting?: GroupRouting;
+  /**
+   * The turn budget the router enforces (ADR-0005 amendment 5 decision 38): the workspace
+   * setting, else `thread.turnBudget`; `value: null` when the workspace turned it off. An older
+   * Gateway omits it.
+   */
+  effectiveTurnBudget?: EffectiveLimit;
 }
 
 /**
@@ -75,6 +82,12 @@ export type GatewayEvent =
   | import("@deskmates/contracts").ThreadActivityEvent
   | { type: "run_status"; threadId?: ThreadId; run: RunView }
   | { type: "run_event"; threadId?: ThreadId; event: RunEvent }
+  /** A live run's cumulative reply preview; the final message replaces it (ADR-0037). */
+  | {
+      type: "run_reply_preview";
+      threadId: ThreadId;
+      preview: import("@deskmates/contracts").ReplyPreviewFrame;
+    }
   | { type: "thread_message"; threadId: ThreadId; message: ThreadMessage }
   | ThreadMembersEvent
   | ThreadPinsEvent
@@ -97,6 +110,7 @@ export type GatewayEventType = GatewayEvent["type"];
 export const GATEWAY_EVENT_TYPES: readonly GatewayEventType[] = [
   "run_status",
   "run_event",
+  "run_reply_preview",
   "thread_message",
   "thread_members",
   "thread_pins",

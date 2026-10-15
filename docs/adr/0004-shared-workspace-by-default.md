@@ -62,7 +62,7 @@ The v0.3 machinery was built to answer a question nobody asked: how to stop bot 
 
 ## Amendment 1 — an opt-in per-bot working directory (2026-10-12)
 
-Status: Proposed (needs product-owner sign-off). Decisions 1 to 7 are unchanged. This amendment gives decision 3's "working directory" a concrete, optional form. Source: issue #88.
+Status: Proposed (needs product-owner sign-off). Decisions 1 to 7 are unchanged. This amendment gives decision 3's "working directory" a concrete, optional form. Source: issue #88. ADR-0036 (proposed) extends decision 8 with a per-workspace setting and would replace decisions 10 and 13.
 
 ### Context
 

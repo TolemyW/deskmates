@@ -12,6 +12,7 @@ import {
   type MemoryReviewBatch,
   type RunId,
   type WorkspaceId,
+  memoryFreshness,
   memoryReviewGroupKey,
   memoryTopic,
 } from "@deskmates/contracts";
@@ -60,10 +61,117 @@ function demoPage<K extends string, T>(
   } as Record<K, T[]> & { total: number };
 }
 
+/**
+ * ADR-0011 amendment 4 in the demo: revalidation flags computed from the shared memory, drafts
+ * that become pending proposals, and an organisation job that honestly says the demo runs no
+ * model. Nothing here pretends to have called one.
+ */
+function maintenance(req: DemoRequest, s: DemoState): Result | undefined {
+  const x = req.match(
+    /^\/api\/workspaces\/([^/]+)\/memory\/(revalidations|document-drafts|organize|organize\/reset-labels|splits)(?:\/([^/]+))?$/,
+  );
+  if (!x) return undefined;
+  const workspaceId = decodeURIComponent(x[1] ?? "") as WorkspaceId;
+  const kind = x[2];
+  const now = new Date();
+  const flagged = s.memory
+    .filter((e) => e.workspaceId === workspaceId)
+    .flatMap((e) => {
+      const reasons = memoryFreshness({ ...e, effectiveAt: e.effectiveAt ?? e.observedAt }, now);
+      const reason = reasons[0];
+      if (!reason || dismissed(s).has(`${e.id}:${e.version}:${reason}`)) return [];
+      return [
+        {
+          id: `mrv_${e.id}`,
+          workspaceId,
+          entryId: e.id,
+          entryVersion: e.version,
+          reason,
+          status: "open" as const,
+          flaggedAt: now.toISOString(),
+          horizonDays: e.scope === "bot" ? 180 : 90,
+          entry: {
+            body: e.body,
+            scope: e.scope === "bot" ? ("bot" as const) : ("workspace" as const),
+            trust: e.trust,
+            version: e.version,
+            effectiveAt: e.effectiveAt ?? e.observedAt,
+            ...(e.lastConfirmedAt ? { lastConfirmedAt: e.lastConfirmedAt } : {}),
+          },
+        },
+      ];
+    });
+  if (kind === "revalidations" && req.method === "GET") {
+    const byReason: Record<string, number> = {};
+    for (const flag of flagged) byReason[flag.reason] = (byReason[flag.reason] ?? 0) + 1;
+    return ok({ ...demoPage("revalidations", flagged, req.query, false), byReason });
+  }
+  if (kind === "revalidations" && x[3]) {
+    const flag = flagged.find((f) => f.id === decodeURIComponent(x[3] ?? ""));
+    const entry = s.memory.find((e) => e.id === flag?.entryId);
+    if (!flag || !entry) return notFound("revalidation");
+    if (req.body.decision === "still_true") {
+      entry.lastConfirmedAt = now.toISOString();
+      entry.version += 1;
+    } else dismissed(s).add(`${entry.id}:${entry.version}:${flag.reason}`);
+    return ok({
+      revalidation: {
+        ...flag,
+        status: req.body.decision === "still_true" ? "still_true" : "dismissed",
+      },
+    });
+  }
+  if (kind === "document-drafts") {
+    const ids = Array.isArray(req.body.entryIds) ? req.body.entryIds.map(String) : [];
+    const notes = s.memory.filter((e) => ids.includes(e.id) && e.trust === "trusted");
+    const proposal: KnowledgeProposal = {
+      id: id("prp"),
+      title: String(req.body.title ?? "Observations"),
+      body: notes.map((e, i) => `- ${e.observedAt.slice(0, 10)}: ${e.body} [${i + 1}]`).join("\n"),
+      status: "pending",
+      createdAt: now.toISOString(),
+      citations: notes.map((e, i) => ({
+        position: i + 1,
+        workspaceId,
+        entryId: e.id,
+        entryVersion: e.version,
+        changed: false,
+      })),
+    };
+    store(s).proposals.push(proposal);
+    return created({ proposal });
+  }
+  if (kind === "organize" && req.method === "GET") return ok({});
+  if (kind === "organize")
+    return ok({
+      job: {
+        id: id("morg"),
+        workspaceId,
+        status: "failed",
+        runId: "",
+        noteCount: 0,
+        labelsKept: 0,
+        labelsDropped: 0,
+        splitsKept: 0,
+        splitsDropped: 0,
+        error: "The demo runs no model",
+        requestedBy: "operator",
+        createdAt: now.toISOString(),
+      },
+    });
+  if (kind === "organize/reset-labels") return ok({ reset: 0 });
+  if (kind === "splits" && req.method === "GET") return ok({ splits: [], total: 0 });
+  return notFound("split proposal");
+}
+
+const dismissed = (s: DemoState) => s.store("knowledge-dismissed", () => new Set<string>());
+
 function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undefined {
   const { method, path, query: q, body: b } = req;
   const m = (re: RegExp) => req.match(re);
   let x: RegExpMatchArray | null;
+  const maintained = maintenance(req, s);
+  if (maintained) return maintained;
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
   if ((x = m(/^\/api\/workspaces\/([^/]+)\/memory\/search$/))) {
     const text = (q.get("q") ?? "").toLocaleLowerCase();

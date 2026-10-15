@@ -12,6 +12,7 @@ const CASES: GoldenCases<ApprovalsApi> = {
   getAutoApproval: (a) => a.getAutoApproval(WS),
   listApprovals: (a) => a.listApprovals({ status: "pending", threadId: THR }),
   listPendingApprovalsPage: (a) => a.listPendingApprovalsPage({ cursor: "c/1", limit: 50 }),
+  setApprovalExpiry: (a) => a.setApprovalExpiry(WS, 30),
   setAutoApproval: (a) => a.setAutoApproval(WS, true),
 };
 

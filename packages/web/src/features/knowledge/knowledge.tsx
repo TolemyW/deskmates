@@ -433,6 +433,19 @@ export function KnowledgePanel({ api }: { api: ApiClient }) {
                 {t("knowledge.pending.sourceRun")}
               </a>
             )}
+            {proposal.citations?.length ? (
+              <p className="muted small">
+                {t("knowledge.pending.citations", {
+                  count: proposal.citations.length,
+                  changed: proposal.citations.filter((c) => c.changed).length,
+                })}
+              </p>
+            ) : null}
+            {proposal.targetDocumentId ? (
+              <p className="muted small">
+                {t("knowledge.pending.updates", { version: proposal.targetVersion ?? 1 })}
+              </p>
+            ) : null}
             <pre>{proposal.body}</pre>
             <div className="knowledge-editor-actions">
               {(["approve", "reject"] as const).map((decision) => (

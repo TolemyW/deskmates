@@ -2,9 +2,12 @@
 // change is published online; the Gateway answers with what each affected proxy acknowledged.
 
 import type {
+  NetworkOverlap,
+  NetworkPreflightResult,
   NetworkProfile,
   NetworkPublication,
   NetworkRule,
+  SandboxNetworkSubnet,
   WorkspaceId,
   WorkspaceNetworkSelection,
   WorkspaceNetworkView,
@@ -36,11 +39,22 @@ export interface WorkspaceNetworkChange {
   note?: string;
 }
 
+export interface NetworkOverlapReport {
+  /** False when the sandbox provider cannot list its networks. */
+  checked: boolean;
+  networks: SandboxNetworkSubnet[];
+  overlaps: NetworkOverlap[];
+}
+
 export interface NetworkApi {
   createNetworkProfile(input: NetworkProfileInput): Promise<NetworkProfile>;
   deleteNetworkProfile(id: string): Promise<NetworkProfileChange>;
+  /** Amendment 2 decision 15: LAN targets inside a Docker network of the daemon (root). */
+  getNetworkOverlaps(): Promise<NetworkOverlapReport>;
   getWorkspaceNetwork(id: WorkspaceId): Promise<WorkspaceNetworkView>;
   listNetworkProfiles(): Promise<NetworkProfileList>;
+  /** Decision 14: one URL probed from the workspace's proxy; changes and stores nothing. */
+  preflightWorkspaceNetwork(id: WorkspaceId, url: string): Promise<NetworkPreflightResult>;
   replaceNetworkProfile(
     id: string,
     input: NetworkProfileInput,
@@ -61,11 +75,17 @@ export function createNetworkApi(t: HttpTransport): NetworkApi {
     deleteNetworkProfile(id) {
       return t.json("DELETE", `/api/network-profiles/${encodeURIComponent(id)}`);
     },
+    getNetworkOverlaps() {
+      return t.json("GET", "/api/network-overlaps");
+    },
     getWorkspaceNetwork(id) {
       return t.json("GET", `/api/workspaces/${encodeURIComponent(id)}/network`);
     },
     listNetworkProfiles() {
       return t.json("GET", "/api/network-profiles");
+    },
+    preflightWorkspaceNetwork(id, url) {
+      return t.json("POST", `/api/workspaces/${encodeURIComponent(id)}/network-preflight`, { url });
     },
     replaceNetworkProfile(id, input, expectedRevision) {
       return t.json("PUT", `/api/network-profiles/${encodeURIComponent(id)}`, {

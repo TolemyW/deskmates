@@ -48,6 +48,15 @@ const CASES: GoldenCases<KnowledgeApi> = {
   undoMemoryBatch: (a) => a.undoMemoryBatch(WS, "mrb_1"),
   undoMemoryEntry: (a) => a.undoMemoryEntry("mem/1"),
   writeMemory: (a) => a.writeMemory(BOT, "notes", "v1"),
+  listMemoryRevalidations: (a) => a.listMemoryRevalidations(WS, { cursor: "c6", limit: 10 }),
+  decideMemoryRevalidation: (a) => a.decideMemoryRevalidation(WS, "mrv/1", "still_true"),
+  draftKnowledgeFromObservations: (a) =>
+    a.draftKnowledgeFromObservations(WS, { entryIds: ["mem/1"], title: "Notes" }),
+  getMemoryOrganizeJob: (a) => a.getMemoryOrganizeJob(WS),
+  requestMemoryOrganize: (a) => a.requestMemoryOrganize(WS),
+  resetMemoryTopicLabels: (a) => a.resetMemoryTopicLabels(WS),
+  listMemorySplits: (a) => a.listMemorySplits(WS, { cursor: "c7" }),
+  decideMemorySplit: (a) => a.decideMemorySplit(WS, "msplit/1", "accept"),
 };
 
 describe("knowledge API wire golden", () => {

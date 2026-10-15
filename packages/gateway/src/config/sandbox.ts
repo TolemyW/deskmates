@@ -6,6 +6,7 @@ import {
   DeskmatesError,
   type PrivateEgressTarget,
   WORKSPACE_FILE_MAX_BYTES_DEFAULT,
+  parseIpv4Cidr,
   parsePrivateEgressTargets,
 } from "@deskmates/contracts";
 import { type Env, optionalCores, optionalInt, optionalLimit } from "./env.js";
@@ -42,6 +43,11 @@ export interface SandboxConfig {
   /** Deployment-owned exact private HTTPS grants, filtered by workspace (ADR-0027). */
   privateEgressTargets?: PrivateEgressTarget[];
   /**
+   * `NETWORK_LAN_CIDRS`: IPv4 CIDRs of the LAN the host reaches, checked for overlap with the
+   * daemon's Docker networks (ADR-0027 amendment 2 decision 15). Advisory; never enforced.
+   */
+  lanCidrs?: string[];
+  /**
    * Memory ceiling of a workspace container, in MiB; recorded in `runs.config_json`.
    */
   workspaceMemoryLimitMb: number;
@@ -61,6 +67,16 @@ export interface SandboxConfig {
    * A5 decision 30, proposed). 0 or unset: no quota. There is no per-file upload cap.
    */
   fileUploadWorkspaceQuotaBytes?: number;
+}
+
+function lanCidrs(env: Env): Pick<SandboxConfig, "lanCidrs"> {
+  const raw = env.NETWORK_LAN_CIDRS?.trim();
+  if (!raw) return {};
+  const cidrs = raw.split(/[\s,]+/).filter(Boolean);
+  const invalid = cidrs.filter((cidr) => !/\/[0-9]{1,2}$/.test(cidr) || !parseIpv4Cidr(cidr));
+  if (invalid.length > 0)
+    throw new DeskmatesError("validation", "NETWORK_LAN_CIDRS must list IPv4 CIDRs", { invalid });
+  return { lanCidrs: cidrs };
 }
 
 /** `SANDBOX_PROVIDER`, checked before anything else is read. */
@@ -84,6 +100,7 @@ export function readSandboxConfig(env: Env): SandboxConfig {
     ...(env.EGRESS_PRIVATE_TARGETS?.trim()
       ? { privateEgressTargets: parsePrivateEgressTargets(JSON.parse(env.EGRESS_PRIVATE_TARGETS)) }
       : {}),
+    ...lanCidrs(env),
     workspaceMemoryLimitMb: optionalInt(
       env,
       "WORKSPACE_MEMORY_LIMIT_MB",

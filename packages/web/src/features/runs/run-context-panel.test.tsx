@@ -87,3 +87,25 @@ it("discards an older context reply after another refresh supersedes it", async 
   resolveFirst({ ...metrics, peakInputTokens: 99 });
   await waitFor(() => expect(screen.queryByText("99 tokens")).toBeNull());
 });
+
+// ADR-0016 amendment 2 decisions 15 and 16: the panel shows the continuation limit the run froze
+// in `config.continuationLimit`; `null` there is `off` (no limit), and a run from before the
+// limits were frozen keeps the old default of 2.
+it.each([
+  [{ limitsVersion: 1, continuationLimit: null, continuationCount: 3 }, /used: 3; no limit/],
+  [{ limitsVersion: 1, continuationLimit: 5, continuationCount: 1 }, /used: 1 of 5/],
+  [{ limitsVersion: 1, continuationLimit: 0 }, /used: 0 of 0/],
+  [{ continuationCount: 1 }, /used: 1 of 2/],
+])("shows the frozen continuation limit %j", async (config, text) => {
+  const api = { getRunContext: vi.fn(async () => metrics), decideContinuation: vi.fn() };
+  render(
+    <RunContextPanel
+      api={api}
+      run={run({ status: "running", config })}
+      events={[]}
+      onRunChanged={vi.fn()}
+    />,
+  );
+  expect(screen.getByText(text)).toBeTruthy();
+  await waitFor(() => expect(api.getRunContext).toHaveBeenCalledOnce());
+});

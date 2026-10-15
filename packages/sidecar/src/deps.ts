@@ -45,12 +45,16 @@ export interface SidecarDeps {
   saveToolEvidence?: import("./tool-evidence.js").SaveToolEvidence;
   spawnPty?: import("./tty-session.js").PtyFactory;
   observeResources?: () => Promise<import("./resource-observation.js").ResourceObservation>;
+  /** The image's `git`, for the opt-in per-bot worktree (ADR-0036 decision 4). */
+  git?: import("./worktree.js").GitRunner;
   query: QueryFn;
   tool: ToolFn;
   createSdkMcpServer: CreateSdkMcpServerFn;
   fetch: typeof globalThis.fetch;
   fs: SidecarFs;
   now: () => Date;
+  /** Seconds since this OS process started (`process.uptime`); absent in tests that do not care. */
+  uptimeSeconds?: () => number;
   /** Process environment as seen by the sidecar; forwarded to the SDK subprocess with overrides. */
   env: Readonly<Record<string, string | undefined>>;
   sleep: (ms: number) => Promise<void>;

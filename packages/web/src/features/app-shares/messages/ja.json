@@ -1,0 +1,20 @@
+{
+  "appShares.disabled": "この Deskmates サーバーではアプリ共有が設定されていません。",
+  "appShares.empty": "公開されたアプリはまだありません。ボットにアプリを起動して公開するよう依頼してください。",
+  "appShares.intro": "このワークスペースでボットが起動して公開した Web アプリです。各アプリは専用のアドレスで開き、サインイン済みのこのワークスペースのメンバーだけが使えます。",
+  "appShares.loading": "アプリを読み込み中…",
+  "appShares.open.continue": "続行",
+  "appShares.open.failed": "アプリを開けませんでした: {error}",
+  "appShares.open.opening": "アプリを開いています…",
+  "appShares.open.title": "公開されたアプリ",
+  "appShares.openApp": "開く",
+  "appShares.port": "ポート {port}",
+  "appShares.refresh": "再確認",
+  "appShares.state.available": "実行中",
+  "appShares.state.revoked": "共有停止済み",
+  "appShares.state.unavailable": "停止中",
+  "appShares.stop": "共有を停止",
+  "appShares.stopConfirm": "「{label}」の共有を停止しますか？開いているタブはすぐにアクセスできなくなります。アプリはワークスペースで動き続けます。",
+  "appShares.title": "アプリ",
+  "appShares.unavailableHint": "このポートは応答していません。ボットにアプリを再起動するよう依頼してください。アドレスは変わりません。"
+}

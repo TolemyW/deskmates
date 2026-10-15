@@ -1,0 +1,20 @@
+{
+  "appShares.disabled": "此 Deskmates 伺服器尚未啟用應用程式分享。",
+  "appShares.empty": "還沒有發布的應用程式。請讓機器人啟動一個應用程式並發布。",
+  "appShares.intro": "機器人在此工作區中啟動並發布的 Web 應用程式。每個應用程式有獨立網址，只有已登入的本工作區成員可以使用。",
+  "appShares.loading": "正在載入應用程式…",
+  "appShares.open.continue": "繼續",
+  "appShares.open.failed": "無法開啟應用程式：{error}",
+  "appShares.open.opening": "正在開啟應用程式…",
+  "appShares.open.title": "已發布的應用程式",
+  "appShares.openApp": "開啟",
+  "appShares.port": "連接埠 {port}",
+  "appShares.refresh": "重新檢查",
+  "appShares.state.available": "執行中",
+  "appShares.state.revoked": "已停止分享",
+  "appShares.state.unavailable": "未執行",
+  "appShares.stop": "停止分享",
+  "appShares.stopConfirm": "停止分享「{label}」？已開啟的分頁會立即失去存取權；應用程式仍在工作區中執行。",
+  "appShares.title": "應用程式",
+  "appShares.unavailableHint": "此連接埠沒有回應。請讓機器人重新啟動應用程式；網址保持不變。"
+}

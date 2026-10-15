@@ -2,11 +2,13 @@
 // profile, created lazily with fixed ids so the shared id counter and other features' records
 // never move. Publications are always `applied` or `unchanged`; the demo has no proxy.
 
-import type {
-  NetworkProfile,
-  NetworkRule,
-  WorkspaceNetworkSelection,
-  WorkspaceNetworkView,
+import {
+  type NetworkPreflightResult,
+  type NetworkProfile,
+  type NetworkRule,
+  type WorkspaceNetworkSelection,
+  type WorkspaceNetworkView,
+  networkGrantAllowsUrl,
 } from "@deskmates/contracts";
 import type { DemoFeature, DemoRequest } from "../../demo/feature.js";
 import { type Result, created, notFound, ok } from "../../demo/result.js";
@@ -43,6 +45,30 @@ function view(s: DemoState, workspaceId: string): WorkspaceNetworkView {
     (sel) => st.profiles.find((p) => p.id === sel.profileId)?.rules ?? [],
   );
   return { workspaceId, trustedTest: selections.length > 0, selections, grants };
+}
+
+/** The demo has no proxy: the policy verdict is real, the network layers are not checked. */
+function preflight(s: DemoState, workspaceId: string, url: string): NetworkPreflightResult {
+  const grants = view(s, workspaceId).grants;
+  if (!networkGrantAllowsUrl(grants, url))
+    return {
+      url,
+      ok: false,
+      failedLayer: "policy",
+      layers: [{ layer: "policy", ok: false, detail: "no selected network profile grants it" }],
+    };
+  return {
+    url,
+    ok: true,
+    admittedBy: "grant",
+    layers: [
+      {
+        layer: "policy",
+        ok: true,
+        detail: "admitted by grant; network layers not checked: the demo has no proxy",
+      },
+    ],
+  };
 }
 
 function invalid(message: string): Result {
@@ -122,6 +148,15 @@ function route(req: DemoRequest, s: DemoState): Result | undefined {
         st.selections[key] = (st.selections[key] ?? []).filter((sel) => sel.profileId !== id);
       return ok({ profile: current, publications });
     }
+  }
+  // The demo has no Docker daemon, so overlap is never checked (amendment 2 decision 15).
+  if (path === "/api/network-overlaps" && method === "GET")
+    return ok({ checked: false, networks: [], overlaps: [] });
+  const preflightMatch = req.match(/^\/api\/workspaces\/([^/]+)\/network-preflight$/);
+  if (preflightMatch && method === "POST") {
+    const workspaceId = decodeURIComponent(preflightMatch[1] ?? "");
+    if (!s.workspaces.some((w) => w.id === workspaceId)) return notFound("workspace");
+    return ok(preflight(s, workspaceId, typeof b.url === "string" ? b.url : ""));
   }
   const wsMatch = req.match(/^\/api\/workspaces\/([^/]+)\/network(-profiles)?$/);
   if (wsMatch) {

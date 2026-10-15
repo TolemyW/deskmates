@@ -22,7 +22,7 @@
   font-family: var(--font-mono, monospace);
 }
 
-.network-selection fieldset label {
+.network-selection fieldset label:not(.network-expiry) {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -38,5 +38,31 @@
 }
 
 .network-publications li[data-status="failed"] {
+  color: var(--danger, #b42318);
+}
+
+.network-preflight {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 48rem;
+  margin-block: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.network-preflight label,
+.network-selection fieldset .network-choice {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.network-overlaps {
+  max-width: 48rem;
+  margin-block: 1rem;
+  padding: 0.75rem 1rem;
+  border-inline-start: 3px solid var(--danger, #b42318);
+  overflow-wrap: anywhere;
+}
+
+.network-preflight [data-ok="false"] {
   color: var(--danger, #b42318);
 }

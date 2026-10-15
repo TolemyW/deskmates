@@ -21,6 +21,7 @@ import { pendingInboxPage } from "./approval-inbox.js";
 import { parseOffsetQuery } from "./pagination.js";
 import { requestTenant } from "./route-policy.js";
 import { requireOwnRun } from "./side-chat-guard.js";
+import { threadApprovalsByIds } from "./thread-approvals.js";
 import {
   asApprovalDecision,
   asRecord,
@@ -45,11 +46,15 @@ export function registerApprovalRoutes(
       botId?: string;
       cursor?: string;
       limit?: string;
+      ids?: string;
     };
   }>("/api/approvals", async (request) => {
+    // A chat asks only for the approvals its loaded messages name (#113 surface 26).
+    if (request.query.ids !== undefined)
+      return threadApprovalsByIds(ctx, request, { ...request.query, ids: request.query.ids });
     const status = request.query.status === "decided" ? "decided" : "pending";
-    // The Attention inbox is paged with a total (#113 surface 23). A thread's approvals stay
-    // bound to its loaded messages (surface 26) and the decided history is not paged yet.
+    // The Attention inbox is paged with a total (#113 surface 23). A thread's pending approvals
+    // are bounded by its parked runs; the decided history is not paged yet.
     if (status === "pending" && !request.query.threadId)
       return pendingInboxPage(ctx, request, request.query);
     return {
@@ -155,14 +160,23 @@ export function registerApprovalRoutes(
   app.put<{ Params: { id: string } }>("/api/workspaces/:id/auto-approval", async (request) => {
     const body = asRecord(request.body);
     const enabled = optionalBoolean(body, "enabled");
-    if (enabled === undefined)
+    // ADR-0002 amendment 3, A7: the expiry of an unattended request rides on the same setting.
+    const expiryMinutes = body.expiryMinutes;
+    if (expiryMinutes !== undefined && typeof expiryMinutes !== "number")
+      throw new DeskmatesError("validation", "expiryMinutes must be a number", {
+        field: "expiryMinutes",
+      });
+    if (enabled === undefined && expiryMinutes === undefined)
       throw new DeskmatesError("validation", "enabled must be true or false", { field: "enabled" });
     const workspaceId = request.params.id as WorkspaceId;
     ctx.workspaces.mustGet(workspaceId);
     return {
-      autoApproval: new AutoApprovalSettings(ctx.db).set(
+      autoApproval: new AutoApprovalSettings(ctx.db).change(
         workspaceId,
-        enabled,
+        {
+          ...(enabled === undefined ? {} : { enabled }),
+          ...(expiryMinutes === undefined ? {} : { expiryMinutes }),
+        },
         requestActorId(request, body),
       ),
     };

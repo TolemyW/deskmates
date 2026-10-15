@@ -25,6 +25,7 @@ import type { GatewayContext } from "../context.js";
 import { isOwnInquiry } from "../model-jobs/status-inquiries.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
 import { requestActorId } from "./actor.js";
+import { threadsByIds } from "./name-lookup.js";
 import { keysetPage, parseCursorQuery } from "./pagination.js";
 import { requestTenant } from "./route-policy.js";
 import { limitOf, seqParam } from "./seq-slices.js";
@@ -98,11 +99,17 @@ export function registerThreadRoutes(
 ): void {
   // `groupRouting` is how this Gateway routes a message with no explicit recipient (ADR-0005
   // amendment 2), so the composer can say what an unaddressed message will do before it is sent.
-  const detail = (id: ThreadId) => ({
-    thread: ctx.threads.mustGet(id),
-    members: ctx.threads.members(id),
-    groupRouting: ctx.config.groupRouting ?? GROUP_ROUTING_DEFAULT,
-  });
+  // `effectiveTurnBudget` is the turn budget the router enforces (ADR-0005 amendment 5 decision
+  // 38): the workspace setting, else the thread row's; `null` when the workspace turned it off.
+  const detail = (id: ThreadId) => {
+    const thread = ctx.threads.mustGet(id);
+    return {
+      thread,
+      members: ctx.threads.members(id),
+      groupRouting: ctx.config.groupRouting ?? GROUP_ROUTING_DEFAULT,
+      effectiveTurnBudget: ctx.limits.threadCaps(thread.workspaceId, thread.turnBudget).turnBudget,
+    };
+  };
   const summarize = (thread: Thread): ThreadSummary => {
     const latest = ctx.messages.latest(thread.id);
     const lastHandoff = ctx.privateChats.latest(thread.id);
@@ -135,8 +142,21 @@ export function registerThreadRoutes(
       cursor?: string;
       limit?: string;
       q?: string;
+      ids?: string;
     };
   }>("/api/threads", async (request) => {
+    // A name lookup asks for the threads it labels, at most 100 (#113 §3.2).
+    if (request.query.ids !== undefined) {
+      const actor = actorLabel(request.principal);
+      return {
+        threads: threadsByIds(ctx, request, request.query.ids, request.query.workspaceId).map(
+          (thread) => ({
+            ...summarize(thread),
+            unreadHandoffs: ctx.privateChats.unread(thread.id, actor),
+          }),
+        ),
+      };
+    }
     const { channel, externalKey } = request.query;
     const { cursor, limit, q } = request.query;
     // #113 slice CH (plan row 24): with `cursor`, `limit` or `q`, one page of a workspace's

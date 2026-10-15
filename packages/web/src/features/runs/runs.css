@@ -320,4 +320,34 @@
   .model-retry {
     font-size: var(--app-text-xs);
   }
+  /* ADR-0037: compact startup timeline, one row per stage. */
+  .run-timeline {
+    display: grid;
+    gap: 2px;
+    margin: 6px 0 10px;
+    padding: 0;
+    list-style: none;
+    font-size: var(--app-text-sm);
+  }
+  .run-timeline-stage {
+    display: grid;
+    grid-template-columns: minmax(10rem, 16rem) minmax(5rem, 7rem) 1fr;
+    gap: 8px;
+    padding: 2px 6px;
+    border-radius: var(--app-radius-sm);
+  }
+  .run-timeline-stage.missing .run-timeline-label {
+    color: var(--app-text-3);
+  }
+  .run-timeline-stage.slowest {
+    background: var(--app-surface-hover);
+    font-weight: 500;
+  }
+  .run-timeline-since {
+    font-variant-numeric: tabular-nums;
+  }
+  .run-timeline-attempt h4 {
+    margin: 8px 0 2px;
+    font-size: var(--app-text-sm);
+  }
 }

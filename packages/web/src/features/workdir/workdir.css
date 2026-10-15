@@ -1,0 +1,40 @@
+/* Working-directory settings section of the workspace detail (ADR-0036). */
+
+.workdir-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.workdir-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.workdir-list dt {
+  color: var(--muted, inherit);
+}
+
+.workdir-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.workdir-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.workdir-form > label:not(.workdir-check) {
+  display: grid;
+  gap: 4px;
+}
+
+.workdir-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

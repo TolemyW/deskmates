@@ -61,6 +61,7 @@ import type { SessionStore } from "./threads/sessions.js";
 import { createThreadModule } from "./threads/thread-module.js";
 import type { ThreadPinStore } from "./threads/thread-pins.js";
 import type { ThreadStore } from "./threads/threads.js";
+import { WorkdirSettingsStore } from "./workdir/workdir-settings.js";
 import { BrowserLockStore } from "./workspaces/browser-lock.js";
 import { BrowserOriginQueueStore } from "./workspaces/browser-origin-queue.js";
 import { createSandboxRegistry } from "./workspaces/sandbox-module.js";
@@ -121,6 +122,7 @@ export interface GatewayContext {
   budget: BudgetStore;
   /** Workspace execution limits (ADR-0005 amendment 5, ADR-0016 amendment 2). */
   limits: WorkspaceLimitStore;
+  workdir: WorkdirSettingsStore /* ADR-0036 */;
   tokens: RunTokenStore;
   locks: BrowserLockStore;
   originQueue: BrowserOriginQueueStore;
@@ -245,6 +247,7 @@ export function buildContext(
     bots,
     bus,
     presence,
+    privateChats: thread.privateChats,
     runTenant: (runId) => ownership.tenantOf("run", runId),
     ownSecrets: config.modelAuthToken ? [config.modelAuthToken] : [],
   });
@@ -338,6 +341,7 @@ export function buildContext(
     costAlerts: new CostAlertStore(db, new CostQueryStore(db), events),
     budget,
     limits,
+    workdir: new WorkdirSettingsStore(db, () => config.botWorkdir ?? "shared"),
     tokens: new RunTokenStore(db, config.modelTokenTtlSeconds),
     locks: new BrowserLockStore(db),
     originQueue: new BrowserOriginQueueStore(db),

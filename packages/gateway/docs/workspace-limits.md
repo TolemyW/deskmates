@@ -55,3 +55,6 @@ A breaker pause ends on the next human message, like a turn-budget pause. Every 
 - `PUT /api/workspaces/:id/limits` (Owner or Admin, role action `limits.set`): a key with a value
   sets it, `null` clears it, an omitted key is unchanged. One `workspace.limits_set` audit row per
   change.
+- `GET /api/threads/:id` and the membership routes return `effectiveTurnBudget`
+  (`{value, source}`): the turn budget the router enforces for that thread, `value: null` when
+  the workspace turned it off. The chat info panel shows this, not the stored `thread.turnBudget`.

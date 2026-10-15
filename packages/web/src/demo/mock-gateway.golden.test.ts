@@ -110,9 +110,11 @@ async function sweep(call: Call, deep: boolean): Promise<void> {
     await call("GET", `/api/workspaces/${ws}/memory?scope=workspace`);
     await call("GET", `/api/workspaces/${ws}/memory/search?q=the`);
     await call("GET", `/api/integrations/workspaces/${ws}/connections`);
+    await call("GET", `/api/workspaces/${ws}/app-shares`);
     await call("GET", `/api/workspaces/${ws}/board`);
     await call("GET", `/api/workspaces/${ws}/limits`);
     await call("GET", `/api/workspaces/${ws}/network`);
+    await call("GET", `/api/workspaces/${ws}/workdir`);
     for (const file of ["/work/notes.md", "/work/kpis.md", "/work/ops-brief.md", "/nope"])
       await call("GET", `/api/workspaces/${ws}/files?path=${encodeURIComponent(file)}`);
   }

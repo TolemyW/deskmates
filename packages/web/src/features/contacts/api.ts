@@ -51,6 +51,11 @@ export interface ContactsApi {
     page?: { offset?: number; limit?: number },
   ): Promise<{ rules: ApprovalRule[]; offset: number; limit: number; total: number }>;
   listBots(workspaceId?: WorkspaceId): Promise<BotDefinition[]>;
+  /**
+   * The named bots the caller may see, for labelling ids (#113 §3.2); asked 100 at a time.
+   * Unknown and invisible ids are absent from the answer.
+   */
+  listBotsByIds(ids: readonly string[]): Promise<BotDefinition[]>;
   /** One page of a workspace's bots by name, with server search (#113 slice B). */
   listBotPage(
     workspaceId: WorkspaceId,
@@ -71,6 +76,9 @@ export interface ContactsApi {
   ): Promise<BotDefinition>;
   writeSoul(id: BotId, body: string, expectedVersion: string): Promise<MemoryView>;
 }
+
+/** The Gateway's cap on ids per name lookup (#113 §3.2). */
+const BOT_IDS_PER_REQUEST = 100;
 
 export function createContactsApi(t: HttpTransport): ContactsApi {
   const bot = (id: BotId) => `/api/bots/${encodeURIComponent(id)}`;
@@ -133,6 +141,18 @@ export function createContactsApi(t: HttpTransport): ContactsApi {
         `/api/bots${query({ workspaceId })}`,
       );
       return r.bots;
+    },
+    async listBotsByIds(ids) {
+      const unique = [...new Set(ids)];
+      const batches: string[][] = [];
+      for (let i = 0; i < unique.length; i += BOT_IDS_PER_REQUEST)
+        batches.push(unique.slice(i, i + BOT_IDS_PER_REQUEST));
+      const answers = await Promise.all(
+        batches.map((batch) =>
+          t.json<{ bots: BotDefinition[] }>("GET", `/api/bots${query({ ids: batch.join(",") })}`),
+        ),
+      );
+      return answers.flatMap((answer) => answer.bots);
     },
     async listModelCapabilities(workspaceId) {
       return (

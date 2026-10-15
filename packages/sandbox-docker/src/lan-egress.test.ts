@@ -118,6 +118,27 @@ describe("proxy grant matching (decisions 10 and 11)", () => {
     expect(lan.isInfrastructureAddress("10.1.2.3", HOST_TARGET, interfaces)).toBe(false);
   });
 
+  it("admits the Docker host's own LAN address from a Testbox-shaped proxy (#124)", () => {
+    // The 2026-10-14 T2 failure: proxy on a 192.168.16.0/20 workspace net, host target the
+    // docker0 gateway (explicit or the bridge fallback), fixture on the host's eno1 address.
+    // The proxy admits it; the 502 there came from a fixture that never listened.
+    const testbox = {
+      lo: [{ family: "IPv4", address: "127.0.0.1", cidr: "127.0.0.1/8" }],
+      eth0: [{ family: "IPv4", address: "192.168.16.2", cidr: "192.168.16.2/20" }],
+    };
+    const grant = { kind: "subnet", cidr: "10.20.40.132/32", schemes: ["http"], ports: [45123] };
+    const s = state([], [grant]);
+    for (const target of ["172.17.0.1", "192.168.16.1"]) {
+      expect(s.lanTarget("http", "10.20.40.132", 45123, target, testbox)).toMatchObject({
+        address: "10.20.40.132",
+        family: 4,
+      });
+    }
+    expect(() => s.lanTarget("http", "10.20.40.132", 45123, "10.20.40.132", testbox)).toThrow(
+      "infrastructure",
+    );
+  });
+
   it("denies an expired grant and forgets grants on revoke and fail-closed", () => {
     const s = state([], [{ ...subnet, expiresAt: "2000-01-01T00:00:00Z" }]);
     expect(s.lanTarget("http", "10.20.30.24", 23001, HOST_TARGET, interfaces)).toBeUndefined();

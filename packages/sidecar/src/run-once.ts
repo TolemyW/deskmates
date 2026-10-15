@@ -51,6 +51,7 @@ import { managedProxyEnvironment } from "./managed-proxy.js";
 import { TaintTracker } from "./memory-taint.js";
 import { ModelSwitchRecorder, fallbackSwitch, isModelFallbackMessage } from "./model-switch.js";
 import { redactText, redactValue } from "./redact.js";
+import { ReplyPreviewer } from "./reply-preview.js";
 import {
   BROWSER_MCP_SERVER,
   DESKMATES_MCP_SERVER,
@@ -59,6 +60,7 @@ import {
   splitMcpToolName,
 } from "./risk-tier.js";
 import { createRunState } from "./run-state.js";
+import { SidecarTimeline, processStartedAt } from "./run-timeline.js";
 import { screenshotRecorder } from "./screenshot-budget.js";
 import {
   SCREENSHOT_MAX_PER_RUN,
@@ -77,6 +79,7 @@ import { TtySessions } from "./tty-session.js";
 import { TurnUsageTracker } from "./turn-usage.js";
 import { TurnWarning } from "./turn-warning.js";
 import { withholdsImages } from "./vision-withhold.js";
+import { prepareWorktree } from "./worktree.js";
 
 /** Seconds added to the short wait so the SDK does not time the hook out mid-wait. */
 export const HOOK_TIMEOUT_MARGIN_SECONDS = 60;
@@ -322,6 +325,14 @@ export async function runOnce(
     sleep: deps.sleep,
     onError: (err) => process.stderr.write(`ledger post failed: ${describeError(err)}\n`),
   });
+  // ADR-0037: this process's half of the startup timeline.
+  const timeline = new SidecarTimeline((payload) => sink.emit("log", payload), deps.now);
+  timeline.mark(
+    "sidecar_started",
+    deps.uptimeSeconds
+      ? { processStartedAt: processStartedAt(deps.now(), deps.uptimeSeconds()).toISOString() }
+      : {},
+  );
   if (request.presentationSummary || request.modelJob) {
     const jobEnv = { ...inheritedEnv(deps.env), ...managedProxyEnvironment(deps.env) };
     const ended = request.modelJob
@@ -336,6 +347,17 @@ export async function runOnce(
     }
     return ended;
   }
+  // ADR-0037 decision 7: a thread run streams its reply as it is written; the final message
+  // stays authoritative. Runs without a thread have nowhere to show it.
+  const preview =
+    request.threadId === undefined
+      ? undefined
+      : new ReplyPreviewer({
+          runId: request.runId,
+          attempt: request.attempt,
+          post: (frame) => client.postReplyPreview(frame),
+          redact: (text) => redactText(text, secrets),
+        });
   const recordScreenshot = screenshotRecorder(sink);
   // One `turn_usage` per model response (M3 context plan, Phase 1; `turn-usage.ts`).
   const turnUsage = new TurnUsageTracker((payload) => sink.emit("turn_usage", { ...payload }));
@@ -387,6 +409,7 @@ export async function runOnce(
           decision: trigger.decision,
           toolUseId: trigger.toolUseId,
           deferredAction: trigger.deferredAction,
+          reason: trigger.reason,
         }
       : undefined,
     // The browser is still on the page the parked process left it on, so a click in this process
@@ -448,7 +471,38 @@ export async function runOnce(
         });
       }
     }
-    const context = await buildContext(request, deps.fs, deps.now(), knowledge);
+    // Issue #88: under the opt-in per-bot mode the run starts in the bot's own directory under the
+    // shared /work. It is a convention the prompt states, not a boundary: no hook or callback
+    // looks at it. A directory that cannot be created leaves the run in /work, not failed.
+    let cwd = WORK_DIR;
+    let workdirProblem: string | undefined;
+    if (request.workdirMode === "per-bot") {
+      const own = botWorkDir(request.botName);
+      try {
+        await deps.fs.mkdir(own);
+        cwd = own;
+      } catch (err) {
+        sink.emit("log", {
+          source: "workdir",
+          level: "warn",
+          reason: `bot working directory unavailable, starting in ${WORK_DIR}: ${String(err)}`,
+        });
+      }
+      // ADR-0036 decision 4: the bot's own worktree of the workspace's repository, before the
+      // prompt is built so a failure can be said in it. A failure never fails the run.
+      if (request.worktreeRepo !== undefined) {
+        const worktree = await prepareWorktree(request.botName, request.worktreeRepo, deps);
+        sink.emit("log", {
+          source: "workdir",
+          op: "worktree",
+          ...worktree,
+          ...(worktree.outcome === "failed" ? { level: "warn" } : {}),
+        });
+        if (worktree.outcome === "failed") workdirProblem = worktree.reason;
+      }
+    }
+
+    const context = await buildContext(request, deps.fs, deps.now(), knowledge, workdirProblem);
     // What each part of the system prompt costs and which prompt this was, without the text
     // (M3 context plan, Phase 1). The hash also goes to `runs.config_json` through RunEnded.
     sink.emit("log", {
@@ -465,24 +519,6 @@ export async function runOnce(
     const skillPlugin = await materializeSkillPlugin(request.skills ?? [], deps.fs, skillDir);
     if (skillPlugin.set.length > 0)
       sink.emit("log", { source: "skills", op: "enabled", set: skillPlugin.set });
-
-    // Issue #88: under the opt-in per-bot mode the run starts in the bot's own directory under the
-    // shared /work. It is a convention the prompt states, not a boundary: no hook or callback
-    // looks at it. A directory that cannot be created leaves the run in /work, not failed.
-    let cwd = WORK_DIR;
-    if (request.workdirMode === "per-bot") {
-      const own = botWorkDir(request.botName);
-      try {
-        await deps.fs.mkdir(own);
-        cwd = own;
-      } catch (err) {
-        sink.emit("log", {
-          source: "workdir",
-          level: "warn",
-          reason: `bot working directory unavailable, starting in ${WORK_DIR}: ${String(err)}`,
-        });
-      }
-    }
 
     // Before the query: the proxy starts with the browser MCP server and captures from the first
     // action on, so the directory has to exist already. A failure here costs the run its
@@ -699,11 +735,14 @@ export async function runOnce(
         ],
         PostModelSwitch: [{ hooks: [postModelSwitch] }],
       },
-      canUseTool: createCanUseTool(sink, state),
+      canUseTool: createCanUseTool(sink, state, { browserCode: request.browserCodeApproval }),
       ...(request.sdkSessionId === undefined ? {} : { resume: request.sdkSessionId }),
     };
 
+    timeline.mark("query_started", { resume: request.sdkSessionId !== undefined });
     for await (const msg of deps.query({ prompt: context.prompt, options })) {
+      timeline.observe(msg);
+      preview?.observe(msg);
       await handleMessage(msg);
     }
     turnUsage.flush();
@@ -774,6 +813,7 @@ export async function runOnce(
       approvalId: consumed.approvalId,
       decision: consumed.decision,
       deferredAction: consumed.deferredAction,
+      reason: consumed.reason,
       replayedToolUseId: toolUseId,
     };
   }
@@ -958,7 +998,7 @@ export async function runOnce(
             toolUseId: block.id,
             toolName: block.name,
             input,
-            riskLevel: riskTier(block.name, input),
+            riskLevel: riskTier(block.name, input, { browserCode: request.browserCodeApproval }),
           });
           // Remembered here, numbered when its result arrives (`emitScreenshot`): the proxy
           // counts the calls that reach it, so action n is the nth page-changing call the hook
@@ -1076,6 +1116,8 @@ export async function runOnce(
 
   ended.taint = taint.snapshot();
   await appendDiary(request, deps, ended, summary);
+  // A preview must not arrive after the final reply it is replaced by.
+  await preview?.flush();
   await sink.flush();
   if (!(await postEndedWithRetry(client, ended, deps))) {
     // Last resort. Without this line a lost post turns a completed run into `failed` on the

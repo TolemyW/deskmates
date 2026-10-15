@@ -970,6 +970,13 @@ describe("approval_decide refuses self-approval and Always from a bot (ADR-0002 
     });
 
     await wake(h, threadId, "@ana place the order");
+    // The request wakes nobody (amendment 3, A4); a human asks Bo to decide it.
+    await waitFor(
+      () => h.app.deskmates.ctx.approvals.get("apr-member" as Approval["id"]) !== undefined,
+      3000,
+      "request",
+    );
+    await wake(h, threadId, "@bo decide the pending approval");
     await waitFor(() => statuses.length === 2, 3000, "member decisions");
     expect(statuses).toEqual([403, 200]);
     const approval = h.app.deskmates.ctx.approvals.mustGet("apr-member" as Approval["id"]);

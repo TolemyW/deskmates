@@ -5,6 +5,7 @@
 import { DeskmatesError, type WorkspaceId } from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
 import type { GatewayContext } from "../context.js";
+import { detectNetworkOverlaps } from "../network/network-overlaps.js";
 import {
   NETWORK_PROFILE_NOTE,
   createNetworkProfile,
@@ -35,6 +36,9 @@ export function registerNetworkRoutes(app: FastifyInstance, ctx: GatewayContext)
     profiles: networkProfiles(ctx).list(),
     note: NETWORK_PROFILE_NOTE,
   }));
+
+  // Amendment 2 decision 15: LAN targets inside a Docker network of this daemon; advisory.
+  app.get("/api/network-overlaps", async () => detectNetworkOverlaps(ctx));
 
   app.post("/api/network-profiles", async (request) => {
     const body = asRecord(request.body);

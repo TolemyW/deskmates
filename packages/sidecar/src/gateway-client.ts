@@ -23,6 +23,8 @@
 
 import { randomUUID } from "node:crypto";
 import {
+  type AppPublishRequest,
+  type AppPublishResponse,
   type ApprovalDecideRequest,
   type ApprovalId,
   type ApprovalRequest,
@@ -50,6 +52,7 @@ import {
   type PhaseTimingSample,
   type PostMessageRequest,
   type PostedMessageRouting,
+  type ReplyPreviewRequest,
   type RunEnded,
   type RunId,
   type SidecarEvent,
@@ -220,6 +223,11 @@ export class GatewayClient {
     );
   }
 
+  /** `app_publish` (ADR-0035 decision 1). The Gateway binds workspace, bot and run itself. */
+  async publishApp(req: AppPublishRequest): Promise<AppPublishResponse> {
+    return this.gatewayCall<AppPublishResponse>("POST", "/app-shares", req, "sandbox_unavailable");
+  }
+
   /** `task_checkpoint` (ADR-0021 A3h). The Gateway binds run, attempt and bot itself. */
   async checkpointTask(req: TaskCheckpointRequest): Promise<TaskCheckpointResponse> {
     const { taskId, ...body } = req;
@@ -347,6 +355,11 @@ export class GatewayClient {
       ts: sample.at,
     }));
     await this.expectOk(await this.send("POST", "/events", events), "phase timings");
+  }
+
+  /** ADR-0037 decision 7: one cumulative reply preview frame; not retried. */
+  async postReplyPreview(preview: ReplyPreviewRequest): Promise<void> {
+    await this.expectOk(await this.send("POST", "/reply-preview", preview), "reply preview");
   }
 
   async postEnded(ended: RunEnded): Promise<void> {

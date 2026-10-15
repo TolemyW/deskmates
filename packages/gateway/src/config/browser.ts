@@ -1,6 +1,7 @@
 // Shared-browser knobs: tab retention and the opt-in execution, coordination and snapshot modes.
 
 import {
+  type BrowserCodeApproval,
   type BrowserCoordinationMode,
   type BrowserSnapshotMode,
   DeskmatesError,
@@ -13,6 +14,8 @@ export interface BrowserConfig {
   /** Opt-in inline page-state experiment; omitted preserves explicit snapshots. */
   browserSnapshotMode?: BrowserSnapshotMode;
   browserExecutionMode?: "vision-cli-v2";
+  /** ADR-0002 amendment 5 (proposed): how browser code is tiered; omitted preserves name-v1. */
+  browserCodeApproval?: BrowserCodeApproval;
   browserRetainedTabs?: number;
   browserTabRetentionHours?: number;
 }
@@ -24,7 +27,16 @@ export function readBrowserConfig(env: Env): BrowserConfig {
     ...browserExecution(env),
     browserCoordinationMode: browserCoordinationMode(env),
     browserSnapshotMode: browserSnapshotMode(env),
+    browserCodeApproval: browserCodeApproval(env),
   };
+}
+
+/** `BROWSER_CODE_APPROVAL`: `name-v1` (default) or the opt-in `effects-v1` (ADR-0002 amendment 5). */
+function browserCodeApproval(env: Env): BrowserCodeApproval {
+  const value = env.BROWSER_CODE_APPROVAL?.trim() || "name-v1";
+  if (value !== "name-v1" && value !== "effects-v1")
+    throw new DeskmatesError("validation", "BROWSER_CODE_APPROVAL must be name-v1 or effects-v1");
+  return value;
 }
 
 function browserCoordinationMode(env: Env): BrowserCoordinationMode {

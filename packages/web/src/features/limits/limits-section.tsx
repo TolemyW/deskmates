@@ -1,4 +1,5 @@
-// The workspace's execution limits (ADR-0005 amendment 5, ADR-0016 amendment 2): each counter's
+// The workspace's execution limits (ADR-0005 amendment 5, ADR-0016 amendment 2), shown as a section
+// of the workspace detail page (ADR-0034 decision 4, `workspaces/detail/limits-section.tsx`): each counter's
 // effective value and where it came from, the loop breaker that stands behind them, and an editor
 // for Owners and Admins. A blank field inherits the default; `off` needs a monetary budget.
 // Opening this section only reads; nothing changes until someone saves.
@@ -61,9 +62,19 @@ function inputOf(
   return { input };
 }
 
-export function LimitsSection({ api, workspaceId }: { api: ApiClient; workspaceId: string }) {
+export function LimitsSection({
+  api,
+  workspaceId,
+  readOnly = false,
+}: {
+  api: ApiClient;
+  workspaceId: string;
+  /** An archived workspace shows its limits without the editor. */
+  readOnly?: boolean;
+}) {
   const t = useT();
-  const canSet = useCan("limits.set", workspaceId).allowed;
+  const can = useCan("limits.set", workspaceId);
+  const canSet = can.allowed && !readOnly;
   const [view, setView] = useState<WorkspaceLimitsView>();
   const [draft, setDraft] = useState<Draft>();
   const [busy, setBusy] = useState(false);
@@ -117,8 +128,11 @@ export function LimitsSection({ api, workspaceId }: { api: ApiClient; workspaceI
   };
 
   return (
-    <section className="card limits-section" aria-label={t("limits.title")}>
-      <h2>{t("limits.title")}</h2>
+    <section
+      className="card workspace-detail-section limits-section"
+      aria-labelledby={`workspace-limits-title-${workspaceId}`}
+    >
+      <h3 id={`workspace-limits-title-${workspaceId}`}>{t("limits.title")}</h3>
       <p className="muted small">{t("limits.intro")}</p>
       {!view ? (
         error ? null : (
@@ -192,8 +206,8 @@ export function LimitsSection({ api, workspaceId }: { api: ApiClient; workspaceI
             <Button type="button" variant="tertiary" onClick={() => setDraft(draftOf(view))}>
               {t("limits.edit")}
             </Button>
-          ) : (
-            <RoleNote action="limits.set" does={t("limits.roleNote")} />
+          ) : readOnly ? null : (
+            <RoleNote action="limits.set" does={t("limits.roleNote")} allowed={can.allowed} />
           )}
         </>
       )}

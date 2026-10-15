@@ -57,6 +57,7 @@
   "chatPane.outcome.viewRun": "View run details",
   "chatPane.paused": "This conversation paused after reaching its bot turn limit. Send a new message to resume it and reset the limit.",
   "chatPane.queueNotice": "A new message will queue behind work already in progress.",
+  "chatPane.replyPreview.label": "writing…",
   "chatPane.runLink": "run",
   "chatPane.runStatus.cancelled": "cancelled",
   "chatPane.runStatus.failed": "failed",

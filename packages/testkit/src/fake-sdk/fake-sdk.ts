@@ -831,6 +831,29 @@ export function createFakeSdk(source: ScriptSource, config: FakeSdkConfig = {}):
           );
           break;
         }
+        case "streamed_text": {
+          turns += 1;
+          const u = { ...DEFAULT_TURN_USAGE, ...step.usage };
+          addUsage(u);
+          if (options.includePartialMessages) {
+            for (const text of step.chunks) {
+              yield emit({
+                type: "stream_event",
+                event: {
+                  type: "content_block_delta",
+                  index: 0,
+                  delta: { type: "text_delta", text },
+                },
+                parent_tool_use_id: null,
+                uuid: uuid(),
+                session_id: session.id,
+              });
+            }
+          }
+          lastText = step.chunks.join("");
+          yield emit(assistant([{ type: "text", text: lastText, citations: null }], "end_turn", u));
+          break;
+        }
         case "thinking": {
           // A thinking block adds to the totals only when the script gives it its own usage.
           if (step.usage) addUsage({ ...DEFAULT_TURN_USAGE, ...step.usage });

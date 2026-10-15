@@ -57,6 +57,7 @@
   "chatPane.outcome.viewRun": "查看运行详情",
   "chatPane.paused": "此对话已达到机器人轮次上限并暂停。发送一条新消息即可恢复对话并重置上限。",
   "chatPane.queueNotice": "新消息会排在正在进行的工作之后。",
+  "chatPane.replyPreview.label": "正在输入…",
   "chatPane.runLink": "运行",
   "chatPane.runStatus.cancelled": "已取消",
   "chatPane.runStatus.failed": "失败",

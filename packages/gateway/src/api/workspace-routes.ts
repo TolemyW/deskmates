@@ -19,6 +19,7 @@ import type { Scheduler } from "../scheduler/scheduler.js";
 import { EGRESS_EDIT_NOTE, replaceEgressAllowlist } from "../workspaces/egress-policy.js";
 import { type DirectoryViewer, WorkspaceDirectory } from "../workspaces/workspace-directory.js";
 import { requestActorId } from "./actor.js";
+import { workspacesByIds } from "./name-lookup.js";
 import { parseOffsetQuery } from "./pagination.js";
 import { requestTenant } from "./route-policy.js";
 import { humanBrowserLock, workspaceHasTakeoverScreen } from "./takeover-routes.js";
@@ -90,7 +91,10 @@ export function registerWorkspaceRoutes(
   }
 
   // Only the workspaces the caller belongs to (ADR-0022 amendment 6 W1).
-  app.get("/api/workspaces", async (request) => {
+  app.get<{ Querystring: { ids?: string } }>("/api/workspaces", async (request) => {
+    // A name lookup asks for the workspaces it labels, at most 100 (#113 §3.2).
+    if (request.query.ids !== undefined)
+      return { workspaces: workspacesByIds(ctx, request, request.query.ids) };
     const readable = readableWorkspaceIds(ctx, request, "guest");
     return {
       workspaces: ctx.workspaces

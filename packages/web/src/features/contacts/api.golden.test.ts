@@ -18,6 +18,7 @@ const CASES: GoldenCases<ContactsApi> = {
   listApprovalRules: (a) => a.listApprovalRules(BOT, { offset: 25, limit: 25 }),
   listBotPage: (a) => a.listBotPage(WS, { offset: 50, limit: 50, q: "ana" }),
   listBots: (a) => a.listBots(WS),
+  listBotsByIds: (a) => a.listBotsByIds([BOT, "bot/2", BOT]),
   listModelCapabilities: (a) => a.listModelCapabilities(WS),
   probeVision: (a) => a.probeVision(WS, "model-a"),
   proposeSoul: (a) => a.proposeSoul(BOT, "review release notes too"),

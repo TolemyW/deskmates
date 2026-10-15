@@ -96,6 +96,33 @@ describe("network preflight (ADR-0027 amendment 1 decision 14)", () => {
     expect(res.json).toMatchObject({ ok: false, failedLayer: "tcp", admittedBy: "grant" });
   });
 
+  it("fails a granted address inside a Docker network at the route layer, without probing", async () => {
+    // Amendment 2 decision 15, Testbox's shape: the LAN service's /24 sits inside a bridge.
+    const { harness, preflight } = await setup();
+    Object.assign(harness.provider, {
+      networkSubnets: async () => [
+        { name: "bridge", cidr: "172.17.0.0/16" },
+        { name: "vendordb-demo-net", cidr: "172.18.0.0/16" },
+      ],
+    });
+    for (const url of ["http://10.20.30.24:23001/", "https://console.lab.test/"]) {
+      const res = await preflight(url);
+      expect(res.json, url).toMatchObject({ ok: false, failedLayer: "route" });
+      expect(res.json.layers[1]?.detail, url).toContain("vendordb-demo-net (172.18.0.0/16)");
+    }
+    expect(harness.provider.probes).toEqual([]);
+    Object.assign(harness.provider, {
+      networkSubnets: async () => [{ name: "bridge", cidr: "172.17.0.0/16" }],
+    });
+    const clear = await preflight("http://10.20.30.24:23001/");
+    expect(clear.json.layers.map((l) => [l.layer, l.ok])).toEqual([
+      ["policy", true],
+      ["route", true],
+      ["tcp", true],
+      ["http", true],
+    ]);
+  });
+
   it("says when the workspace is not running instead of guessing", async () => {
     const { harness, preflight } = await setup(false);
     const res = await preflight("http://10.20.30.24:23001/");

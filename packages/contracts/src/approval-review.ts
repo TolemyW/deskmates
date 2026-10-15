@@ -14,7 +14,17 @@ export interface ApprovalReviewResult {
 export interface WorkspaceAutoApproval {
   workspaceId: string;
   enabled: boolean;
+  /**
+   * Minutes an undecided request waits before it expires to deny (ADR-0002 amendment 3, A7).
+   * A whole number from `APPROVAL_EXPIRY_MIN_MINUTES` to `APPROVAL_EXPIRY_MAX_MINUTES`.
+   */
+  expiryMinutes: number;
 }
+
+/** A7's proposed default; the column default in the migration says the same. */
+export const APPROVAL_EXPIRY_DEFAULT_MINUTES = 15;
+export const APPROVAL_EXPIRY_MIN_MINUTES = 1;
+export const APPROVAL_EXPIRY_MAX_MINUTES = 1440;
 
 /** Bumped whenever the reviewer prompt or the package shape changes; frozen in the run config. */
 export const APPROVAL_REVIEW_POLICY_VERSION = 1;

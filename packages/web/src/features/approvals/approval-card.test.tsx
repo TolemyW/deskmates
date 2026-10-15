@@ -87,3 +87,17 @@ describe("tier labels on the card (ADR-0002 amendment 3, A5)", () => {
     expect(screen.queryByText(/Inside subagent/)).toBeNull();
   });
 });
+
+describe("an expired request (ADR-0002 amendment 3, A7)", () => {
+  it("says nobody decided in time instead of naming a denier", () => {
+    const expired = {
+      ...base,
+      decision: "deny",
+      decidedBy: "system:expiry",
+      decidedAt: "2026-09-30T00:15:00.000Z",
+    } as Approval;
+    render(<ApprovalCard approval={expired} />);
+    expect(screen.getByText("Expired: nobody decided in time")).toBeTruthy();
+    expect(screen.queryByText(/Denied by/)).toBeNull();
+  });
+});

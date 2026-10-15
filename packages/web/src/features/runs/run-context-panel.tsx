@@ -30,6 +30,16 @@ function numberOrUnknown(value: unknown): string {
     : t("runContextPanel.unknown");
 }
 
+/**
+ * The continuation limit a run froze when it first started (ADR-0016 amendment 2 decisions 15 and
+ * 16): a number, or `null` for `off` (no limit). A run from before the limits were frozen
+ * (`limitsVersion` absent) kept the fixed default of 2, as the Gateway still reads it.
+ */
+export function frozenContinuationLimit(config: Record<string, unknown>): number | null {
+  if (config.limitsVersion !== 1) return 2;
+  return typeof config.continuationLimit === "number" ? config.continuationLimit : null;
+}
+
 export function RunContextPanel({
   api,
   run,
@@ -92,16 +102,22 @@ export function RunContextPanel({
   );
   const ruleChanges = events.filter((event) => event.kind === "rule_file_modified");
   const handoff = typeof run.config.handoffPath === "string" ? run.config.handoffPath : undefined;
+  const continuationLimit = frozenContinuationLimit(run.config);
   return (
     <section aria-label={t("runContextPanel.region")} className="management-subsection">
       <h3>{t("runContextPanel.heading")}</h3>
       <output>{t(STATUS_TEXT[run.status])}</output>
       <p>
-        {t("runContextPanel.attempt", {
-          attempt: run.attempt ?? 1,
-          used: numberOrUnknown(run.config.continuationCount ?? 0),
-          limit: numberOrUnknown(run.config.continuationLimit ?? 2),
-        })}
+        {continuationLimit === null
+          ? t("runContextPanel.attemptNoLimit", {
+              attempt: run.attempt ?? 1,
+              used: numberOrUnknown(run.config.continuationCount ?? 0),
+            })
+          : t("runContextPanel.attempt", {
+              attempt: run.attempt ?? 1,
+              used: numberOrUnknown(run.config.continuationCount ?? 0),
+              limit: numberOrUnknown(continuationLimit),
+            })}
       </p>
       {run.status === "waiting_continuation" ? (
         <div>

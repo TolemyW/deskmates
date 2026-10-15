@@ -57,6 +57,7 @@
   "chatPane.outcome.viewRun": "Ver detalles de la ejecución",
   "chatPane.paused": "Esta conversación se pausó al alcanzar su límite de turnos de bots. Envía un mensaje nuevo para reanudarla y restablecer el límite.",
   "chatPane.queueNotice": "Un mensaje nuevo se pondrá en cola detrás del trabajo que ya está en curso.",
+  "chatPane.replyPreview.label": "escribiendo…",
   "chatPane.runLink": "ejecución",
   "chatPane.runStatus.cancelled": "cancelado",
   "chatPane.runStatus.failed": "fallido",

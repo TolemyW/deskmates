@@ -4,6 +4,7 @@
 // Each domain reads its own variables in `config/<domain>.ts` (issue #53); this file composes
 // them and is the one import path for the config type, its defaults and `loadConfig`.
 
+import { type AppSharesConfig, readAppSharesConfig } from "./config/app-shares.js";
 import type { AuthSettings } from "./config/auth.js";
 import { authConfig } from "./config/auth.js";
 import { type BrowserConfig, readBrowserConfig } from "./config/browser.js";
@@ -31,7 +32,8 @@ export {
 } from "./config/sandbox.js";
 
 export interface GatewayConfig
-  extends AuthSettings,
+  extends AppSharesConfig,
+    AuthSettings,
     BrowserConfig,
     IntegrationsConfig,
     ModelConfig,
@@ -51,6 +53,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     ...readTenancyConfig(env),
     ...readBrowserConfig(env),
     ...readIntegrationsConfig(env),
+    ...readAppSharesConfig(env),
     auth: authConfig(env),
   };
 }

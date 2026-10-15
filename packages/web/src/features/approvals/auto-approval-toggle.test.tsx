@@ -13,9 +13,17 @@ afterEach(cleanup);
 
 function renderAs(tenantRole: "admin" | "member", enabled = false) {
   const { fetch, calls } = fakeFetch({
-    "GET /api/workspaces/ws_1/auto-approval": { autoApproval: { workspaceId: "ws_1", enabled } },
-    "PUT /api/workspaces/ws_1/auto-approval": (call: { body: { enabled: boolean } }) => ({
-      autoApproval: { workspaceId: "ws_1", enabled: call.body.enabled },
+    "GET /api/workspaces/ws_1/auto-approval": {
+      autoApproval: { workspaceId: "ws_1", enabled, expiryMinutes: 15 },
+    },
+    "PUT /api/workspaces/ws_1/auto-approval": (call: {
+      body: { enabled?: boolean; expiryMinutes?: number };
+    }) => ({
+      autoApproval: {
+        workspaceId: "ws_1",
+        enabled: call.body.enabled ?? enabled,
+        expiryMinutes: call.body.expiryMinutes ?? 15,
+      },
     }),
   });
   render(
@@ -36,10 +44,26 @@ describe("AutoApprovalToggle", () => {
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ enabled: true });
   });
 
+  it("lets an Admin change the request expiry (ADR-0002 amendment 3, A7)", async () => {
+    const calls = renderAs("admin");
+    const field = (await screen.findByRole("spinbutton")) as HTMLInputElement;
+    await waitFor(() => expect(field.value).toBe("15"));
+    const save = screen.getByRole("button", { name: "Save" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(field, { target: { value: "0" } });
+    expect(save.disabled).toBe(true);
+    fireEvent.change(field, { target: { value: "30" } });
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ expiryMinutes: 30 }),
+    );
+  });
+
   it("is read-only for a Member", async () => {
     const calls = renderAs("member", true);
     const toggle = await screen.findByRole("switch", { name: /Automatic approval is on/ });
     expect((toggle as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole("spinbutton") as HTMLInputElement).disabled).toBe(true);
     expect(calls.some((c) => c.method === "PUT")).toBe(false);
   });
 });

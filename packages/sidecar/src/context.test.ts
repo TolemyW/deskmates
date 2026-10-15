@@ -17,7 +17,7 @@ import type {
   TriggerPayload,
   WorkspaceId,
 } from "@deskmates/contracts";
-import { assemblePinnedIndex } from "@deskmates/contracts";
+import { APPROVAL_ATTACHMENT_MIME, assemblePinnedIndex } from "@deskmates/contracts";
 import { describe, expect, it } from "vitest";
 import { buildContext, renderThreadMessage, renderTrigger } from "./context.js";
 import { createMemoryFs } from "./testing/in-memory-fs.js";
@@ -171,6 +171,18 @@ describe("renderThreadMessage wraps everything a bot chose", () => {
       message({ authorKind: "system", authorName: "system", body: "orion joined", attachments }),
     );
     expect(system).toBe("[system] orion joined\n  attachments: a.csv (text/csv) /work/a.csv");
+  });
+
+  it("marks a system message carrying an approval as an approval notice (ADR-0002 A4)", () => {
+    const notice = renderThreadMessage(
+      message({
+        authorKind: "system",
+        authorName: "system",
+        body: "Approval needed: orion wants to run Bash",
+        attachments: [{ name: "approval", mimeType: APPROVAL_ATTACHMENT_MIME, ref: "apr-1" }],
+      }),
+    );
+    expect(notice.startsWith("[system: approval notice] Approval needed")).toBe(true);
   });
 });
 
@@ -681,6 +693,101 @@ describe("buildContext working directory", () => {
       at,
     );
     expect(resumed.systemPrompt).toBe(fresh.systemPrompt);
+  });
+
+  // ADR-0036 decision 5.
+  it("says where teammates work and names the prepared worktree when the workspace has one", async () => {
+    const plain = await buildContext({ ...request(trigger), workdirMode: "per-bot" }, fs(), at);
+    expect(plain.systemPrompt).toContain("/work/bots/<its name>");
+    const withRepo = await buildContext(
+      { ...request(trigger), workdirMode: "per-bot", worktreeRepo: "/work/app" },
+      fs(),
+      at,
+    );
+    expect(withRepo.systemPrompt).toContain("/work/bots/<its name>");
+    expect(withRepo.systemPrompt).toContain(
+      "worktree of it at /work/bots/nova/app on branch bots/nova",
+    );
+    expect(withRepo.systemPrompt).toContain("not in /work/app");
+    expect(withRepo.systemPrompt).toContain("never resets, pulls or merges");
+    expect(withRepo.systemPrompt).not.toContain("worktree add /work/bots/nova/<repo>");
+    // Byte-stable from run to run: nothing per run enters it.
+    const again = await buildContext(
+      { ...request(trigger), workdirMode: "per-bot", worktreeRepo: "/work/app" },
+      fs(),
+      new Date("2026-10-13T00:00:00Z"),
+    );
+    expect(again.systemPromptSha256).toBe(withRepo.systemPromptSha256);
+  });
+
+  it("puts a worktree failure in the run's prompt, not the system prompt", async () => {
+    const ok = await buildContext(
+      { ...request(trigger), workdirMode: "per-bot", worktreeRepo: "/work/app" },
+      fs(),
+      at,
+    );
+    const failed = await buildContext(
+      { ...request(trigger), workdirMode: "per-bot", worktreeRepo: "/work/app" },
+      fs(),
+      at,
+      [],
+      "not a git repository",
+    );
+    expect(failed.systemPrompt).toBe(ok.systemPrompt);
+    expect(failed.prompt).toContain("could not be prepared this run (not a git repository)");
+    expect(ok.prompt).not.toContain("could not be prepared");
+  });
+});
+
+// ADR-0036 decision 6: a note in the run's prompt, never in the cached system prompt.
+describe("buildContext lane notice", () => {
+  const trigger: TriggerPayload = { kind: "cron", prompt: "nightly check" };
+  const fs = () => createMemoryFs({ "/home/nova/SOUL.md": "You are Nova." });
+  const at = new Date("2026-10-14T00:00:00Z");
+  const otherLaneRun = {
+    runId: "run_chat",
+    lane: "interactive",
+    triggerKind: "thread_message",
+    threadId: "thread-1",
+    startedAt: "2026-10-14T07:59:00.000Z",
+  } as const;
+
+  it("names the other lane's run and the shared worktree", async () => {
+    const without = await buildContext({ ...request(trigger) }, fs(), at);
+    const context = await buildContext(
+      { ...request(trigger), workdirMode: "per-bot", worktreeRepo: "/work/app", otherLaneRun },
+      fs(),
+      at,
+    );
+    expect(context.prompt).toContain(
+      "run run_chat on your interactive lane (trigger thread_message in thread thread-1, started 2026-10-14T07:59:00.000Z)",
+    );
+    expect(context.prompt).toContain("shares your working directory and your worktree");
+    expect(context.prompt).toContain("git status");
+    expect(context.systemPrompt).not.toContain("run_chat");
+    expect(without.prompt).not.toContain("other lane");
+  });
+
+  it("adds the note on a resume as well, without a worktree", async () => {
+    const context = await buildContext(
+      {
+        ...request({
+          kind: "approval",
+          approvalId: "approval-lane" as ApprovalId,
+          decision: "allow_once",
+        }),
+        otherLaneRun: {
+          runId: otherLaneRun.runId,
+          lane: otherLaneRun.lane,
+          triggerKind: otherLaneRun.triggerKind,
+          startedAt: otherLaneRun.startedAt,
+        },
+      },
+      fs(),
+      at,
+    );
+    expect(context.prompt).toContain("(trigger thread_message, started");
+    expect(context.prompt).toContain("shares your working directory. Before");
   });
 });
 

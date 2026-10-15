@@ -148,6 +148,7 @@ describe("parseStartRunRequest accepts what the Gateway sends", () => {
         targetOrigin: "http://shop.example.test:8080",
         argumentPattern: "*submit*",
       },
+      reason: "Nobody approved this within 15 minutes.",
       currentOrigin: "http://shop.example.test:8080",
     };
     const result = parseStartRunRequest(withField("trigger", trigger));
@@ -164,6 +165,28 @@ describe("parseStartRunRequest accepts what the Gateway sends", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.workdirMode).toBe("per-bot");
     expect(parseStartRunRequest(json({ ...VALID, workdirMode: "shared" })).ok).toBe(false);
+  });
+
+  it("keeps the worktree repository and the other lane's run, refusing unsafe paths (ADR-0036)", () => {
+    const otherLaneRun = {
+      runId: "run_other",
+      lane: "background",
+      triggerKind: "cron",
+      startedAt: "2026-10-14T08:00:00.000Z",
+    } as const;
+    const result = parseStartRunRequest(
+      json({ ...VALID, workdirMode: "per-bot", worktreeRepo: "/work/app", otherLaneRun }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.worktreeRepo).toBe("/work/app");
+      expect(result.value.otherLaneRun).toEqual(otherLaneRun);
+    }
+    for (const worktreeRepo of ["/work/../etc", "/work/bots/alice", "/work/a;b", "app"])
+      expect(parseStartRunRequest(json({ ...VALID, worktreeRepo })).ok).toBe(false);
+    expect(
+      parseStartRunRequest(json({ ...VALID, otherLaneRun: { ...otherLaneRun, lane: "other" } })).ok,
+    ).toBe(false);
   });
 
   it("keeps the opt-in origin coordination deadline through stdin", () => {

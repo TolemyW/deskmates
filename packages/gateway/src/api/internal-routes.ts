@@ -17,6 +17,7 @@ import {
   mentionDiagnostics,
 } from "@deskmates/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { registerAppShareInternalRoutes } from "../app-shares/app-share-routes.js";
 import { assertBotMayDecide } from "../approvals/bot-decision.js";
 import type { GatewayContext } from "../context.js";
 import { bearerToken } from "../model-proxy/model-proxy.js";
@@ -31,6 +32,7 @@ import { registerConnectorInternalRoutes } from "./connector-routes.js";
 import { registerIntegrationInternalRoutes } from "./integration-routes.js";
 import { registerKnowledgeInternalRoutes } from "./knowledge-routes.js";
 import { registerMemoryInternalRoutes } from "./learned-memory-routes.js";
+import { registerReplyPreviewRoutes } from "./reply-preview-routes.js";
 import { registerTaskInternalRoutes } from "./task-internal-routes.js";
 import {
   asApprovalDecision,
@@ -66,10 +68,12 @@ export function registerInternalRoutes(
       }
     });
 
+    registerAppShareInternalRoutes(scope, ctx);
     registerBrowserOriginRoutes(scope, ctx);
     registerBrowserRetentionRoutes(scope, ctx);
     registerKnowledgeInternalRoutes(scope, ctx);
     registerMemoryInternalRoutes(scope, ctx);
+    registerReplyPreviewRoutes(scope, ctx);
     registerTaskInternalRoutes(scope, ctx);
 
     scope.post<RunParams>("/internal/runs/:runId/events", async (request) => {

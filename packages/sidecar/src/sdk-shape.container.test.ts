@@ -20,6 +20,7 @@ import type {
   SDKAssistantMessage,
   SDKCompactBoundaryMessage,
   SDKMessage,
+  SDKPartialAssistantMessage,
   SDKResultMessage,
   SDKSystemMessage,
   SDKUserMessage,
@@ -41,6 +42,7 @@ import type {
   SdkQueryOptions,
   SdkResultMessage,
   SdkSystemInitMessage,
+  SdkTextDeltaStreamMessage,
   SdkUserMessage,
 } from "@deskmates/testkit";
 import { describe, expect, it } from "vitest";
@@ -60,6 +62,8 @@ type _any = Assert<Assignable<SdkMessage, SDKMessage>>;
 type _compact = Assert<Assignable<SdkCompactBoundaryMessage, SDKCompactBoundaryMessage>>;
 // ADR-0023 decision 3: retries and model switches as the sidecar forwards them to the ledger.
 type _apiRetry = Assert<Assignable<SdkApiRetryMessage, SDKAPIRetryMessage>>;
+// ADR-0037: the text deltas the sidecar reads for the timeline and the reply preview.
+type _textDelta = Assert<Assignable<SdkTextDeltaStreamMessage, SDKPartialAssistantMessage>>;
 type _postModelSwitchInput = Assert<
   Assignable<SdkPostModelSwitchHookInput, PostModelSwitchHookInput>
 >;

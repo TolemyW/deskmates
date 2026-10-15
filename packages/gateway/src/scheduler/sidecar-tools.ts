@@ -15,7 +15,9 @@ import {
  * The five integration tools come with a workspace that has at least one usable integration
  * connection, on a run whose config carries `integrationVersion: 1` (ADR-0013 item 5).
  * `task_deliver` comes only with an open task linked to the run or its thread (ADR-0021
- * amendment 2), so a run with no task to deliver sees no new tool.
+ * amendment 2), so a run with no task to deliver sees no new tool. `app_publish` comes with a
+ * run whose config carries `appShareVersion: 1`, stamped only where app sharing is configured
+ * (ADR-0035 decision 1).
  */
 export function sidecarToolsFor(
   hasThread: boolean,
@@ -37,5 +39,6 @@ export function sidecarToolsFor(
     ...(hasConnectors && config.connectorVersion === 1 ? CONNECTOR_TOOL_NAMES : []),
     ...(hasIntegrationConnections && config.integrationVersion === 1 ? INTEGRATION_TOOL_NAMES : []),
     ...(hasDeliverableTasks ? (["task_deliver"] as const) : []),
+    ...(config.appShareVersion === 1 ? (["app_publish"] as const) : []),
   ];
 }

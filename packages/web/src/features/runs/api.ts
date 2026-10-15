@@ -6,6 +6,7 @@ import type {
   RunContextMetrics,
   RunEvent,
   RunId,
+  RunTimeline,
   RunUsageReceipt,
   ThreadId,
   UsageCoverage,
@@ -55,6 +56,8 @@ export interface RunsApi {
     usageCoverage?: UsageCoverage;
   }>;
   getRunContext(id: RunId): Promise<RunContextMetrics>;
+  /** The run's per-attempt startup timeline, derived from its whole ledger (ADR-0037). */
+  getRunTimeline(id: RunId): Promise<RunTimeline>;
   /** Each bot's newest run in one workspace (replaces a tenant-wide run read). */
   latestRunsByBot(workspaceId: WorkspaceId): Promise<RunView[]>;
   /** The newest run's events, or a bounded tail after `afterSeq`. */
@@ -82,6 +85,9 @@ export function createRunsApi(t: HttpTransport): RunsApi {
     },
     getRunContext(id) {
       return t.json("GET", `/api/runs/${encodeURIComponent(id)}/context`);
+    },
+    getRunTimeline(id) {
+      return t.json("GET", `/api/runs/${encodeURIComponent(id)}/timeline`);
     },
     async latestRunsByBot(workspaceId) {
       const r = await t.json<{ runs: RunView[] }>(

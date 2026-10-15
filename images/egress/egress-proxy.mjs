@@ -3,6 +3,7 @@ import { promises as dns } from "node:dns";
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import net from "node:net";
+import { startAppRelay } from "./app-relay.mjs";
 import { createDohLookup } from "./doh-lookup.mjs";
 import { connectTarget, createPolicyState, parsePolicyDocument } from "./egress-policy.mjs";
 import { hostException, hostPort, resolveHostTarget } from "./host-target.mjs";
@@ -184,11 +185,17 @@ const closeScreens = process.env.DESKMATES_SCREEN_TARGET
       [6080, 6081, 6082, 6083, 6084, 6085, 6086],
     )
   : () => {};
+// ADR-0035 decision 4: the Gateway's keyed inward path to published workspace services.
+const closeApps =
+  process.env.DESKMATES_SCREEN_TARGET && process.env.DESKMATES_APP_RELAY_KEY
+    ? startAppRelay(process.env.DESKMATES_SCREEN_TARGET, process.env.DESKMATES_APP_RELAY_KEY)
+    : () => {};
 // Node is PID 1 here. Install explicit handlers; otherwise Linux can leave Docker waiting
 // for its full stop deadline. No persistent state needs flushing in this stateless relay.
 const shutdown = () => {
   policy.failClosed();
   closeScreens();
+  closeApps();
   for (const socket of sockets) socket.destroy();
   server.close(() => process.exit(0));
 };

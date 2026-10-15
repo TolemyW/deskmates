@@ -25,6 +25,7 @@
     "compare": "tsx --tsconfig evals/tsconfig.json evals/compare.ts",
     "power": "tsx --tsconfig evals/tsconfig.json evals/power.ts",
     "delegation-metrics": "tsx --tsconfig evals/tsconfig.json evals/delegation-metrics.ts",
+    "latency-report": "tsx --tsconfig evals/tsconfig.json evals/latency-report.ts",
     "golden-site": "npm run serve -w packages/golden-site",
     "dev:gateway": "npm run dev -w packages/gateway",
     "auth": "node scripts/auth-cli.mjs",

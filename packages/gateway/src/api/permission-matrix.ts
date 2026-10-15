@@ -58,8 +58,12 @@ export const SANDBOX_ROUTE_RULES: Readonly<Record<string, string>> = {
   "POST /internal/runs/:runId/knowledge/proposals":
     "That run's token. Proposes to its tenant's Knowledge; an Admin reviews.",
   "GET /internal/runs/:runId/memory/search": "That run's token. Its workspace's learned memory.",
+  "POST /internal/runs/:runId/reply-preview":
+    "That run's token, for its current attempt while live. Relays a reply preview to the run's own thread stream; writes no ledger row or message (ADR-0037).",
   "POST /internal/runs/:runId/tasks/:taskId/deliver":
     "That run's token, for a task of its workspace linked to the run or its thread (task_deliver; ADR-0021 amendment 2). Files are verified through the workspace before publication (ADR-0014 A4). Never accepts.",
+  "POST /internal/runs/:runId/app-shares":
+    "That run's token. Publishes a port of its workspace's container for the workspace's signed-in Members (app_publish; ADR-0035). Never opens the app.",
   "POST /internal/runs/:runId/tasks/:taskId/checkpoints":
     "That run's token, for a task of its workspace linked to the run or its thread (task_checkpoint; ADR-0021 A3h). Changes no task state; publishes nothing.",
   "POST /internal/runs/:runId/connectors/:connector/describe":

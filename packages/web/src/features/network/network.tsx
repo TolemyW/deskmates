@@ -2,6 +2,9 @@
 // selects them per workspace. Authorization is the Gateway's: a refused call shows its message.
 
 import type {
+  NetworkLayer,
+  NetworkOverlap,
+  NetworkPreflightResult,
   NetworkProfile,
   NetworkPublication,
   NetworkRule,
@@ -131,6 +134,7 @@ export function NetworkScreen({ api }: { api: Api }) {
       </header>
       {error ? <p role="alert">{error}</p> : null}
       <Publications publications={publications} />
+      <Overlaps api={api} revision={profiles} />
       {draft ? (
         <ProfileForm
           draft={draft}
@@ -261,6 +265,8 @@ function WorkspaceSelection(props: {
   const [workspaceId, setWorkspaceId] = useState<WorkspaceId>();
   const [view, setView] = useState<WorkspaceNetworkView>();
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
+  // Per-selection expiry (decision 9): a grant ends at the earlier of profile and selection.
+  const [expiry, setExpiry] = useState<Readonly<Record<string, string>>>({});
   const [error, setError] = useState<string>();
   const [outcome, setOutcome] = useState<NetworkPublication>();
   const [busy, setBusy] = useState(false);
@@ -281,6 +287,7 @@ function WorkspaceSelection(props: {
       (next) => {
         setView(next);
         setChosen(new Set(next.selections.map((s) => s.profileId)));
+        setExpiry(selectionExpiry(next));
         setError(undefined);
       },
       (err) => setError(errorMessage(err)),
@@ -296,9 +303,13 @@ function WorkspaceSelection(props: {
     try {
       const result = await api.setWorkspaceNetworkProfiles(
         workspaceId,
-        [...chosen].map((profileId) => ({ profileId })),
+        [...chosen].map((profileId) => {
+          const expiresAt = expiry[profileId]?.trim();
+          return expiresAt ? { profileId, expiresAt } : { profileId };
+        }),
       );
       setView(result.network);
+      setExpiry(selectionExpiry(result.network));
       setOutcome(result.publication);
     } catch (err) {
       setError(errorMessage(err));
@@ -341,19 +352,30 @@ function WorkspaceSelection(props: {
           <fieldset>
             <legend>{t("network.selection")}</legend>
             {profiles.map((profile) => (
-              <label key={profile.id}>
-                <input
-                  type="checkbox"
-                  checked={chosen.has(profile.id)}
-                  onChange={(e) => {
-                    const next = new Set(chosen);
-                    if (e.target.checked) next.add(profile.id);
-                    else next.delete(profile.id);
-                    setChosen(next);
-                  }}
-                />
-                {profile.name}
-              </label>
+              <div key={profile.id} className="network-choice">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={chosen.has(profile.id)}
+                    onChange={(e) => {
+                      const next = new Set(chosen);
+                      if (e.target.checked) next.add(profile.id);
+                      else next.delete(profile.id);
+                      setChosen(next);
+                    }}
+                  />
+                  {profile.name}
+                </label>
+                {chosen.has(profile.id) ? (
+                  <label className="network-expiry">
+                    {t("network.selectionExpiresAt")}
+                    <input
+                      value={expiry[profile.id] ?? ""}
+                      onChange={(e) => setExpiry({ ...expiry, [profile.id]: e.target.value })}
+                    />
+                  </label>
+                ) : null}
+              </div>
             ))}
           </fieldset>
           {props.note ? <p className="network-note">{props.note}</p> : null}
@@ -364,6 +386,116 @@ function WorkspaceSelection(props: {
       ) : null}
       {error ? <p role="alert">{error}</p> : null}
       {outcome ? <Publications publications={[outcome]} /> : null}
+      {workspaceId ? <Preflight key={workspaceId} api={api} workspaceId={workspaceId} /> : null}
     </section>
+  );
+}
+
+/**
+ * Amendment 2 decision 15: LAN targets the host routes into a Docker bridge. Advisory; reread
+ * whenever the profile list changes. A failed read shows nothing: the screen still works.
+ */
+function Overlaps({ api, revision }: { api: Api; revision: unknown }) {
+  const t = useT();
+  const [overlaps, setOverlaps] = useState<NetworkOverlap[]>([]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `revision` triggers the reread.
+  useEffect(() => {
+    api.getNetworkOverlaps().then(
+      (report) => setOverlaps(report.overlaps),
+      () => setOverlaps([]),
+    );
+  }, [api, revision]);
+  if (overlaps.length === 0) return null;
+  return (
+    <section className="network-overlaps" aria-live="polite">
+      <h2>{t("network.overlaps.title")}</h2>
+      <p>{t("network.overlaps.intro")}</p>
+      <ul>
+        {overlaps.map((o) => (
+          <li key={`${o.source}:${o.label}:${o.cidr}:${o.network}:${o.networkCidr}`}>
+            {t("network.overlaps.item", {
+              cidr: o.cidr,
+              label: o.label,
+              network: o.network,
+              networkCidr: o.networkCidr,
+            })}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function selectionExpiry(view: WorkspaceNetworkView): Record<string, string> {
+  return Object.fromEntries(view.selections.map((s) => [s.profileId, s.expiresAt ?? ""]));
+}
+
+const LAYER: Record<NetworkLayer, MessageKey> = {
+  policy: "network.preflight.layer.policy",
+  route: "network.preflight.layer.route",
+  dns: "network.preflight.layer.dns",
+  tcp: "network.preflight.layer.tcp",
+  tls: "network.preflight.layer.tls",
+  http: "network.preflight.layer.http",
+};
+
+/** Decision 14: one URL checked from the workspace's proxy, each layer's verdict shown. */
+function Preflight({ api, workspaceId }: { api: Api; workspaceId: WorkspaceId }) {
+  const t = useT();
+  const [url, setUrl] = useState("");
+  const [result, setResult] = useState<NetworkPreflightResult>();
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const check = async () => {
+    setBusy(true);
+    setError(undefined);
+    setResult(undefined);
+    try {
+      setResult(await api.preflightWorkspaceNetwork(workspaceId, url.trim()));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form
+      className="network-preflight"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void check();
+      }}
+    >
+      <h2>{t("network.preflight.title")}</h2>
+      <p>{t("network.preflight.intro")}</p>
+      <label>
+        {t("network.preflight.url")}
+        <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} />
+      </label>
+      <Button type="submit" disabled={busy || url.trim() === ""}>
+        {t("network.preflight.run")}
+      </Button>
+      {error ? <p role="alert">{error}</p> : null}
+      {result ? (
+        <div aria-live="polite">
+          <p className="network-preflight-verdict" data-ok={result.ok}>
+            {result.failedLayer
+              ? t("network.preflight.failed", { layer: t(LAYER[result.failedLayer]) })
+              : result.status === undefined
+                ? t("network.preflight.okPolicy")
+                : t("network.preflight.ok", { status: result.status })}
+          </p>
+          <ul>
+            {result.layers.map((layer) => (
+              <li key={layer.layer} data-ok={layer.ok}>
+                <strong>{t(LAYER[layer.layer])}</strong>{" "}
+                {layer.ok ? t("network.preflight.pass") : t("network.preflight.fail")}
+                {layer.detail ? <span> {layer.detail}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </form>
   );
 }

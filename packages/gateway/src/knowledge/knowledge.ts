@@ -41,6 +41,8 @@ type ProposalRow = {
   reviewed_by: string | null;
   reviewed_at: string | null;
   document_id: string | null;
+  target_document_id: string | null;
+  target_version: number | null;
 };
 export interface Page<T> {
   items: T[];
@@ -102,7 +104,26 @@ const proposalView = (r: ProposalRow): KnowledgeProposal => ({
   ...(r.reviewed_by ? { reviewedBy: r.reviewed_by } : {}),
   ...(r.reviewed_at ? { reviewedAt: r.reviewed_at } : {}),
   ...(r.document_id ? { documentId: r.document_id } : {}),
+  ...(r.target_document_id
+    ? { targetDocumentId: r.target_document_id, targetVersion: r.target_version ?? 1 }
+    : {}),
 });
+
+type CitationRow = {
+  position: number;
+  workspace_id: string;
+  entry_id: string;
+  entry_version: number;
+  changed: number;
+};
+
+/** A draft from observations (ADR-0011 amendment 4, A29): what it cites and what it targets. */
+export interface ObservationDraftInput {
+  title: string;
+  body: string;
+  target?: { documentId: string; version: number };
+  citations: { workspaceId: string; entryId: string; entryVersion: number }[];
+}
 
 /**
  * SQLite publishes pointers to immutable Markdown versions; uncommitted files are never served.
@@ -125,12 +146,70 @@ export class KnowledgeStore {
       .run(id, tenantId, value.title, value.body, sourceRunId ?? null, new Date().toISOString());
     return this.proposal(tenantId, id);
   }
+  /**
+   * A29: a pending proposal composed from learned-memory notes, with one citation per note at
+   * the version it read. It publishes nothing; the Admin review does.
+   */
+  proposeDraft(tenantId: string, input: ObservationDraftInput, sourceRunId?: RunId) {
+    const value = validateKnowledge(input.title, input.body);
+    const id = `kp_${randomUUID().replaceAll("-", "")}`;
+    return this.db.transaction(() => {
+      if (input.target) this.read(tenantId, input.target.documentId);
+      this.db
+        .prepare(
+          `INSERT INTO knowledge_proposals(id, tenant_id, title, body, source_run_id, created_at,
+             target_document_id, target_version) VALUES (?,?,?,?,?,?,?,?)`,
+        )
+        .run(
+          id,
+          tenantId,
+          value.title,
+          value.body,
+          sourceRunId ?? null,
+          new Date().toISOString(),
+          input.target?.documentId ?? null,
+          input.target?.version ?? null,
+        );
+      const cite = this.db.prepare(
+        `INSERT INTO knowledge_proposal_citations
+           (proposal_id, position, workspace_id, entry_id, entry_version) VALUES (?,?,?,?,?)`,
+      );
+      input.citations.forEach((c, i) =>
+        cite.run(id, i + 1, c.workspaceId, c.entryId, c.entryVersion),
+      );
+      return this.proposal(tenantId, id);
+    })();
+  }
+  /** Citations of a draft; `changed` once the note left the cited version (A29). */
+  private withCitations(proposal: KnowledgeProposal): KnowledgeProposal {
+    const rows = this.db
+      .prepare(
+        `SELECT c.position, c.workspace_id, c.entry_id, c.entry_version,
+                (e.id IS NULL OR e.version <> c.entry_version OR e.tombstoned = 1
+                  OR e.invalid_at IS NOT NULL) AS changed
+           FROM knowledge_proposal_citations c
+           LEFT JOIN memory_entries e ON e.id = c.entry_id AND e.workspace_id = c.workspace_id
+          WHERE c.proposal_id = ? ORDER BY c.position`,
+      )
+      .all(proposal.id) as CitationRow[];
+    if (rows.length === 0) return proposal;
+    return {
+      ...proposal,
+      citations: rows.map((row) => ({
+        position: row.position,
+        workspaceId: row.workspace_id,
+        entryId: row.entry_id,
+        entryVersion: row.entry_version,
+        changed: row.changed === 1,
+      })),
+    };
+  }
   proposal(tenantId: string, id: string): KnowledgeProposal {
     const row = this.db
       .prepare("SELECT * FROM knowledge_proposals WHERE id = ? AND tenant_id = ?")
       .get(id, tenantId) as ProposalRow | undefined;
     if (!row) throw new DeskmatesError("not_found", "Knowledge proposal not found");
-    return proposalView(row);
+    return this.withCitations(proposalView(row));
   }
   /** Proposals with this status, newest first, `created_at DESC, id DESC`; `limit + 1` rows. */
   proposalRows(
@@ -156,7 +235,10 @@ export class KnowledgeStore {
         limit + 1,
       ) as ProposalRow[];
     return {
-      rows: rows.map((row) => ({ item: proposalView(row), key: [row.created_at, row.id] })),
+      rows: rows.map((row) => ({
+        item: this.withCitations(proposalView(row)),
+        key: [row.created_at, row.id],
+      })),
     };
   }
   /** The whole queue's size under the same filter: one indexed count, not a page length. */
@@ -208,7 +290,23 @@ export class KnowledgeStore {
         );
       const now = new Date().toISOString();
       let documentId: string | null = null;
-      if (decision === "approve") {
+      if (decision === "approve" && proposal.targetDocumentId) {
+        // A29: an update applies only to the version it was drafted against.
+        const current = this.read(tenantId, proposal.targetDocumentId);
+        if (current.version !== proposal.targetVersion)
+          throw new DeskmatesError(
+            "invalid_transition",
+            "The document changed after this draft was made; draft it again",
+          );
+        documentId = this.edit(
+          tenantId,
+          current.id,
+          proposal.title,
+          proposal.body,
+          current.version,
+          by,
+        ).id;
+      } else if (decision === "approve") {
         documentId = `kb_${randomUUID().replaceAll("-", "")}`;
         const path = this.writeVersion(documentId, 1, proposal.body);
         this.db

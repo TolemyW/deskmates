@@ -18,7 +18,6 @@ import { currentI18n } from "../../i18n/intl.js";
 import { PageBar } from "../../lib/page-bar.js";
 import { usePagedQuery } from "../../lib/use-paged-query.js";
 import { RoleNote, useCan } from "../../state/session-roles.js";
-import { AutoApprovalToggle } from "../approvals/auto-approval-toggle.js";
 import { EgressModePicker } from "../workspaces/egress-mode-picker.js";
 import { BotSchedules } from "./bot-schedules.js";
 import { VisionCapability } from "./model-capability.js";
@@ -299,7 +298,6 @@ export function EgressEditor({
         </Button>
       )}
       <RoleNote action="workspace.configure" does={t("management.egress.roleNote")} />
-      <AutoApprovalToggle api={api} workspaceId={workspace.id} />
     </article>
   );
 }

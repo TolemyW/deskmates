@@ -7,6 +7,9 @@ Amendment 1 (2026-10-14, proposed, issue #124): online, durable, named network p
 explicitly configured LAN origins (HTTP or HTTPS, custom ports, RFC1918 IP literals); decisions 6
 to 14 below. It supersedes decision 4's startup-only rule and decision 1's HTTPS:443 and
 no-IP-literal limits for profile grants only; `EGRESS_PRIVATE_TARGETS` keeps its exact meaning.
+Amendment 2 (2026-10-14, proposed, issue #124): Docker/LAN subnet overlap detection and a `route`
+preflight layer (decision 15); a cached sandbox handle is revalidated with attach's topology rules
+before reuse (decision 16).
 
 ## Context
 
@@ -181,3 +184,48 @@ below is proposed until the owner accepts it; the owner choices it had to make a
 | 12 | Only the root defines and selects; Owners and Admins read; run tokens have no route | `gateway/src/api/network-routes.test.ts` | grants created or selected by non-root principals zero |
 | 13 | Selection refused on a `*` workspace and `*` refused on a selecting workspace; trusted-test label returned | `gateway/src/api/network-routes.test.ts` | open-internet workspaces with LAN grants zero |
 | 14 | Preflight reports policy, DNS, TCP, TLS or HTTP as the failing layer without a model call | `gateway/src/network/network-preflight.test.ts`; `acceptance/lan-egress.container.test.ts` | preflights with an unattributed failure zero |
+
+## Amendment 2 (2026-10-14, proposed): overlap detection and cached-handle revalidation
+
+Issue #124, the follow-ups decision 14 named. Everything below is proposed until the owner
+accepts it.
+
+Correction to the amendment 1 evidence: the T2 `acceptance/lan-egress.container.test.ts` failure
+on Testbox (`502` for the granted LAN origin) was two defects in the test, not in the proxy or
+in decision 11. The fixture script was bind-mounted from the test user's `0700` temporary
+directory, which the image's `node` user (uid 1000) cannot read when the test user has another
+uid (Testbox: 1001), so nothing listened and the proxy's upstream connection was refused; and
+the helper that holds a slow request returned a bare promise from an async function, which
+adopted it, so revocation always arrived after the response had finished. With both fixed the
+test passed three times in a row there against the v0.6.7 proxy image. Decision 11 stands: the
+Docker host's LAN address is outside the proxy's own networks and is reachable through a grant.
+
+15. **Docker/LAN subnet overlap is detected, reported and never repaired silently.** A LAN target
+    whose address lies inside the subnet of a Docker network on the same daemon is routed by the
+    host into that bridge, not onto the LAN, and no grant can change that. The Gateway compares
+    every LAN target it knows (profile subnet rules, profile host-rule addresses,
+    `EGRESS_PRIVATE_TARGETS` addresses and the operator-declared `NETWORK_LAN_CIDRS`) with the
+    IPv4 subnets of every network the sandbox provider reports. Each overlap is logged as a
+    warning at Gateway startup, listed for the root at `GET /api/network-overlaps`, and shown on
+    the network screen. The per-URL preflight adds a `route` layer after `policy`: a target
+    address inside a Docker network fails there, naming the network, before any probe runs.
+    Detection is advisory: a profile or selection is not refused for an overlap, because Docker
+    networks come and go independently of profiles. The Gateway never creates, removes or
+    renumbers a Docker network; choosing non-conflicting `default-address-pools` and migrating
+    existing networks remain an operator procedure.
+16. **A cached sandbox handle is revalidated before reuse, with attach's rules.** Before the
+    registry reuses a cached handle it asks the provider to verify the sandbox's topology with
+    the same rules a fresh attach applies: the workspace container exists, carries the
+    workspace's labels, is attached to exactly its own workspace network and has no direct host
+    alias; the egress proxy keeps its two networks and host target (the existing policy push
+    already checks the proxy). A mismatch drops the cached handle and reopens through attach,
+    whose refusal then stands; a network added to a running workspace by hand therefore stops
+    working at its next use instead of after the next Gateway restart. Fresh-attach validation
+    is never relaxed to make a topology work.
+
+## Verification (amendment 2)
+
+| Decision | Concrete meaning | Test | Metric |
+| --- | --- | --- | --- |
+| 15 | IPv4 overlap between LAN targets and provider networks found exactly; reported at startup, at the root route and as a failed `route` preflight layer; nothing refused or changed | `contracts/src/network-overlap.test.ts`; `gateway/src/network/network-overlaps.test.ts`; `gateway/src/network/network-preflight.test.ts`; `sandbox-docker/src/network-topology.test.ts`; `sandbox-docker/src/docker-provider.container.test.ts` (T2) | overlapping LAN targets left unreported zero |
+| 16 | A cached handle whose workspace container gained a network, lost its own or gained a host alias is dropped and reattached, and attach refuses it | `sandbox-docker/src/network-topology.test.ts`; `gateway/src/workspaces/sandbox-revalidation.test.ts`; `sandbox-docker/src/docker-provider.container.test.ts` (T2) | runs on a tampered topology through a cached handle zero |

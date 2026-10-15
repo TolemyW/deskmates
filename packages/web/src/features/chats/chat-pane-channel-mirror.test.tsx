@@ -62,7 +62,7 @@ function routes(subject: Thread, extra: RouteTable = {}): RouteTable {
     },
     "GET /api/runs?threadId=thr_1": { runs: [] },
     "GET /api/approvals?status=pending&threadId=thr_1": { approvals: [pending] },
-    "GET /api/approvals?status=decided&threadId=thr_1": { approvals: [] },
+    "GET /api/approvals?threadId=thr_1&ids=apr_1": { approvals: [] },
     "GET /api/workspaces/ws_1": workspaceView(),
     "GET /api/channels": catalog,
     ...extra,

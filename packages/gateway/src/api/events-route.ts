@@ -138,6 +138,8 @@ function eventRow(event: GatewayEvent): [OwnedKind, string] | undefined {
       return ["run", event.run.id];
     case "run_event":
       return ["run", event.event.runId];
+    case "run_reply_preview":
+      return ["run", event.preview.runId];
     case "approval":
       return ["approval", event.approval.id];
     case "cost_alert":
@@ -196,6 +198,8 @@ export function eventTenant(ctx: GatewayContext, event: GatewayEvent): string | 
       return owner.tenantOf("run", event.run.id);
     case "run_event":
       return owner.tenantOf("run", event.event.runId);
+    case "run_reply_preview":
+      return owner.tenantOf("run", event.preview.runId);
     case "approval":
       return owner.tenantOf("approval", event.approval.id);
     case "workspace_lock":

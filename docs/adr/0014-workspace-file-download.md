@@ -3,7 +3,7 @@
 Date: 2026-09-29
 Status: Accepted (product owner, 2026-10-11; download, the Files collection and the rich-preview policy are accepted). Originally proposed from the owner's 2026-09-29 note "先做下载器"; A1 specifies the original bounded text preview, A2 the collection and A3 supersedes the original transfer and preview limits.
 Builds on: ADR-0004 (the workspace is the trust boundary), ADR-0006 (operator routes on the operator listener)
-Amendment A2 (workspace Files collection, issue #27 phase B): accepted by the owner on 2026-10-11. Amendment A3 (issues #44 and #45) is accepted design. Amendment A5 (issue #52, authenticated uploads) is proposed; its upload roles and its absence of a per-file size cap are the owner's 2026-10-13 decisions, the rest is engineering design awaiting review.
+Amendment A2 (workspace Files collection, issue #27 phase B): accepted by the owner on 2026-10-11. Amendment A3 (issues #44 and #45) is accepted design. Amendment A5 (issue #52, authenticated uploads) is proposed; its upload roles and its absence of a per-file size cap are the owner's 2026-10-13 decisions, the rest is engineering design awaiting review. Amendment A6 (issue #45, preview viewing controls and entry points) is proposed engineering design within A3's accepted policy.
 
 ## Context
 
@@ -279,6 +279,64 @@ remove partial files. The Gateway never deletes a completed upload's file.
 | 28 to 31 (amendment A5), UI | Files shows Upload with a scope note, progress, failure with Retry (resuming the same session), Cancel and completion; a Guest sees no control | T0 Web `features/files/upload-attach-button.test.tsx`, `features/files/files.test.tsx`; desktop and 390 px visual check | Visual check pending |
 | 35 (amendment A5) | Deleting the workspace removes upload rows. Cancel and expiry remove partial files | T1 `packages/gateway/src/db/schema-conventions.test.ts` (every `workspace_id` cascades); T1 `file-upload-routes.test.ts`; T0 `file-write.test.ts` | none |
 | 28 to 32 end to end | A file uploaded through the routes into a real workspace image downloads byte-identical. A planted `uploads` symbolic link into `/profile` is refused | T2 `acceptance/m4-file-upload.container.test.ts` (needs a workspace image with this sidecar) | none |
+
+### Amendment A6: preview viewing controls and every file-link entry point (2026-10-14, proposed; issue #45)
+
+Amendment A3 settled what may be rendered and how many bytes a preview may read. Issue #45 also
+asks for a paged PDF viewer with zoom, images that fit the panel with zoom, a Markdown source
+toggle, a bounded CSV table, and the same preview wherever a file is linked from a chat or a task.
+The owner's reopening comment requires that a chat-linked preview opens in a separate drawer that
+leaves the conversation in place. A6 specifies these viewing controls. It changes no route, no
+byte budget, no path rule and no isolation rule: decisions 17 to 21 apply unchanged to every view
+below. The decisions are engineering design that follows the issue text and awaits owner review.
+
+36. **Rendered and Source views.** A Markdown, HTML, JSON, CSV, TSV or SVG preview offers two
+views: Rendered (the A3 renderer) and Source. Source shows the decoded bytes already read for that
+preview as a React text node in a `<pre>`. It reads nothing more and renders nothing. It is how
+decision 19 and 21's "source remains available" is offered without a download. Source is the only
+view for a truncated JSON prefix (decision 18). An SVG source view decodes the same complete bytes
+under the text rules (UTF-8, no control bytes). The view choice is per open preview and resets to
+Rendered when the drawer closes, like decision 20's remote-image choice.
+
+37. **CSV and TSV are a bounded table.** The decoded prefix is parsed by RFC 4180 rules: quoted
+fields, doubled quotes and delimiters or line breaks inside quotes. The first record is the header
+row (`<th scope="col">`). The table shows at most 200 data rows and 50 columns. A note states the
+number of rows and columns shown and says when more rows, more columns or more bytes exist. When
+the prefix is truncated, the last record, which may be cut, is dropped. Cells are text only: no
+formula is evaluated, no link is made and no cell is interpreted as HTML. XLSX and other Office
+files stay download-only (decision 18).
+
+38. **Zoom and page navigation.** An image opens fitted to the panel and offers zoom out, zoom
+in and Fit, from 25% to 400% of its natural size. A PDF opens fitted to the panel width and
+offers previous and next page, a page number field and zoom from 50% to 300% of the fitted width.
+A rendered PDF canvas is capped at 16 million device pixels; a larger zoom renders at the cap
+instead of growing memory. Zoom never changes how many bytes are read, and decision 19's
+decoded-pixel limit applies before any zoom.
+
+39. **More inert text types and browser image types.** Source and configuration files
+(`.yaml`, `.yml`, `.toml`, `.ini`, `.cfg`, `.conf`, `.xml`, `.py`, `.js`, `.mjs`, `.cjs`, `.ts`,
+`.tsx`, `.jsx`, `.sh`, `.sql`, `.css`, `.go`, `.rs`, `.java`, `.c`, `.h`, `.cpp`, `.rb`, `.diff`,
+`.patch`) preview as inert text under the text budget and its truncation marker. XML is never
+parsed or rendered. AVIF and BMP images preview under decision 19. Any other type, including
+Office files, archives and executables, offers only Download with the explicit "Preview
+unavailable for this file type" state.
+
+40. **One drawer at every entry point.** Every place the web app shows a workspace file path
+offers the same preview and download controls: a path token in a chat message, the chat's
+Files section, a task's saved artifact, a published file in a task's delivery history and the
+Files detail panel. Preview opens the separate detail drawer of decision 15. The message, task or
+list never expands inline. Closing the drawer returns focus to the control that opened it and
+discards the read bytes, the view choice and any Blob URL.
+
+### Verification (amendment A6)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 36 (amendment A6) | Markdown, HTML, JSON, CSV and SVG show a Source view of the same bytes with no further range read; HTML source holds the script as text and mounts no script; truncated JSON offers no Rendered view; closing resets the view to Rendered | T0 Web `features/files/workspace-file-preview.test.tsx` ("source view") | none |
+| 37 (amendment A6) | Quoted delimiters, doubled quotes and quoted line breaks parse as one cell; the header uses column headers; a file with more than 200 rows or 50 columns states what is shown; a truncated prefix drops its cut last record; a formula cell stays text | T0 Web `features/files/csv-table.test.ts`; `workspace-file-preview.test.tsx` ("bounded table") | none |
+| 38 (amendment A6) | Image zoom steps stay within 25% to 400% and Fit restores the fitted view; PDF zoom stays within 50% to 300%, the page field rejects out-of-range pages, and the canvas never exceeds 16 million device pixels | T0 Web `features/files/preview-zoom.test.ts`; `workspace-file-preview.test.tsx` ("zoom") | none |
+| 39 (amendment A6) | YAML, Python and XML preview as text; XML is not parsed; AVIF previews as a Blob image; DOCX, XLSX, ZIP and EXE stay download-only | T0 Web `features/files/workspace-file-preview.test.tsx` ("preview type policy") | preview failures by type (reported) |
+| 40 (amendment A6) | A published file in a task's delivery history offers Preview and Download, which open the drawer; a chat path opens the drawer without expanding the message, and closing returns focus to the opener | T0 Web `features/tasks/tasks.test.tsx` ("delivery preview"); `features/files/workspace-file-preview.test.tsx` ("returns focus"); desktop and 390 px visual check | Manual Testbox acceptance pending |
 
 ## Alternatives
 

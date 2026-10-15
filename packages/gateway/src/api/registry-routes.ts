@@ -12,6 +12,7 @@ import type { Scheduler } from "../scheduler/scheduler.js";
 import { welcomeDeliveryOf } from "../threads/welcome-delivery.js";
 import { requestActorId } from "./actor.js";
 import { SOUL_BODY_MAX_BYTES } from "./memory-routes.js";
+import { botsByIds } from "./name-lookup.js";
 import { parseOffsetQuery } from "./pagination.js";
 import { requestTenant } from "./route-policy.js";
 import {
@@ -34,8 +35,17 @@ export function registerRegistryRoutes(
   scheduler: Scheduler,
 ): void {
   app.get<{
-    Querystring: { workspaceId?: string; offset?: string; limit?: string; q?: string };
+    Querystring: {
+      workspaceId?: string;
+      offset?: string;
+      limit?: string;
+      q?: string;
+      ids?: string;
+    };
   }>("/api/bots", async (request) => {
+    // A name lookup asks for the bots it labels, at most 100 (#113 §3.2).
+    if (request.query.ids !== undefined)
+      return { bots: botsByIds(ctx, request, request.query.ids, request.query.workspaceId) };
     const readable = readableWorkspaceIds(ctx, request, "guest");
     // #113 slice B: the Contacts and Computer rails read one workspace's bots a page at a time
     // (`name, id`, 50 by default, at most 100) with server search. Without paging parameters the

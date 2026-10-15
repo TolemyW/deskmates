@@ -57,6 +57,7 @@
   "chatPane.outcome.viewRun": "実行の詳細を表示",
   "chatPane.paused": "この会話はボットのターン上限に達したため一時停止しました。新しいメッセージを送ると再開し、上限がリセットされます。",
   "chatPane.queueNotice": "新しいメッセージは、進行中の作業の後ろに順番待ちで追加されます。",
+  "chatPane.replyPreview.label": "入力中…",
   "chatPane.runLink": "実行",
   "chatPane.runStatus.cancelled": "キャンセル済み",
   "chatPane.runStatus.failed": "失敗",

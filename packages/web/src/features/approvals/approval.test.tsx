@@ -45,7 +45,7 @@ function threadRoutes(extra: Record<string, unknown> = {}) {
     },
     "GET /api/runs?threadId=thr_1": { runs: [] },
     "GET /api/approvals?status=pending&threadId=thr_1": { approvals: [approval()] },
-    "GET /api/approvals?status=decided&threadId=thr_1": { approvals: [] },
+    "GET /api/approvals?threadId=thr_1&ids=apr_1": { approvals: [] },
     ...extra,
   };
 }
@@ -83,7 +83,7 @@ describe("approval card in the transcript", () => {
       threadRoutes({
         "GET /api/threads/thr_1/messages": { messages: [request, approvalMessage(3, body)] },
         "GET /api/approvals?status=pending&threadId=thr_1": { approvals: [] },
-        "GET /api/approvals?status=decided&threadId=thr_1": { approvals: [decided] },
+        "GET /api/approvals?threadId=thr_1&ids=apr_1": { approvals: [decided] },
       }),
     );
     render(
@@ -247,7 +247,7 @@ describe("approval card in the transcript", () => {
           messages: [message(1, "human", "order the widgets"), request, echo],
         },
         "GET /api/approvals?status=pending&threadId=thr_1": { approvals: [] },
-        "GET /api/approvals?status=decided&threadId=thr_1": { approvals: [decided] },
+        "GET /api/approvals?threadId=thr_1&ids=apr_1": { approvals: [decided] },
       }),
     );
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
@@ -276,8 +276,9 @@ describe("ApprovalsScreen", () => {
       id: "apr_2" as typeof APPROVAL_ID,
       action: { toolName: "Bash", input: {}, argumentSummary: "git push origin main" },
     });
-    const { fetch } = fakeFetch({
-      "GET /api/bots": { bots: [bot] },
+    const { fetch, calls } = fakeFetch({
+      // #113 §3.2: the inbox asks for the bots its page names, never the whole roster.
+      [`GET /api/bots?ids=${BOT_ID}`]: { bots: [bot] },
       "GET /api/approvals?status=pending": { approvals: [approval(), other] },
     });
     render(<ApprovalsScreen api={createApiClient({ fetch })} />);
@@ -286,7 +287,9 @@ describe("ApprovalsScreen", () => {
     const rows = within(list).getAllByRole("listitem");
     expect(rows).toHaveLength(2);
     expect(rows[0]?.textContent).toContain("browser_click");
-    expect(rows[0]?.textContent).toContain("ops");
+    await waitFor(() => expect(rows[0]?.textContent).toContain("ops"));
+    expect(calls.map((c) => c.path)).not.toContain("/api/bots");
+    expect(calls.filter((c) => c.path.startsWith("/api/bots"))).toHaveLength(1);
     expect(rows[1]?.textContent).toContain("git push origin main");
     expect(
       within(rows[0] as HTMLElement)

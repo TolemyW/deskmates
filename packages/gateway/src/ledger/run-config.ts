@@ -35,6 +35,8 @@ export function createRunConfig(config: GatewayConfig): () => Record<string, unk
     ...(config.strategyEvidence ? { strategyEvidence: { ...config.strategyEvidence } } : {}),
     browserCoordinationMode: config.browserCoordinationMode ?? "tab-v1",
     browserSnapshotMode: config.browserSnapshotMode ?? "explicit-v1",
+    // ADR-0002 amendment 5: browser code tiers; name-v1 is every earlier run's behaviour.
+    browserCodeApproval: config.browserCodeApproval ?? "name-v1",
     groupRouting: config.groupRouting ?? GROUP_ROUTING_DEFAULT,
     privateHandoffVersion: 1,
     // Issue #88: where the run starts; `shared` is `/work`, as before the knob.
@@ -50,6 +52,8 @@ export function createRunConfig(config: GatewayConfig): () => Record<string, unk
     connectorValidationTtlSeconds,
     // ADR-0013: recorded only where a runtime is configured, so older run rows stay comparable.
     ...(config.integrationRuntime ? { integrationVersion: 1 } : {}),
+    // ADR-0035 decision 1: `app_publish` exists only where app sharing is configured.
+    ...(config.appShares ? { appShareVersion: 1 } : {}),
     // ADR-0011: pinned index in the first user turn, memory_search, learned writes. The budgets
     // and the exact version set of each run are stamped at start (decision 12).
     memoryVersion: 1,

@@ -74,6 +74,10 @@ describe("M2 group foundation through the Gateway", () => {
       expect.objectContaining({
         payload: { source: "final_reply", op: "deduplicated", messageId: posted.id },
       }),
+      // ADR-0037: recorded only after the end committed, so the rolled-back try left none.
+      expect.objectContaining({
+        payload: expect.objectContaining({ source: "run_timeline", mark: "run_ended" }),
+      }),
     ]);
     route.mockRestore();
   });

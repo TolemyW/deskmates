@@ -180,3 +180,12 @@
     }
   }
 }
+
+/* ADR-0002 amendment 3, A7: the request expiry beside the automatic-approval switch. */
+.auto-approval-expiry {
+  margin-top: 0.75rem;
+}
+
+.auto-approval-expiry input[type="number"] {
+  width: 5.5rem;
+}

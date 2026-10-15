@@ -57,6 +57,7 @@
   "chatPane.outcome.viewRun": "查看執行詳細資料",
   "chatPane.paused": "此對話已達機器人回合上限而暫停。傳送新訊息即可繼續並重設上限。",
   "chatPane.queueNotice": "新訊息會排在正在進行的工作之後。",
+  "chatPane.replyPreview.label": "正在輸入…",
   "chatPane.runLink": "執行",
   "chatPane.runStatus.cancelled": "已取消",
   "chatPane.runStatus.failed": "失敗",

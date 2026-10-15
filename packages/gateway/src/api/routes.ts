@@ -2,6 +2,7 @@
 // combined helper exists only for the in-process T1 fixture.
 
 import type { FastifyInstance } from "fastify";
+import { registerAppShareRoutes } from "../app-shares/app-share-routes.js";
 import { budgetAdmission } from "../budget/admission.js";
 import type { GatewayContext } from "../context.js";
 import { frozenModelsOf } from "../model-proxy/frozen-models.js";
@@ -32,6 +33,7 @@ import { registerKnowledgeRoutes } from "./knowledge-routes.js";
 import { registerLearnedMemoryRoutes } from "./learned-memory-routes.js";
 import { registerLimitRoutes } from "./limit-routes.js";
 import { registerMemberRoutes } from "./member-routes.js";
+import { registerMemoryMaintenanceRoutes } from "./memory-maintenance-routes.js";
 import { registerMemoryRoutes } from "./memory-routes.js";
 import { registerMemorySuggestionRoutes } from "./memory-suggestion-routes.js";
 import { registerModelJobRoutes } from "./model-job-routes.js";
@@ -45,6 +47,7 @@ import { registerRoutePolicy } from "./route-policy.js";
 import { registerRunCancelRoutes } from "./run-cancel-routes.js";
 import { registerRunContextRoutes } from "./run-context-routes.js";
 import { registerRunRoutes } from "./run-routes.js";
+import { registerRunTimelineRoutes } from "./run-timeline-routes.js";
 import { registerRuntimeRoutes } from "./runtime-routes.js";
 import { registerScreenRoutes } from "./screen-routes.js";
 import { registerServicePrincipalRoutes } from "./service-principal-routes.js";
@@ -56,6 +59,7 @@ import { registerThreadRoundRoutes } from "./thread-round-routes.js";
 import { registerThreadRoutes } from "./thread-routes.js";
 import { registerTrashRoutes } from "./trash-routes.js";
 import { registerWebhookDeliveryRoute, registerWebhookTokenRoute } from "./webhook-routes.js";
+import { registerWorkdirRoutes } from "./workdir-routes.js";
 import { registerWorkspaceRoutes } from "./workspace-routes.js";
 
 export interface RouteOptions {
@@ -80,6 +84,7 @@ type RegisterFamily = (scope: FastifyInstance, deps: OperatorRouteDeps) => void;
  * guard hooks are installed before the list, and no family's routes depend on another's.
  */
 export const OPERATOR_ROUTE_FAMILIES: ReadonlyArray<readonly [name: string, RegisterFamily]> = [
+  ["app-shares", (scope, { ctx }) => registerAppShareRoutes(scope, ctx)],
   ["approvals", (scope, { ctx, scheduler }) => registerApprovalRoutes(scope, ctx, scheduler)],
   ["board", (scope, { ctx }) => registerBoardRoutes(scope, ctx)],
   ["budgets", (scope, { ctx, scheduler }) => registerBudgetRoutes(scope, ctx, scheduler)],
@@ -102,6 +107,10 @@ export const OPERATOR_ROUTE_FAMILIES: ReadonlyArray<readonly [name: string, Regi
   ["limits", (scope, { ctx }) => registerLimitRoutes(scope, ctx)],
   ["members", (scope, { ctx }) => registerMemberRoutes(scope, ctx)],
   ["memory", (scope, { ctx, scheduler }) => registerMemoryRoutes(scope, ctx, scheduler)],
+  [
+    "memory-maintenance",
+    (scope, { ctx, scheduler }) => registerMemoryMaintenanceRoutes(scope, ctx, scheduler),
+  ],
   ["memory-suggestions", (scope, { ctx }) => registerMemorySuggestionRoutes(scope, ctx)],
   ["model-jobs", (scope, { ctx, scheduler }) => registerModelJobRoutes(scope, ctx, scheduler)],
   ["network", (scope, { ctx }) => registerNetworkRoutes(scope, ctx)],
@@ -113,6 +122,7 @@ export const OPERATOR_ROUTE_FAMILIES: ReadonlyArray<readonly [name: string, Regi
   ["registry", (scope, { ctx, scheduler }) => registerRegistryRoutes(scope, ctx, scheduler)],
   ["run-cancel", (scope, { ctx, scheduler }) => registerRunCancelRoutes(scope, ctx, scheduler)],
   ["run-context", (scope, { ctx }) => registerRunContextRoutes(scope, ctx)],
+  ["run-timeline", (scope, { ctx }) => registerRunTimelineRoutes(scope, ctx)],
   ["runs", (scope, { ctx }) => registerRunRoutes(scope, ctx)],
   ["runtime", (scope, { ctx }) => registerRuntimeRoutes(scope, ctx)],
   ["screens", (scope, { ctx }) => registerScreenRoutes(scope, ctx)],
@@ -128,6 +138,7 @@ export const OPERATOR_ROUTE_FAMILIES: ReadonlyArray<readonly [name: string, Regi
   ["threads", (scope, { ctx, scheduler }) => registerThreadRoutes(scope, ctx, scheduler)],
   ["trash", (scope, { ctx, scheduler }) => registerTrashRoutes(scope, ctx, scheduler)],
   ["webhook-token", (scope, { ctx }) => registerWebhookTokenRoute(scope, ctx)],
+  ["workdir", (scope, { ctx }) => registerWorkdirRoutes(scope, ctx)],
   ["workspaces", (scope, { ctx, scheduler }) => registerWorkspaceRoutes(scope, ctx, scheduler)],
 ];
 

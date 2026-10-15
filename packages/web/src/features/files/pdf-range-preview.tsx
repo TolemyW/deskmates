@@ -1,10 +1,12 @@
 import { WORKSPACE_FILE_RANGE_BYTES } from "@deskmates/contracts";
+import { ZoomIn, ZoomOut } from "lucide-react";
 import type { PDFDataRangeTransport, PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { currentI18n } from "../../i18n/intl.js";
+import { PDF_ZOOM_STEPS, parsePageNumber, pdfCanvasScale, stepZoom } from "./preview-zoom.js";
 import type {
   WorkspaceFileRange,
   WorkspaceFileRangeReader,
@@ -103,6 +105,10 @@ export function PdfRangePreview({
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(0);
   const [busy, setBusy] = useState(true);
+  // Zoom is a share of the fitted width (ADR-0014 amendment A6 decision 38).
+  const [zoom, setZoom] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
+  const [pageInvalid, setPageInvalid] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -159,14 +165,15 @@ export function PdfRangePreview({
       .then((pdfPage) => {
         if (!live) return;
         const base = pdfPage.getViewport({ scale: 1 });
-        const available = target.parentElement?.clientWidth ?? base.width;
-        const cssScale = Math.min(1.5, Math.max(0.25, available / base.width));
+        const available = target.parentElement?.clientWidth || base.width;
+        const cssScale = Math.min(1.5, Math.max(0.25, available / base.width)) * zoom;
         const ratio = Math.min(window.devicePixelRatio || 1, 2);
-        const viewport = pdfPage.getViewport({ scale: cssScale * ratio });
+        const scale = pdfCanvasScale(base.width, base.height, cssScale, ratio);
+        const viewport = pdfPage.getViewport({ scale });
         target.width = Math.ceil(viewport.width);
         target.height = Math.ceil(viewport.height);
-        target.style.width = `${Math.ceil(viewport.width / ratio)}px`;
-        target.style.height = `${Math.ceil(viewport.height / ratio)}px`;
+        target.style.width = `${Math.ceil(base.width * cssScale)}px`;
+        target.style.height = `${Math.ceil(base.height * cssScale)}px`;
         const context = target.getContext("2d", { alpha: false });
         if (!context) throw new Error(currentI18n().t("workspaceFilePreview.pdfCanvasUnavailable"));
         const task = pdfPage.render({
@@ -189,7 +196,18 @@ export function PdfRangePreview({
       live = false;
       renderTask.current?.cancel();
     };
-  }, [page, pages, onError]);
+  }, [page, pages, zoom, onError]);
+
+  useEffect(() => {
+    setPageInput(String(page));
+    setPageInvalid(false);
+  }, [page]);
+
+  const goToPage = () => {
+    const next = parsePageNumber(pageInput, pages);
+    setPageInvalid(next === undefined);
+    if (next !== undefined) setPage(next);
+  };
 
   return (
     <div className="workspace-file-pdf" aria-label={t("workspaceFilePreview.pdfLabel", { path })}>
@@ -201,11 +219,28 @@ export function PdfRangePreview({
         >
           {t("workspaceFilePreview.previousPage")}
         </Button>
-        <span>
-          {pages > 0
-            ? t("workspaceFilePreview.pageCount", { page, pages })
-            : t("workspaceFilePreview.loading")}
-        </span>
+        {pages > 0 ? (
+          <form
+            className="workspace-file-pdf-page"
+            onSubmit={(event) => {
+              event.preventDefault();
+              goToPage();
+            }}
+          >
+            <input
+              type="text"
+              inputMode="numeric"
+              aria-label={t("workspaceFilePreview.pageInput", { pages })}
+              aria-invalid={pageInvalid}
+              value={pageInput}
+              onChange={(event) => setPageInput(event.target.value)}
+              onBlur={goToPage}
+            />
+            <span>{t("workspaceFilePreview.pageCount", { page, pages })}</span>
+          </form>
+        ) : (
+          <span>{t("workspaceFilePreview.loading")}</span>
+        )}
         <Button
           type="button"
           disabled={busy || pages === 0 || page === pages}
@@ -213,8 +248,42 @@ export function PdfRangePreview({
         >
           {t("workspaceFilePreview.nextPage")}
         </Button>
+        <span
+          className="workspace-file-zoom"
+          role="toolbar"
+          aria-label={t("workspaceFilePreview.zoom")}
+        >
+          <Button
+            type="button"
+            aria-label={t("workspaceFilePreview.zoomOut")}
+            disabled={zoom === PDF_ZOOM_STEPS[0]}
+            onClick={() => setZoom((value) => stepZoom(PDF_ZOOM_STEPS, value, -1))}
+          >
+            <ZoomOut size={16} aria-hidden="true" />
+          </Button>
+          <output>
+            {zoom === 1
+              ? t("workspaceFilePreview.zoomFitWidth")
+              : t("workspaceFilePreview.zoomPercent", { percent: Math.round(zoom * 100) })}
+          </output>
+          <Button
+            type="button"
+            aria-label={t("workspaceFilePreview.zoomIn")}
+            disabled={zoom === PDF_ZOOM_STEPS.at(-1)}
+            onClick={() => setZoom((value) => stepZoom(PDF_ZOOM_STEPS, value, 1))}
+          >
+            <ZoomIn size={16} aria-hidden="true" />
+          </Button>
+        </span>
       </div>
-      <canvas ref={canvas} aria-label={t("workspaceFilePreview.pdfPageLabel", { page })} />
+      {pageInvalid ? (
+        <p role="alert" className="small">
+          {t("workspaceFilePreview.pageInvalid", { pages })}
+        </p>
+      ) : null}
+      <div className="workspace-file-pdf-canvas">
+        <canvas ref={canvas} aria-label={t("workspaceFilePreview.pdfPageLabel", { page })} />
+      </div>
     </div>
   );
 }

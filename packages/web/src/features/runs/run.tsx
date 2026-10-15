@@ -33,6 +33,7 @@ import { initialRunView, runViewReducer } from "../../state/run-view.js";
 import { RoleNote, useCan, useCanInOwnSideChat } from "../../state/session-roles.js";
 import { RunContextPanel } from "./run-context-panel.js";
 import { RunEventRow } from "./run-event-row.js";
+import { RunTimelinePanel } from "./run-timeline.js";
 
 /** A run's status as the pill shows it; the English is the status code itself. */
 const RUN_STATUS_LABEL: Readonly<Record<RunStatus, MessageKey>> = {
@@ -227,8 +228,9 @@ function RunScreenContent(props: RunScreenProps) {
   useEffect(() => {
     let cancelled = false;
     if (hasEvidence && evidenceBotId) {
+      // #113 §3.2: the one bot this run names, not the whole roster.
       void api
-        .listBots()
+        .listBotsByIds([evidenceBotId])
         .then((bots) => {
           if (!cancelled)
             setEvidenceWorkspace(bots.find((bot) => bot.id === evidenceBotId)?.workspaceId);
@@ -430,6 +432,12 @@ function RunScreenContent(props: RunScreenProps) {
             canContinue={canContinue.allowed}
             onRunChanged={(updated) => dispatch({ type: "run_status", run: updated })}
           />
+        </details>
+      ) : null}
+      {run ? (
+        <details className="run-metadata">
+          <summary>{t("runTimeline.heading")}</summary>
+          <RunTimelinePanel api={api} run={run} />
         </details>
       ) : null}
       <h3>

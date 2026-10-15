@@ -13,6 +13,7 @@ import {
 import { describe, expect, it } from "vitest";
 import type { DockerClient } from "./docker-client.js";
 import {
+  APP_RELAY_KEY_ENV,
   DockerProvider,
   EGRESS_OUTBOUND_NETWORK,
   EGRESS_PROXY_ROLE,
@@ -36,6 +37,8 @@ interface Stub {
   onStdin?: (chunk: string) => void;
   proxyPorts?: Record<string, { HostIp: string; HostPort: string }[]>;
   proxyHostTarget?: string;
+  /** Extra variables in the proxy container's environment. */
+  proxyEnv?: string[];
   /**
    * Start the managed proxy stopped, the way a real daemon reports one: no network address and
    * no published ports until it is started. `POST /containers/proxy1/start` flips it.
@@ -88,6 +91,7 @@ function stubClient(client: DockerClient, stub: Stub): Call[] {
               Env: [
                 `DESKMATES_HOST_TARGET=${stub.proxyHostTarget ?? "host.docker.internal"}`,
                 "DESKMATES_HOST_FALLBACK_IP=172.31.0.1",
+                ...(stub.proxyEnv ?? []),
               ],
               Labels: managedLabels(proxyWorkspace),
             },
@@ -608,8 +612,10 @@ describe("DockerProvider workspace isolation (ADR-0006)", () => {
     });
     // A container/daemon restart must never resurrect the creation-time policy. Startup is
     // deny-all and create reloads the requested policy before it starts the workspace.
+    // The app relay key is infrastructure, not policy (ADR-0035 decision 4).
     expect(proxyCreate.Env).toEqual([
       "DESKMATES_SCREEN_TARGET=deskmates-ws-ws1",
+      expect.stringMatching(/^DESKMATES_APP_RELAY_KEY=[0-9a-f]{32}$/),
       "DESKMATES_HOST_TARGET=host.docker.internal",
       "DESKMATES_HOST_FALLBACK_IP=172.31.0.1",
     ]);
@@ -1285,6 +1291,66 @@ it.each([false, true])(
     expect(handle.botScreenAddresses?.length).toBe(capable ? 6 : undefined);
   },
 );
+
+describe("app relay (ADR-0035 decision 4)", () => {
+  const create = async (proxyEnv: string[], proxyPorts: NonNullable<Stub["proxyPorts"]>) => {
+    const provider = newProvider();
+    const calls = stubClient(provider.client, {
+      proxyPorts,
+      proxyEnv,
+      expect: (_method, path) => {
+        if (path !== "/containers/c1/json") throw new Error(`unexpected ${path}`);
+        return inspectOf("c1");
+      },
+      request: (_method, path) =>
+        path.startsWith("/containers/create")
+          ? { status: 201, body: JSON.stringify({ Id: "c1" }) }
+          : { status: 204, body: "" },
+    });
+    const handle = await provider.create({
+      workspaceId: WS,
+      image: "img",
+      env: {},
+      volumes: {},
+      ports: [],
+      egressAllowlist: [],
+    });
+    return { calls, handle };
+  };
+  const relayPorts = { "6090/tcp": [{ HostIp: "127.0.0.1", HostPort: "49190" }] };
+
+  it("publishes the relay from the proxy with a fresh key and nothing from the workspace", async () => {
+    const { calls } = await create([], relayPorts);
+    const bodies = calls
+      .filter((c) => c.method === "POST" && c.path.startsWith("/containers/create"))
+      .map((c) => ({
+        path: c.path,
+        body: c.body as { Env: string[]; HostConfig: { PortBindings: Record<string, unknown> } },
+      }));
+    const proxy = bodies.find((b) => b.path.includes("deskmates-egress-"))?.body;
+    const workspace = bodies.find((b) => b.path.includes("deskmates-ws-"))?.body;
+    expect(proxy?.HostConfig.PortBindings["6090/tcp"]).toEqual([
+      { HostIp: "127.0.0.1", HostPort: "" },
+    ]);
+    expect(proxy?.Env.find((e: string) => e.startsWith(`${APP_RELAY_KEY_ENV}=`))).toMatch(
+      /^DESKMATES_APP_RELAY_KEY=[0-9a-f]{32}$/,
+    );
+    expect(workspace?.HostConfig.PortBindings).toEqual({});
+  });
+
+  it("hands the Gateway the relay address and key read back from the proxy", async () => {
+    const key = "ab".repeat(16);
+    const { handle } = await create([`${APP_RELAY_KEY_ENV}=${key}`], relayPorts);
+    expect(handle.appRelayAddress).toBe("127.0.0.1:49190");
+    expect(handle.appRelayKey).toBe(key);
+  });
+
+  it("reports no relay for a proxy from before the relay existed", async () => {
+    const { handle } = await create([], {});
+    expect(handle.appRelayAddress).toBeUndefined();
+    expect(handle.appRelayKey).toBeUndefined();
+  });
+});
 
 describe("DockerProvider tenant ownership labels (ADR-0022 DOCKER-01)", () => {
   it("labels the workspace container, its proxy and its network with the owning tenant", async () => {

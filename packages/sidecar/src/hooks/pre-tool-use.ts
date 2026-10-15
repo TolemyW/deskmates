@@ -74,7 +74,13 @@ import {
   targetUrl,
   toToolAction,
 } from "../tool-action.js";
-import { imageReadNotice, isImagePath, withholdsImages } from "../vision-withhold.js";
+import {
+  imageReadNotice,
+  isImagePath,
+  isPdfPath,
+  pdfReadNotice,
+  withholdsImages,
+} from "../vision-withhold.js";
 
 /** Display-only facts the hook adds to a posted action (ADR-0002 amendment 3, A5). */
 type ActionLabels = Pick<ToolAction, "agentType" | "unclassified">;
@@ -143,9 +149,13 @@ function defer(reason: string): HookJSONOutput {
 }
 
 /** Turn a human's decision into the hook's answer; the same for a replay and for its retry. */
-function applyDecision(approvalId: ApprovalId, decision: ApprovalDecision): HookJSONOutput {
+function applyDecision(
+  approvalId: ApprovalId,
+  decision: ApprovalDecision,
+  reason?: string,
+): HookJSONOutput {
   const allowed = decision === "allow_once" || decision === "allow_always";
-  return allowed ? allow() : deny(`Denied by human (approval ${approvalId})`);
+  return allowed ? allow() : deny(reason ?? `Denied by human (approval ${approvalId})`);
 }
 
 /**
@@ -169,6 +179,8 @@ function asRecord(input: unknown): Record<string, unknown> {
 
 export function createPreToolUseHook(ctx: HookContext): HookCallback {
   const { request, client, sink, state } = ctx;
+  // ADR-0002 amendment 5: the run's frozen browser-code tier policy; absent is `name-v1`.
+  const tierOptions = { browserCode: request.browserCodeApproval };
 
   /**
    * The workspace's egress allowlist as this hook last saw it. It starts as the copy the run was
@@ -244,7 +256,8 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
     // The labels are display only (ADR-0002 amendment 3, A5): they ride on the posted action and
     // the ledger event, and never enter a rule's dimensions.
     const action: ToolAction = {
-      ...(actionOverride ?? toToolAction(toolName, input, { currentOrigin: state.currentOrigin })),
+      ...(actionOverride ??
+        toToolAction(toolName, input, { currentOrigin: state.currentOrigin, ...tierOptions })),
       ...labels,
     };
 
@@ -256,6 +269,7 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
         approvalId: decided.approvalId,
         decision: decided.decision,
         deferredAction: decided.deferredAction,
+        reason: decided.reason,
         toolUseId,
       };
       sink.emit("approval", {
@@ -267,7 +281,7 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
         riskLevel,
         decision: decided.decision,
       });
-      return applyDecision(decided.approvalId, decided.decision);
+      return applyDecision(decided.approvalId, decided.decision, decided.reason);
     }
 
     // The replayed call failed, most often on a `ref` from the old process's snapshot. The first
@@ -287,7 +301,7 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
         riskLevel,
         decision: retry.decision,
       });
-      return applyDecision(retry.approvalId, retry.decision);
+      return applyDecision(retry.approvalId, retry.decision, retry.reason);
     }
 
     const approvalId = randomUUID() as ApprovalId;
@@ -587,6 +601,18 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
       });
       return deny(imageReadNotice(input.file_path));
     }
+    // Amendment 3, decision 15: a PDF reaches the model as page images, so it is withheld too.
+    if (toolName === READ_TOOL && withholdsImages(request) && isPdfPath(input.file_path)) {
+      sink.emit("log", {
+        source: "vision",
+        op: "image_withheld",
+        toolName,
+        toolUseId,
+        path: input.file_path,
+        media: "application/pdf",
+      });
+      return deny(pdfReadNotice(input.file_path));
+    }
 
     // A call that cannot reach the network never asks the Gateway anything: the refresh is one
     // round trip per navigation check, not one per tool call.
@@ -767,7 +793,7 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
       );
 
     // (d) risk tier. A tool in no table is L2 and labelled `unclassified` (ADR-0002 amendment 3, A5).
-    const tier = classifyTool(toolName, input);
+    const tier = classifyTool(toolName, input, tierOptions);
     if (tier.level !== "L2") return allow();
     return decideL2(
       toolName,

@@ -26,6 +26,7 @@ export const runsRoutePolicies: PolicyTable = {
       "below Admin (Member or member principal) cancels only the runs it started (run_not_started_by_you)",
   }),
   "GET /api/runs/:id/context": member({ params: { id: "run" } }),
+  "GET /api/runs/:id/timeline": member({ params: { id: "run" } }),
   "POST /api/runs/:id/continuation/decide": member({
     params: { id: "run" },
     handlerCheck:

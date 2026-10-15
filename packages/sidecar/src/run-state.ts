@@ -5,6 +5,8 @@ import type { ApprovalDecision, ApprovalId, DeferredAction } from "@deskmates/co
 export interface PendingDecision {
   approvalId: ApprovalId;
   decision: ApprovalDecision;
+  /** The deny reason the Gateway recorded (an expiry says so, ADR-0002 amendment 3, A7). */
+  reason?: string | undefined;
   /**
    * SDK tool-use id of the call the decision is for. The hook applies the decision only to the
    * replayed call with this id; when it is absent or does not match, the replayed call is judged
@@ -23,6 +25,7 @@ export interface PendingDecision {
 export interface ConsumedDecision {
   approvalId: ApprovalId;
   decision: ApprovalDecision;
+  reason?: string | undefined;
   deferredAction: DeferredAction | undefined;
   /** Tool-use id of the replayed call whose result decides whether the retry may have it. */
   toolUseId: string;
@@ -32,6 +35,7 @@ export interface ConsumedDecision {
 export interface RetryDecision {
   approvalId: ApprovalId;
   decision: ApprovalDecision;
+  reason?: string | undefined;
   deferredAction: DeferredAction;
   /** Tool-use id of the replayed call, so the ledger names both calls. */
   replayedToolUseId: string;

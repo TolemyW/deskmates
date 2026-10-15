@@ -549,6 +549,47 @@
       "notified": 0
     }
   },
+  "listBotsByIds": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/bots?ids=bot%2F1%2Cbot%2F2",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": [
+        "<bots>"
+      ]
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/bots?ids=bot%2F1%2Cbot%2F2 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
   "listModelCapabilities": {
     "requests": [
       {

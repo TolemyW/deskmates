@@ -74,6 +74,8 @@ export interface MemoryEntry {
   /** Topic tag key and label (amendment 3, A20); absent until computed or when there is none. */
   topic?: string;
   topicLabel?: string;
+  /** Present when the topic is a model label (amendment 4, A31); absent for the A20 rule. */
+  topicSource?: "model";
 }
 
 export type MemoryVersionOp =

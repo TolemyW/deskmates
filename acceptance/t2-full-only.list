@@ -21,6 +21,7 @@ acceptance/m4-model-selection.container.test.ts     ADR-0023 proxy refusal, rewr
 acceptance/m4-tenancy.container.test.ts                  ADR-0022 two-tenant labels, attach refusal, files, desktop and restart; changes only with tenancy
 acceptance/m4-turn-exhaustion.container.test.ts           ADR-0016 turn warning, waiting_continuation park, bot continue resume and outcome notice; changes only with the turn budget path
 packages/connector-postgres/src/service.container.test.ts connector against real PostgreSQL 16; package-level, changes only with the connector
+packages/sandbox-docker/src/app-share.container.test.ts   ADR-0035 app relay round trip on node:22-alpine; changes only with the relay or the provider
 packages/sandbox-docker/src/docker-provider.container.test.ts DockerProvider against alpine; package-level, changes only with the provider
 packages/sandbox-docker/src/workspace-image.container.test.ts image contents, pins and restart behaviour; changes only with the image, which CI smoke-builds
 packages/sidecar/src/sdk-shape.container.test.ts          fake SDK vs real SDK call shape (needs a model) and the ADR-0015 skill filter (loopback upstream)

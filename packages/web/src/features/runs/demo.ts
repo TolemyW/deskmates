@@ -1,7 +1,12 @@
 // Demo routes of the run drawer: run lists, detail with usage, events, context metrics, cancel
 // (only the named run, issue #76) and the continue-or-stop decision.
 
-import { type RunContextMetrics, type RunId, isTerminal } from "@deskmates/contracts";
+import {
+  type RunContextMetrics,
+  type RunId,
+  buildRunTimeline,
+  isTerminal,
+} from "@deskmates/contracts";
 import type { RunView } from "../../api/types.js";
 import type { DemoFeature, DemoRequest } from "../../demo/feature.js";
 import { type Result, notFound, ok } from "../../demo/result.js";
@@ -96,6 +101,22 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
       },
     };
     return ok(metrics);
+  }
+  // biome-ignore lint/suspicious/noAssignInExpressions: route matching
+  if ((x = m(/^\/api\/runs\/([^/]+)\/timeline$/))) {
+    const run = s.runs.get(decodeURIComponent(x[1] ?? "") as RunId);
+    if (!run) return notFound("run");
+    // The demo records no timeline marks, so every process stage reads "not observed".
+    return ok(
+      buildRunTimeline({
+        runId: run.id,
+        status: run.status,
+        attempt: run.attempt ?? 1,
+        createdAt: run.createdAt,
+        finishedAt: run.finishedAt ?? null,
+        events: s.events.get(run.id) ?? [],
+      }),
+    );
   }
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
   if (method === "POST" && (x = m(/^\/api\/runs\/([^/]+)\/cancel$/))) {

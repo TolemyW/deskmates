@@ -16,6 +16,10 @@ import {
   type WorkspaceId,
 } from "@deskmates/contracts";
 
+/** Where an `ensure` found its sandbox: the cached handle, an existing container, a new one. */
+export type SandboxOrigin = "cached" | "attached" | "created";
+export type SandboxOriginObserver = (origin: SandboxOrigin) => void;
+
 export class SandboxRegistry {
   private readonly policies = new Map<string, Promise<unknown>>();
 
@@ -63,16 +67,20 @@ export class SandboxRegistry {
     private readonly grantsOf: (id: WorkspaceId) => readonly NetworkGrant[] = () => [],
   ) {}
 
-  ensure(workspace: Workspace): Promise<SandboxHandle> {
+  /** `observe` learns where the handle came from (ADR-0037 timeline: cold or warm start). */
+  ensure(workspace: Workspace, observe?: SandboxOriginObserver): Promise<SandboxHandle> {
     return this.exclusive(workspace.id, () =>
-      this.ensureUnlocked(this.latestWorkspace(workspace.id)),
+      this.ensureUnlocked(this.latestWorkspace(workspace.id), observe),
     );
   }
 
-  private ensureUnlocked(workspace: Workspace): Promise<SandboxHandle> {
+  private ensureUnlocked(
+    workspace: Workspace,
+    observe?: SandboxOriginObserver,
+  ): Promise<SandboxHandle> {
     const cached = this.handles.get(workspace.id);
-    if (cached) return this.reapplyPolicy(workspace, cached);
-    const pending = this.open(workspace).catch((err) => {
+    if (cached) return this.reapplyPolicy(workspace, cached, observe);
+    const pending = this.open(workspace, observe).catch((err) => {
       this.handles.delete(workspace.id);
       throw err;
     });
@@ -89,14 +97,28 @@ export class SandboxRegistry {
   private async reapplyPolicy(
     workspace: Workspace,
     cached: Promise<SandboxHandle>,
+    observe?: SandboxOriginObserver,
   ): Promise<SandboxHandle> {
     const handle = await cached;
+    try {
+      // ADR-0027 amendment 2 decision 16: the topology attach would accept, or reattach, whose
+      // refusal then stands. A network added to a running workspace by hand stops here.
+      await this.provider.verifyTopology?.(handle);
+    } catch (err) {
+      this.log("reopening workspace sandbox: its network topology changed since attach", {
+        workspaceId: workspace.id,
+        error: String(err),
+      });
+      this.handles.delete(workspace.id);
+      return this.ensureUnlocked(workspace);
+    }
     try {
       await this.provider.updateEgress(
         handle,
         workspace.egressAllowlist,
         this.grantsOf(workspace.id),
       );
+      observe?.("cached");
       return handle;
     } catch (err) {
       this.log("reopening workspace sandbox: reapplying its egress policy failed", {
@@ -104,7 +126,7 @@ export class SandboxRegistry {
         error: String(err),
       });
       this.handles.delete(workspace.id);
-      return this.ensureUnlocked(workspace);
+      return this.ensureUnlocked(workspace, observe);
     }
   }
 
@@ -220,7 +242,10 @@ export class SandboxRegistry {
    * builds the sandbox exactly like a fresh one: the current allowlist, new screen credentials.
    * A configured image that is not present fails closed before anything is removed.
    */
-  private async open(workspace: Workspace): Promise<SandboxHandle> {
+  private async open(
+    workspace: Workspace,
+    observe?: SandboxOriginObserver,
+  ): Promise<SandboxHandle> {
     const spec = this.spec(workspace);
     // The replacement preflight guards only destructive or creating paths: a stale-image
     // removal (inside the provider, before it removes anything) and a create. A healthy current
@@ -262,10 +287,13 @@ export class SandboxRegistry {
         workspace.egressAllowlist,
         this.grantsOf(workspace.id),
       );
+      observe?.("attached");
       return existing;
     }
     if (!preflighted) await this.provider.preflight(spec);
-    return this.provider.create(spec);
+    const created = await this.provider.create(spec);
+    observe?.("created");
+    return created;
   }
 
   private spec(workspace: Workspace): SandboxSpec {

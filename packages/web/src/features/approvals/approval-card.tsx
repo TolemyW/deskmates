@@ -76,6 +76,9 @@ export function decisionLabel(
     approval.decidedBy
       ? t("approvalCard.decision.by", { verb, who: label(approval.decidedBy) })
       : verb;
+  // ADR-0002 amendment 3, A7: nobody denied an expired request, so no "by" either.
+  if (approval.decidedBy === "system:expiry" && approval.kind !== "continuation")
+    return t("approvalCard.decision.expired");
   if (approval.kind === "egress") {
     return by(
       approval.decision === "allow_always"

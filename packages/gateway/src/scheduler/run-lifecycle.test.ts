@@ -56,6 +56,7 @@ describe("maxTurns as a Gateway knob", () => {
     const run = posted.json.runs[0] as RunRecord;
     expect(run.config.maxTurns).toBe(7);
     expect(run.config.browserSnapshotMode).toBe("explicit-v1");
+    expect(run.config.browserCodeApproval).toBe("name-v1");
     await waitFor(
       () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "succeeded",
       3000,
@@ -63,10 +64,12 @@ describe("maxTurns as a Gateway knob", () => {
     );
     expect(h.provider.execCalls[0]?.request.maxTurns).toBe(7);
     expect(h.provider.execCalls[0]?.request.browserSnapshotMode).toBeUndefined();
+    expect(h.provider.execCalls[0]?.request).not.toHaveProperty("browserCodeApproval");
   });
 
   it("travels with a thread-less trigger too", async () => {
     h.app.deskmates.ctx.config.browserSnapshotMode = "inline-v2";
+    h.app.deskmates.ctx.config.browserCodeApproval = "effects-v1";
     const { bot } = await h.seed();
     h.provider.onRun(async (req, gw) => {
       await gw.post("ended", {
@@ -94,6 +97,7 @@ describe("maxTurns as a Gateway knob", () => {
     });
     expect(run.config.maxTurns).toBe(7);
     h.app.deskmates.ctx.config.browserSnapshotMode = "explicit-v1";
+    h.app.deskmates.ctx.config.browserCodeApproval = "name-v1";
     h.app.deskmates.scheduler.kick();
     await waitFor(
       () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "succeeded",
@@ -103,6 +107,9 @@ describe("maxTurns as a Gateway knob", () => {
     expect(h.provider.execCalls[0]?.request.maxTurns).toBe(7);
     expect(run.config.browserSnapshotMode).toBe("inline-v2");
     expect(h.provider.execCalls[0]?.request.browserSnapshotMode).toBe("inline-v2");
+    // ADR-0002 amendment 5: the run row's policy, not the Gateway's current one, is sent.
+    expect(run.config.browserCodeApproval).toBe("effects-v1");
+    expect(h.provider.execCalls[0]?.request.browserCodeApproval).toBe("effects-v1");
   });
 });
 
@@ -670,5 +677,135 @@ describe("the bot working-directory knob travels with the run", () => {
     });
     await waitFor(() => h.app.deskmates.ctx.runs.mustGet(run.id).attempt === 2, 3000, "resumed");
     expect(h.provider.execCalls.at(-1)?.request.workdirMode).toBe("per-bot");
+  });
+});
+
+/**
+ * ADR-0036 decisions 3 and 6: a workspace's stored settings win over the Gateway knob, are frozen
+ * on the run's first process and sent unchanged on a resume; the lane notice names the bot's live
+ * run on its other lane.
+ */
+describe("workspace working-directory settings freeze at first start", () => {
+  const finish: Parameters<Harness["provider"]["onRun"]>[0] = async (req, gw) => {
+    await gw.post("ended", {
+      type: "run_ended",
+      runId: req.runId,
+      outcome: "completed",
+      summary: {
+        done: "ok",
+        filesChanged: [],
+        sitesVisited: [],
+        pendingApprovals: [],
+        memorySuggestions: [],
+        reply: "ok",
+      },
+      usage: [],
+    });
+  };
+
+  it("sends the workspace's mode and repository, frozen across a resume", async () => {
+    const { workspace, thread } = await h.seed();
+    h.app.deskmates.ctx.workdir.set(
+      workspace.id,
+      { mode: "per-bot", worktreeRepo: "/work/app" },
+      "user:qa",
+    );
+    let attempt = 0;
+    h.provider.onRun(async (req, gw) => {
+      attempt += 1;
+      if (attempt > 1) return finish(req, gw);
+      await gw.post("approvals", {
+        type: "approval_request",
+        runId: req.runId,
+        approvalId: "apr_worktree",
+        action: {
+          toolName: "Bash",
+          input: { command: "git push origin main" },
+          argumentSummary: "git push origin main",
+          argumentPattern: "git push*",
+        },
+        riskLevel: "L2",
+        toolUseId: "toolu_1",
+      });
+      await gw.post("ended", {
+        type: "run_ended",
+        runId: req.runId,
+        outcome: "deferred",
+        sdkSessionId: "sess-1",
+        pendingApprovalId: "apr_worktree",
+        pendingToolUseId: "toolu_1",
+        usage: [],
+      });
+    });
+    const posted = await h.api<{ runs: RunRecord[] }>(
+      "POST",
+      `/api/threads/${thread.id}/messages`,
+      { body: "push it" },
+    );
+    const run = posted.json.runs[0] as RunRecord;
+    await waitFor(
+      () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "waiting_approval",
+      3000,
+      "parked",
+    );
+    expect(h.provider.execCalls[0]?.request).toMatchObject({
+      workdirMode: "per-bot",
+      worktreeRepo: "/work/app",
+    });
+    expect(h.provider.execCalls[0]?.request).not.toHaveProperty("otherLaneRun");
+    expect(h.app.deskmates.ctx.runs.mustGet(run.id).config).toMatchObject({
+      botWorkdir: "per-bot",
+      botWorkdirSource: "workspace",
+      worktreeRepo: "/work/app",
+      laneNotice: false,
+      workdirVersion: 1,
+    });
+    h.app.deskmates.ctx.workdir.set(workspace.id, { mode: null, worktreeRepo: null }, "user:qa");
+    await h.api("POST", "/api/approvals/apr_worktree/decide", {
+      decision: "allow_once",
+      decidedBy: "human:qa",
+    });
+    await waitFor(() => h.app.deskmates.ctx.runs.mustGet(run.id).attempt === 2, 3000, "resumed");
+    expect(h.provider.execCalls.at(-1)?.request).toMatchObject({
+      workdirMode: "per-bot",
+      worktreeRepo: "/work/app",
+    });
+  });
+
+  it("lane notice: names the bot's live background run to its interactive run", async () => {
+    const { workspace, bot, thread } = await h.seed();
+    h.app.deskmates.ctx.workdir.set(workspace.id, { laneNotice: true }, "user:qa");
+    h.provider.onRun(finish);
+    const background = h.app.deskmates.ctx.runs.create({
+      botId: bot.id,
+      lane: "background",
+      triggerKind: "cron",
+      triggerRef: "cron_lane",
+      triggerPayload: { prompt: "nightly" },
+      config: h.app.deskmates.ctx.runConfig(),
+    });
+    h.app.deskmates.ctx.db
+      .prepare("UPDATE runs SET status = 'running', started_at = ? WHERE id = ?")
+      .run("2026-10-14T08:00:00.000Z", background.id);
+    const posted = await h.api<{ runs: RunRecord[] }>(
+      "POST",
+      `/api/threads/${thread.id}/messages`,
+      { body: "x" },
+    );
+    const run = posted.json.runs[0] as RunRecord;
+    await waitFor(
+      () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "succeeded",
+      3000,
+      "run",
+    );
+    const request = h.provider.execCalls.find((c) => c.request.runId === run.id)?.request;
+    expect(request?.otherLaneRun).toEqual({
+      runId: background.id,
+      lane: "background",
+      triggerKind: "cron",
+      startedAt: "2026-10-14T08:00:00.000Z",
+    });
+    // The lane notice alone changes no directory.
+    expect(request).not.toHaveProperty("workdirMode");
   });
 });

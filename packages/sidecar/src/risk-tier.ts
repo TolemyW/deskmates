@@ -3,8 +3,22 @@
 // effect. Unknown tools are L2: the safe default is to ask.
 
 import path from "node:path";
-import type { RiskLevel } from "@deskmates/contracts";
+import type { BrowserCodeApproval, RiskLevel } from "@deskmates/contracts";
+import {
+  type BrowserCodeEffect,
+  browserCodeEffects,
+  browserToolCode,
+  playwrightCliEffects,
+} from "./browser-code-effects.js";
 import { basename, shellArgvs, unwrapArgv } from "./shell-words.js";
+
+/**
+ * Policy knobs of the tier function, frozen per run. `browserCode` (ADR-0002 amendment 5):
+ * absent or `name-v1` tiers browser code by tool name, `effects-v1` by its effects.
+ */
+export interface TierOptions {
+  browserCode?: BrowserCodeApproval | undefined;
+}
 
 /** Where the workspace's shared files live; writes elsewhere are not reversible by the run. */
 export const WORK_DIR = "/work";
@@ -344,10 +358,15 @@ function gitSubcommand(args: readonly string[]): string | undefined {
 }
 
 /** Whether one simple command (an argv) is destructive or reaches outside the workspace. */
-function argvIsL2(argv: readonly string[]): boolean {
+function argvIsL2(argv: readonly string[], opts: TierOptions): boolean {
   // Wrappers that matter by themselves, wherever they sit in the argv.
   if (argv.some((w) => basename(w) === "sudo")) return true;
   const cmd = unwrapArgv(argv);
+  // ADR-0002 amendment 5, C1 and C3: Playwright CLI code and its L2-mirroring subcommands.
+  if (opts.browserCode === "effects-v1") {
+    const effects = playwrightCliEffects(cmd, SIDE_EFFECT_PHRASES);
+    if (effects !== undefined && effects.length > 0) return true;
+  }
   const name = basename(cmd[0] ?? "");
   const args = cmd.slice(1);
   switch (name) {
@@ -377,8 +396,8 @@ function argvIsL2(argv: readonly string[]): boolean {
  * are honoured, so `curl -sSd x`, `rm -r -f`, `git -C /work push` and `$(git push)` all rate L2
  * while `echo 'git push'` stays L1.
  */
-function shellIsL2(command: string): boolean {
-  return shellArgvs(command).some(argvIsL2);
+function shellIsL2(command: string, opts: TierOptions): boolean {
+  return shellArgvs(command).some((argv) => argvIsL2(argv, opts));
 }
 
 /** Connector tools that only read: capabilities, a dry validation, a receipt (ADR-0012 item 6). */
@@ -427,6 +446,8 @@ export function isIntegrationExecute(toolName: string): boolean {
  */
 const DESKMATES_READ_TOOLS = new Set(["knowledge_search", "knowledge_read", "memory_search"]);
 const DESKMATES_WRITE_TOOLS = new Set([
+  // ADR-0035 decision 1: a Gateway record whose audience is the workspace's signed-in members.
+  "app_publish",
   "thread_post",
   "message_bot",
   "approval_decide",
@@ -548,7 +569,37 @@ function ttyShellLine(input: Record<string, unknown>): string | undefined {
   return line;
 }
 
-function tableTier(toolName: string, input: Record<string, unknown>): RiskLevel {
+/**
+ * The effect labels of a browser code call under `effects-v1` (ADR-0002 amendment 5), or
+ * undefined when the policy is off or the call is not a browser code tool. Empty means passive.
+ */
+export function browserCodeCallEffects(
+  toolName: string,
+  input: Record<string, unknown>,
+  opts: TierOptions = {},
+): BrowserCodeEffect[] | undefined {
+  if (opts.browserCode !== "effects-v1" || !isBrowserTool(toolName)) return undefined;
+  const body = browserToolCode(splitMcpToolName(toolName).tool, input);
+  return body === undefined ? undefined : browserCodeEffects(body.code, SIDE_EFFECT_PHRASES);
+}
+
+/**
+ * The effect labels of every `playwright-cli` command in a shell line under `effects-v1`, or
+ * undefined when the policy is off or the line runs no effectful one (C3, C4).
+ */
+export function shellBrowserCodeEffects(
+  command: string,
+  opts: TierOptions = {},
+): BrowserCodeEffect[] | undefined {
+  if (opts.browserCode !== "effects-v1") return undefined;
+  const labels = new Set<BrowserCodeEffect>();
+  for (const argv of shellArgvs(command))
+    for (const label of playwrightCliEffects(unwrapArgv(argv), SIDE_EFFECT_PHRASES) ?? [])
+      labels.add(label);
+  return labels.size > 0 ? [...labels].sort() : undefined;
+}
+
+function tableTier(toolName: string, input: Record<string, unknown>, opts: TierOptions): RiskLevel {
   const { server, tool } = splitMcpToolName(toolName);
 
   if (server === DESKMATES_MCP_SERVER && CONNECTOR_READ_TOOLS.has(tool)) return "L0";
@@ -565,7 +616,7 @@ function tableTier(toolName: string, input: Record<string, unknown>): RiskLevel 
       if (input.action === "resize" || input.action === "close") return "L1";
       // A5: one complete line typed into the terminal is judged like the same line given to Bash.
       const line = ttyShellLine(input);
-      if (line !== undefined) return shellIsL2(line) ? "L2" : "L1";
+      if (line !== undefined) return shellIsL2(line, opts) ? "L2" : "L1";
       return "L2";
     }
     if (DESKMATES_READ_TOOLS.has(tool)) return "L0";
@@ -577,6 +628,10 @@ function tableTier(toolName: string, input: Record<string, unknown>): RiskLevel 
     if (BROWSER_L2_TOOLS.has(tool)) return "L2";
     if (BROWSER_READ_TOOLS.has(tool)) return "L0";
     if (BROWSER_WRITE_TOOLS.has(tool)) {
+      // ADR-0002 amendment 5, C1/C2: under effects-v1, code is at least as high as the named
+      // tool with the same effect. Passive code falls through to the rules below.
+      const effects = browserCodeCallEffects(toolName, input, opts);
+      if (effects !== undefined && effects.length > 0) return "L2";
       // A click or key press that submits a form is an external side effect. The MCP click input
       // carries a human-readable `element` description; a POST form submit shows up there.
       const target = `${stringInput(input, "element", "text", "key")} ${stringInput(input, "method")}`;
@@ -589,7 +644,7 @@ function tableTier(toolName: string, input: Record<string, unknown>): RiskLevel 
   }
 
   if (SHELL_TOOLS.has(tool)) {
-    return shellIsL2(stringInput(input, "command")) ? "L2" : "L1";
+    return shellIsL2(stringInput(input, "command"), opts) ? "L2" : "L1";
   }
 
   if (FILE_WRITE_TOOLS.has(tool)) {
@@ -610,12 +665,20 @@ function tableTier(toolName: string, input: Record<string, unknown>): RiskLevel 
  * table is still L2, so a new SDK or MCP tool fails closed, but it is labelled `unclassified` so
  * the approval card and the ledger show that nobody tiered it.
  */
-export function classifyTool(toolName: string, input: Record<string, unknown>): ToolTier {
-  const level = tableTier(toolName, input);
+export function classifyTool(
+  toolName: string,
+  input: Record<string, unknown>,
+  opts: TierOptions = {},
+): ToolTier {
+  const level = tableTier(toolName, input, opts);
   if (isTabledTool(toolName)) return { level };
   return { level: "L2", unclassified: true };
 }
 
-export function riskTier(toolName: string, input: Record<string, unknown>): RiskLevel {
-  return classifyTool(toolName, input).level;
+export function riskTier(
+  toolName: string,
+  input: Record<string, unknown>,
+  opts: TierOptions = {},
+): RiskLevel {
+  return classifyTool(toolName, input, opts).level;
 }

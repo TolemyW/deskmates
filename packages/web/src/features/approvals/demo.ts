@@ -4,6 +4,7 @@
 
 import {
   APPROVAL_ATTACHMENT_MIME,
+  APPROVAL_EXPIRY_DEFAULT_MINUTES,
   type ApprovalDecision,
   type ApprovalId,
   type ApprovalRule,
@@ -18,6 +19,8 @@ export const demo: DemoFeature = { route, seed: { after: "team", run: seed } };
 
 /** The demo's automatic-approval switch per workspace (ADR-0002 amendment 4); off by default. */
 const autoApproval = new Map<string, boolean>();
+/** The demo's request expiry per workspace (ADR-0002 amendment 3, A7). */
+const approvalExpiry = new Map<string, number>();
 
 function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undefined {
   const { method, path, query: q, body: b } = req;
@@ -52,10 +55,13 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
     return ok({ deleted: true });
   }
   if (path === "/api/approvals" && method === "GET") {
-    const status = q.get("status") ?? "pending";
+    const named = q.has("ids") ? new Set((q.get("ids") ?? "").split(",")) : undefined;
+    // A chat names the approvals of its loaded messages; both states unless asked (#113, 26).
+    const status = q.get("status") ?? (named ? "all" : "pending");
     const threadId = q.get("threadId");
     const approvals = [...s.approvals.values()].filter(
       (a) =>
+        (!named || named.has(a.id)) &&
         (status === "all" ||
           (status === "pending" ? a.decision === undefined : a.decision !== undefined)) &&
         (!threadId || a.threadId === threadId),
@@ -68,8 +74,17 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
   if ((x = m(/^\/api\/workspaces\/([^/]+)\/auto-approval$/))) {
     const workspaceId = decodeURIComponent(x[1] ?? "");
-    if (method === "PUT") autoApproval.set(workspaceId, b.enabled === true);
-    return ok({ autoApproval: { workspaceId, enabled: autoApproval.get(workspaceId) ?? false } });
+    if (method === "PUT" && typeof b.enabled === "boolean")
+      autoApproval.set(workspaceId, b.enabled);
+    if (method === "PUT" && typeof b.expiryMinutes === "number")
+      approvalExpiry.set(workspaceId, b.expiryMinutes);
+    return ok({
+      autoApproval: {
+        workspaceId,
+        enabled: autoApproval.get(workspaceId) ?? false,
+        expiryMinutes: approvalExpiry.get(workspaceId) ?? APPROVAL_EXPIRY_DEFAULT_MINUTES,
+      },
+    });
   }
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
   if ((x = m(/^\/api\/approvals\/([^/]+)\/decide$/))) {

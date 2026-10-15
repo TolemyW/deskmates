@@ -250,6 +250,16 @@ function demoAssetReferences(s: DemoState, addRef: DemoAdd, bots: BotDefinition[
   add("/work/q4/report.md", said("researcher", 75), true);
   add("/home/qa/checks/regression-run.log", said("qa", 90), true);
   add("/work/data/tickets-export.parquet", said("researcher", 130), true);
+  // ADR-0014 amendment A6: a bounded CSV table with quoted cells and a config file as text.
+  if (!s.files.has("/work/data/tickets-by-region.csv"))
+    s.files.set(
+      "/work/data/tickets-by-region.csv",
+      'region,open,closed,note\nEMEA,42,310,"Includes ""priority"" queue"\nAPAC,17,198,"Tokyo, Singapore"\nAMER,29,402,\n',
+    );
+  add("/work/data/tickets-by-region.csv", said("researcher", 135), true);
+  if (!s.files.has("/work/site/deploy.yaml"))
+    s.files.set("/work/site/deploy.yaml", "service: ops-console\nreplicas: 2\nregion: emea\n");
+  add("/work/site/deploy.yaml", said("chief", 140), true);
   add(
     "/work/inbox/vendor-brief.pdf",
     {

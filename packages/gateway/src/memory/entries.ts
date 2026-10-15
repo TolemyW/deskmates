@@ -56,6 +56,7 @@ interface EntryRow {
   created_at: string;
   topic: string | null;
   topic_label: string | null;
+  topic_source: "rule" | "model";
 }
 
 interface SourceRow {
@@ -132,6 +133,7 @@ function toEntry(row: EntryRow): StoredEntry {
     effectiveBasis: row.effective_basis,
     ingestedAt: row.created_at,
     ...(row.topic ? { topic: row.topic, topicLabel: row.topic_label ?? row.topic } : {}),
+    ...(row.topic && row.topic_source === "model" ? { topicSource: "model" as const } : {}),
   };
 }
 
@@ -524,7 +526,8 @@ export class MemoryEntryStore {
       .all(workspaceId) as { id: string; body: string }[];
     if (rows.length === 0) return;
     const update = this.db.prepare(
-      "UPDATE memory_entries SET topic = ?, topic_label = ?, topic_set = 1 WHERE id = ?",
+      `UPDATE memory_entries SET topic = ?, topic_label = ?, topic_set = 1, topic_source = 'rule',
+         topic_run_id = NULL WHERE id = ?`,
     );
     this.db.transaction(() => {
       for (const row of rows) {
@@ -724,6 +727,22 @@ export class MemoryEntryStore {
       this.db
         .prepare("UPDATE memory_versions SET body = '', redacted = 1 WHERE entry_id = ?")
         .run(id);
+      // Amendment 4, A32: a split proposal holds the body and its parts; forget redacts them too
+      // and ends a pending one.
+      this.db
+        .prepare(
+          `UPDATE memory_split_parts SET body = '' WHERE proposal_id IN
+             (SELECT id FROM memory_split_proposals WHERE entry_id = ?)`,
+        )
+        .run(id);
+      this.db
+        .prepare(
+          `UPDATE memory_split_proposals SET body = '',
+             status = CASE status WHEN 'pending' THEN 'rejected' ELSE status END,
+             decided_by = COALESCE(decided_by, ?), decided_at = COALESCE(decided_at, ?)
+           WHERE entry_id = ?`,
+        )
+        .run(by, now, id);
       this.insertVersion(id, version, "forget", {
         body: "",
         authority: current.authority,

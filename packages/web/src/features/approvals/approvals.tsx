@@ -5,7 +5,7 @@
 // the list as soon as it is decided, whoever decided it, because the `approval` frame the Gateway
 // fans out on a decision carries the settled approval.
 
-import type { Approval, BotDefinition } from "@deskmates/contracts";
+import type { Approval } from "@deskmates/contracts";
 import { Pager } from "@deskmates/ui";
 import { ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -18,6 +18,7 @@ import { usePageRangeText } from "../../lib/page-bar.js";
 import { threadHref } from "../../router.js";
 import { newerApproval } from "../../state/newer-approval.js";
 import { NextAction } from "../../state/session-roles.js";
+import { useBotsByIds } from "../contacts/use-bots-by-ids.js";
 import { ApprovalCard } from "./approval-card.js";
 
 export interface ApprovalsScreenProps {
@@ -189,24 +190,13 @@ export function ApprovalsScreen(props: ApprovalsScreenProps) {
     if (loaded && approvals.length === 0 && index > 0) setCursors((stack) => stack.slice(0, -1));
   }, [loaded, approvals.length, index]);
   const from = index * PENDING_PAGE_SIZE + 1;
-  const [bots, setBots] = useState<readonly BotDefinition[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .listBots()
-      .then((list) => {
-        if (!cancelled) setBots(list);
-      })
-      .catch(() => {
-        // A missing bot list only costs the row its display name; the inbox still works.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [api]);
-
-  const botName = (botId: string): string => bots.find((b) => b.id === botId)?.name ?? botId;
+  // #113 §3.2: only the bots this page names, never the whole roster. A missing name only costs
+  // the row its display name; the inbox still works.
+  const bots = useBotsByIds(
+    api,
+    approvals.map((a) => a.botId),
+  );
+  const botName = (botId: string): string => bots.get(botId)?.name ?? botId;
 
   return (
     <section className="approvals-screen page-container">

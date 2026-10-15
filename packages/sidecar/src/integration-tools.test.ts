@@ -27,6 +27,11 @@ import { createMemoryFs } from "./testing/in-memory-fs.js";
 const TOKEN = "deskmates-run-token-integrations";
 const HOME = "/home/nova";
 const BODY_MARKER = "wire the payroll to account 0042";
+/** A base64 string whose bytes start with the PNG header (ADR-0023 amendment 3). */
+const PNG_BASE64 = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.alloc(60, 7),
+]).toString("base64");
 
 function request(overrides: Partial<StartRunRequest> = {}): StartRunRequest {
   return {
@@ -128,7 +133,12 @@ function setup(steps: ScriptStep[], opts: Options = {}) {
         ],
       });
     if (path === "execute")
-      return json({ ok: true, actionId: "slack.post_message", executionId: "exec-1", data: {} });
+      return json({
+        ok: true,
+        actionId: "slack.post_message",
+        executionId: "exec-1",
+        data: { files: [{ name: "chart.png", content: PNG_BASE64 }], note: "posted" },
+      });
     return json({ code: "not_found", message: "no", details: {} }, 404);
   };
   let clock = Date.parse("2026-09-29T10:00:00Z");
@@ -342,5 +352,44 @@ describe("Drive write approval preview", () => {
     await go(deps, request());
     expect(gateway.approvals).toHaveLength(0);
     expect(calls.some((c) => c.path === "execute")).toBe(false);
+  });
+});
+
+// ADR-0023 amendment 3, decisions 16 and 17 (issue #87).
+describe("a withholding run is given no image inside an integration result", () => {
+  const resultText = (gateway: ReturnType<typeof setup>["gateway"]) =>
+    gateway.events
+      .filter((e) => e.kind === "tool_result")
+      .map((e) => String(e.payload.content))
+      .join("\n");
+
+  it("replaces a base64 image with the notice and records it once", async () => {
+    const { gateway, deps } = setup([executeStep(), { type: "end", summary: "" }]);
+    await go(deps, request({ visionPolicy: "withhold" }));
+    const text = resultText(gateway);
+    expect(text).not.toContain(PNG_BASE64);
+    expect(text).toContain("an image (image/png) was withheld");
+    expect(text).toContain("chart.png");
+    const withheld = gateway.events.filter(
+      (e) => e.kind === "log" && e.payload.op === "image_withheld",
+    );
+    expect(withheld.map((e) => e.payload)).toEqual([
+      {
+        source: "vision",
+        op: "image_withheld",
+        toolName: "mcp__deskmates__integration_execute",
+        count: 1,
+        media: ["image/png"],
+      },
+    ]);
+  });
+
+  it("leaves the result as it was on a run that delivers images", async () => {
+    const { gateway, deps } = setup([executeStep(), { type: "end", summary: "" }]);
+    await go(deps, request());
+    expect(resultText(gateway)).toContain(PNG_BASE64);
+    expect(gateway.events.some((e) => e.kind === "log" && e.payload.op === "image_withheld")).toBe(
+      false,
+    );
   });
 });

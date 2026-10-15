@@ -4,11 +4,15 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import type { ToolAction } from "@deskmates/contracts";
+import { browserToolCode, describeBrowserCode } from "./browser-code-effects.js";
 import {
+  type TierOptions,
   WORK_DIR,
+  browserCodeCallEffects,
   isBrowserTool,
   isNavigation,
   isShellTool,
+  shellBrowserCodeEffects,
   sideEffectPhrase,
   splitMcpToolName,
 } from "./risk-tier.js";
@@ -213,7 +217,7 @@ function shellPattern(command: string): string | undefined {
 export function toToolAction(
   toolName: string,
   input: Record<string, unknown>,
-  opts: { currentOrigin?: string | undefined } = {},
+  opts: { currentOrigin?: string | undefined } & TierOptions = {},
 ): ToolAction {
   const action: ToolAction = { toolName, input };
   const origin =
@@ -231,10 +235,39 @@ export function toToolAction(
     }
   }
 
-  const { summary, pattern } = describeArguments(toolName, input, action.filePath);
+  const { summary, pattern } =
+    describeBrowserCodeCall(toolName, input, opts) ??
+    describeArguments(toolName, input, action.filePath);
   if (summary !== undefined && summary !== "") action.argumentSummary = truncateSummary(summary);
   if (pattern !== undefined) action.argumentPattern = pattern;
   return action;
+}
+
+/**
+ * ADR-0002 amendment 5, C4: under `effects-v1` a browser code call, or a shell line running an
+ * effectful `playwright-cli` command, names its effects and binds Always to the exact code by
+ * hash, so `playwright-cli eval*` or "any upload code" can never become a rule. Undefined when
+ * the policy is off or the call is neither.
+ */
+function describeBrowserCodeCall(
+  toolName: string,
+  input: Record<string, unknown>,
+  opts: TierOptions,
+): { summary: string; pattern: string } | undefined {
+  const codeEffects = browserCodeCallEffects(toolName, input, opts);
+  if (codeEffects !== undefined) {
+    const body = browserToolCode(splitMcpToolName(toolName).tool, input);
+    return describeBrowserCode(codeEffects, body?.code, { maxChars: ARGUMENT_SUMMARY_MAX_CHARS });
+  }
+  if (!isShellTool(toolName)) return undefined;
+  const command = stringInput(input, "command") ?? "";
+  const shellEffects = shellBrowserCodeEffects(command, opts);
+  if (shellEffects === undefined) return undefined;
+  // The card shows the start of the command, then the effects and the hash the pattern binds to.
+  return describeBrowserCode(shellEffects, command, {
+    prefix: `${collapse(command).slice(0, 48)} | `,
+    maxChars: ARGUMENT_SUMMARY_MAX_CHARS,
+  });
 }
 
 /**

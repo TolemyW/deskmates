@@ -133,6 +133,11 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
   if (path === "/api/bots" && method === "GET") {
     const ws = q.get("workspaceId");
     const bots = ws ? s.bots.filter((bot) => bot.workspaceId === ws) : s.bots;
+    // #113 §3.2: a name lookup answers only the named bots.
+    if (q.has("ids")) {
+      const named = new Set((q.get("ids") ?? "").split(","));
+      return ok({ bots: bots.filter((bot) => named.has(bot.id)) });
+    }
     // #113 slice B: with paging parameters, one page by name with server search and the total.
     if (q.has("offset") || q.has("limit") || q.has("q")) {
       const needle = (q.get("q") ?? "").toLowerCase();

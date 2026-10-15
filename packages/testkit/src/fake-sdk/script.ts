@@ -16,6 +16,11 @@ export interface ScriptUsage {
 export type ScriptStep =
   /** Assistant text block. */
   | { type: "text"; text: string; usage?: Partial<ScriptUsage> }
+  /**
+   * Assistant text block streamed in `chunks`: with `includePartialMessages`, one `stream_event`
+   * text delta per chunk, then the complete assistant message with the joined text (ADR-0037).
+   */
+  | { type: "streamed_text"; chunks: readonly string[]; usage?: Partial<ScriptUsage> }
   /** Assistant thinking block. */
   | { type: "thinking"; text: string; usage?: Partial<ScriptUsage> }
   /**

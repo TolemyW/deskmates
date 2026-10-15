@@ -91,6 +91,22 @@ const CONNECTION_LABELS: Readonly<Record<ConnectionStatus, MessageKey>> = {
   reconnecting: "chatPane.connection.reconnecting",
 };
 
+/** The Gateway's cap on approval ids per request (#113 surface 26). */
+const APPROVAL_IDS_PER_REQUEST = 100;
+
+/** The approval ids the messages name, distinct, in batches the Gateway accepts. */
+function approvalIdBatches(messages: readonly ThreadMessage[]): string[][] {
+  const ids = [
+    ...new Set(
+      messages.map((m) => approvalRefOf(m.attachments)).filter((ref) => ref !== undefined),
+    ),
+  ];
+  const batches: string[][] = [];
+  for (let i = 0; i < ids.length; i += APPROVAL_IDS_PER_REQUEST)
+    batches.push(ids.slice(i, i + APPROVAL_IDS_PER_REQUEST));
+  return batches;
+}
+
 /** One line for the header: who is in the chat and what is happening right now. */
 function membersSummary(
   members: readonly { botId: string; name: string }[],
@@ -118,6 +134,7 @@ function membersSummary(
 }
 import { UploadAttachButton, draftWithPath } from "../files/upload-attach-button.js";
 import { WorkspaceFilePreview } from "../files/workspace-file-preview.js";
+import { ReplyPreviews, replyPreviewReducer } from "./reply-preview.js";
 import { type WorkspaceLockState, useWorkspaceLock } from "./use-workspace-lock.js";
 import { VisionNotice } from "./vision-notice.js";
 
@@ -141,6 +158,7 @@ export function ChatPane(props: ChatPaneProps) {
   const t = useT();
   const actorName = useActorLabel();
   const [state, dispatch] = useReducer(threadViewReducer, EMPTY_THREAD_VIEW);
+  const [previews, applyPreview] = useReducer(replyPreviewReducer, {});
   const [detail, setDetail] = useState<ThreadDetailView | undefined>();
   const members = detail?.members ?? [];
   // Only `owner-v1` offers an unaddressed message to the owner first; under the walk (or an older
@@ -198,6 +216,9 @@ export function ChatPane(props: ChatPaneProps) {
   const onThreadUpdatedRef = useRef(props.onThreadUpdated);
   onThreadUpdatedRef.current = props.onThreadUpdated;
   const refreshDetailRef = useRef<() => Promise<void>>(async () => {});
+  const approvalsForRef = useRef<(messages: readonly ThreadMessage[]) => Promise<Approval[]>>(
+    async () => [],
+  );
   const lifecycleRevisionRef = useRef(0);
 
   useEffect(() => {
@@ -207,6 +228,7 @@ export function ChatPane(props: ChatPaneProps) {
     let detailRequest = 0;
     setError(undefined);
     dispatch({ type: "reset" });
+    applyPreview({ type: "reset" });
     setRunsCursor(undefined);
     setHasOlderMessages(false);
     runRevisionRef.current = 0;
@@ -224,16 +246,17 @@ export function ChatPane(props: ChatPaneProps) {
     refreshDetailRef.current = refreshDetail;
 
     /** Ask for what the stream may not have delivered; the reducer merges it in. */
-    // The Gateway defaults `/api/approvals` to pending, so ask twice: a card only renders its
-    // finished state once the decided approval is loaded too.
-    const listApprovals = async (): Promise<Approval[]> => {
+    // #113 surface 26: the thread's pending approvals (bounded by its parked runs) plus the ones
+    // the loaded messages name, never the thread's whole decided history.
+    const listApprovals = async (messages: readonly ThreadMessage[]): Promise<Approval[]> => {
       if (guestRef.current) return [];
-      const [pending, decided] = await Promise.all([
+      const [pending, ...named] = await Promise.all([
         api.listApprovals({ threadId, status: "pending" }),
-        api.listApprovals({ threadId, status: "decided" }),
+        ...approvalIdBatches(messages).map((ids) => api.listApprovals({ threadId, ids })),
       ]);
-      return [...pending, ...decided];
+      return [...pending, ...named.flat()];
     };
+    approvalsForRef.current = listApprovals;
 
     // #113 slice R: every unfinished run plus the newest finished page; older pages on request.
     const listRuns = async (): Promise<RunView[]> => {
@@ -266,10 +289,14 @@ export function ChatPane(props: ChatPaneProps) {
     const refetch = async (): Promise<void> => {
       const afterSeq = stateRef.current.messages.at(-1)?.seq;
       const runSnapshotRevision = runRevisionRef.current;
-      const [messages, runs, approvals] = await Promise.all([
-        afterSeq === undefined ? newestMessages() : tailAfter(afterSeq),
+      const [{ messages, approvals }, runs] = await Promise.all([
+        (afterSeq === undefined ? newestMessages() : tailAfter(afterSeq)).then(
+          async (messages) => ({
+            messages,
+            approvals: await listApprovals([...stateRef.current.messages, ...messages]),
+          }),
+        ),
         listRuns(),
-        listApprovals(),
         refreshDetail(),
       ]);
       if (!cancelled) {
@@ -283,6 +310,7 @@ export function ChatPane(props: ChatPaneProps) {
         if (cancelled) return;
         if (event.type === "run_status") runRevisionRef.current += 1;
         dispatch(event);
+        applyPreview(event);
         // Messages can add a member or pause/reset the thread; run changes affect each member's
         // activity. Refresh the authoritative detail while the reducer applies the live frame.
         if (
@@ -307,8 +335,12 @@ export function ChatPane(props: ChatPaneProps) {
     });
 
     const initialRunSnapshotRevision = runRevisionRef.current;
-    Promise.all([refreshDetail(), newestMessages(), listRuns(), listApprovals()])
-      .then(([, messages, runs, approvals]) => {
+    const newestWithApprovals = async () => {
+      const messages = await newestMessages();
+      return { messages, approvals: await listApprovals(messages) };
+    };
+    Promise.all([refreshDetail(), newestWithApprovals(), listRuns()])
+      .then(([, { messages, approvals }, runs]) => {
         if (cancelled) return;
         dispatch({
           type: "loaded",
@@ -429,8 +461,9 @@ export function ChatPane(props: ChatPaneProps) {
     setLoadingOlderMessages(true);
     try {
       const slice = await api.listMessageSlice(threadId, { beforeSeq: first });
+      const approvals = await approvalsForRef.current(slice.messages);
       if (lifecycleRevisionRef.current !== lifecycleRevision) return;
-      dispatch({ type: "loaded", messages: slice.messages, runs: [] });
+      dispatch({ type: "loaded", messages: slice.messages, runs: [], approvals });
       setHasOlderMessages(slice.hasOlder === true);
     } catch (err) {
       setError(errorMessage(err));
@@ -858,6 +891,7 @@ export function ChatPane(props: ChatPaneProps) {
               );
             })}
             <IncomingHandoffs api={api} threadId={threadId} onRuns={setHandoffRuns} />
+            <ReplyPreviews previews={previews} runs={pending} botName={botName} />
             {pending.map((run) => (
               <li key={run.id} className="typing" data-testid="typing">
                 <Avatar name={botName(run.botId)} />

@@ -8,9 +8,6 @@
 // exact name; never joins or changes another network or container.
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { egressProxyImage } from "./support/docker.js";
 
@@ -20,7 +17,6 @@ const nets = [`lan-egress-a-${nonce}`, `lan-egress-b-${nonce}`] as const;
 const proxies = [`lan-proxy-a-${nonce}`, `lan-proxy-b-${nonce}`] as const;
 const fixture = `lan-fixture-${nonce}`;
 const port = 40000 + Math.floor(Math.random() * 9000);
-const temp = mkdtempSync(join(tmpdir(), "lan-egress-"));
 const available = spawnSync("docker", ["info"], { timeout: 3000, stdio: "ignore" }).status === 0;
 if (!available) console.warn("[lan-egress] skipped: Docker unavailable");
 
@@ -85,8 +81,12 @@ function get(which: 0 | 1, url: string): string {
   return docker(nodeIn(nets[which], getScript, [proxies[which], url]));
 }
 
-/** Starts a slow request and resolves with its final output once it has started streaming. */
-async function hold(which: 0 | 1, url: string): Promise<Promise<string>> {
+/**
+ * Starts a slow request; once it streams, resolves with a holder of its final output. The
+ * output promise is wrapped because an async function returning a bare promise adopts it:
+ * every hold then waited for its response to finish, and revocation came too late (#124).
+ */
+async function hold(which: 0 | 1, url: string): Promise<{ done: Promise<string> }> {
   const child = spawn("docker", nodeIn(nets[which], getScript, [proxies[which], url, "hold"]));
   let output = "";
   const done = new Promise<string>((resolve) => child.on("exit", () => resolve(output)));
@@ -100,7 +100,7 @@ async function hold(which: 0 | 1, url: string): Promise<Promise<string>> {
       }
     });
   });
-  return done;
+  return { done };
 }
 
 function publish(which: 0 | 1, allowlist: string[], grants: unknown[]): void {
@@ -131,7 +131,6 @@ afterAll(() => {
     if (created.has(name)) spawnSync("docker", ["rm", "-f", name], { timeout: 15000 });
   for (const name of nets)
     if (created.has(name)) spawnSync("docker", ["network", "rm", name], { timeout: 15000 });
-  rmSync(temp, { recursive: true, force: true });
 }, 60_000);
 
 describe.skipIf(!available)("LAN network-profile grants in the real proxy", () => {
@@ -141,24 +140,13 @@ describe.skipIf(!available)("LAN network-profile grants in the real proxy", () =
       console.warn("[lan-egress] skipped: the Docker host has no non-bridge RFC1918 address");
       return;
     }
-    writeFileSync(
-      join(temp, "server.cjs"),
-      `require('http').createServer((q,r)=>{if(q.url==='/slow'){r.write('first\\n');setTimeout(()=>r.end('last'),4000);return;}r.end('lan-fixture-ok '+q.url);}).listen(${port},'${lanIp}');`,
-    );
-    docker([
-      "run",
-      "-d",
-      "--name",
-      fixture,
-      "--network",
-      "host",
-      "--mount",
-      `type=bind,src=${temp},dst=/fixture,readonly`,
-      "--entrypoint",
-      "node",
-      image,
-      "/fixture/server.cjs",
-    ]);
+    // The fixture travels as an argument, never a bind mount: the image runs as `node` (uid
+    // 1000), which cannot read a 0700 temp directory of a test user with another uid. On
+    // Testbox (uid 1001) a mounted script never ran, and the granted request got 502 from a
+    // closed port, which read as a proxy denial (#124).
+    const server = `require('http').createServer((q,r)=>{if(q.url==='/slow'){r.write('first\\n');setTimeout(()=>r.end('last'),4000);return;}r.end('lan-fixture-ok '+q.url);}).listen(${port},'${lanIp}',()=>console.log('fixture ready'));`;
+    const fixtureArgs = ["--name", fixture, "--network", "host", "--entrypoint", "node", image];
+    docker(["run", "-d", ...fixtureArgs, "-e", server]);
     created.add(fixture);
     for (const [i, net] of nets.entries()) {
       docker(["network", "create", net]);
@@ -181,10 +169,15 @@ describe.skipIf(!available)("LAN network-profile grants in the real proxy", () =
       ]);
       created.add(proxies[i] as string);
     }
-    for (const name of proxies) {
+    // A fixture that never listens would turn every granted request into 502, so wait for it.
+    const started: [string, string][] = [
+      ...proxies.map((name): [string, string] => [name, "egress proxy ready"]),
+      [fixture, "fixture ready"],
+    ];
+    for (const [name, line] of started) {
       let ready = false;
       for (let i = 0; i < 50 && !ready; i++) {
-        ready = docker(["logs", name]).includes("egress proxy ready");
+        ready = docker(["logs", name]).includes(line);
         if (!ready) await new Promise((r) => setTimeout(r, 100));
       }
       expect(ready, docker(["logs", name])).toBe(true);
@@ -229,8 +222,8 @@ describe.skipIf(!available)("LAN network-profile grants in the real proxy", () =
     const inA = await hold(0, `http://${lanIp}:${port}/slow`);
     const inB = await hold(1, `http://${lanIp}:${port}/slow`);
     publish(0, [], []);
-    expect(await inA).toMatch(/CUT/);
-    expect(await inB).toContain("STATUS:200");
+    expect(await inA.done).toMatch(/CUT/);
+    expect(await inB.done).toContain("STATUS:200");
     expect(get(0, url)).toContain("STATUS:403");
     expect(get(1, url)).toContain("STATUS:200");
 

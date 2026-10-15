@@ -16,11 +16,13 @@ import {
   registerSandboxRoutes,
 } from "./api/routes.js";
 import { registerStaticUi, resolveWebDistDir } from "./api/static-ui.js";
+import { createAppIngress } from "./app-shares/app-share-ingress.js";
 import { loadReleaseChannelPlugins } from "./channels/plugin-loader.js";
 import { type GatewayConfig, loadConfig } from "./config.js";
 import { type GatewayContext, buildContext } from "./context.js";
 import { openDatabase } from "./db/open.js";
 import { invokedDirectly } from "./invoked-directly.js";
+import { reportNetworkOverlaps } from "./network/network-overlaps.js";
 import { resolveProvider } from "./provider.js";
 import { RunLifecycle } from "./scheduler/run-lifecycle.js";
 import { Scheduler } from "./scheduler/scheduler.js";
@@ -222,11 +224,27 @@ export async function main(): Promise<void> {
     await app.close();
     throw err;
   }
+  // ADR-0035 decision 2: published workspace apps on a listener of their own, when configured.
+  const appIngress = config.appShares ? createAppIngress(app.deskmates.ctx) : undefined;
+  if (appIngress && config.appShares) {
+    const { port, bind } = config.appShares;
+    await new Promise<void>((resolve, reject) => {
+      appIngress.server.once("error", reject);
+      appIngress.server.listen(port, bind, () => resolve());
+    }).catch(async (err) => {
+      await Promise.allSettled([operatorApp.close(), app.close()]);
+      throw err;
+    });
+  }
+  // ADR-0027 amendment 2 decision 15: warn about LAN targets inside a Docker network.
+  void reportNetworkOverlaps(app.deskmates.ctx, (message) => operatorApp.log.warn(message));
   // ADR-0023 amendment 1, decision 6: models in use without a result for this configuration.
   if (config.visionProbe === "auto" && app.deskmates.ctx.modelJobs.vision.sweep().length > 0)
     app.deskmates.scheduler.kick();
   const shutdown = (): void => {
-    Promise.allSettled([operatorApp.close(), app.close()]).finally(() => process.exit(0));
+    Promise.allSettled([appIngress?.close(), operatorApp.close(), app.close()]).finally(() =>
+      process.exit(0),
+    );
   };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);

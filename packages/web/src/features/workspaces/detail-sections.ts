@@ -4,7 +4,11 @@
 import type { WorkspaceDirectoryEntry } from "@deskmates/contracts";
 import type { ComponentType } from "react";
 import type { ApiClient } from "../../api/client.js";
+import { AppSharesSection } from "../app-shares/app-shares-section.js";
+import { WorkdirSection } from "../workdir/workdir-section.js";
 import { ArchiveSection } from "./detail/archive-section.js";
+import { AutoApprovalSection } from "./detail/auto-approval-section.js";
+import { WorkspaceLimitsSection } from "./detail/limits-section.js";
 import { NameSection } from "./detail/name-section.js";
 import { NetworkSection } from "./detail/network-section.js";
 import { PeopleSection } from "./detail/people-section.js";
@@ -23,6 +27,10 @@ export const WORKSPACE_DETAIL_SECTIONS: ReadonlyArray<{
 }> = [
   { key: "name", Section: NameSection },
   { key: "network", Section: NetworkSection },
+  { key: "auto-approval", Section: AutoApprovalSection },
+  { key: "limits", Section: WorkspaceLimitsSection },
   { key: "people", Section: PeopleSection },
+  { key: "workdir", Section: WorkdirSection },
+  { key: "apps", Section: AppSharesSection },
   { key: "archive", Section: ArchiveSection },
 ];

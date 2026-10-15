@@ -200,7 +200,10 @@ describe("runOnce: happy path with an L0 browser call and an L1 write", () => {
 
     // A response's `turn_usage` follows its blocks: it is ledgered when the next response starts,
     // and the last one when the result arrives (`turn-usage.ts`).
-    const kinds = gateway.events.map((e) => e.kind);
+    // Timeline marks (ADR-0037) interleave with these; they are asserted in `run-timeline.test.ts`.
+    const kinds = gateway.events
+      .filter((e) => e.payload.source !== "run_timeline")
+      .map((e) => e.kind);
     expect(kinds).toEqual([
       "log", // context_sections
       "log", // sdk init: CLI version and model
@@ -216,12 +219,13 @@ describe("runOnce: happy path with an L0 browser call and an L1 write", () => {
       "log",
       "turn_usage",
     ]);
-    expect(gateway.events.map((e) => e.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(gateway.events.map((e) => e.seq)).toEqual(gateway.events.map((_, i) => i + 1));
     const ledger = gateway.events.filter(
       (e) =>
         e.kind !== "turn_usage" &&
         e.payload.kind !== "context_sections" &&
-        e.payload.source !== "sdk",
+        e.payload.source !== "sdk" &&
+        e.payload.source !== "run_timeline",
     );
     expect(ledger[0]?.payload).toEqual({ text: "Look at the queue first." });
     expect(ledger[1]?.payload).toMatchObject({
@@ -347,8 +351,9 @@ describe("runOnce: happy path with an L0 browser call and an L1 write", () => {
     const browserConfig = browser as typeof browser & { timeout?: number };
     // The timeout follows the remaining absolute budget at MCP construction time. The fake
     // clock has advanced 750 ms since the deadline was computed above: context assembly, the
-    // `context_sections` event's timestamp, and the timeout computation itself.
-    expect(browserConfig.timeout).toBe(359_250);
+    // `context_sections` event's timestamp, and the timeout computation itself; 500 ms more for
+    // the `sidecar_started` timeline mark and its ledger timestamp (ADR-0037).
+    expect(browserConfig.timeout).toBe(358_750);
     const raw = browser.env?.DESKMATES_BROWSER_COORDINATION;
     expect(raw).toEqual(expect.any(String));
     expect(JSON.parse(raw as string)).toMatchObject({ mode: "origin-v2", deadlineAt, attempt: 1 });
@@ -693,6 +698,30 @@ describe("runOnce: L2 approvals (ADR-0002 decision 2)", () => {
     expect(second.outcome).toBe("completed");
     const calls = sdk.sessions.get(first.sdkSessionId ?? "")?.toolCalls;
     expect(calls?.at(-1)).toMatchObject({ hookDecision: "deny", executed: false });
+  });
+
+  it("an expired request tells the model nobody approved it (ADR-0002 amendment 3, A7)", async () => {
+    const { deps, sdk } = makeDeps(l2Script, { approvalResponder: () => "pending" });
+    const first = await run(deps, baseRequest({ shortWaitSeconds: 1 }));
+    const reason = "Nobody approved this within 15 minutes. It was not done.";
+    await run(
+      deps,
+      baseRequest({
+        runId: "run-2" as RunId,
+        sdkSessionId: first.sdkSessionId ?? "",
+        trigger: {
+          kind: "approval",
+          approvalId: first.pendingApprovalId as ApprovalId,
+          decision: "deny",
+          reason,
+          toolUseId: first.pendingToolUseId as string,
+        },
+      }),
+    );
+    const session = sdk.sessions.get(first.sdkSessionId ?? "");
+    expect(session?.toolCalls.at(-1)).toMatchObject({ hookDecision: "deny", hookReason: reason });
+    expect(String(session?.calls[1]?.prompt)).toContain(reason);
+    expect(String(session?.calls[1]?.prompt)).not.toContain("Human decision");
   });
 
   it("a decision for another tool call is discarded and the replayed call is judged afresh", async () => {
@@ -2323,7 +2352,8 @@ describe("runOnce: screenshots", () => {
         (e) =>
           e.kind !== "turn_usage" &&
           e.payload.kind !== "context_sections" &&
-          e.payload.source !== "sdk",
+          e.payload.source !== "sdk" &&
+          e.payload.source !== "run_timeline",
       )
       .map((e) => e.kind);
     expect(kinds.slice(0, 8)).toEqual([
@@ -2767,7 +2797,7 @@ describe("runOnce: per-turn usage and compaction", () => {
   it("ledgers the context section sizes and reports the system prompt hash in RunEnded", async () => {
     const { deps, gateway, sdk } = makeDeps(script, {}, { [`${HOME}/MEMORY.md`]: "Be brief." });
     const ended = await run(deps, baseRequest());
-    const first = gateway.events[0];
+    const first = gateway.events.filter((e) => e.payload.source !== "run_timeline")[0];
     expect(first?.kind).toBe("log");
     expect(first?.payload).toMatchObject({
       source: "context",
@@ -3006,5 +3036,95 @@ describe("runOnce: working directory", () => {
       ["allow", undefined],
       ["allow", undefined],
     ]);
+  });
+});
+
+// ADR-0036 decisions 4 and 7: with a worktree repository the sidecar prepares the bot's own
+// worktree before the query, with the image's git only, and a failure never fails the run. The
+// worktree is tooling, not a boundary: writes into another bot's worktree and into the shared
+// checkout are judged by risk tier alone.
+describe("runOnce: prepared worktree", () => {
+  const writes: ScriptStep[] = [
+    {
+      type: "tool_call",
+      name: "Write",
+      input: { file_path: "/work/bots/orion/app/src/a.ts", content: "x" },
+      result: "Wrote /work/bots/orion/app/src/a.ts",
+    },
+    {
+      type: "tool_call",
+      name: "Write",
+      input: { file_path: "/work/app/src/a.ts", content: "x" },
+      result: "Wrote /work/app/src/a.ts",
+    },
+    { type: "text", text: summaryBlock("ok") },
+    { type: "end", summary: summaryBlock("ok"), usage: { inputTokens: 1, outputTokens: 1 } },
+  ];
+  const request = () => baseRequest({ workdirMode: "per-bot", worktreeRepo: "/work/app" });
+
+  it("creates the worktree before the query and leaves every path writable", async () => {
+    const made = makeDeps(writes);
+    const gitCalls: string[][] = [];
+    let queried = false;
+    made.deps.git = async (args) => {
+      expect(queried).toBe(false);
+      gitCalls.push([...args]);
+      return { code: args.includes("--verify") ? 1 : 0, stdout: "", stderr: "" };
+    };
+    const query = made.deps.query;
+    made.deps.query = (params) => {
+      queried = true;
+      return query(params);
+    };
+    const ended = await run(made.deps, request());
+    expect(ended.outcome).toBe("completed");
+    expect(gitCalls.at(-1)).toEqual([
+      "-C",
+      "/work/app",
+      "worktree",
+      "add",
+      "-b",
+      "bots/nova",
+      "/work/bots/nova/app",
+    ]);
+    const log = made.gateway.events.find((e) => e.kind === "log" && e.payload.source === "workdir");
+    expect(log?.payload).toEqual({
+      source: "workdir",
+      op: "worktree",
+      outcome: "created",
+      path: "/work/bots/nova/app",
+      branch: "bots/nova",
+    });
+    const session = [...made.sdk.sessions.values()][0];
+    expect(session?.calls[0]?.options?.cwd).toBe("/work/bots/nova");
+    expect(session?.toolCalls.map((c) => [c.hookDecision, c.callbackDecision])).toEqual([
+      ["allow", undefined],
+      ["allow", undefined],
+    ]);
+  });
+
+  it("runs on in the bot directory and says so in the prompt when git fails", async () => {
+    const made = makeDeps(writes);
+    made.deps.git = async () => ({ code: 128, stdout: "", stderr: "fatal: nope" });
+    const ended = await run(made.deps, request());
+    expect(ended.outcome).toBe("completed");
+    const session = [...made.sdk.sessions.values()][0];
+    expect(session?.calls[0]?.options?.cwd).toBe("/work/bots/nova");
+    expect(String(session?.calls[0]?.prompt)).toContain(
+      "Your worktree could not be prepared this run (/work/app is not a git repository)",
+    );
+    const log = made.gateway.events.find((e) => e.kind === "log" && e.payload.source === "workdir");
+    expect(log?.payload).toMatchObject({ outcome: "failed", level: "warn" });
+  });
+
+  it("prepares nothing without a worktree repository", async () => {
+    const made = makeDeps(writes);
+    const gitCalls: string[][] = [];
+    made.deps.git = async (args) => {
+      gitCalls.push([...args]);
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    await run(made.deps, baseRequest({ workdirMode: "per-bot" }));
+    expect(gitCalls).toEqual([]);
   });
 });

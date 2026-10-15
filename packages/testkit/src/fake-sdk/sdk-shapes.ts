@@ -227,13 +227,31 @@ export interface SdkModelFallbackMessage {
   session_id: string;
 }
 
+/**
+ * `SDKPartialAssistantMessage` carrying one `content_block_delta` text delta (the Messages API
+ * `BetaRawContentBlockDeltaEvent`). The real SDK emits these only with `includePartialMessages`,
+ * before the complete assistant message that follows (ADR-0037).
+ */
+export interface SdkTextDeltaStreamMessage {
+  type: "stream_event";
+  event: {
+    type: "content_block_delta";
+    index: number;
+    delta: { type: "text_delta"; text: string };
+  };
+  parent_tool_use_id: null;
+  uuid: SdkUuid;
+  session_id: string;
+}
+
 export type SdkMessage =
   | SdkSystemInitMessage
   | SdkAssistantMessage
   | SdkUserMessage
   | SdkResultMessage
   | SdkCompactBoundaryMessage
-  | SdkApiRetryMessage;
+  | SdkApiRetryMessage
+  | SdkTextDeltaStreamMessage;
 
 // ---- Hook and permission callback shapes (what the fake CALLS) ----
 
@@ -442,6 +460,8 @@ export interface SdkQueryOptions {
    */
   fallbackModel?: string;
   hooks?: SdkHooks;
+  /** Stream events precede each assistant message of a `streamed_text` step only when set. */
+  includePartialMessages?: boolean;
   maxTurns?: number;
   mcpServers?: Record<string, SdkMcpServerConfig>;
   model?: string;

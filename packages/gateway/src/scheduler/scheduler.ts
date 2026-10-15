@@ -9,6 +9,7 @@ import {
   type ExecResult,
   type RunEnded,
   type RunId,
+  type RunTimelineMark,
   type SandboxHandle,
   type StartRunRequest,
   type Workspace,
@@ -20,6 +21,7 @@ import {
 import { ensureCanonicalSoul, ensureLegacyMemory } from "../api/memory-routes.js";
 import { asRunEnded } from "../api/validate.js";
 import { isReviewRun } from "../approvals/auto-review.js";
+import { ApprovalExpiry } from "../approvals/expiry.js";
 import { parkIfExhausted } from "../budget/admission.js";
 
 /** A workspace over its disk quota is measured again at most this often while it waits. */
@@ -29,7 +31,9 @@ import type { RunRecord } from "../ledger/runs.js";
 import { canonicalMemoryForBot } from "../memory/canonical-memory.js";
 import { isConsolidationRun } from "../memory/consolidation.js";
 import { MODEL_JOB_RUN_TYPES } from "../model-jobs/model-jobs.js";
+import type { SandboxOrigin } from "../workspaces/sandboxes.js";
 import type { RunLifecycle } from "./run-lifecycle.js";
+import { markAttemptStarted, recordTimelineMark } from "./run-timeline-marks.js";
 
 export const SIDECAR_RUN_CMD: readonly string[] = ["deskmates-sidecar", "run"];
 
@@ -131,9 +135,17 @@ export class Scheduler {
         this.log("continuation expiry could not be settled", { runId: run.id, error: String(err) });
       }
     }
+    // ADR-0002 amendment 3, A7/A8: expire unattended requests and send their one reminder.
+    try {
+      new ApprovalExpiry(this.ctx).sweep();
+    } catch (err) {
+      this.log("approval expiry sweep failed", { error: String(err) });
+    }
     for (const run of this.ctx.memory.consolidation.requestEligible()) {
       this.ctx.bus.publish({ type: "run_status", run });
     }
+    // ADR-0011 amendment 4, A26: flag rows only, at most once an hour per workspace; no run.
+    this.ctx.memory.freshness.sweepDue(new Date(), (message) => this.log(message, {}));
     for (const id of this.capacityWaiting) {
       const run = this.ctx.runs.get(id);
       if (!run || isTerminal(run.status)) this.capacityWaiting.delete(id);
@@ -418,6 +430,7 @@ export class Scheduler {
     // Keyed by attempt, not by run: a run parked by its first process and resumed by a second one
     // has two overlapping `exec` calls for the same run id, and the first one finishing must not
     // drop the second from the in-flight set.
+    markAttemptStarted(this.ctx, run, prepared.request);
     const key = `${run.id}#${prepared.request.attempt}`;
     const attempt: Attempt = { workspaceId, abort: new AbortController() };
     this.attempts.set(key, attempt);
@@ -437,9 +450,18 @@ export class Scheduler {
     signal: AbortSignal,
   ): Promise<void> {
     let request = initialRequest;
+    // ADR-0037: the attempt's sandbox, spawn and close marks. `closed` is recorded exactly once.
+    const mark = (name: RunTimelineMark, attributes: Record<string, unknown> = {}): void =>
+      recordTimelineMark(this.ctx, run.id, initialRequest.attempt, name, attributes);
+    let spawned = false;
     try {
       const workspace = this.ctx.workspaces.mustGet(request.workspaceId);
-      const handle = await this.ensureSandbox(workspace);
+      const sandbox: { origin?: SandboxOrigin; retried: boolean } = { retried: false };
+      const handle = await this.ensureSandbox(workspace, sandbox);
+      mark("sandbox_ready", {
+        sandbox: sandbox.origin ?? "unknown",
+        ...(sandbox.retried ? { sandboxRetried: true } : {}),
+      });
       // Import every legacy bot's physical files before any model sees this workspace. The
       // canonical copies are then authoritative; peer snapshots detect later shared-file edits.
       const workspaceBots = this.ctx.bots.list(workspace.id);
@@ -477,6 +499,8 @@ export class Scheduler {
       // The sidecar takes ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN from this request, not from
       // the workspace env file: that file is one per workspace, so a per-run `injectEnv` would
       // hand a concurrent run in the same workspace the other run's token.
+      mark("sidecar_spawned");
+      spawned = true;
       const result = await this.execInWorkspace(
         workspace,
         {
@@ -488,6 +512,12 @@ export class Scheduler {
         },
         handle,
       );
+      mark("attempt_closed", {
+        spawned: true,
+        exitCode: result.exitCode,
+        ...(result.timedOut ? { timedOut: true } : {}),
+        ...(signal.aborted ? { error: "cancelled" } : {}),
+      });
       let after = this.ctx.runs.mustGet(run.id);
       // The run may already have been resumed by a later process while this one was exiting; the
       // `running` row it sees then belongs to that process, not this one. `attempt` is what tells
@@ -517,6 +547,7 @@ export class Scheduler {
         this.lifecycle.fail(run.id, `${why}${tail === "" ? "" : `: ${tail}`}`);
       }
     } catch (err) {
+      mark("attempt_closed", { spawned, error: "sandbox_error" });
       const after = this.ctx.runs.get(run.id);
       if (after && !isTerminal(after.status)) {
         this.lifecycle.fail(run.id, `sandbox error: ${String(err)}`);
@@ -530,9 +561,15 @@ export class Scheduler {
    * container that never became healthy or a transient Docker error then costs one retry instead
    * of a failed run the human has to notice and resend (Testbox, 2026-09-29).
    */
-  private async ensureSandbox(workspace: Workspace): Promise<SandboxHandle> {
+  private async ensureSandbox(
+    workspace: Workspace,
+    observed: { origin?: SandboxOrigin; retried: boolean } = { retried: false },
+  ): Promise<SandboxHandle> {
+    const observe = (origin: SandboxOrigin): void => {
+      observed.origin = origin;
+    };
     try {
-      return await this.ctx.sandboxes.ensure(workspace);
+      return await this.ctx.sandboxes.ensure(workspace, observe);
     } catch (err) {
       if (!isDeskmatesError(err) || err.code !== "sandbox_unavailable") throw err;
       this.log("sandbox could not be prepared; retrying once", {
@@ -540,7 +577,8 @@ export class Scheduler {
         error: String(err),
       });
       this.ctx.sandboxes.forget(workspace.id);
-      return this.ctx.sandboxes.ensure(workspace);
+      observed.retried = true;
+      return this.ctx.sandboxes.ensure(workspace, observe);
     }
   }
 

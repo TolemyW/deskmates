@@ -5,6 +5,7 @@
 // validity, and are never published into Documents by this page (ADR-0011).
 
 import { BookOpen, History, Sparkles } from "lucide-react";
+import { useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { NoWorkspace, ResourceHeading } from "../../components/resource-page.js";
 import { useT } from "../../i18n/i18n-provider.js";
@@ -12,6 +13,7 @@ import { type KnowledgeTab, knowledgeHref } from "../../router.js";
 import { useWorkspaceScope } from "../../state/workspace-scope.js";
 import { KnowledgeGovernance, type KnowledgeGovernanceApi } from "./knowledge-governance.js";
 import { KnowledgePanel } from "./knowledge.js";
+import { MemoryMaintenance, type MemoryMaintenanceApi } from "./memory-maintenance.js";
 import { ObservationsPanel } from "./observations.js";
 
 export function KnowledgePage({ api, tab }: { api: ApiClient; tab: KnowledgeTab }) {
@@ -19,6 +21,10 @@ export function KnowledgePage({ api, tab }: { api: ApiClient; tab: KnowledgeTab 
   const scope = useWorkspaceScope(api);
   const workspace = scope.current;
   const governanceApi = "listKnowledgePage" in api ? (api as KnowledgeGovernanceApi) : undefined;
+  const maintenanceApi =
+    "listMemoryRevalidations" in api ? (api as MemoryMaintenanceApi) : undefined;
+  // Mounted only while open, so the list page asks for nothing it does not show.
+  const [maintenanceOpen, setMaintenanceOpen] = useState(false);
 
   if (scope.loaded && !workspace) return <NoWorkspace scope={scope} />;
 
@@ -71,6 +77,23 @@ export function KnowledgePage({ api, tab }: { api: ApiClient; tab: KnowledgeTab 
         <div className="workspace-observations">
           <p className="muted small resource-intro">{t("knowledgePage.observations.intro")}</p>
           <ObservationsPanel key={workspace.id} api={api} workspaceId={workspace.id} />
+          {maintenanceApi ? (
+            <details
+              className="workspace-history memory-maintenance-details"
+              onToggle={(event) => setMaintenanceOpen(event.currentTarget.open)}
+            >
+              <summary>
+                <History size={16} aria-hidden="true" /> {t("knowledgePage.maintenance")}
+              </summary>
+              {maintenanceOpen ? (
+                <MemoryMaintenance
+                  key={workspace.id}
+                  api={maintenanceApi}
+                  workspaceId={workspace.id}
+                />
+              ) : null}
+            </details>
+          ) : null}
         </div>
       ) : null}
     </section>

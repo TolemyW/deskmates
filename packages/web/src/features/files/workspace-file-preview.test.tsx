@@ -103,6 +103,37 @@ describe("preview type policy", () => {
       expect(canPreviewWorkspacePath(`/work/${path}`), path).toBe(false);
   });
 
+  it("previews source and config files as text and browser images, and nothing else (A6 decision 39)", () => {
+    for (const path of ["ci.yaml", "main.py", "feed.xml", "query.sql", "fix.patch", "photo.avif"])
+      expect(canPreviewWorkspacePath(`/work/${path}`), path).toBe(true);
+    for (const path of ["bundle.zip", "tool.exe", "book.xlsx", "deck.ppt", "noextension"])
+      expect(canPreviewWorkspacePath(`/work/${path}`), path).toBe(false);
+  });
+
+  it("previews AVIF only as a Blob image", async () => {
+    render(<WorkspaceFilePreview api={apiFor("avif")} workspaceId={WS_ID} path="/work/a.avif" />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+    const image = await screen.findByRole("img", { name: "a.avif" });
+    expect(image.getAttribute("src")).toBe("blob:preview");
+    expect(vi.mocked(URL.createObjectURL).mock.calls[0]?.[0]).toMatchObject({
+      type: "image/avif",
+    });
+  });
+
+  it("shows XML as inert text without parsing it", async () => {
+    render(
+      <WorkspaceFilePreview
+        api={apiFor('<?xml version="1.0"?><feed><script>x()</script></feed>')}
+        workspaceId={WS_ID}
+        path="/work/feed.xml"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+    const preview = await screen.findByLabelText("Preview of /work/feed.xml");
+    await waitFor(() => expect(preview.textContent).toContain("<feed><script>x()</script>"));
+    expect(document.querySelector("script, feed")).toBeNull();
+  });
+
   it("rejects oversized, binary and malformed UTF-8 source bytes", async () => {
     await expect(decodeWorkspacePreview({ size: 1024 * 1024 + 1 } as Blob)).rejects.toThrow(
       /1 MiB/,
@@ -229,7 +260,9 @@ describe("safe renderers", () => {
     fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
     const image = await screen.findByRole("img", { name: "chart.png" });
     expect(image.getAttribute("src")).toBe("blob:preview");
-    expect(document.querySelector(".detail-drawer-scroll svg")).toBeNull();
+    expect(
+      document.querySelector(".detail-drawer-scroll svg:not(.lucide), .detail-drawer-scroll rect"),
+    ).toBeNull();
     expect(document.querySelector("script")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Hide preview" }));
     await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:preview"));
@@ -244,7 +277,9 @@ describe("safe renderers", () => {
     fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
     const image = await screen.findByRole("img", { name: "chart.svg" });
     expect(image.getAttribute("src")).toBe("blob:preview");
-    expect(document.querySelector(".detail-drawer-scroll svg")).toBeNull();
+    expect(
+      document.querySelector(".detail-drawer-scroll svg:not(.lucide), .detail-drawer-scroll rect"),
+    ).toBeNull();
     expect(document.querySelector("script")).toBeNull();
   });
 
@@ -321,5 +356,136 @@ describe("compact audit rows", () => {
       "bot_unknown",
     ]);
     expect(container.querySelector("summary")?.title).toBe(path);
+  });
+});
+
+describe("viewing controls (ADR-0014 amendment A6)", () => {
+  it("source view shows the same bytes as text without another read and resets on close", async () => {
+    const api = apiFor("# Title\n\n**bold**");
+    render(<WorkspaceFilePreview api={api} workspaceId={WS_ID} path="/work/report.md" />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+    await screen.findByRole("heading", { name: "Title" });
+    const reads = vi.mocked(api.readWorkspaceFileRange).mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Source" }));
+    expect(document.querySelector(".workspace-file-source")?.textContent).toBe(
+      "# Title\n\n**bold**",
+    );
+    expect(screen.queryByRole("heading", { name: "Title" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Source" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(api.readWorkspaceFileRange).toHaveBeenCalledTimes(reads);
+    fireEvent.click(screen.getByRole("button", { name: "Hide preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+    await screen.findByRole("heading", { name: "Title" });
+    expect(screen.getByRole("button", { name: "Rendered" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+  });
+
+  it("source view of HTML holds the script as text and mounts no script or frame", async () => {
+    render(
+      <WorkspaceFilePreview
+        api={apiFor("<script>parent.x=1</script><p>Hi</p>")}
+        workspaceId={WS_ID}
+        path="/work/page.html"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+    await screen.findByTitle("Isolated HTML preview of /work/page.html");
+    fireEvent.click(screen.getByRole("button", { name: "Source" }));
+    expect(document.querySelector(".workspace-file-source")?.textContent).toContain(
+      "<script>parent.x=1</script>",
+    );
+    expect(document.querySelector("script, iframe")).toBeNull();
+  });
+
+  it("source view of SVG decodes the complete bytes as text, never as DOM", async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>';
+    render(<WorkspaceFilePreview api={apiFor(svg)} workspaceId={WS_ID} path="/work/icon.svg" />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+    await screen.findByRole("img", { name: "icon.svg" });
+    fireEvent.click(screen.getByRole("button", { name: "Source" }));
+    expect(document.querySelector(".workspace-file-source")?.textContent).toBe(svg);
+    expect(document.querySelector(".detail-drawer-scroll rect")).toBeNull();
+  });
+
+  it("offers no Rendered view for a truncated JSON prefix", async () => {
+    render(
+      <WorkspaceFilePreview
+        api={apiFor('{"a": [1, 2', 4 * 1024 * 1024)}
+        workspaceId={WS_ID}
+        path="/work/big.json"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+    await screen.findByText(/preview is truncated/);
+    expect(screen.queryByRole("button", { name: "Rendered" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Source" })).toBeNull();
+    expect(screen.getByText('{"a": [1, 2')).toBeTruthy();
+  });
+
+  it("renders CSV as a bounded table with column headers and states the extent", async () => {
+    render(
+      <WorkspaceFilePreview
+        api={apiFor('name,note\n"Smith, Jo","said ""hi"""\n')}
+        workspaceId={WS_ID}
+        path="/work/people.csv"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+    const header = await screen.findByRole("columnheader", { name: "name" });
+    expect(header.getAttribute("scope")).toBe("col");
+    expect(screen.getByRole("cell", { name: "Smith, Jo" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: 'said "hi"' })).toBeTruthy();
+    expect(screen.getByText("Showing 1 row and 2 columns.")).toBeTruthy();
+  });
+
+  it("zooms an image within its steps and returns to Fit", async () => {
+    render(<WorkspaceFilePreview api={apiFor("png")} workspaceId={WS_ID} path="/work/a.png" />);
+    fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+    const image = (await screen.findByRole("img", { name: "a.png" })) as HTMLImageElement;
+    Object.defineProperty(image, "naturalWidth", { configurable: true, value: 200 });
+    Object.defineProperty(image, "naturalHeight", { configurable: true, value: 100 });
+    fireEvent.load(image);
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" }) as HTMLButtonElement;
+    for (let i = 0; i < 10; i++) fireEvent.click(zoomIn);
+    expect(screen.getByText("400%")).toBeTruthy();
+    expect(zoomIn.disabled).toBe(true);
+    expect(image.style.width).toBe("800px");
+    fireEvent.click(screen.getByRole("button", { name: "Fit" }));
+    expect(image.style.width).toBe("");
+    for (let i = 0; i < 10; i++) fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
+    expect(screen.getByText("25%")).toBeTruthy();
+  });
+
+  it("zooms a PDF page and refuses a page number that does not exist", async () => {
+    render(
+      <WorkspaceFilePreview
+        api={apiFor("%PDF-1.7\n", 4 * 1024 * 1024)}
+        workspaceId={WS_ID}
+        path="/work/r.pdf"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+    await screen.findByText("Page 1 of 1");
+    const field = screen.getByRole("textbox", { name: "Go to page (1 to 1)" });
+    fireEvent.change(field, { target: { value: "2" } });
+    fireEvent.submit(field);
+    expect((await screen.findByRole("alert")).textContent).toBe("Enter a page number from 1 to 1.");
+    expect(screen.getByText("Fit width")).toBeTruthy();
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" }) as HTMLButtonElement;
+    for (let i = 0; i < 10; i++) fireEvent.click(zoomIn);
+    expect(screen.getByText("300%")).toBeTruthy();
+    expect(zoomIn.disabled).toBe(true);
+  });
+
+  it("returns focus to the opener when the drawer closes", async () => {
+    render(<WorkspaceFilePreview api={apiFor("x")} workspaceId={WS_ID} path="/work/a.txt" />);
+    const opener = screen.getByRole("button", { name: "Preview file" });
+    fireEvent.click(opener);
+    await screen.findByRole("dialog", { name: "a.txt" });
+    fireEvent.click(screen.getByRole("button", { name: "Hide preview" }));
+    await waitFor(() => expect(document.activeElement).toBe(opener));
   });
 });

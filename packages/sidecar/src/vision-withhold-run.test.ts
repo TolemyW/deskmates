@@ -68,6 +68,13 @@ const script: ScriptStep[] = [
     input: { file_path: "/work/notes.md" },
     result: "Slide notes",
   },
+  // ADR-0023 amendment 3, decision 15: a PDF's pages reach the model as images.
+  {
+    type: "tool_call",
+    name: "Read",
+    input: { file_path: "/work/deck.PDF" },
+    result: "[pdf pages the model would have been handed]",
+  },
   { type: "text", text: final },
   { type: "end", summary: final },
 ];
@@ -111,9 +118,16 @@ describe("a run whose model cannot see (visionPolicy: withhold)", () => {
     expect(JSON.stringify(results[0])).toContain("image_withheld: /work/slide-1.PNG");
     expect(JSON.stringify(results[0])).not.toContain("image bytes");
     expect(JSON.stringify(results[1])).toContain("Slide notes");
-    expect(withheld).toHaveLength(1);
+    expect(JSON.stringify(results[2])).toContain("image_withheld: /work/deck.PDF is a PDF");
+    expect(JSON.stringify(results[2])).not.toContain("pdf pages");
+    expect(withheld).toHaveLength(2);
     expect(withheld[0]?.payload).toMatchObject({ toolName: "Read", path: "/work/slide-1.PNG" });
     expect(withheld[0]?.payload.toolUseId).toEqual(expect.any(String));
+    expect(withheld[1]?.payload).toMatchObject({
+      toolName: "Read",
+      path: "/work/deck.PDF",
+      media: "application/pdf",
+    });
     expect(String(options.systemPrompt)).toContain(VISION_WITHHELD_GUIDANCE);
     const browser = options.mcpServers?.[BROWSER_MCP_SERVER];
     expect(browser?.args).not.toContain("vision");
@@ -125,6 +139,7 @@ describe("a run that delivers images (no policy key)", () => {
   it("is unchanged: the image Read runs, no notice, no prompt section, the browser can see", async () => {
     const { results, withheld, options } = await run(request());
     expect(JSON.stringify(results[0])).toContain("image bytes");
+    expect(JSON.stringify(results[2])).toContain("pdf pages");
     expect(withheld).toHaveLength(0);
     expect(String(options.systemPrompt)).not.toContain("## Images");
     const browser = options.mcpServers?.[BROWSER_MCP_SERVER];

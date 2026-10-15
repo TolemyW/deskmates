@@ -223,8 +223,15 @@ blocks from `Read` and from the browser, and the model could still describe what
 The owner's evidence rules (issue #87, comment of 2026-10-13) keep one wrong probe answer as
 `unknown`, not `unsupported`, and say a capability must never be silently upgraded. The owner
 has not ruled on run behaviour; issue #87 proposal 2 lists a prompt notice, withholding the
-vision browser capability and a text notice instead of an image read. The probe is off unless
-`VISION_PROBE=auto`, so most models in most workspaces are `unknown`/`not_probed`.
+vision browser capability and a text notice instead of an image read. The probe is on by
+default in a deployment: the Gateway's environment loader reads an empty `VISION_PROBE` as
+`auto`, and only `VISION_PROBE=off` or a hand-built configuration that omits the setting (the T2
+stacks) queues no automatic probe. (Corrected 2026-10-14: this paragraph first said the probe
+was off unless `VISION_PROBE=auto`.) A run can still meet a model with no settled answer: a
+bot's first runs may start while its probe is `pending`, a probe that failed for transport,
+auth, rate-limit, budget or a missing host bot is `unknown` with that reason, and a deployment
+with the probe off, or a model in use before the probe existed and not yet re-probed, is
+`not_probed`.
 
 ### Decisions
 
@@ -236,9 +243,13 @@ vision browser capability and a text notice instead of an image read. The probe 
     `wrong_answer` withholds (**proposed**): the probe saw the model answer a question about an
     image it did not read correctly, which is the confabulation of #87, and the status stays
     `unknown` with its receipt, so the policy never rewrites the evidence. Every other
-    `unknown`, `pending` and `not_probed` delivers unchanged (**proposed**): with the probe off by
-    default, withholding there would blind every model that can see, and a prompt notice on
-    every run would be a strategy change that needs a paired evaluation first. A model job
+    `unknown`, `pending` and `not_probed` delivers unchanged (**proposed**): none of them is
+    evidence that the model cannot see (decision 7 and the owner's rule that a transport, auth,
+    rate-limit or budget error is not proof of non-support), so withholding there would blind
+    models that can see on exactly the runs where the probe has not answered yet, such as a new
+    bot's welcome run while its probe is `pending` or every run of a deployment that set
+    `VISION_PROBE=off`; and a prompt notice on every such run would be a strategy change that
+    needs a paired evaluation first. A model job
     (`vision_probe`, `soul_proposal`) records no policy; the probe must always send its image.
 12. **Withholding is done in the sidecar, before the model, and says so in text.** Under
     `withhold`: (a) the system prompt gains a fixed notice that this run's model cannot see
@@ -270,7 +281,8 @@ vision browser capability and a text notice instead of an image read. The probe 
 - The policy follows the frozen primary model. An SDK fallback switch (decision 3) to a model
   with another vision status, and subagents on `cheapModel`, keep the primary's policy.
 - PDF reads (document blocks) and image content returned by connectors or integrations are not
-  covered; neither path has been observed to carry images on the deployment endpoint.
+  covered; neither path has been observed to carry images on the deployment endpoint. Closed by
+  amendment 3.
 - Real-model and T2 verification (the real CLI's `Read` of a PNG under `withhold`) have not run.
 
 ### Verification (amendment 2)
@@ -281,3 +293,57 @@ vision browser capability and a text notice instead of an image read. The probe 
 | 12 | Under `withhold` the prompt carries the notice and without it the prompt is byte-identical to before; an image `Read` is denied with the notice and a text `Read` is not; the MCP args lack `--caps vision`; a browser result's image item becomes text and the vision fallback attaches none | T0 `packages/sidecar/src/vision-withhold.test.ts`, `packages/sidecar/src/browser-mcp.test.ts`; T1 `packages/sidecar/src/mcp-proxy/proxy-vision.test.ts`, `packages/sidecar/src/vision-withhold-run.test.ts` (fake SDK). Not run: T2 with the real CLI | Withholding runs with `image_blocks` > 0 on any request = 0 |
 | 13 | A denied image `Read` emits one `image_withheld` event with its tool-use id and path | T1 `packages/sidecar/src/vision-withhold-run.test.ts` | `image_withheld` events per withholding run |
 | 14 | The route returns `visionPolicy` and `botIds`; the settings line shows the withheld effect; a chat with a withholding member shows a notice naming it and one without shows none | T1 `packages/gateway/src/model-jobs/vision-policy.test.ts`; web `packages/web/src/features/contacts/model-capability.test.tsx`, `packages/web/src/features/chats/vision-notice.test.tsx` | Not measured |
+
+## Amendment 3 (2026-10-14): PDF reads and connector or integration results
+
+Status: Proposed, like amendment 2, whose decisions 11 to 14 it extends to the two paths
+amendment 2 left open (issue #87, comment of 2026-10-14). A delivering run is unchanged.
+
+### Context
+
+Amendment 2 withheld images from `Read` of image files and from browser tool results. Two
+paths remained. The SDK's `Read` of a PDF hands the model the document itself (a document
+block, or rendered pages when `pages` is given), which a vision model reads page by page as
+images; what an Anthropic-protocol gateway in front of a text-only model makes of it has not
+been observed, and a model given pages it cannot see is the confabulation of #87 again. The
+connector and integration tools build text results from the Gateway's JSON, so they cannot
+carry an image block, but a SaaS record can hold an image as a `data:` URI or as base64 bytes,
+and a model shown a long base64 string it cannot decode is invited to guess what it depicts.
+The workspace image has no PDF text extractor, so a withheld PDF has no text substitute today.
+
+### Decisions
+
+15. **Under `withhold`, `Read` of a PDF is denied with a notice.** The PreToolUse hook treats a
+    path ending in `.pdf` (any case) like an image path: it denies the `Read` with a notice that
+    the PDF was not read because its pages reach the model as images, that the model must not
+    guess its content, and that it should use a text source (an accompanying text file, a
+    page's text, a person). The `log` event is decision 13's, with `media: "application/pdf"`.
+    A text extractor in the workspace image is not decided here.
+16. **Under `withhold`, a result of any tool on the in-process `deskmates` server carries no
+    image.** The sidecar applies decision 12's replacement to every result of that server:
+    an `image` item becomes the one-line notice. Connector and integration values are cleaned
+    before they are serialised and wrapped as untrusted: an object whose `type` is `image`, a
+    string that is a `data:image/...;base64,` URI, and a string of at least 64 base64
+    characters whose bytes begin with a PNG, JPEG, GIF or WebP header are each replaced by the
+    notice. Other values, including `http(s)` links to images, stay as they are: a link is
+    text, not an image. The Gateway's own `tool_result` (`connector_proxy`,
+    `integration_proxy`) keeps the raw value, as before.
+17. **Each such withholding is in the ledger.** A cleaned connector, integration or other
+    `deskmates` tool result emits one `log` event `source: "vision"`, `op: "image_withheld"`
+    with the tool name, the number of images replaced and their media types when known.
+
+### Open items
+
+- A PDF text extractor (for example `poppler-utils`) in the workspace base image, so a
+  withholding run can still read a PDF's text; an image change, not taken here.
+- Jupyter notebooks: `Read` of an `.ipynb` returns image outputs of its cells as images and is
+  not covered.
+- Real-model and T2 verification of a PDF `Read` under `withhold` have not run.
+
+### Verification (amendment 3)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 15 | Under `withhold` a `.pdf` or `.PDF` `Read` is denied with the PDF notice and one `image_withheld` event with `media: "application/pdf"`; under `deliver` it runs | T0 `packages/sidecar/src/vision-withhold.test.ts`; T1 `packages/sidecar/src/vision-withhold-run.test.ts` (fake SDK) | `image_withheld` events per withholding run, by media |
+| 16 | Under `withhold` a connector or integration value with a `data:` image URI, a base64 PNG, JPEG, GIF or WebP and an `image`-typed object reaches the model as notices, an image link and ordinary base64 text do not change, and an `image` item of any `deskmates` tool result becomes text; under `deliver` results are byte-identical | T0 `vision-withhold.test.ts`; T1 `packages/sidecar/src/connector-tools.test.ts`, `packages/sidecar/src/integration-tools.test.ts` | Withholding runs with `image_blocks` > 0 on any request = 0 |
+| 17 | One cleaned result emits exactly one `image_withheld` event with its tool name, count and media types; a result with nothing to clean emits none | T1 `connector-tools.test.ts`, `integration-tools.test.ts` | `image_withheld` events per withholding run |

@@ -8,6 +8,8 @@ import type { GatewayDb } from "../db/open.js";
 
 /** Every action the record knows; the baseline seeds `audit_actions` with exactly these. */
 export const AUDIT_ACTIONS = [
+  "app_share.publish",
+  "app_share.revoke",
   "approval.decide",
   "approval_rule.create",
   "approval_rule.delete",
@@ -32,8 +34,10 @@ export const AUDIT_ACTIONS = [
   "membership.add",
   "membership.remove",
   "membership.role",
+  "memory.revalidate",
   "memory.review_batch",
   "memory.review_batch_undo",
+  "memory.split_decide",
   "network_policy.publish",
   "network_profile.create",
   "network_profile.delete",
@@ -44,6 +48,7 @@ export const AUDIT_ACTIONS = [
   "task.delete",
   "task.run",
   "task.schedule_set",
+  "workspace.approval_expiry_set",
   "workspace.archive",
   "workspace.auto_approval_set",
   "workspace.create",
@@ -52,6 +57,7 @@ export const AUDIT_ACTIONS = [
   "workspace.purge",
   "workspace.restore",
   "workspace.update",
+  "workspace.workdir_set",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

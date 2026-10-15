@@ -744,6 +744,57 @@ describe("task triggers and execution (ADR-0021 amendment 3)", () => {
     await waitFor(() => expect(remove).toHaveBeenCalledWith(WS_ID, "task_1", 1));
     expect(await screen.findByText("Task deleted.")).toBeVisible();
   });
+
+  it("offers delivery preview of a published file in the file drawer (ADR-0014 A6 decision 40)", async () => {
+    const initial = task({ ownerBotId: BOT_ID, runIds: [RUN_ID] });
+    const { api } = setup(initial);
+    vi.spyOn(api, "getTaskDetail").mockResolvedValue({
+      task: initial,
+      execution: {
+        observedAt: "2026-10-13T12:00:00.000Z",
+        submissions: [],
+        linkedRuns: [],
+        deliveries: [
+          {
+            id: "tdl_2",
+            kind: "complete",
+            runId: RUN_ID,
+            attempt: 1,
+            deliveredBy: "bot:b",
+            scopeVersion: 1,
+            summary: "Done",
+            outstanding: [],
+            createdAt: deliveredAt,
+            publications: [
+              {
+                path: "/work/out/report.md",
+                label: "Report",
+                sizeBytes: 12,
+                sha256: "a".repeat(64),
+                checkedAt: deliveredAt,
+              },
+            ],
+          },
+        ],
+        latestCheckpoint: null,
+      },
+    });
+    const read = vi.spyOn(api, "readWorkspaceFileRange").mockResolvedValue({
+      blob: new Blob(["# Report"]),
+      fileSize: 8,
+      start: 0,
+      end: 7,
+    });
+    render(<TasksScreen api={api} taskId="task_1" />);
+    await ready();
+    expect(
+      await screen.findByRole("button", { name: "Download /work/out/report.md" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Preview of /work/out/report.md" }));
+    expect(await screen.findByRole("dialog", { name: "report.md" })).toBeVisible();
+    await waitFor(() => expect(read).toHaveBeenCalled());
+    expect(read.mock.calls[0]?.slice(0, 2)).toEqual([WS_ID, "/work/out/report.md"]);
+  });
 });
 
 describe("task list pages (#113)", () => {

@@ -15,6 +15,7 @@ import {
   type StartRunRequest,
   isSkillFilePath,
   isSkillName,
+  worktreeRepoProblem,
 } from "@deskmates/contracts";
 import { z } from "zod";
 
@@ -136,6 +137,7 @@ const triggerSchema = z.discriminatedUnion("kind", [
     approvalId: id,
     decision: z.enum(["allow_once", "allow_always", "deny"]),
     toolUseId: z.string().optional(),
+    reason: z.string().optional(),
     // The resume hand-over (ADR-0002 amendment 2, "the decision survives a stale snapshot").
     // zod strips keys the schema does not name, so leaving these out silently turns every
     // retry into a fresh L2 call: this is the only thing between the contract and the process.
@@ -168,6 +170,14 @@ export const startRunRequestSchema = z.object({
   modelJob: z
     .discriminatedUnion("kind", [
       z.object({ kind: z.literal("vision_probe"), code: z.string().regex(/^\d{4,8}$/) }),
+      // ADR-0011 amendment 4, A30: at most 40 notes, each an id and a body.
+      z.object({
+        kind: z.literal("memory_organize"),
+        notes: z
+          .array(z.object({ id: z.string().min(1), body: z.string().min(1).max(16_000) }))
+          .min(1)
+          .max(40),
+      }),
       z.object({
         kind: z.literal("approval_review"),
         reviewPackage: z.string().min(2).max(24_000),
@@ -192,6 +202,21 @@ export const startRunRequestSchema = z.object({
   groupGuidance: z.literal("owner-v1").optional(),
   // Issue #88: present only under the opt-in per-bot working directory; absent keeps /work.
   workdirMode: z.literal("per-bot").optional(),
+  // ADR-0036 decision 2: checked again here, so a path the Gateway should have refused never
+  // reaches a `git` argument list.
+  worktreeRepo: z
+    .string()
+    .refine((path) => worktreeRepoProblem(path) === undefined, "invalid worktreeRepo")
+    .optional(),
+  otherLaneRun: z
+    .object({
+      runId: id,
+      lane: z.enum(["interactive", "background"]),
+      triggerKind: z.string().min(1).max(64),
+      threadId: id.optional(),
+      startedAt: z.string().min(1).max(64),
+    })
+    .optional(),
   model: z.string().min(1),
   cheapModel: z.string().min(1),
   // ADR-0023 decision 3: FALLBACK_MODEL, passed verbatim to the SDK's `fallbackModel`. Absent
@@ -222,6 +247,8 @@ export const startRunRequestSchema = z.object({
     })
     .optional(),
   browserExecutionMode: z.literal("vision-cli-v2").optional(),
+  // ADR-0002 amendment 5 (opt-in): browser code is tiered by its effects.
+  browserCodeApproval: z.literal("effects-v1").optional(),
   // ADR-0023 amendment 2: the run's model cannot see; image content becomes a text notice.
   visionPolicy: z.literal("withhold").optional(),
   screenSlot: z.number().int().min(0).max(5).optional(),

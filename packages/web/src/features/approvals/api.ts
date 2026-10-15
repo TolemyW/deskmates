@@ -17,6 +17,11 @@ export interface ApprovalFilter {
   status?: "pending" | "decided";
   threadId?: ThreadId;
   botId?: BotId;
+  /**
+   * Only these approvals of `threadId`, pending and decided unless `status` is set; at most 100
+   * (#113 surface 26). Unknown ids are omitted.
+   */
+  ids?: readonly string[];
 }
 
 /** One page of the Attention inbox (#113 surface 23): oldest first, with the visible total. */
@@ -39,6 +44,8 @@ export interface ApprovalsApi {
     cursor?: string;
     limit?: number;
   }): Promise<PendingApprovalsPage>;
+  /** ADR-0002 amendment 3, A7: minutes an undecided request waits before it expires. */
+  setApprovalExpiry(workspaceId: string, expiryMinutes: number): Promise<WorkspaceAutoApproval>;
   setAutoApproval(workspaceId: string, enabled: boolean): Promise<WorkspaceAutoApproval>;
 }
 
@@ -72,6 +79,7 @@ export function createApprovalsApi(t: HttpTransport): ApprovalsApi {
           status: filter.status,
           threadId: filter.threadId,
           botId: filter.botId,
+          ids: filter.ids?.join(","),
         })}`,
       );
       return r.approvals;
@@ -88,6 +96,14 @@ export function createApprovalsApi(t: HttpTransport): ApprovalsApi {
         ...(r.nextCursor ? { nextCursor: r.nextCursor } : {}),
         ...(typeof r.total === "number" ? { total: r.total } : {}),
       };
+    },
+    async setApprovalExpiry(workspaceId, expiryMinutes) {
+      const r = await t.json<{ autoApproval: WorkspaceAutoApproval }>(
+        "PUT",
+        `/api/workspaces/${encodeURIComponent(workspaceId)}/auto-approval`,
+        { expiryMinutes },
+      );
+      return r.autoApproval;
     },
     async setAutoApproval(workspaceId, enabled) {
       const r = await t.json<{ autoApproval: WorkspaceAutoApproval }>(

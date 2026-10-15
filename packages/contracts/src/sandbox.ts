@@ -2,6 +2,7 @@
 // provider (M3). The Gateway talks to sandboxes only through this interface.
 
 import type { WorkspaceId } from "./ids.js";
+import type { SandboxNetworkSubnet } from "./network-overlap.js";
 import type { EgressProbeRequest, EgressProbeResult, NetworkGrant } from "./network-profile.js";
 
 /**
@@ -59,6 +60,13 @@ export interface SandboxHandle {
   novncViewPassword?: string;
   /** Fixed desktop-region addresses on a shared-monitors-v1 workspace, never CDP endpoints. */
   botScreenAddresses?: readonly string[];
+  /**
+   * Host loopback address of the egress proxy's app relay (ADR-0035 decision 4); only the
+   * Gateway's app ingress uses it, and only for a published port.
+   */
+  appRelayAddress?: string;
+  /** The relay's per-proxy key. Gateway memory only, like the VNC passwords. */
+  appRelayKey?: string;
 }
 
 export interface ExecRequest {
@@ -124,6 +132,16 @@ export interface SandboxProvider {
    * layers (ADR-0027 amendment 1 decision 14). Read-only; optional for providers without it.
    */
   probeEgress?(handle: SandboxHandle, request: EgressProbeRequest): Promise<EgressProbeResult>;
+  /**
+   * The IPv4 subnets of every network on the provider's daemon, for Docker/LAN overlap
+   * detection (ADR-0027 amendment 2 decision 15). Read-only; optional.
+   */
+  networkSubnets?(): Promise<SandboxNetworkSubnet[]>;
+  /**
+   * Whether a cached handle's sandbox still has the topology `attach` would accept; throws the
+   * same network error attach would (amendment 2 decision 16). Read-only; optional.
+   */
+  verifyTopology?(handle: SandboxHandle): Promise<void>;
   /** Read-only metadata inspection of temporary prerequisites that replacement may discard. */
   inspectVolatilePrerequisites?(
     spec: SandboxSpec,

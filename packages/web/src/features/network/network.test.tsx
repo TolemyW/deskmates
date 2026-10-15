@@ -48,6 +48,7 @@ function fakeApi(overrides: Record<string, unknown> = {}) {
         policyHash: "ab".repeat(32),
       },
     })),
+    getNetworkOverlaps: vi.fn(async () => ({ checked: true, networks: [], overlaps: [] })),
     createNetworkProfile: vi.fn(),
     replaceNetworkProfile: vi.fn(),
     deleteNetworkProfile: vi.fn(),
@@ -85,6 +86,76 @@ it("selects a profile for a workspace and shows the acknowledged outcome", async
   );
   expect(await screen.findByText("Trusted-test workspace")).toBeInTheDocument();
   expect(screen.getByText(`${workspace.id}: applied`)).toBeInTheDocument();
+});
+
+it("sends a per-selection expiry only for a selection that has one", async () => {
+  const api = fakeApi();
+  render(<NetworkScreen api={api as never} />);
+  fireEvent.click(await screen.findByRole("checkbox", { name: "VendorDB test environment" }));
+  const expiry = screen.getByRole("textbox", { name: "Selection expires at (ISO UTC, optional)" });
+  fireEvent.change(expiry, { target: { value: " 2026-10-31T00:00:00Z " } });
+  fireEvent.click(screen.getByRole("button", { name: "Save selection" }));
+  await waitFor(() =>
+    expect(api.setWorkspaceNetworkProfiles).toHaveBeenCalledWith(workspace.id, [
+      { profileId: "netp_1", expiresAt: "2026-10-31T00:00:00Z" },
+    ]),
+  );
+});
+
+it("runs a preflight for the workspace and names the failing layer", async () => {
+  const preflightWorkspaceNetwork = vi.fn(async (_id: WorkspaceId, url: string) => ({
+    url,
+    ok: false,
+    admittedBy: "grant",
+    failedLayer: "tcp",
+    layers: [
+      { layer: "policy", ok: true, detail: "admitted by grant" },
+      { layer: "tcp", ok: false, detail: "ECONNREFUSED" },
+    ],
+  }));
+  const api = fakeApi({ preflightWorkspaceNetwork });
+  render(<NetworkScreen api={api as never} />);
+  const check = await screen.findByRole("button", { name: "Check" });
+  expect(check).toBeDisabled();
+  fireEvent.change(screen.getByRole("textbox", { name: "URL to check" }), {
+    target: { value: "http://10.20.30.24:23001/health" },
+  });
+  fireEvent.click(check);
+  expect(await screen.findByText("Failed at: TCP")).toBeInTheDocument();
+  expect(screen.getByText(/ECONNREFUSED/)).toBeInTheDocument();
+  expect(preflightWorkspaceNetwork).toHaveBeenCalledWith(
+    workspace.id,
+    "http://10.20.30.24:23001/health",
+  );
+});
+
+it("warns about a LAN target inside a Docker network and is silent without one", async () => {
+  const api = fakeApi({
+    getNetworkOverlaps: vi.fn(async () => ({
+      checked: true,
+      networks: [{ name: "vendordb-demo-net", cidr: "172.18.0.0/16" }],
+      overlaps: [
+        {
+          source: "profile",
+          label: "VendorDB test environment",
+          cidr: "10.20.30.0/24",
+          network: "vendordb-demo-net",
+          networkCidr: "172.18.0.0/16",
+        },
+      ],
+    })),
+  });
+  render(<NetworkScreen api={api as never} />);
+  expect(await screen.findByText("LAN targets inside a Docker network")).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "10.20.30.0/24 (VendorDB test environment) overlaps vendordb-demo-net (172.18.0.0/16)",
+    ),
+  ).toBeInTheDocument();
+  cleanup();
+  render(<NetworkScreen api={fakeApi() as never} />);
+  await screen.findByText("VendorDB test environment");
+  expect(screen.queryByText("LAN targets inside a Docker network")).toBeNull();
 });
 
 it("shows the Gateway's refusal and sends the revision with an edit", async () => {

@@ -38,6 +38,16 @@ export interface ChatInfoProps {
   onClose?: (() => void) | undefined;
 }
 
+/**
+ * The turn budget the router enforces (ADR-0005 amendment 5 decision 38), not the stored row:
+ * a workspace setting wins, `off` reads as `off`; an older Gateway sends only the row.
+ */
+export function shownTurnBudget(detail: ThreadDetailView, off: string): string | number {
+  const effective = detail.effectiveTurnBudget;
+  if (!effective) return detail.thread.turnBudget;
+  return effective.value === null ? off : effective.value;
+}
+
 type Section = "members" | "activity" | "notes" | "files" | "approvals" | "desktops";
 
 export function ChatInfo(props: ChatInfoProps) {
@@ -111,7 +121,7 @@ export function ChatInfo(props: ChatInfoProps) {
             <h2>{detail.thread.title || nameOf(members[0]?.botId ?? "")}</h2>
             <p className="muted small">
               {t("chatInfo.turnBudget", {
-                budget: detail.thread.turnBudget,
+                budget: shownTurnBudget(detail, t("limits.off")),
                 status:
                   detail.thread.status === "paused"
                     ? t("chatInfo.status.paused")

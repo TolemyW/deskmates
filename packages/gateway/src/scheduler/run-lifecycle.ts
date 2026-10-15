@@ -38,6 +38,7 @@ import {
   resolveReasoning,
 } from "@deskmates/contracts";
 import { approvalAttachment } from "../approvals/broker.js";
+import { APPROVAL_EXPIRY_ACTOR } from "../approvals/expiry.js";
 import type { GatewayContext } from "../context.js";
 import { nowIso } from "../db/ids.js";
 import { newId } from "../db/ids.js";
@@ -58,6 +59,7 @@ import {
   freezeRunLimits,
   runMaxTurns,
 } from "./run-limits.js";
+import { recordTimelineMark } from "./run-timeline-marks.js";
 import { sidecarToolsFor } from "./sidecar-tools.js";
 
 /**
@@ -175,8 +177,15 @@ export class RunLifecycle {
 
   private browserSettings(
     run: RunRecord,
-  ): Pick<StartRunRequest, "browserCoordination" | "browserSnapshotMode" | "browserExecutionMode"> {
+  ): Pick<
+    StartRunRequest,
+    "browserCoordination" | "browserSnapshotMode" | "browserExecutionMode" | "browserCodeApproval"
+  > {
     return {
+      // ADR-0002 amendment 5: from the run row, so a resume keeps the tiers it started with.
+      ...(run.config.browserCodeApproval === "effects-v1"
+        ? { browserCodeApproval: "effects-v1" as const }
+        : {}),
       ...(run.config.browserExecutionMode === "vision-cli-v2"
         ? { browserExecutionMode: "vision-cli-v2" as const }
         : {}),
@@ -199,10 +208,15 @@ export class RunLifecycle {
   /**
    * Issue #88 (ADR-0004 amendment 1): the run row's working-directory mode, not the Gateway's
    * current one, so every process of a run starts where its first one did. `shared`, and a row
-   * from before the knob, send nothing and the sidecar keeps `/work`.
+   * from before the knob, send nothing and the sidecar keeps `/work`. ADR-0036: the workspace's
+   * stored settings win over the Gateway knob and are frozen on the first process, with the
+   * worktree repository and, when the lane notice is on, the bot's other live lane.
    */
-  private workdirSettings(run: RunRecord): Pick<StartRunRequest, "workdirMode"> {
-    return run.config.botWorkdir === "per-bot" ? { workdirMode: "per-bot" } : {};
+  private workdirSettings(
+    run: RunRecord,
+    workspaceId: WorkspaceId,
+  ): Pick<StartRunRequest, "workdirMode" | "worktreeRepo" | "otherLaneRun"> {
+    return this.ctx.workdir.startFields(this.ctx.runs, run, workspaceId);
   }
 
   /**
@@ -434,7 +448,7 @@ export class RunLifecycle {
       shortWaitSeconds: ctx.config.shortWaitSeconds,
       maxTurns: freezeRunLimits(ctx, run, bot.workspaceId),
       ...this.browserSettings(run),
-      ...this.workdirSettings(run),
+      ...this.workdirSettings(run, bot.workspaceId),
       egressAllowlist: ctx.workspaces.mustGet(bot.workspaceId).egressAllowlist,
       connectors: bot.connectors,
       ...this.integrationSettings(bot.workspaceId),
@@ -515,7 +529,7 @@ export class RunLifecycle {
       shortWaitSeconds: ctx.config.shortWaitSeconds,
       maxTurns: freezeRunLimits(ctx, run, bot.workspaceId),
       ...this.browserSettings(run),
-      ...this.workdirSettings(run),
+      ...this.workdirSettings(run, bot.workspaceId),
       egressAllowlist: ctx.workspaces.mustGet(bot.workspaceId).egressAllowlist,
       connectors: bot.connectors,
       ...this.integrationSettings(bot.workspaceId),
@@ -585,7 +599,7 @@ export class RunLifecycle {
       shortWaitSeconds: ctx.config.shortWaitSeconds,
       maxTurns: runMaxTurns(run.config, ctx.config.maxTurns),
       ...this.browserSettings(run),
-      ...this.workdirSettings(run),
+      ...this.workdirSettings(run, bot.workspaceId),
       egressAllowlist: ctx.workspaces.mustGet(bot.workspaceId).egressAllowlist,
       connectors: bot.connectors,
       ...this.integrationSettings(bot.workspaceId),
@@ -653,6 +667,11 @@ export class RunLifecycle {
           approvalId: approval.id,
           decision: approval.decision,
           ...(payload.toolUseId ? { toolUseId: payload.toolUseId } : {}),
+          // ADR-0002 amendment 3, A7: an expiry tells the model nobody approved it, and not to work
+          // around it; other decisions resume exactly as before.
+          ...(approval.decidedBy === APPROVAL_EXPIRY_ACTOR && approval.reason
+            ? { reason: approval.reason }
+            : {}),
           ...(payload.currentOrigin ? { currentOrigin: payload.currentOrigin } : {}),
           deferredAction: deferredActionOf(approval.action),
         };
@@ -872,6 +891,14 @@ export class RunLifecycle {
       return committed;
     });
     this.release(runId);
+    // ADR-0037: the sidecar's end was taken; a non-empty reply is in the thread from now on.
+    recordTimelineMark(ctx, runId, run.attempt, "run_ended", {
+      outcome: ended.outcome,
+      replyPosted:
+        ended.outcome === "completed" &&
+        run.threadId !== undefined &&
+        (ended.summary?.reply.trim() ?? "") !== "",
+    });
     ctx.router.runEnded(result);
     return result;
   }
@@ -941,20 +968,22 @@ export class RunLifecycle {
         ? ctx.messages.get(run.triggerRef as MessageId)
         : undefined;
     const delegatorBot = source?.authorKind === "bot" ? source.authorId : undefined;
+    // ADR-0002 amendment 3, A9: a threadless run's notices go to its bot's private chat.
+    const noticeThreadId = ctx.broker.noticeThread(run).threadId;
     const notify = (body: string, attachmentId?: ApprovalId): void => {
-      if (!run.threadId) return;
+      if (!noticeThreadId) return;
       const posted = ctx.router.postSystem(
-        run.threadId,
+        noticeThreadId,
         body,
         attachmentId ? [approvalAttachment(attachmentId)] : [],
         delegatorBot
           ? { wakeOnly: delegatorBot as RunRecord["botId"] }
           : { wakeExcept: run.botId, wakeOnly: run.botId },
       );
-      published.push({ type: "thread_message", threadId: run.threadId, message: posted.message });
+      published.push({ type: "thread_message", threadId: noticeThreadId, message: posted.message });
       if (attachmentId) ctx.approvals.setMessage(attachmentId, posted.message.id);
       for (const wake of posted.runs)
-        published.push({ type: "run_status", threadId: run.threadId, run: wake });
+        published.push({ type: "run_status", threadId: noticeThreadId, run: wake });
     };
     // ADR-0016 amendment 2: the limit and window the run froze at its first start.
     const policy = continuationPolicy(run.config);
@@ -989,7 +1018,7 @@ export class RunLifecycle {
       id: approvalId,
       runId: run.id,
       botId: run.botId,
-      ...(run.threadId ? { threadId: run.threadId } : {}),
+      ...(noticeThreadId ? { threadId: noticeThreadId } : {}),
       action: {
         toolName: "__run_continuation__",
         input: {},
@@ -1018,8 +1047,8 @@ export class RunLifecycle {
     );
     const approval = ctx.approvals.mustGet(approvalId);
     published.push(
-      run.threadId
-        ? { type: "approval", threadId: run.threadId, approval }
+      noticeThreadId
+        ? { type: "approval", threadId: noticeThreadId, approval }
         : { type: "approval", approval },
     );
     ctx.events.append({

@@ -101,6 +101,17 @@ export const ROLE_ACTIONS = {
   "memory.undo": { route: "POST /api/memory/entries/:id/undo", role: "admin" },
   "memory.confirm": { route: "POST /api/memory/entries/:id/confirm", role: "admin" },
   "memory.reviewSuggestion": { route: "POST /api/memory-suggestions/:id/review", role: "admin" },
+  // ADR-0011 amendment 4: revalidation, drafts from observations and model organisation
+  "memory.revalidate": {
+    route: "POST /api/workspaces/:id/memory/revalidations/:itemId",
+    role: "admin",
+  },
+  "memory.draftDocument": {
+    route: "POST /api/workspaces/:id/memory/document-drafts",
+    role: "admin",
+  },
+  "memory.organize": { route: "POST /api/workspaces/:id/memory/organize", role: "admin" },
+  "memory.decideSplit": { route: "POST /api/workspaces/:id/memory/splits/:itemId", role: "admin" },
   // Approvals and costs
   "approval.decide": { route: "POST /api/approvals/:id/decide", role: "member" },
   "approval.decideAny": {
@@ -133,6 +144,8 @@ export const ROLE_ACTIONS = {
   "budget.continue": { route: "POST /api/budgets/:workspaceId/continue", role: "admin" },
   // Workspace execution limits (ADR-0005 amendment 5, ADR-0016 amendment 2)
   "limits.set": { route: "PUT /api/workspaces/:id/limits", role: "admin" },
+  // Working-directory settings (ADR-0036)
+  "workdir.set": { route: "PUT /api/workspaces/:id/workdir", role: "admin" },
   // Knowledge (ADR-0031 Q2: an Owner or Admin publishes)
   "knowledge.propose": { route: "POST /api/knowledge/proposals", role: "member" },
   "knowledge.review": { route: "POST /api/knowledge/proposals/:id/review", role: "admin" },
@@ -166,6 +179,8 @@ export const ROLE_ACTIONS = {
     role: "member",
   },
   "knowledge.read": { route: "GET /api/knowledge", role: "member" },
+  // Network profiles are the root's (ADR-0027 amendment 1 decision 12)
+  "network.read": { route: "GET /api/network-profiles", role: "root" },
   "runs.read": { route: "GET /api/runs", role: "member" },
   "skills.read": { route: "GET /api/workspaces/:id/skills", role: "member" },
   "tasks.read": { route: "GET /api/workspaces/:workspaceId/tasks", role: "member" },

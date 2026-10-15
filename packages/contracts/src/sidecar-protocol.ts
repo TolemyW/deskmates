@@ -23,6 +23,8 @@ export type TriggerPayload =
       kind: "approval";
       approvalId: ApprovalId;
       decision: ApprovalDecision;
+      /** For a deny: the reason as the hook would have given it live (ADR-0002 amendment 3, A7). */
+      reason?: string;
       /**
        * The SDK tool-use id of the deferred call (`RunEnded.pendingToolUseId`). The sidecar applies
        * the decision to the replayed call with this id or, when that call's result is an error, to
@@ -51,6 +53,8 @@ export type TriggerPayload =
  */
 export type ModelJobRequest =
   | { kind: "vision_probe"; code: string }
+  /** ADR-0011 amendment 4, A30: label and propose splits for at most 40 notes; decides nothing. */
+  | { kind: "memory_organize"; notes: { id: string; body: string }[] }
   /**
    * ADR-0002 amendment 4, B4: judge one pending L2 request. `reviewPackage` is the JSON the
    * Gateway built: the action and the originating human instruction, nothing a tool returned.
@@ -78,11 +82,25 @@ export type DeferredAction = Pick<ToolAction, "toolName" | "targetOrigin" | "arg
 export type BrowserCoordinationMode = "tab-v1" | "origin-v2";
 export type BrowserSnapshotMode = "explicit-v1" | "inline-v2";
 /**
+ * How generic browser code is tiered (ADR-0002 amendment 5, proposed). `name-v1`, the default:
+ * by tool name, as before the amendment. `effects-v1`: by the effects its text may have.
+ */
+export type BrowserCodeApproval = "name-v1" | "effects-v1";
+/**
  * Where a run starts (issue #88, ADR-0004 amendment 1). `shared`: `/work`, as every run did
  * before the knob. `per-bot`: `botWorkDir(botName)`, with `/work` still shared. A soft
  * distinction, never access control between bots.
  */
 export type BotWorkdirMode = "shared" | "per-bot";
+
+/** ADR-0036 decision 6: what a run is told about its bot's other live lane. */
+export interface OtherLaneRun {
+  runId: string;
+  lane: "interactive" | "background";
+  triggerKind: string;
+  threadId?: string;
+  startedAt: string;
+}
 
 /** Gateway → sidecar supervisor: start one run as one sidecar process. */
 export interface StartRunRequest {
@@ -143,6 +161,11 @@ export interface StartRunRequest {
   /** Opt-in strategy: automatic vision guidance and reviewed CLI workflows. */
   browserExecutionMode?: "vision-cli-v2";
   /**
+   * ADR-0002 amendment 5 (proposed, opt-in): tier browser code by its effects. Absent is
+   * `name-v1`, the tiers of every earlier run. Frozen on the run row.
+   */
+  browserCodeApproval?: "effects-v1";
+  /**
    * ADR-0023 amendment 2: the run's model cannot see images (or was observed inventing what it
    * saw), so the sidecar replaces image content with a text notice. Absent means images are
    * delivered as before. Frozen on the run row; a resume gets the first attempt's value.
@@ -159,6 +182,16 @@ export interface StartRunRequest {
    * (`runs.config_json.botWorkdir`); absent keeps `/work` and the prompt of every earlier run.
    */
   workdirMode?: "per-bot";
+  /**
+   * ADR-0036 decision 4: the git repository under `/work` the sidecar prepares this bot's
+   * worktree of before the query. Sent only with `workdirMode: "per-bot"`, from the run row.
+   */
+  worktreeRepo?: string;
+  /**
+   * ADR-0036 decision 6: the same bot's live run on its other lane when this process started.
+   * Sent only when the run froze `laneNotice` on and such a run exists; a note, never a lock.
+   */
+  otherLaneRun?: OtherLaneRun;
   /**
    * SDK `maxTurns` for this run, frozen in `runs.config_json` when attempt 1 starts: the
    * workspace setting, else `DESKMATES_MAX_TURNS` (ADR-0016 amendment 2). `null` is the workspace's
@@ -233,6 +266,7 @@ export type SidecarToolName =
   | "browser_cli_workflow"
   | "memory_search"
   | "task_deliver"
+  | "app_publish"
   | ConnectorToolName
   | IntegrationToolName;
 

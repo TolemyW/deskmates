@@ -22,6 +22,7 @@ import { errorMessage, formatDateTime } from "../../format.js";
 import type { MessageKey } from "../../i18n/catalogs.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { runHref } from "../../router.js";
+import { WorkspaceFilePreview } from "../files/workspace-file-preview.js";
 
 export interface TriggerDraft {
   trigger: TaskTrigger;
@@ -384,14 +385,23 @@ export function TaskExecutionPanel({
                       <p className="muted small">{t("tasks.execution.delivery.noFiles")}</p>
                     ) : (
                       delivery.publications.map((p) => (
-                        <p key={p.path} className="muted small">
-                          {t("tasks.execution.delivery.published", {
-                            path: p.path,
-                            size: p.sizeBytes,
-                            sha: p.sha256.slice(0, 12),
-                            time: formatDateTime(p.checkedAt),
-                          })}
-                        </p>
+                        <div key={p.path} className="task-delivery-publication">
+                          <p className="muted small">
+                            {t("tasks.execution.delivery.published", {
+                              path: p.path,
+                              size: p.sizeBytes,
+                              sha: p.sha256.slice(0, 12),
+                              time: formatDateTime(p.checkedAt),
+                            })}
+                          </p>
+                          {/* ADR-0014 amendment A6 decision 40: the same drawer as every file link. */}
+                          <WorkspaceFilePreview
+                            api={api}
+                            workspaceId={workspaceId}
+                            path={p.path}
+                            compact
+                          />
+                        </div>
                       ))
                     )}
                   </li>

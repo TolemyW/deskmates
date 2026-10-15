@@ -1661,4 +1661,9 @@
     background: var(--app-surface-hover);
     font-weight: 600;
   }
+  /* ADR-0037: a provisional, streamed reply; the final message replaces it. */
+  .transcript .reply-preview .body {
+    white-space: pre-wrap;
+    opacity: 0.85;
+  }
 }

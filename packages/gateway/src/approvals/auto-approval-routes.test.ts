@@ -12,7 +12,7 @@ afterEach(async () => {
   h = undefined;
 });
 
-type Setting = { autoApproval: { workspaceId: string; enabled: boolean } };
+type Setting = { autoApproval: { workspaceId: string; enabled: boolean; expiryMinutes: number } };
 
 describe("workspace automatic approval setting (B1)", () => {
   it("is off for a new workspace and audited on every change", async () => {
@@ -20,7 +20,11 @@ describe("workspace automatic approval setting (B1)", () => {
     const { workspace } = await h.seed();
     const read = await h.api<Setting>("GET", `/api/workspaces/${workspace.id}/auto-approval`);
     expect(read.status).toBe(200);
-    expect(read.json.autoApproval).toEqual({ workspaceId: workspace.id, enabled: false });
+    expect(read.json.autoApproval).toEqual({
+      workspaceId: workspace.id,
+      enabled: false,
+      expiryMinutes: 15,
+    });
 
     const on = await h.api<Setting>("PUT", `/api/workspaces/${workspace.id}/auto-approval`, {
       enabled: true,
@@ -44,6 +48,25 @@ describe("workspace automatic approval setting (B1)", () => {
       enabled: "yes",
     });
     expect(invalid.status).toBe(400);
+  });
+
+  it("changes the request expiry within 1 to 1440 minutes, audited (amendment 3, A7)", async () => {
+    h = await startHarness();
+    const { workspace } = await h.seed();
+    const path = `/api/workspaces/${workspace.id}/auto-approval`;
+    const set = await h.api<Setting>("PUT", path, { expiryMinutes: 30 });
+    expect(set.status).toBe(200);
+    expect(set.json.autoApproval).toMatchObject({ enabled: false, expiryMinutes: 30 });
+    await h.api("PUT", path, { expiryMinutes: 30 });
+    for (const bad of [0, 1441, 2.5, "10"])
+      expect((await h.api("PUT", path, { expiryMinutes: bad })).status).toBe(400);
+    expect((await h.api("PUT", path, {})).status).toBe(400);
+    const audit = h.app.deskmates.ctx.audit
+      .list({ workspaceId: workspace.id })
+      .filter((row) => row.action === "workspace.approval_expiry_set");
+    expect(audit.map((row) => [row.before, row.after])).toEqual([
+      [{ approvalExpiryMinutes: 15 }, { approvalExpiryMinutes: 30 }],
+    ]);
   });
 
   it("an Admin may change it; a Member and a Guest may only read it", async () => {
@@ -73,6 +96,7 @@ describe("workspace automatic approval setting (B1)", () => {
     expect((await member.signIn("mel")).status).toBe(200);
     expect((await member.fetch("GET", path)).status).toBe(200);
     expect((await member.fetch("PUT", path, { body: { enabled: true } })).status).toBe(403);
+    expect((await member.fetch("PUT", path, { body: { expiryMinutes: 5 } })).status).toBe(403);
 
     const guest = new BrowserJar(h.baseUrl);
     expect((await guest.signIn("gus")).status).toBe(200);

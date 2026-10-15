@@ -34,6 +34,7 @@ Each feature documents itself in its own file under `docs/`. A new feature adds 
 `docs/<topic>.md` (kebab-case) and one line to this list, in its sorted place; it does not add
 a section to this README.
 
+- [App sharing: published workspace apps (ADR-0035)](docs/app-shares.md)
 - [Approvals](docs/approvals.md)
 - [Configuration](docs/configuration.md)
 - [Connectors (ADR-0012)](docs/connectors.md)
@@ -48,6 +49,7 @@ a section to this README.
 - [M1/M2 feature closeout operator APIs](docs/feature-closeout-apis.md)
 - [Model jobs: vision probes and SOUL proposals (ADR-0023 amendment 1)](docs/model-jobs.md)
 - [Model transport observations](docs/model-transport-observations.md)
+- [Name lookups and bounded chat approvals (#113)](docs/name-lookups.md)
 - [Network profiles (ADR-0027 amendment 1)](docs/network-profiles.md): online LAN grants, publication, preflight
 - [Operations (M1)](docs/operations.md)
 - [Operator authentication and listeners (M2 B4)](docs/operator-authentication.md): browser sign-in and sessions (ADR-0022 P1)
@@ -56,6 +58,7 @@ a section to this README.
 - [Per-bot working directory experiment](docs/per-bot-working-directory.md)
 - [Private-chat handoffs (ADR-0024)](docs/private-chat-handoffs.md)
 - [Reviewed knowledge and memory administration (B5)](docs/knowledge-and-memory-administration.md)
+- [Run startup timeline and reply preview (ADR-0037)](docs/run-startup-timeline.md)
 - [Snapshot delivery experiment](docs/snapshot-delivery-experiment.md)
 - [Takeover (M1)](docs/takeover.md)
 - [Triggers (M1)](docs/triggers.md)

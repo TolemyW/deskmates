@@ -256,7 +256,8 @@ export function networkGrantAllowsUrl(
 }
 
 /** The layers a connectivity preflight tells apart (ADR-0027 amendment 1 decision 14). */
-export type NetworkLayer = "policy" | "dns" | "tcp" | "tls" | "http";
+/** `route`: the target lies inside a Docker network of the daemon (amendment 2 decision 15). */
+export type NetworkLayer = "policy" | "route" | "dns" | "tcp" | "tls" | "http";
 
 export interface NetworkLayerResult {
   layer: NetworkLayer;

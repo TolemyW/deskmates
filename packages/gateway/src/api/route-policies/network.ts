@@ -5,6 +5,8 @@
 import { type PolicyTable, admin, root } from "./policy.js";
 
 export const networkRoutePolicies: PolicyTable = {
+  // Amendment 2 decision 15: installation-level network facts, like the profiles.
+  "GET /api/network-overlaps": root(),
   "GET /api/network-profiles": root(),
   "POST /api/network-profiles": root(),
   "PUT /api/network-profiles/:id": root("profile looked up by id; installation-level"),

@@ -15,8 +15,10 @@ import {
   isDeskmatesError,
 } from "@deskmates/contracts";
 import { z } from "zod";
+import { deskmatesToolName } from "./risk-tier.js";
 import type { ThreadToolsContext } from "./thread-tools.js";
 import { wrapIntegrationContent } from "./untrusted.js";
+import { valueForModel } from "./vision-withhold.js";
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
 
@@ -51,7 +53,11 @@ export function integrationTools(ctx: ThreadToolsContext): SdkMcpToolDefinition<
   ): Promise<ToolResult> => {
     try {
       const value = await call();
-      return answer(source, value, failed(value));
+      return answer(
+        source,
+        valueForModel(ctx.request, ctx.sink, deskmatesToolName(tool), value),
+        failed(value),
+      );
     } catch (err) {
       return refused(source, tool, err);
     }

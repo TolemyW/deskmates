@@ -168,7 +168,7 @@ export class ThreadRouter {
     threadId: ThreadId,
     body: string,
     attachments: readonly Attachment[] = [],
-    opts: { wakeExcept?: BotId; wakeOnly?: BotId; runId?: Run["id"] } = {},
+    opts: { wakeExcept?: BotId; wakeOnly?: BotId; runId?: Run["id"]; inert?: true } = {},
   ): PostResult {
     const thread = this.threads.mustGet(threadId);
     const members = this.threads.members(threadId);
@@ -183,6 +183,8 @@ export class ThreadRouter {
       ...(opts.runId === undefined ? {} : { runId: opts.runId }),
     });
     if (isPastDeadline(thread)) return { message, runs: [], deadlinePassed: true };
+    // A routing-inert notice (an approval request, reminder or expiry, ADR-0002 amendment 3 A4).
+    if (opts.inert) return { message, runs: [] };
     const runs = members
       .filter((member) => member.botId !== opts.wakeExcept)
       .filter((member) => opts.wakeOnly === undefined || member.botId === opts.wakeOnly)

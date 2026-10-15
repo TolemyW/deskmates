@@ -1,0 +1,20 @@
+{
+  "appShares.disabled": "此 Deskmates 服务器尚未启用应用分享。",
+  "appShares.empty": "还没有发布的应用。请让机器人启动一个应用并发布。",
+  "appShares.intro": "机器人在此工作区中启动并发布的 Web 应用。每个应用有独立地址，只有已登录的本工作区成员可以使用。",
+  "appShares.loading": "正在加载应用…",
+  "appShares.open.continue": "继续",
+  "appShares.open.failed": "无法打开应用：{error}",
+  "appShares.open.opening": "正在打开应用…",
+  "appShares.open.title": "已发布的应用",
+  "appShares.openApp": "打开",
+  "appShares.port": "端口 {port}",
+  "appShares.refresh": "重新检查",
+  "appShares.state.available": "运行中",
+  "appShares.state.revoked": "已停止分享",
+  "appShares.state.unavailable": "未运行",
+  "appShares.stop": "停止分享",
+  "appShares.stopConfirm": "停止分享“{label}”？已打开的标签页会立即失去访问权限；应用仍在工作区中运行。",
+  "appShares.title": "应用",
+  "appShares.unavailableHint": "此端口没有响应。请让机器人重新启动应用；地址保持不变。"
+}
