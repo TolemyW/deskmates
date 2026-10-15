@@ -101,3 +101,46 @@ part of this decision.
 | 6 | No timer or scheduler purges Trash, no export/backup/idle-stop endpoint or setting is introduced, and usage/cost rows disappear on permanent delete | T0 route/config/schema assertions plus T1 fake-clock test | none |
 | 7 | The operator command lists exact resources/orphans and requires confirmation before deletion; prefix-similar resources and another Deskmates deployment are untouched | T0 command planning test; T2 labeled-resource cleanup test; stable runbook rehearsal | orphan count |
 
+
+## Amendment 1 (2026-10-16): pause is not Trash
+
+Source: GitHub issue #10 (owner scope: a `paused` flag on the bot; cron, webhook and chat wakes
+skipped with a visible reason; running runs untouched; parked approvals stay parked; distinct from
+Trash). The scheduler's hold of queued work and the webhook's 409 are engineering choices awaiting
+owner review.
+
+### Context
+
+Trash (decision 4) was the only way to stop an always-on bot, and it is a hard stop: it cancels
+the bot's runs and denies its approvals. An operator who only wants a bot to stop taking new work
+for a while, and to pick up again where it was, had nothing.
+
+### Decision
+
+8. **A bot can be paused, which stops new work and ends nothing.** `PATCH /api/bots/:id` with
+   `{paused: true | false}` sets or clears `bots.paused_at` and `paused_by` (an actor label), audited
+   as `bot.update`; `BotDefinition` carries `pausedAt` and `pausedBy` while paused. While paused:
+   - a matching cron round creates no run; the Gateway log names each skipped round and the bot's
+     private chat says so once per entry and pause;
+   - a webhook delivery is refused with 409 `invalid_transition`, `details.reason: "bot_paused"`,
+     so the sender can retry later; nothing is queued behind the pause;
+   - no thread wake is created for the bot, whether by a mention, `@everyone`, an unaddressed
+     request offered to members, a system notice or `message_bot`; the thread gets a system
+     message naming the paused bot and the message it was not woken by, and an unaddressed request
+     goes to the next awake member. The message stays unseen by the bot, so the first wake after
+     it is resumed delivers it; missed wakes are not replayed by themselves;
+   - the bot's own queued runs, and a parked run whose approval a person answers meanwhile, wait in
+     the scheduler (a `log` event `{source: "scheduler", waitReason: "bot_paused"}`) and start when
+     the bot is resumed. Gateway jobs hosted on the bot (a presentation summary, a probe, a SOUL
+     draft; they carry a `runType`) are not its own work and still run;
+   - a live run finishes; a parked run stays parked; no run is cancelled and no approval denied;
+   - "Run now" (ADR-0043 decision 5) and a round member retry are refused.
+
+   Unlike Trash, a paused bot stays in every list, thread and routing table, its configuration
+   stays editable, and resuming needs no restore. Resuming starts the queued work at once.
+
+### Verification (amendment 1)
+
+| Decision | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 8 | a paused bot gets no run from two cron ticks and a mention, its chat shows one schedule notice and one wake notice, a webhook is 409 `bot_paused`, "Run now" is 409; in a group an unaddressed request and `@everyone` wake only the awake member; a queued run waits with `waitReason: bot_paused` while a parked run stays parked, and resuming starts the queued run; the audit records `paused` before and after | T1 `packages/gateway/src/bots/bot-pause.test.ts` | paused bots; skipped wakes in the Gateway log |
