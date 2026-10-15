@@ -82,6 +82,16 @@ export type ModelJobRequest =
       projection: string;
       question: string;
     }
+  /**
+   * ADR-0005 amendment 6, decision 45: plan one round of a group thread from its roster and the
+   * human's request (untrusted data); the Gateway validates the plan and decides who wakes.
+   */
+  | {
+      kind: "round_triage";
+      roster: { name: string; role: string; owner?: true }[];
+      everyone: boolean;
+      request: string;
+    }
   | {
       kind: "soul_proposal";
       mode: "create" | "edit";

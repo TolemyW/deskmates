@@ -102,11 +102,13 @@ export async function postGroupMessage(
   stack: Stack,
   thread: Thread,
   body: string,
+  options: { roundMode?: "parallel" | "sequential" } = {},
 ): Promise<{ message: ThreadMessage; runs: RunView[] }> {
   const response = await stack.api<{ message: ThreadMessage; runs: RunView[] }>(
     "POST",
     `/api/threads/${thread.id}/messages`,
-    { body },
+    // ADR-0005 amendment 4, decision 29: one-by-one is asked per message; parallel sends nothing.
+    { body, ...(options.roundMode === "sequential" ? { roundMode: "sequential" } : {}) },
   );
   if (response.status !== 201) {
     throw new Error(`post message: ${response.status} ${JSON.stringify(response.json)}`);

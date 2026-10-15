@@ -125,7 +125,10 @@ function runEventsRetention(env: Env): { runEventsRetentionDays?: number } {
 function groupRouting(env: Env): GroupRouting {
   const value = env.DESKMATES_GROUP_ROUTING?.trim() || GROUP_ROUTING_DEFAULT;
   if (!isGroupRouting(value))
-    throw new DeskmatesError("validation", "DESKMATES_GROUP_ROUTING must be walk-v1 or owner-v1");
+    throw new DeskmatesError(
+      "validation",
+      "DESKMATES_GROUP_ROUTING must be walk-v1, owner-v1 or round-v1",
+    );
   return value;
 }
 

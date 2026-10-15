@@ -14,6 +14,21 @@ const WAKE_BLOCKED: Record<WakeBlockedReason, string> = {
   deadline_passed: "the thread is past its deadline",
 };
 
+/**
+ * ADR-0005 amendment 6, decision 50: the Gateway's facts about the recipient's previous final
+ * reply in this thread, worded like the `thread_post` answer. A final reply is posted after the
+ * run ends, so the next wake is the first place the bot can learn that an address missed.
+ */
+export function describeLastReply(routing: PostedMessageRouting): string {
+  const missed = routing.unknown.map((name) => `@${name}`).join(", ");
+  const addressed = routing.everyone
+    ? "It was addressed to everyone."
+    : routing.addressed.length > 0
+      ? `It was addressed to ${routing.addressed.join(", ")}.`
+      : "It mentioned no member, so it woke nobody.";
+  return `Your final reply in your previous run was posted as message #${routing.seq}. ${addressed} No member of this thread is called ${missed}, so that address reached nobody; if someone has to act, post again with @ and a member's exact name.`;
+}
+
 export function describePosted(
   routing: PostedMessageRouting | undefined,
   ownerRouting: boolean,

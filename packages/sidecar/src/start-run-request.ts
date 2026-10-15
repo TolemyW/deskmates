@@ -106,6 +106,40 @@ const triggerSchema = z.discriminatedUnion("kind", [
             remaining: z.array(z.string()),
           })
           .optional(),
+        // ADR-0005 amendment 6, decisions 47, 48 and 50: named here for the same reason.
+        round: z
+          .object({
+            messageSeq: z.number().int().positive(),
+            phase: z.enum(["work", "close"]),
+            assignments: z.array(
+              z.object({
+                name: z.string().min(1),
+                task: z.string(),
+                you: z.literal(true).optional(),
+              }),
+            ),
+            closer: z.string().min(1),
+            youClose: z.literal(true).optional(),
+            outcomes: z
+              .array(
+                z.object({
+                  name: z.string().min(1),
+                  outcome: z.enum(["replied", "silent", "failed", "cancelled", "stopped"]),
+                  seqs: z.array(z.number().int().positive()),
+                }),
+              )
+              .optional(),
+          })
+          .optional(),
+        lastReply: z
+          .object({
+            seq: z.number().int().positive(),
+            addressed: z.array(z.string()),
+            everyone: z.boolean(),
+            unknown: z.array(z.string()),
+            spaced: z.array(z.string()),
+          })
+          .optional(),
       })
       .optional(),
     relayCount: z.number().int().nonnegative(),
@@ -197,6 +231,22 @@ export const startRunRequestSchema = z.object({
       z.object({
         kind: z.literal("approval_review"),
         reviewPackage: z.string().min(2).max(24_000),
+      }),
+      // ADR-0005 amendment 6, decision 45: at most six members and a bounded request.
+      z.object({
+        kind: z.literal("round_triage"),
+        roster: z
+          .array(
+            z.object({
+              name: z.string().min(1),
+              role: z.string(),
+              owner: z.literal(true).optional(),
+            }),
+          )
+          .min(1)
+          .max(6),
+        everyone: z.boolean(),
+        request: z.string().max(16_000),
       }),
       z.object({
         kind: z.literal("soul_proposal"),

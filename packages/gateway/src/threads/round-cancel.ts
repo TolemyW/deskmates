@@ -2,6 +2,7 @@
 
 import { type MessageId, type RunId, isTerminal } from "@deskmates/contracts";
 import type { RunStore } from "../ledger/runs.js";
+import type { RoundPlanStore } from "./round-plans.js";
 import type { RoundStore } from "./rounds.js";
 import type { RoutingWalkStore } from "./routing-walks.js";
 
@@ -9,6 +10,8 @@ export interface RoundCancelDeps {
   rounds: RoundStore;
   runs: RunStore;
   walks: RoutingWalkStore;
+  /** Triaged rounds (ADR-0005 amendment 6): their triage job and closer wake go with them. */
+  plans?: RoundPlanStore;
   /** The scheduler's cancel: transitions the run and stops a live sidecar. */
   cancelRun: (runId: RunId, by: string) => void;
 }
@@ -32,7 +35,14 @@ export function cancelRound(
     for (const id of tree) {
       if (deps.walks.get(id)?.status === "pending") deps.walks.complete(id);
     }
-    return { rounds: tree, targets: deps.rounds.runsOf(tree) };
+    // A triage job or closer wake serves its round only, so it is never shared.
+    const planned = tree.flatMap((id) => {
+      const plan = deps.plans?.get(id);
+      return [plan?.triageRunId, plan?.closerRunId].flatMap((runId) =>
+        runId ? [{ runId, shared: false }] : [],
+      );
+    });
+    return { rounds: tree, targets: [...deps.rounds.runsOf(tree), ...planned] };
   });
   const cancelled: RunId[] = [];
   const kept: RunId[] = [];

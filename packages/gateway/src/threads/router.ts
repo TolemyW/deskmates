@@ -6,6 +6,7 @@ import {
   LOOP_BREAKER_BOT_MESSAGES,
   LOOP_BREAKER_RELAY_MAX,
   type Mention,
+  type MentionOptions,
   type MessageId,
   RUN_ERROR_TURN_BUDGET,
   type RequestedRoundMode,
@@ -23,8 +24,10 @@ import {
 import type { EventStore } from "../ledger/events.js";
 import type { RunRecord, RunStore } from "../ledger/runs.js";
 import type { WorkspaceLimitStore } from "../limits/workspace-limits.js";
+import type { RoundTriageRequester } from "../model-jobs/round-triage.js";
 import { type CapBreach, blockedReason, breachLabel, evaluateCaps, fixedCaps } from "./caps.js";
 import type { MessageStore } from "./messages.js";
+import type { RoundPlanStore, StoredPlan } from "./round-plans.js";
 import type { RoundStore } from "./rounds.js";
 import type { RoutingWalk, RoutingWalkStore, WalkMode } from "./routing-walks.js";
 import type { NamedMember, ThreadStore } from "./threads.js";
@@ -85,6 +88,17 @@ export interface ThreadRouterOptions {
    * awake.
    */
   isPaused?: (botId: BotId) => boolean;
+  /**
+   * Triaged rounds (amendment 6, proposed): their plans, and the job that triages a request.
+   * Under `round-v1` a router without both routes every request on the fallback of decision 46.
+   */
+  roundPlans?: RoundPlanStore;
+  triage?: RoundTriageRequester;
+}
+
+/** A bounded reason for a plan's fallback or early close. */
+function reasonText(text: string): string {
+  return text.length > 300 ? `${text.slice(0, 299)}…` : text;
 }
 
 export class ThreadRouter {
@@ -100,8 +114,18 @@ export class ThreadRouter {
     private readonly options: ThreadRouterOptions = {},
   ) {}
 
+  /** Amendment 2's routing; `round-v1` keeps it for everything amendment 6 does not change. */
   private get ownerRouting(): boolean {
-    return this.options.groupRouting === "owner-v1";
+    return this.options.groupRouting === "owner-v1" || this.options.groupRouting === "round-v1";
+  }
+
+  private get roundRouting(): boolean {
+    return this.options.groupRouting === "round-v1";
+  }
+
+  /** Amendment 6, decision 50: under `round-v1` a member written `@ name` is a mention. */
+  get mentionOptions(): MentionOptions {
+    return this.roundRouting ? { spaced: true } : {};
   }
 
   postHuman(input: PostHumanMessageInput): PostResult {
@@ -119,7 +143,7 @@ export class ThreadRouter {
         authorKind: "human",
         authorId: input.authorId ?? "web",
         body: input.body,
-        mentions: parseMentions(input.body, members),
+        mentions: parseMentions(input.body, members, undefined, this.mentionOptions),
         relayCount: 0,
         ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
         ...(input.externalId === undefined ? {} : { externalId: input.externalId }),
@@ -209,10 +233,17 @@ export class ThreadRouter {
     return created;
   }
 
-  /** A terminal run releases its member in an in-turn walk. Parked runs do not. */
+  /**
+   * A terminal run releases its member in an in-turn walk, and moves a triaged round on (amendment
+   * 6): a triage job dispatches or falls back, an assigned run may complete the round. Parked runs
+   * do neither.
+   */
   runEnded(run: RunRecord): RunRecord[] {
     if (!isTerminal(run.status) || !run.threadId) return [];
-    const created = this.walks.transaction(() => this.advanceThreadWalk(run.threadId as ThreadId));
+    const created = this.walks.transaction(() => [
+      ...this.advanceRounds(run),
+      ...this.advanceThreadWalk(run.threadId as ThreadId),
+    ]);
     if (created.length > 0) this.onRunsCreated(created);
     return created;
   }
@@ -295,7 +326,7 @@ export class ThreadRouter {
       const relayCount = sourceRelay + 1;
       const mentions: Mention[] = forceTarget
         ? [{ kind: "bot", botId: forceTarget }]
-        : parseMentions(body, members, run.botId);
+        : parseMentions(body, members, run.botId, this.mentionOptions);
       const message = this.messages.append({
         threadId,
         authorKind: "bot",
@@ -313,6 +344,10 @@ export class ThreadRouter {
         relayCount,
         botCount: this.messages.botCountSinceLastHuman(threadId),
         repeats: this.messages.botRepeatsSinceLastHuman(message),
+        // Amendment 6, decision 49: a triaged round's posts count once toward the turn budget.
+        ...(this.roundRouting && this.options.roundPlans
+          ? { budgetCount: this.options.roundPlans.botCountByRound(threadId) }
+          : {}),
       });
       const wakeBlocked = blockedReason(breaches);
       if (!forceTarget)
@@ -378,6 +413,13 @@ export class ThreadRouter {
       );
       if (message.authorKind === "human") this.openRound(thread, message, "parallel", targets);
       created = this.directWakes(thread, message, targets);
+    } else if (
+      this.roundRouting &&
+      message.authorKind === "human" &&
+      members.length > 1 &&
+      thread.kind === "chat"
+    ) {
+      created = this.startRound(thread, members, message, everyone);
     } else if (everyone && !sequential) {
       // Amendment 4, decision 28: every eligible member at once; a bot never consults itself.
       const targets = this.withoutPaused(
@@ -392,6 +434,146 @@ export class ThreadRouter {
     } else created = this.routeUnaddressed(thread, members, message);
     if (publish && created.length > 0) this.onRunsCreated(created);
     return created;
+  }
+
+  /**
+   * Amendment 6, decisions 44 to 46: open the round and its plan in this transaction and queue the
+   * triage job; without a plan store or a job, route as `owner-v1` would.
+   */
+  private startRound(
+    thread: Thread,
+    members: readonly NamedMember[],
+    message: ThreadMessage,
+    everyone: boolean,
+  ): RunRecord[] {
+    if (thread.status === "paused") return [];
+    const targets = members.map((member) => member.botId);
+    this.openRound(thread, message, everyone ? "parallel" : "offer", targets);
+    const plans = this.options.roundPlans;
+    if (!plans || !this.options.rounds?.exists(message.id))
+      return this.fallback(thread, members, message, "no round plans in this Gateway");
+    plans.open(message.id);
+    const job = this.options.triage?.request({ thread, message, members });
+    if (!job) return this.fallback(thread, members, message, "no triage job could be queued");
+    plans.setTriageRun(message.id, job.id);
+    return [job];
+  }
+
+  /** Decision 46: the message is routed as `owner-v1` routes it, and the plan says why. */
+  private fallback(
+    thread: Thread,
+    members: readonly NamedMember[],
+    message: ThreadMessage,
+    reason: string,
+  ): RunRecord[] {
+    this.options.roundPlans?.setPhase(message.id, "fallback", { reason: reasonText(reason) });
+    if (message.mentions.some((mention) => mention.kind === "everyone"))
+      return this.directWakes(
+        thread,
+        message,
+        members.map((member) => member.botId),
+      );
+    return this.enqueueWalk(thread, message, members, "first_taker");
+  }
+
+  /** The plans a terminal run moves on: the one it triaged or closed, and those it works on. */
+  private advanceRounds(run: RunRecord): RunRecord[] {
+    const plans = this.options.roundPlans;
+    if (!plans) return [];
+    const own = plans.byRun(run.id);
+    if (own?.as === "triage") return this.dispatchRound(own.plan, run);
+    if (own?.as === "closer" && own.plan.phase === "closing")
+      plans.setPhase(own.plan.messageId, "closed");
+    return plans.workingForRun(run.id).flatMap((plan) => this.closeRound(plan));
+  }
+
+  /** The closer a plan has now: the one triage named while it is a member, else an assignee. */
+  private closerOf(plan: StoredPlan, members: readonly NamedMember[]): BotId | undefined {
+    const current = new Set(members.map((member) => member.botId));
+    if (plan.closerBotId && current.has(plan.closerBotId)) return plan.closerBotId;
+    return plan.assignments.find((a) => current.has(a.botId))?.botId;
+  }
+
+  /**
+   * Decision 47: the triage job ended. A valid plan wakes its assigned members at once and makes
+   * the closer the owner; anything else falls back (decision 46). A cancelled job wakes nobody.
+   */
+  private dispatchRound(plan: StoredPlan, triage: RunRecord): RunRecord[] {
+    const plans = this.options.roundPlans as RoundPlanStore;
+    if (plan.phase !== "triage") return [];
+    const message = this.messages.mustGet(plan.messageId);
+    const thread = this.threads.mustGet(message.threadId);
+    if (triage.status === "cancelled" || this.options.rounds?.isCancelled(plan.messageId)) {
+      plans.setPhase(plan.messageId, "closed", { reason: "the round or its triage was cancelled" });
+      return [];
+    }
+    const members = this.threads.members(thread.id);
+    const current = new Set(members.map((member) => member.botId));
+    const assigned = plan.assignments.filter((a) => current.has(a.botId));
+    if (triage.status !== "succeeded" || assigned.length === 0) {
+      const why =
+        triage.status !== "succeeded"
+          ? `triage ${triage.status}${triage.error ? `: ${triage.error}` : ""}`
+          : "triage assigned no current member";
+      return this.fallback(thread, members, message, why);
+    }
+    if (thread.status === "paused" || isPastDeadline(thread)) {
+      plans.setPhase(plan.messageId, "closed", {
+        reason: "the thread is paused or past its deadline",
+      });
+      return [];
+    }
+    plans.setPhase(plan.messageId, "working");
+    const closer = this.closerOf(plan, members);
+    if (closer && this.threads.setOwner(thread.id, closer))
+      this.options.onThreadChanged?.(thread.id);
+    return this.directWakes(
+      thread,
+      message,
+      assigned.map((a) => a.botId),
+    );
+  }
+
+  /**
+   * Decision 48: once the latest related run of every assigned member is terminal, wake the
+   * closer exactly once (or take its queued wake), unless it was the only assignee or the thread
+   * cannot start work. The phase moves off `working` here, so a later end never wakes it again.
+   */
+  private closeRound(plan: StoredPlan): RunRecord[] {
+    const plans = this.options.roundPlans as RoundPlanStore;
+    if (plan.phase !== "working" || !plans.allAssignedEnded(plan)) return [];
+    const message = this.messages.mustGet(plan.messageId);
+    const thread = this.threads.mustGet(message.threadId);
+    const closer = this.closerOf(plan, this.threads.members(thread.id));
+    const stop = (reason: string): RunRecord[] => {
+      plans.setPhase(plan.messageId, "closed", { reason });
+      return [];
+    };
+    if (this.options.rounds?.isCancelled(plan.messageId)) return stop("the round was cancelled");
+    if (!closer) return stop("no closer is still a member");
+    if (plan.assignments.length === 1 && plan.assignments[0]?.botId === closer)
+      return stop("the closer was the only assignee; its reply is the answer");
+    if (thread.status === "paused" || isPastDeadline(thread))
+      return stop("the thread is paused or past its deadline");
+    const queued = this.runs.findQueued(closer, thread.id);
+    const run = queued ?? this.createWake(thread, closer, message);
+    plans.setPhase(plan.messageId, "closing", { closerRunId: run.id });
+    this.events?.append({
+      runId: run.id,
+      kind: "log",
+      payload: {
+        source: "round_close",
+        messageId: plan.messageId,
+        closerBotId: closer,
+        coalesced: queued !== undefined,
+        assigned: plans.assignedRuns(plan).map((a) => ({
+          botId: a.botId,
+          runId: a.runId ?? null,
+          status: a.status ?? null,
+        })),
+      },
+    });
+    return queued ? [] : [run];
   }
 
   /** Decision 30: the durable round of an accepted originating message, with its parent. */

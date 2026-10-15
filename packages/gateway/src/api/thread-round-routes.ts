@@ -13,6 +13,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { GatewayContext } from "../context.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
 import { cancelRound } from "../threads/round-cancel.js";
+import { RoundPlanStore } from "../threads/round-plans.js";
 import { requestActorId } from "./actor.js";
 import { startedRun } from "./side-chat-guard.js";
 import { actsBelowAdmin } from "./workspace-access.js";
@@ -77,6 +78,7 @@ export function registerThreadRoundRoutes(
           rounds: ctx.rounds,
           runs: ctx.runs,
           walks: ctx.walks,
+          plans: new RoundPlanStore(ctx.db),
           cancelRun: (runId, actor) => scheduler.cancel(runId, actor),
         },
         messageId,

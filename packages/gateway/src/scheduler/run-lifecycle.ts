@@ -58,6 +58,7 @@ import { recordAuthoredSkills } from "../skills/authoring.js";
 import { STARTER_SKILL_PACK } from "../skills/starter-catalog.js";
 import { announceDelegationOutcome } from "../threads/delegation-outcomes.js";
 import { type DeliveryGroup, buildDelivery } from "../threads/delivery.js";
+import { recordFinalReplyRouting, roundFacts } from "../threads/round-delivery.js";
 import { modelUpstreamsOf } from "./model-upstream-freeze.js";
 import { rulesChangedSince } from "./rule-revisions.js";
 import { continuationPolicy, freezeRunLimits, runMaxTurns } from "./run-limits.js";
@@ -345,8 +346,10 @@ export class RunLifecycle {
    */
   private deliveryGroup(run: RunRecord, thread: Thread): DeliveryGroup | undefined {
     const { ctx } = this;
-    // A run created before the knob existed has no value: it was routed by the walk.
-    if (run.config.groupRouting !== "owner-v1") return undefined;
+    // A run created before the knob existed has no value: it was routed by the walk. `round-v1`
+    // keeps the roster and adds its round facts (ADR-0005 amendment 6).
+    const routing = run.config.groupRouting;
+    if (routing !== "owner-v1" && routing !== "round-v1") return undefined;
     const members = ctx.threads.members(thread.id);
     if (members.length < 2 || thread.kind !== "chat") return undefined;
     const bots = ctx.bots.list(thread.workspaceId);
@@ -373,6 +376,7 @@ export class RunLifecycle {
             },
           }
         : {}),
+      ...(routing === "round-v1" ? roundFacts(ctx, run, name) : {}),
     };
   }
 
@@ -889,6 +893,7 @@ export class RunLifecycle {
           } else {
             const message = ctx.router.postFromRun(run, reply);
             published.push({ type: "thread_message", threadId: run.threadId, message });
+            recordFinalReplyRouting(ctx, run, message);
           }
         }
         const silent = run.threadId !== undefined && !reply;

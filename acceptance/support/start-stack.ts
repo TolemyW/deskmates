@@ -38,7 +38,7 @@ function groupRoutingFromEnv(): GroupRouting | undefined {
   const value = process.env.DESKMATES_GROUP_ROUTING?.trim();
   if (!value) return undefined;
   if (!isGroupRouting(value)) {
-    throw new Error(`DESKMATES_GROUP_ROUTING must be walk-v1 or owner-v1, got ${value}`);
+    throw new Error(`DESKMATES_GROUP_ROUTING must be walk-v1, owner-v1 or round-v1, got ${value}`);
   }
   return value;
 }
