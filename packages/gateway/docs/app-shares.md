@@ -84,7 +84,10 @@ of the operator listener on 18381.
 3. Add a site to `shared/Caddyfile` on the same public port. Caddy chooses the site by SNI and
    `Host`, so the operator's IP site and its certificate stay as they are. `skip_install_trust`
    keeps a user-level Caddy from trying to install its root into the system store; put it in the
-   existing global options block if there is one.
+   existing global options block if there is one. A global `auto_https off` (the stable
+   Caddyfile had one) also stops `tls internal` from issuing the wildcard certificate, and every
+   app host then fails the TLS handshake; use `auto_https disable_redirects` instead, which keeps
+   certificate automation and adds no port-80 redirect (found on Testbox on 2026-10-14).
 
    ```
    {

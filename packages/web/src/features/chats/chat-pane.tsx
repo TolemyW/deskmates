@@ -14,7 +14,7 @@ import { useActorLabel } from "../../state/session-roles.js";
 import { DesktopView } from "../computer/desktop-view.js";
 import { AttachmentCards } from "./attachment-cards.js";
 import { ChatInfo } from "./chat-info.js";
-import { ChatRunStop } from "./chat-run-stop.js";
+import { ChatRunStatus } from "./chat-run-status.js";
 import {
   ComposerAttachButton,
   ComposerAttachmentChips,
@@ -531,9 +531,18 @@ export function ChatPane(props: ChatPaneProps) {
       latest?.status === "failed" || latest?.status === "cancelled" || latest?.status === "stopped"
         ? runStatusLabel(latest.status)
         : t("chatPane.activity.ready");
+    // One entry per status with its count ("queued ×3"), so several runs of one bot never read as
+    // a list of repeated states (#126); the run list under the composer has the per-run detail.
+    const byStatus = new Map<string, number>();
+    for (const run of runs) {
+      const label = runStatusLabel(run.status);
+      byStatus.set(label, (byStatus.get(label) ?? 0) + 1);
+    }
     memberActivity.set(
       member.botId,
-      runs.length > 0 ? runs.map((run) => runStatusLabel(run.status)).join(", ") : idleLabel,
+      runs.length > 0
+        ? [...byStatus].map(([label, n]) => (n > 1 ? `${label} ×${n}` : label)).join(", ")
+        : idleLabel,
     );
   }
 
@@ -650,19 +659,6 @@ export function ChatPane(props: ChatPaneProps) {
           scrollTargetId={props.messageId ? `message-${props.messageId}` : undefined}
           composer={
             <div className="chat-composer-region">
-              {" "}
-              <ChatRunStop
-                key={threadId}
-                api={api}
-                runs={pending}
-                botName={botName}
-                thread={detail?.thread}
-                memberCount={members.length}
-                onRunUpdated={(run) => {
-                  runRevisionRef.current += 1;
-                  dispatch({ type: "run_status", threadId, run });
-                }}
-              />
               {pending.some((run) => run.status === "queued") ? (
                 <p className="chat-notice">{t("chatPane.queueNotice")}</p>
               ) : null}
@@ -922,28 +918,19 @@ export function ChatPane(props: ChatPaneProps) {
             })}
             <IncomingHandoffs api={api} threadId={threadId} onRuns={setHandoffRuns} />
             <ReplyPreviews previews={previews} runs={pending} botName={botName} />
-            {pending.map((run) => (
-              <li key={run.id} className="typing" data-testid="typing">
-                <Avatar name={botName(run.botId)} />
-                <span className="typing-dots" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-                <span className="muted">
-                  {t.rich("chatPane.typing", {
-                    name: botName(run.botId),
-                    status: runStatusLabel(run.status),
-                    author: (text) => <span className="author bot">{text}</span>,
-                    link: (text) => (
-                      <a href={runHref(run.id)} className="small">
-                        {text}
-                      </a>
-                    ),
-                  })}
-                </span>
-              </li>
-            ))}
+            <ChatRunStatus
+              key={threadId}
+              api={api}
+              runs={pending}
+              botName={botName}
+              messageBody={(id) => state.messages.find((m) => m.id === id)?.body}
+              thread={detail?.thread}
+              memberCount={members.length}
+              onRunUpdated={(run) => {
+                runRevisionRef.current += 1;
+                dispatch({ type: "run_status", threadId, run });
+              }}
+            />
           </ol>
           {members.length === 1 && members[0] && !guest ? (
             <PrivateChatActivity

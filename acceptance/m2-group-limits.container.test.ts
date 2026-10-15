@@ -51,6 +51,9 @@ describe.skipIf(!available)("M2 group loop limits (real Docker/SDK, scripted ups
   const threadEvidence: Record<string, unknown>[] = [];
   let failure: unknown;
   let testCompleted = false;
+  // Each scripted post is numbered: ADR-0005 amendment 5 now pauses a chat on a bot's third
+  // identical message by default, which would stop these loops before the cap under test.
+  let post = 0;
 
   beforeAll(async () => {
     upstream = await startFakeModelUpstream({
@@ -70,7 +73,7 @@ describe.skipIf(!available)("M2 group loop limits (real Docker/SDK, scripted ups
           return {
             kind: "tool_use",
             name: "mcp__deskmates__thread_post",
-            input: { body: `@${target} B3_RELAY_LOOP`, attachments: [] },
+            input: { body: `@${target} B3_RELAY_LOOP #${++post}`, attachments: [] },
           };
         }
         if (conversation.includes("B3_BUDGET_LOOP")) {
@@ -78,7 +81,7 @@ describe.skipIf(!available)("M2 group loop limits (real Docker/SDK, scripted ups
             kind: "tool_use",
             name: "mcp__deskmates__thread_post",
             input: {
-              body: `${BUDGET_NAMES.map((name) => `@${name}`).join(" ")} B3_BUDGET_LOOP`,
+              body: `${BUDGET_NAMES.map((name) => `@${name}`).join(" ")} B3_BUDGET_LOOP #${++post}`,
               attachments: [],
             },
           };
@@ -211,6 +214,12 @@ describe.skipIf(!available)("M2 group loop limits (real Docker/SDK, scripted ups
           ),
         );
       }
+      // The turn budget is off by default since 2026-10-14 (ADR-0005 amendment 5); this case
+      // turns it on at its former default for the workspace it runs in.
+      const limits = await stack.api("PUT", `/api/workspaces/${target.workspace.id}/limits`, {
+        turnBudget: TURN_BUDGET_DEFAULT,
+      });
+      expect(limits.status).toBe(200);
       const thread = await createGroupThread(stack, bots, "B3 turn budget bound", target);
       threads.push(thread);
       await postGroupMessage(

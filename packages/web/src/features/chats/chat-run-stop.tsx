@@ -1,12 +1,13 @@
-// Stop in an open chat (issue #76): one control per unfinished run of this chat, each naming the
-// bot and status of the run it cancels. It asks first and says what stops and what does not;
-// cancelling one run never stops the chat, other bots, other runs of the same bot or queued
-// follow-ups. It calls the existing `POST /api/runs/:id/cancel`, the same path as Cancel run on
-// the run screen, and the Gateway decides permission and the terminal-state race.
+// Stop in an open chat (issue #76): cancelling one unfinished run of this chat. Since issue #126
+// the Stop buttons sit in the expanded run list of `chat-run-status.tsx`, one per run; this file
+// owns what happens after a press. It asks first, naming the exact run and its status, and says
+// what stops and what does not: cancelling one run never stops the chat, other bots, other runs
+// of the same bot or queued follow-ups. It calls the existing `POST /api/runs/:id/cancel`, the
+// same path as Cancel run on the run screen, and the Gateway decides permission and the
+// terminal-state race. There is no bulk stop.
 
-import type { RunId, Thread } from "@deskmates/contracts";
-import { Square } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import type { RunId } from "@deskmates/contracts";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { ApiError, type RunView } from "../../api/types.js";
 import { Button } from "../../components/ui/button.js";
@@ -18,19 +19,26 @@ import {
 } from "../../components/ui/dialog.js";
 import { errorMessage } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
-import { RoleNote, useCanInOwnSideChat } from "../../state/session-roles.js";
 import { runStatusLabel } from "../../state/thread-view.js";
 
-export interface ChatRunStopProps {
+export interface RunStopOptions {
   api: ApiClient;
-  /** Unfinished runs of this chat, oldest first. Runs of other chats are never offered. */
+  /** Unfinished runs of this chat. Runs of other chats are never offered. */
   runs: readonly RunView[];
   botName: (botId: string) => string;
-  /** The chat, once loaded: a Member may cancel only in a side chat they opened. */
-  thread: Pick<Thread, "kind" | "sideChatActor"> | undefined;
-  memberCount: number;
   /** The run as the Gateway now reports it, after a cancel or a lost terminal-state race. */
   onRunUpdated: (run: RunView) => void;
+}
+
+export interface RunStopController {
+  /** Runs whose cancel request is in flight. */
+  stopping: ReadonlySet<RunId>;
+  /** Open the confirmation for exactly this run. */
+  ask: (run: Pick<RunView, "id" | "botId">) => void;
+  /** The last outcome and the confirmation dialog; render it once. */
+  feedback: ReactNode;
+  /** Whether a confirmation or an outcome is showing, so it stays after the last run ends. */
+  active: boolean;
 }
 
 interface Notice {
@@ -38,10 +46,9 @@ interface Notice {
   text: string;
 }
 
-export function ChatRunStop(props: ChatRunStopProps) {
-  const { api, runs, botName, onRunUpdated } = props;
+export function useRunStop(options: RunStopOptions): RunStopController {
+  const { api, runs, botName, onRunUpdated } = options;
   const t = useT();
-  const can = useCanInOwnSideChat("run.cancel", props.thread, props.memberCount);
   const [confirming, setConfirming] = useState<{ id: RunId; botId: string } | undefined>();
   const [stopping, setStopping] = useState<ReadonlySet<RunId>>(new Set());
   const [notice, setNotice] = useState<Notice | undefined>();
@@ -102,39 +109,11 @@ export function ChatRunStop(props: ChatRunStopProps) {
     }
   };
 
-  if (runs.length === 0 && notice === undefined && confirming === undefined) return null;
   const target = confirming ? runs.find((run) => run.id === confirming.id) : undefined;
   const targetName = confirming ? botName(confirming.botId) : "";
 
-  return (
-    <fieldset className="chat-run-stop" aria-label={t("chatRunStop.groupLabel")}>
-      {runs.length > 0 && can.allowed ? (
-        <div className="chat-run-stop-actions">
-          {runs.map((run) => {
-            const name = botName(run.botId);
-            const busy = stopping.has(run.id);
-            return (
-              <Button
-                key={run.id}
-                type="button"
-                size="sm"
-                variant="destructive"
-                title={run.id}
-                disabled={busy}
-                onClick={() => setConfirming({ id: run.id, botId: run.botId })}
-              >
-                <Square size={12} aria-hidden="true" />
-                {busy
-                  ? t("chatRunStop.stopping", { name })
-                  : t("chatRunStop.stop", { name, status: runStatusLabel(run.status) })}
-              </Button>
-            );
-          })}
-        </div>
-      ) : null}
-      {runs.length > 0 ? (
-        <RoleNote action="run.cancel" allowed={can.allowed} does={t("run.roleNote.cancel")} />
-      ) : null}
+  const feedback = (
+    <>
       {notice ? (
         notice.kind === "error" ? (
           <p className="error small" role="alert">
@@ -195,6 +174,13 @@ export function ChatRunStop(props: ChatRunStopProps) {
           )}
         </DialogContent>
       </Dialog>
-    </fieldset>
+    </>
   );
+
+  return {
+    stopping,
+    ask: (run) => setConfirming({ id: run.id, botId: run.botId }),
+    feedback,
+    active: notice !== undefined || confirming !== undefined,
+  };
 }

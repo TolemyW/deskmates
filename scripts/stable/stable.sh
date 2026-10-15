@@ -193,7 +193,9 @@ cmd_install() {
     # build the same Dockerfile here. Its apt and npm layers come from this host's build cache
     # or network, so the ID differs from the release workflow's; images.txt records both.
     say "LOCAL_BASE=1: building $base_tag on this host"
-    (cd "$rel" && docker build -f images/workspace-base/Dockerfile -t "$base_tag" images/workspace-base) \
+    # APT_MIRROR (optional, .env) points apt at a faster Ubuntu mirror for this build only.
+    (cd "$rel" && docker build --build-arg APT_MIRROR="$(env_get APT_MIRROR)" \
+      -f images/workspace-base/Dockerfile -t "$base_tag" images/workspace-base) \
       >"$meta/base.log" 2>&1 || { tail -20 "$meta/base.log" >&2; die "local base build failed; see $meta/base.log"; }
     base_note="built on this host (LOCAL_BASE=1); the release workflow's base is $base_id"
     base_id="$(docker image inspect --format '{{.Id}}' "$base_tag")"

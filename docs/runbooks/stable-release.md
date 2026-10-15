@@ -43,6 +43,10 @@ minutes for the workflow (`RELEASE_WAIT_MINUTES` overrides), the longest a passi
 under the job timeouts; if it gives up, the workflow may still be running, and rerunning the
 script with `--commit` resumes the wait. `--no-ship` stops after the workflow; `--version` and
 `--commit` override the defaults. `ship.sh --run` passes `LOCAL_BASE` and `npm_config_registry` to `install` on the host.
+Pass `LOCAL_BASE=1` to `ship.sh` too when the workstation cannot pull from GHCR: without it,
+`ship.sh` retries the pull five times before giving up. A base built on the host downloads its
+Ubuntu packages there; set `APT_MIRROR` in the deployment's `.env` to a nearby mirror (the
+official archive ran at about 70 KB/s from Testbox on 2026-10-14, 33 minutes for one build).
 
 Measured on 2026-10-12 for v0.5.9 (frontend only), merge to live by hand: `main` ci 5.2 min,
 release workflow 3.0 min, ship 0.6 min, install 0.4 min, T2 smoke 0.8 min, activate under 0.1

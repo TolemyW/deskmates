@@ -19,6 +19,15 @@ ARG AGENT_SDK_VERSION=0.3.278
 ARG NODE_PTY_VERSION=1.1.0
 
 ENV DEBIAN_FRONTEND=noninteractive
+# An Ubuntu mirror for hosts where the official archive is slow (stable.sh passes APT_MIRROR from
+# the deployment's .env, e.g. https://mirrors.tuna.tsinghua.edu.cn/ubuntu). Empty keeps the image's
+# own sources, which is what the release workflow builds. Package versions do not depend on it.
+ARG APT_MIRROR=
+RUN if [ -n "$APT_MIRROR" ]; then \
+      for f in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do \
+        [ -f "$f" ] && sed -i -E "s#https?://(archive|security)\.ubuntu\.com/ubuntu/?#${APT_MIRROR%/}/#g" "$f"; \
+      done; \
+    fi; true
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb fluxbox x11vnc novnc websockify xdotool imagemagick \
     postgresql-client git gh python3 make g++ curl ca-certificates procps \

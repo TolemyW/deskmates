@@ -14,6 +14,7 @@ export const chatsMessages = defineMessages({
   prefixes: [
     "chatInfo",
     "chatPane",
+    "chatRunStatus",
     "chatRunStop",
     "incomingHandoffs",
     "mentionQuery",

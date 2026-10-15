@@ -141,14 +141,15 @@ describe("Stop in an open chat (issue #76)", () => {
     );
     render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Stop ops (running)" }));
+    fireEvent.click(await screen.findByRole("button", { name: "1 run of ops" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Stop ops \(running\)/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
 
     await screen.findByText("ops's run was cancelled. Other work in this chat keeps going.");
     expect(calls.filter((c) => c.method === "POST").map((c) => c.path)).toEqual([
       "/api/runs/run_1/cancel",
     ]);
-    expect(screen.queryByRole("button", { name: "Stop ops (running)" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Stop ops/ })).toBeNull();
     expect(screen.queryByTestId("typing")).toBeNull();
   });
 
@@ -156,6 +157,7 @@ describe("Stop in an open chat (issue #76)", () => {
     const { fetch } = fakeFetch(routes());
     render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
     await screen.findByText("/work/in.md");
-    expect(screen.queryByRole("group", { name: "Stop work in this chat" })).toBeNull();
+    expect(screen.queryByTestId("typing")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Stop/ })).toBeNull();
   });
 });
