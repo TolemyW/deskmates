@@ -1,7 +1,7 @@
 // T0/T1: the round triage job of ADR-0005 amendment 6, decision 45 (proposed). The answer is
 // validated against the current members; the job starts while its bot's lane is busy.
 
-import type { BotId, StartRunRequest } from "@deskmates/contracts";
+import type { BotDefinition, BotId, StartRunRequest } from "@deskmates/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { type Harness, startHarness, waitFor } from "../test-support/harness.js";
 import { TRIAGE_TASK_MAX_CHARS, parseTriagePlan } from "./round-triage.js";
@@ -119,5 +119,26 @@ describe("the triage job and lanes", () => {
       "triage started beside the held lane",
     );
     release();
+  });
+
+  it("leaves a paused member off the roster it plans with (ADR-0026 amendment 1)", async () => {
+    h = await startHarness({ groupRouting: "round-v1" });
+    const { ctx } = h.app.deskmates;
+    const ws = ctx.workspaces.create({ name: "w", sandboxProvider: "docker" });
+    const [ann, ben, cat] = ["ann", "ben", "cat"].map((name) =>
+      ctx.bots.create({ name, role: name, workspaceId: ws.id }),
+    ) as [BotDefinition, BotDefinition, BotDefinition];
+    const thread = ctx.threads.create({ workspaceId: ws.id, botIds: [ann.id, ben.id, cat.id] });
+    ctx.bots.setPaused(ben.id, true, "user:op");
+    const started: StartRunRequest[] = [];
+    h.provider.onRun(async (req, gw) => {
+      started.push(req);
+      await gw.post("ended", { type: "run_ended", runId: req.runId, outcome: "failed", usage: [] });
+    });
+    ctx.router.postHuman({ threadId: thread.id, body: "anyone?" });
+    h.app.deskmates.scheduler.kick();
+    await waitFor(() => started.some((r) => r.modelJob), 2000, "triage started");
+    const job = started.find((r) => r.modelJob)?.modelJob;
+    expect(job?.kind === "round_triage" && job.roster.map((m) => m.name)).toEqual(["ann", "cat"]);
   });
 });

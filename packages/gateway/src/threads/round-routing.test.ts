@@ -48,6 +48,7 @@ function setup(groupRouting: GroupRouting = "round-v1", opts: { triage?: boolean
       rounds,
       limits,
       roundPlans: plans,
+      isPaused: (botId) => bots.isPaused(botId),
       ...(opts.triage === false
         ? {}
         : {
@@ -487,5 +488,97 @@ describe("`@ name` is a mention under round-v1 (decision 50)", () => {
     expect(handoff.mentions).toEqual([{ kind: "bot", botId: s.cat.id }]);
     expect(s.router.mentionOptions).toEqual({ spaced: true });
     expect(setup("owner-v1").router.mentionOptions).toEqual({});
+  });
+});
+
+describe("a round never wakes a paused bot (ADR-0026 amendment 1)", () => {
+  const pause = (s: ReturnType<typeof setup>, ...ids: BotId[]) => {
+    for (const id of ids) s.bots.setPaused(id, true, "user:op");
+  };
+
+  it("runs the triage as the first awake member when the owner is paused", () => {
+    const s = setup();
+    s.threads.setOwner(s.thread.id, s.cat.id);
+    pause(s, s.cat.id, s.ann.id);
+    const posted = s.router.postHuman({ threadId: s.thread.id, body: "next?" });
+    expect(s.only(posted.runs)).toMatchObject({ botId: s.ben.id });
+    expect(s.only(posted.runs).config.runType).toBe(ROUND_TRIAGE);
+  });
+
+  it("makes no triage job when every member is paused, and the fallback wakes nobody", () => {
+    const s = setup();
+    pause(s, s.ann.id, s.ben.id, s.cat.id, s.dan.id);
+    const posted = s.router.postHuman({ threadId: s.thread.id, body: "anyone?" });
+    expect(posted.runs).toEqual([]);
+    expect(s.plans.get(posted.message.id)).toMatchObject({
+      phase: "fallback",
+      reason: "every member is paused",
+    });
+  });
+
+  it("leaves a paused member out of the @everyone fallback", () => {
+    const s = setup();
+    const posted = s.router.postHuman({ threadId: s.thread.id, body: "@everyone report" });
+    pause(s, s.ben.id);
+    expect(s.named(s.endTriage(s.only(posted.runs), "failed"))).toEqual(["ann", "cat", "dan"]);
+  });
+
+  it("drops a paused assignee from the plan and wakes only the awake ones", () => {
+    const s = setup();
+    const posted = s.router.postHuman({ threadId: s.thread.id, body: "Price and stock of K?" });
+    const triage = s.only(posted.runs);
+    pause(s, s.ben.id);
+    const work = s.triaged(
+      triage,
+      [
+        [s.ben.id, "look up the price"],
+        [s.cat.id, "look up the stock"],
+      ],
+      s.dan.id,
+    );
+    expect(s.named(work)).toEqual(["cat"]);
+    expect(s.plans.get(posted.message.id)?.assignments).toEqual([
+      { botId: s.cat.id, task: "look up the stock" },
+    ]);
+    // With the one assignee done, the closer is woken as usual.
+    s.start(s.only(work));
+    expect(s.only(s.end(s.only(work), "succeeded")).botId).toBe(s.dan.id);
+  });
+
+  it("falls back to the offer when every assignee is paused", () => {
+    const s = setup();
+    const posted = s.router.postHuman({ threadId: s.thread.id, body: "Price of K?" });
+    const triage = s.only(posted.runs);
+    pause(s, s.ann.id, s.ben.id);
+    const offered = s.only(s.triaged(triage, [[s.ben.id, "price"]], s.ben.id));
+    expect(offered.botId).toBe(s.cat.id);
+    expect(s.walks.get(posted.message.id)).toMatchObject({ mode: "first_taker" });
+    expect(s.plans.get(posted.message.id)?.reason).toBe("every assigned member is paused");
+  });
+
+  it("replaces a paused closer with the first awake assignee", () => {
+    const { s, message, ben, cat } = dispatched();
+    s.start(ben);
+    s.end(ben, "succeeded");
+    pause(s, s.dan.id);
+    s.start(cat);
+    const closer = s.only(s.end(cat, "succeeded"));
+    expect(closer).toMatchObject({ botId: s.ben.id, triggerRef: message.id });
+    expect(s.plans.get(message.id)).toMatchObject({ phase: "closing", closerRunId: closer.id });
+  });
+
+  it("falls back to the offer when the closer, every assignee and the owner are paused", () => {
+    const { s, message, ben, cat } = dispatched();
+    s.start(ben);
+    s.end(ben, "succeeded");
+    pause(s, s.dan.id, s.ben.id, s.cat.id);
+    s.start(cat);
+    const offered = s.only(s.end(cat, "succeeded"));
+    expect(offered.botId).toBe(s.ann.id);
+    expect(s.plans.get(message.id)).toMatchObject({
+      phase: "fallback",
+      reason: "the closer and every assignee are paused",
+    });
+    expect(s.runs.list({ threadId: s.thread.id }).some((r) => r.botId === s.dan.id)).toBe(false);
   });
 });

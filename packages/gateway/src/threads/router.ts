@@ -452,8 +452,12 @@ export class ThreadRouter {
     const plans = this.options.roundPlans;
     if (!plans || !this.options.rounds?.exists(message.id))
       return this.fallback(thread, members, message, "no round plans in this Gateway");
+    // ADR-0026 amendment 1: a paused member is not on the triage roster and never runs the job.
+    const awake = members.filter((member) => !this.options.isPaused?.(member.botId));
     plans.open(message.id);
-    const job = this.options.triage?.request({ thread, message, members });
+    if (awake.length === 0)
+      return this.fallback(thread, members, message, "every member is paused");
+    const job = this.options.triage?.request({ thread, message, members: awake });
     if (!job) return this.fallback(thread, members, message, "no triage job could be queued");
     plans.setTriageRun(message.id, job.id);
     return [job];
@@ -471,7 +475,11 @@ export class ThreadRouter {
       return this.directWakes(
         thread,
         message,
-        members.map((member) => member.botId),
+        this.withoutPaused(
+          thread,
+          message,
+          members.map((member) => member.botId),
+        ),
       );
     return this.enqueueWalk(thread, message, members, "first_taker");
   }
@@ -492,6 +500,26 @@ export class ThreadRouter {
     const current = new Set(members.map((member) => member.botId));
     if (plan.closerBotId && current.has(plan.closerBotId)) return plan.closerBotId;
     return plan.assignments.find((a) => current.has(a.botId))?.botId;
+  }
+
+  /**
+   * ADR-0026 amendment 1 in a round: a paused closer is replaced by the first assigned member
+   * that is not paused, else by the thread's owner when it is not; undefined when nobody is left.
+   */
+  private awakeCloser(
+    closer: BotId,
+    plan: StoredPlan,
+    thread: Thread,
+    members: readonly NamedMember[],
+  ): BotId | undefined {
+    const isPaused = this.options.isPaused;
+    if (!isPaused?.(closer)) return closer;
+    const current = new Set(members.map((member) => member.botId));
+    const eligible = (botId: BotId | undefined): botId is BotId =>
+      botId !== undefined && current.has(botId) && !isPaused(botId);
+    const assignee = plan.assignments.find((a) => eligible(a.botId))?.botId;
+    if (assignee) return assignee;
+    return eligible(thread.ownerBotId) ? thread.ownerBotId : undefined;
   }
 
   /**
@@ -523,15 +551,27 @@ export class ThreadRouter {
       });
       return [];
     }
-    plans.setPhase(plan.messageId, "working");
-    const closer = this.closerOf(plan, members);
-    if (closer && this.threads.setOwner(thread.id, closer))
-      this.options.onThreadChanged?.(thread.id);
-    return this.directWakes(
+    // ADR-0026 amendment 1: a paused assignee is dropped from the plan and not woken; with none
+    // left awake the request falls back (decision 46), whose routing skips paused members too.
+    if (assigned.every((a) => this.options.isPaused?.(a.botId)))
+      return this.fallback(thread, members, message, "every assigned member is paused");
+    const targets = this.withoutPaused(
       thread,
       message,
       assigned.map((a) => a.botId),
     );
+    const named = this.closerOf(plan, members);
+    const closer = named && this.awakeCloser(named, plan, thread, members);
+    if (targets.length < assigned.length || closer !== named)
+      plans.storeAssignments(
+        plan.messageId,
+        assigned.filter((a) => targets.includes(a.botId)),
+        closer ?? (targets[0] as BotId),
+      );
+    plans.setPhase(plan.messageId, "working");
+    if (closer && this.threads.setOwner(thread.id, closer))
+      this.options.onThreadChanged?.(thread.id);
+    return this.directWakes(thread, message, targets);
   }
 
   /**
@@ -544,17 +584,22 @@ export class ThreadRouter {
     if (plan.phase !== "working" || !plans.allAssignedEnded(plan)) return [];
     const message = this.messages.mustGet(plan.messageId);
     const thread = this.threads.mustGet(message.threadId);
-    const closer = this.closerOf(plan, this.threads.members(thread.id));
+    const members = this.threads.members(thread.id);
+    const named = this.closerOf(plan, members);
     const stop = (reason: string): RunRecord[] => {
       plans.setPhase(plan.messageId, "closed", { reason });
       return [];
     };
     if (this.options.rounds?.isCancelled(plan.messageId)) return stop("the round was cancelled");
-    if (!closer) return stop("no closer is still a member");
-    if (plan.assignments.length === 1 && plan.assignments[0]?.botId === closer)
+    if (!named) return stop("no closer is still a member");
+    if (plan.assignments.length === 1 && plan.assignments[0]?.botId === named)
       return stop("the closer was the only assignee; its reply is the answer");
     if (thread.status === "paused" || isPastDeadline(thread))
       return stop("the thread is paused or past its deadline");
+    // ADR-0026 amendment 1: a paused closer is replaced; with nobody left the request falls back.
+    const closer = this.awakeCloser(named, plan, thread, members);
+    if (!closer)
+      return this.fallback(thread, members, message, "the closer and every assignee are paused");
     const queued = this.runs.findQueued(closer, thread.id);
     const run = queued ?? this.createWake(thread, closer, message);
     plans.setPhase(plan.messageId, "closing", { closerRunId: run.id });

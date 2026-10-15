@@ -147,6 +147,11 @@ export class RoundTriage {
     return message && message.threadId === run.threadId ? message : undefined;
   }
 
+  /** The members a plan may name: current and not paused (ADR-0026 amendment 1). */
+  private roster(thread: Thread): NamedMember[] {
+    return this.ctx.threads.members(thread.id).filter((m) => !this.ctx.bots.isPaused(m.botId));
+  }
+
   /** The job the sidecar runs, built at start from the current roster. */
   job(run: RunRecord, _bot: BotDefinition): ModelJobRequest | undefined {
     const message = this.request(run);
@@ -155,7 +160,7 @@ export class RoundTriage {
     const roles = new Map(this.ctx.bots.list(thread.workspaceId).map((b) => [b.id, b.role]));
     return {
       kind: "round_triage",
-      roster: this.ctx.threads.members(thread.id).map((m) => ({
+      roster: this.roster(thread).map((m) => ({
         name: m.name,
         role: roles.get(m.botId) ?? "",
         ...(m.botId === thread.ownerBotId ? { owner: true as const } : {}),
@@ -177,7 +182,9 @@ export class RoundTriage {
     if (!reply || !message || !plan || plan.triageRunId !== run.id || plan.phase !== "triage")
       return "failed";
     const thread = this.ctx.threads.mustGet(message.threadId);
-    const result = parseTriagePlan(reply, this.ctx.threads.members(thread.id), thread.ownerBotId);
+    const roster = this.roster(thread);
+    const owner = roster.some((m) => m.botId === thread.ownerBotId) ? thread.ownerBotId : undefined;
+    const result = parseTriagePlan(reply, roster, owner);
     if (!result.ok) {
       this.ctx.events.append({
         runId: run.id,
