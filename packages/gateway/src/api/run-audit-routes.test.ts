@@ -141,7 +141,8 @@ describe("marking a run wrong (ADR-0042 decision 3)", () => {
     const { h, ctx, bot, workspace } = await setup();
     const marked = seedRun(h, bot.id, { at: "2026-10-10T01:00:00.000Z", status: "succeeded" });
     const plain = seedRun(h, bot.id, { at: "2026-10-10T01:05:00.000Z", status: "succeeded" });
-    const candidate = (runId: RunId, body: string) =>
+    // Distinct observation times: consolidation input is ordered by them, then by a random id.
+    const candidate = (runId: RunId, body: string, observedAt: string) =>
       ctx.memory.entries.insert({
         workspaceId: workspace.id as WorkspaceId,
         scope: "bot",
@@ -152,10 +153,15 @@ describe("marking a run wrong (ADR-0042 decision 3)", () => {
         trust: "trusted",
         sourceKind: "bot_self",
         sourceRunId: runId,
+        observedAt,
         by: `bot:${bot.id}`,
       });
-    const wrong = candidate(marked, "Always skip the review queue.");
-    const right = candidate(plain, "Export the refund sheet before closing.");
+    const wrong = candidate(marked, "Always skip the review queue.", "2026-10-10T01:01:00.000Z");
+    const right = candidate(
+      plain,
+      "Export the refund sheet before closing.",
+      "2026-10-10T01:06:00.000Z",
+    );
     const inputIds = () =>
       ctx.memory.entries.consolidationInput(workspace.id as WorkspaceId, bot.id).map((e) => e.id);
     expect(inputIds()).toEqual([wrong.id, right.id]);
