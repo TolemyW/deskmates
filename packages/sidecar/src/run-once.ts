@@ -74,6 +74,7 @@ import {
 import { carrySessionIntoBotDir } from "./session-carry.js";
 import { materializeSkillPlugin, skillPluginDir } from "./skill-plugin.js";
 import { parseRunSummary } from "./summary.js";
+import { sdkSystemPrompt } from "./system-prompt.js";
 import { createThreadTools } from "./thread-tools.js";
 import { ledgerToolResult } from "./tool-evidence.js";
 import { toolResultText } from "./tool-result-text.js";
@@ -506,8 +507,14 @@ export async function runOnce(
       kind: "context_sections",
       sections: { ...context.sections },
       systemPromptSha256: context.systemPromptSha256,
+      // ADR-0023 amendment 5: the part before the SDK's dynamic boundary, and the rest.
+      systemPromptStaticSha256: context.systemPromptStaticSha256,
+      ...(context.systemPromptDynamicSha256 === undefined
+        ? {}
+        : { systemPromptDynamicSha256: context.systemPromptDynamicSha256 }),
     });
     ended.systemPromptSha256 = context.systemPromptSha256;
+    ended.systemPromptStaticSha256 = context.systemPromptStaticSha256;
 
     // The run's skill set from the Gateway, written as this attempt's local plugin (ADR-0015
     // decision 1). The ledger names what was enabled; the Gateway already recorded it in
@@ -705,7 +712,9 @@ export async function runOnce(
       plugins: [skillPlugin.plugin],
       skills: skillPlugin.skills,
       permissionMode: "default",
-      systemPrompt: context.systemPrompt,
+      // ADR-0023 amendment 5: the static part before the SDK's dynamic boundary, recorded once
+      // per session (`system-prompt.ts`).
+      systemPrompt: sdkSystemPrompt(context.systemPromptParts),
       env,
       // The turn budget is a Gateway knob recorded in `runs.config_json`, not a container setting:
       // the environment belongs to the whole workspace and a value left there would silently run

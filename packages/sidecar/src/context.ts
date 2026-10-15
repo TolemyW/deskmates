@@ -4,6 +4,10 @@
 // pinned memory index, MEMORY.md, the diary window and approved knowledge hits) is placed in the
 // first user turn, before the rendered trigger. An approval resume adds none of it: the resumed
 // session already holds the first turn of its run.
+//
+// ADR-0023 amendment 5 splits the system prompt at the SDK's dynamic boundary: the static part
+// (SOUL.md and the guidance) before it, the sections chosen per run (today only the withheld-image
+// notice) after it (`system-prompt.ts`). The joined text is unchanged.
 
 import { createHash } from "node:crypto";
 import {
@@ -19,6 +23,7 @@ import {
 import type { SidecarFs } from "./deps.js";
 import { deskmatesToolName } from "./risk-tier.js";
 import { SUMMARY_INSTRUCTION } from "./summary.js";
+import type { SystemPromptParts } from "./system-prompt.js";
 import { UNTRUSTED_NOTICE, wrapKnowledgeContent, wrapUntrusted } from "./untrusted.js";
 import {
   VISION_LOOK_GUIDANCE,
@@ -106,11 +111,22 @@ export interface ContextSectionSizes {
 }
 
 export interface RunContext {
+  /** The whole system prompt as the model reads it: the parts joined by one blank line. */
   systemPrompt: string;
+  /** The same text split at the SDK's dynamic boundary (ADR-0023 amendment 5). */
+  systemPromptParts: SystemPromptParts;
   prompt: string;
   sections: ContextSectionSizes;
   /** Hex sha256 of `systemPrompt` (UTF-8): tells two runs' prompts apart without storing them. */
   systemPromptSha256: string;
+  /** Hex sha256 of the static part alone: equal across every run of a bot in the same thread. */
+  systemPromptStaticSha256: string;
+  /** Hex sha256 of the dynamic parts joined as in `systemPrompt`; absent when there are none. */
+  systemPromptDynamicSha256?: string;
+}
+
+function sha256Hex(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
 export function isoDate(d: Date): string {
@@ -358,19 +374,18 @@ export async function buildContext(
     SUMMARY_INSTRUCTION,
   ].join("\n");
 
-  // ADR-0023 amendment 2: only a withholding run gets the section, so every other prompt is
-  // byte-identical to before.
-  const systemPrompt = [
-    soulText,
-    guidanceText,
-    ...(withholdsImages(request)
-      ? [
-          offersLook(request)
-            ? `${VISION_WITHHELD_GUIDANCE}\n${VISION_LOOK_GUIDANCE}`
-            : VISION_WITHHELD_GUIDANCE,
-        ]
-      : []),
-  ].join("\n\n");
+  // ADR-0023 amendment 5: SOUL.md and the guidance are the static part; a section chosen per run
+  // goes after the boundary. ADR-0023 amendment 2: only a withholding run gets the image section,
+  // so every other prompt is byte-identical to before.
+  const staticPrompt = [soulText, guidanceText].join("\n\n");
+  const dynamicPrompt = withholdsImages(request)
+    ? [
+        offersLook(request)
+          ? `${VISION_WITHHELD_GUIDANCE}\n${VISION_LOOK_GUIDANCE}`
+          : VISION_WITHHELD_GUIDANCE,
+      ]
+    : [];
+  const systemPrompt = [staticPrompt, ...dynamicPrompt].join("\n\n");
   const trigger = [
     renderIdentity(request),
     renderTrigger(request.trigger),
@@ -379,6 +394,7 @@ export async function buildContext(
   ].join("\n");
   return {
     systemPrompt,
+    systemPromptParts: { static: staticPrompt, dynamic: dynamicPrompt },
     prompt: firstTurn.length > 0 ? [...firstTurn, `## This run\n${trigger}`].join("\n\n") : trigger,
     sections: {
       soul: soulText.length,
@@ -388,7 +404,11 @@ export async function buildContext(
       knowledge: knowledgeText?.length ?? 0,
       guidance: guidanceText.length,
     },
-    systemPromptSha256: createHash("sha256").update(systemPrompt, "utf8").digest("hex"),
+    systemPromptSha256: sha256Hex(systemPrompt),
+    systemPromptStaticSha256: sha256Hex(staticPrompt),
+    ...(dynamicPrompt.length > 0
+      ? { systemPromptDynamicSha256: sha256Hex(dynamicPrompt.join("\n\n")) }
+      : {}),
   };
 }
 

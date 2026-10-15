@@ -56,6 +56,13 @@ export interface RunContextMetrics {
   compactions: RunCompaction[];
   contextSections: Record<string, number> | null;
   systemPromptSha256: string | null;
+  /**
+   * ADR-0023 amendment 5: the latest attempt's static and dynamic system-prompt hashes from its
+   * `context_sections` event; null when it has none (a run before the amendment, or no dynamic
+   * part).
+   */
+  systemPromptStaticSha256?: string | null;
+  systemPromptDynamicSha256?: string | null;
   modelRequests: { count: number; distinctSystemHashes: number; changedWithinAttempt: boolean };
   /**
    * ADR-0023 amendment 5. Optional so a reader built before it still type-checks; the Gateway

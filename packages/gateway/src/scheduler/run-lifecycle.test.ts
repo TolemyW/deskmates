@@ -537,16 +537,27 @@ describe("context observability from the sidecar", () => {
   }
 
   it("stores turn_usage and compact_boundary events and merges the hash and window", async () => {
-    const run = await runWith({ systemPromptSha256: HASH, maxContextTokens: 180000 });
+    const run = await runWith({
+      systemPromptSha256: HASH,
+      systemPromptStaticSha256: "f".repeat(64),
+      maxContextTokens: 180000,
+    });
     const kinds = h.app.deskmates.ctx.events.list(run.id).map((e) => e.kind);
     expect(kinds).toEqual(expect.arrayContaining(["turn_usage", "compact_boundary"]));
     expect(run.config.systemPromptSha256).toBe(HASH);
+    // ADR-0023 amendment 5: the static part's hash is a knob of the same kind.
+    expect(run.config.systemPromptStaticSha256).toBe("f".repeat(64));
     expect(run.config.claudeCodeMaxContextTokens).toBe(180000);
   });
 
   it("ignores malformed values instead of failing the run", async () => {
-    const run = await runWith({ systemPromptSha256: "not-a-hash", maxContextTokens: -1 });
+    const run = await runWith({
+      systemPromptSha256: "not-a-hash",
+      systemPromptStaticSha256: "F".repeat(64),
+      maxContextTokens: -1,
+    });
     expect(run.config).not.toHaveProperty("systemPromptSha256");
+    expect(run.config).not.toHaveProperty("systemPromptStaticSha256");
     expect(run.config).not.toHaveProperty("claudeCodeMaxContextTokens");
   });
 });

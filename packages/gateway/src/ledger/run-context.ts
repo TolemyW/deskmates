@@ -8,7 +8,8 @@
 //   model read on that turn; peak is the largest, p95 the nearest-rank 95th percentile;
 // - cacheHitRatio is sum(cacheRead) / sum(cacheRead + cacheCreate + input) over the turns;
 // - peak/p95 and the cache ratio are unknown if any contributing turn lacks measurements;
-// - contextSections and systemPromptSha256 are the latest attempt's `context_sections` event;
+// - contextSections, systemPromptSha256 and its static and dynamic parts (ADR-0023 amendment 5)
+//   are the latest attempt's `context_sections` event;
 // - modelRequests counts forwarded `messages` requests only (`count_tokens` is not a turn, and a
 //   request the proxy refused never reached a model);
 // - contextUsage is the `context_usage` samples (ADR-0023 amendment 5): the first in ledger
@@ -136,6 +137,8 @@ export function runContextMetrics(
   const compactions: RunCompaction[] = [];
   let sections: Record<string, number> | null = null;
   let hash: string | null = null;
+  let staticHash: string | null = null;
+  let dynamicHash: string | null = null;
   let firstUsage: RunContextUsageSample | null = null;
   let latestUsage: RunContextUsageSample | null = null;
   let usageSamples = 0;
@@ -172,6 +175,10 @@ export function runContextMetrics(
         );
       }
       hash = typeof p.systemPromptSha256 === "string" ? p.systemPromptSha256 : null;
+      staticHash =
+        typeof p.systemPromptStaticSha256 === "string" ? p.systemPromptStaticSha256 : null;
+      dynamicHash =
+        typeof p.systemPromptDynamicSha256 === "string" ? p.systemPromptDynamicSha256 : null;
     } else if (e.kind === "log" && p.kind === "context_usage") {
       const sample = usageSample(e);
       if (sample !== null) {
@@ -214,6 +221,8 @@ export function runContextMetrics(
     compactions,
     contextSections: sections,
     systemPromptSha256: hash,
+    systemPromptStaticSha256: staticHash,
+    systemPromptDynamicSha256: dynamicHash,
     modelRequests: {
       count: messages.length,
       distinctSystemHashes: distinct.size,

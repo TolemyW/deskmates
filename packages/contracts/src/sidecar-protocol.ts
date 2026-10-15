@@ -399,6 +399,11 @@ export interface RunEnded {
    */
   systemPromptSha256?: string;
   /**
+   * Hex sha256 of the part of that prompt before the SDK's dynamic boundary (ADR-0023 amendment
+   * 5); merged into `runs.config_json` like `systemPromptSha256`.
+   */
+  systemPromptStaticSha256?: string;
+  /**
    * `CLAUDE_CODE_MAX_CONTEXT_TOKENS` as the SDK's CLI subprocess received it, when it did; a knob
    * the Gateway records in `runs.config_json`.
    */

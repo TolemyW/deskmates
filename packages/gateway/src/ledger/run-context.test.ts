@@ -75,6 +75,8 @@ describe("runContextMetrics", () => {
           kind: "context_sections",
           sections: { soul: 10, memory: 3, diary: 6, knowledge: 0, guidance: 100 },
           systemPromptSha256: "b".repeat(64),
+          systemPromptStaticSha256: "c".repeat(64),
+          systemPromptDynamicSha256: "d".repeat(64),
         },
         2,
       ),
@@ -105,6 +107,8 @@ describe("runContextMetrics", () => {
       guidance: 100,
     });
     expect(m.systemPromptSha256).toBe("b".repeat(64));
+    expect(m.systemPromptStaticSha256).toBe("c".repeat(64));
+    expect(m.systemPromptDynamicSha256).toBe("d".repeat(64));
     expect(m.modelRequests).toEqual({
       count: 3,
       distinctSystemHashes: 2,
@@ -126,6 +130,8 @@ describe("runContextMetrics", () => {
       compactions: [],
       contextSections: null,
       systemPromptSha256: null,
+      systemPromptStaticSha256: null,
+      systemPromptDynamicSha256: null,
       modelRequests: { count: 0, distinctSystemHashes: 0, changedWithinAttempt: false },
       contextUsage: { samples: 0, first: null, latest: null },
       sessionStarts: [],

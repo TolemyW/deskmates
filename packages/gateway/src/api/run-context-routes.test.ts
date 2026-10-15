@@ -83,6 +83,8 @@ describe("GET /api/runs/:id/context", () => {
       compactions: [{ attempt: 1, seq: 3, trigger: "auto", preTokens: 150000 }],
       contextSections: { soul: 12, memory: 0, diary: 40, knowledge: 0, guidance: 900 },
       systemPromptSha256: "c".repeat(64),
+      systemPromptStaticSha256: null,
+      systemPromptDynamicSha256: null,
       modelRequests: { count: 1, distinctSystemHashes: 1, changedWithinAttempt: false },
       contextUsage: { samples: 0, first: null, latest: null },
       sessionStarts: [],
