@@ -731,7 +731,27 @@ export async function runOnce(
     };
 
     timeline.mark("query_started", { resume: request.sdkSessionId !== undefined });
-    for await (const msg of deps.query({ prompt: context.prompt, options })) {
+    // ADR-0042 decision 1: the run row froze which loop runs; both consume the same options and
+    // yield the same message shapes, so everything below this line is runtime-neutral.
+    const runtime = request.runtime ?? "claude-agent-sdk";
+    let stream: AsyncIterable<SDKMessage>;
+    if (runtime === "openai-agents") {
+      if (deps.queryOpenAi === undefined)
+        throw new Error("this sidecar cannot host the openai-agents runtime (ADR-0042)");
+      stream = deps.queryOpenAi({
+        prompt: context.prompt,
+        options,
+        modelBaseUrl: request.modelBaseUrl,
+        modelAuthToken: request.modelAuthToken,
+        botHomeDir: request.botHomeDir,
+        botName: request.botName,
+        runId: request.runId,
+        cwd,
+      });
+    } else {
+      stream = deps.query({ prompt: context.prompt, options });
+    }
+    for await (const msg of stream) {
       timeline.observe(msg);
       preview?.observe(msg);
       await handleMessage(msg);

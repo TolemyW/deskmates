@@ -17,6 +17,10 @@ ARG PLAYWRIGHT_MCP_VERSION=0.0.82
 ARG PLAYWRIGHT_CLI_VERSION=0.1.21
 ARG AGENT_SDK_VERSION=0.3.278
 ARG NODE_PTY_VERSION=1.1.0
+# The second agent runtime (ADR-0042) and the MCP client the sidecar attaches its tools with.
+# Pinned with packages/sidecar/package.json.
+ARG OPENAI_AGENTS_VERSION=0.20.0
+ARG MCP_SDK_VERSION=1.30.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 # An Ubuntu mirror for hosts where the official archive is slow (stable.sh passes APT_MIRROR from
@@ -50,4 +54,6 @@ RUN node -e 'const {createRequire}=require("node:module"); const {execFileSync}=
 
 ARG UNDICI_VERSION=7.29.1
 RUN npm install -g --no-fund --no-audit "undici@${UNDICI_VERSION}" \
+    "@openai/agents@${OPENAI_AGENTS_VERSION}" \
+    "@modelcontextprotocol/sdk@${MCP_SDK_VERSION}" \
  && npm cache clean --force

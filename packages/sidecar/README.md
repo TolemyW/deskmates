@@ -1,6 +1,6 @@
 # @deskmates/sidecar
 
-Runs **inside** the workspace container, one process per run. It is the process that calls the Claude Agent SDK's `query()`; there is no separate proxy layer between the agent and its tools (ADR-0002).
+Runs **inside** the workspace container, one process per run. It is the process that calls the Claude Agent SDK's `query()`, or runs the OpenAI Agents SDK loop in-process when the bot's runtime says so (ADR-0042); there is no separate proxy layer between the agent and its tools (ADR-0002).
 
 A workspace holds a group of bots that share one Chromium, one filesystem and one shell (ADR-0004). Several sidecar processes for different bots can run at once in the same container.
 
@@ -97,7 +97,7 @@ What the design assigns to this package but M0 does not do. Each is a gap, not a
 
 Rules:
 
-- The only package allowed to import `@anthropic-ai/claude-agent-sdk`.
+- The only package allowed to import an agent SDK: `@anthropic-ai/claude-agent-sdk` and, since ADR-0042, `@openai/agents` (in `src/runtime/openai/`), with `@modelcontextprotocol/sdk` as the client that attaches the sidecar's tools to the second runtime.
 - `DESKMATES_EGRESS_PROXY` is the managed proxy address supplied by the workspace provider. The
   `run` and `mcp-proxy` processes install an undici dispatcher for Node fetch; the SDK CLI and
   Playwright MCP child receive HTTP(S) proxy variables derived only from that address. Only

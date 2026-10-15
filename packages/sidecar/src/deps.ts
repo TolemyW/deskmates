@@ -23,6 +23,9 @@ export type ToolFn = typeof tool;
 
 export type CreateSdkMcpServerFn = typeof createSdkMcpServer;
 
+/** The OpenAI Agents SDK loop (ADR-0042), yielding the same message shapes as `query()`. */
+export type OpenAiQueryFn = import("./runtime/openai/types.js").OpenAiQueryFn;
+
 /**
  * The few filesystem operations context assembly, the diary and the screenshot directory need.
  * Paths are absolute.
@@ -48,6 +51,8 @@ export interface SidecarDeps {
   /** Files for the look/OCR and speech tools (ADR-0040); absent means the container itself. */
   operationFiles?: import("./operation-input.js").OperationFiles;
   query: QueryFn;
+  /** Present when the sidecar can host the `openai-agents` runtime; a run asking for it without one fails. */
+  queryOpenAi?: OpenAiQueryFn;
   tool: ToolFn;
   createSdkMcpServer: CreateSdkMcpServerFn;
   fetch: typeof globalThis.fetch;

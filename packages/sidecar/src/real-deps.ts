@@ -1,11 +1,13 @@
 // Production wiring of `SidecarDeps`: the real Agent SDK, global fetch, node:fs and the clock.
-// This is the only module in the repository that imports the SDK's runtime (ADR-0002 decision 1).
+// This and `runtime/openai/` are the only modules that import an agent SDK runtime (ADR-0002
+// decision 1, ADR-0042).
 
 import { access, appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { createSdkMcpServer, query, tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SidecarDeps, SidecarFs } from "./deps.js";
 import { readResourceObservation } from "./resource-observation.js";
+import { createOpenAiQuery } from "./runtime/openai/openai-runtime.js";
 import { saveToolEvidence } from "./tool-evidence-store.js";
 
 export const realFs: SidecarFs = {
@@ -78,6 +80,8 @@ export function createRealDeps(
       };
     },
     query: (params) => query(params),
+    // ADR-0042: the second loop, in this process; nothing else in the repository imports it.
+    queryOpenAi: createOpenAiQuery({ env }),
     tool,
     createSdkMcpServer,
     fetch: (input, init) => globalThis.fetch(input, init),
