@@ -9,7 +9,7 @@ import {
   SHORT_WAIT_SECONDS_DEFAULT,
   isGroupRouting,
 } from "@deskmates/contracts";
-import { type Env, optionalInt } from "./env.js";
+import { type Env, optionalInt, optionalLimit } from "./env.js";
 
 /** ADR-0005 definitions: delivered slice cap, a guess to be calibrated. */
 export const THREAD_PAYLOAD_MAX_TOKENS_DEFAULT = 16000;
@@ -20,6 +20,15 @@ export const THREAD_PAYLOAD_MAX_TOKENS_DEFAULT = 16000;
  * allow 10 minutes; the default leaves room for a long browser session and an L2 short wait.
  */
 export const RUN_TIMEOUT_SECONDS_DEFAULT = 1800;
+
+/**
+ * Issue #9: a `running` run that has produced no progress event for this long is marked
+ * `stalled`, and goes back to `running` on its next one. The 10 s `resource_observation` only
+ * proves the sidecar process is alive, so it does not count; an upstream that never answers
+ * stalls the run. Never a kill: `RUN_TIMEOUT_SECONDS` stays the only one. 0 turns detection off.
+ * An observation, not a knob the agent sees, so it is not recorded in `runs.config_json`.
+ */
+export const RUN_STALL_SECONDS_DEFAULT = 300;
 
 /**
  * Largest webhook body the Gateway accepts, in bytes. The body is stored on the run row and put
@@ -57,6 +66,8 @@ export interface RunsConfig {
   shortWaitSeconds: number;
   /** Recorded in `runs.config_json`; a change is a knob change (AGENTS.md). */
   runTimeoutSeconds: number;
+  /** Seconds without a progress event before a running run is `stalled`; 0 is off (issue #9). */
+  runStallSeconds: number;
   /**
    * How a message with no explicit recipient is routed in a group (ADR-0005 amendment 2).
    * Omitted means `GROUP_ROUTING_DEFAULT`. Recorded in `runs.config_json` as `groupRouting`.
@@ -88,6 +99,7 @@ export function readRunsConfig(env: Env): RunsConfig {
     ),
     shortWaitSeconds: SHORT_WAIT_SECONDS_DEFAULT,
     runTimeoutSeconds: optionalInt(env, "RUN_TIMEOUT_SECONDS", RUN_TIMEOUT_SECONDS_DEFAULT),
+    runStallSeconds: optionalLimit(env, "RUN_STALL_SECONDS", RUN_STALL_SECONDS_DEFAULT),
     groupRouting: groupRouting(env),
     botWorkdir: botWorkdir(env),
     cronTimeZone: cronTimeZone(env),

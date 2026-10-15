@@ -45,6 +45,7 @@ const STATE_ORDER: readonly BotRunState[] = ["running", "approval", "browser", "
 export function botRunState(status: RunStatus): BotRunState {
   switch (status) {
     case "running":
+    case "stalled":
       return "running";
     case "waiting_approval_live":
     case "waiting_approval":

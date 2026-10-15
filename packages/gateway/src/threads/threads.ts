@@ -363,7 +363,7 @@ export class ThreadStore {
       const liveRun = this.db
         .prepare(
           `SELECT id FROM runs WHERE thread_id = ? AND bot_id = ?
-         AND status IN ('queued', 'running', 'waiting_approval_live', 'waiting_approval', 'waiting_browser', 'waiting_continuation')
+         AND status IN ('queued', 'running', 'stalled', 'waiting_approval_live', 'waiting_approval', 'waiting_browser', 'waiting_continuation')
          LIMIT 1`,
         )
         .get(threadId, botId) as { id: string } | undefined;

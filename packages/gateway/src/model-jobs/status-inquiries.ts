@@ -61,7 +61,7 @@ export class StatusInquiries {
   private open(threadId: ThreadId): RunRecord | undefined {
     const row = this.ctx.db
       .prepare(
-        `SELECT id FROM runs WHERE thread_id = ? AND status IN ('queued', 'running')
+        `SELECT id FROM runs WHERE thread_id = ? AND status IN ('queued', 'running', 'stalled')
            AND json_extract(config_json, '$.runType') = ? LIMIT 1`,
       )
       .get(threadId, STATUS_INQUIRY) as { id: string } | undefined;

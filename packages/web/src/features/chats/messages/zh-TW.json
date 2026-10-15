@@ -75,6 +75,7 @@
   "chatPane.runStatus.queued": "排隊中",
   "chatPane.runStatus.running": "執行中",
   "chatPane.runStatus.silent": "未回覆",
+  "chatPane.runStatus.stalled": "停滯",
   "chatPane.runStatus.stopped": "已停止",
   "chatPane.runStatus.succeeded": "已成功",
   "chatPane.runStatus.waiting_approval": "等待核准",

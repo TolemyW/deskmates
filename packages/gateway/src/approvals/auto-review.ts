@@ -182,7 +182,7 @@ export class ApprovalReviews {
     const workspaceId = this.workspaceOf(run);
     const row = this.deps.db
       .prepare(
-        `SELECT COUNT(*) AS n FROM runs WHERE workspace_id = ? AND status = 'running'
+        `SELECT COUNT(*) AS n FROM runs WHERE workspace_id = ? AND status IN ('running', 'stalled')
            AND run_type = ?`,
       )
       .get(workspaceId, APPROVAL_REVIEW) as { n: number };

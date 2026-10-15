@@ -15,6 +15,7 @@ import {
   type Workspace,
   type WorkspaceId,
   isDeskmatesError,
+  isExecuting,
   isPastDeadline,
   isTerminal,
 } from "@deskmates/contracts";
@@ -34,6 +35,7 @@ import { queueMemoryMaintenance } from "../memory/maintenance-due.js";
 import { MODEL_JOB_RUN_TYPES } from "../model-jobs/model-jobs.js";
 import type { SandboxOrigin } from "../workspaces/sandboxes.js";
 import type { RunLifecycle } from "./run-lifecycle.js";
+import { RunStallMonitor, STALL_SWEEP_INTERVAL_MS } from "./run-stall.js";
 import { markAttemptStarted, recordTimelineMark } from "./run-timeline-marks.js";
 
 export const SIDECAR_RUN_CMD: readonly string[] = ["deskmates-sidecar", "run"];
@@ -88,6 +90,10 @@ export class Scheduler {
   private readonly maintenance = new Set<WorkspaceId>();
   private lastTokenPruneMs = Number.NEGATIVE_INFINITY;
   private readonly continuationSweep: ReturnType<typeof setInterval>;
+  private readonly stallSweep: ReturnType<typeof setInterval>;
+  private readonly unsubscribeStalls: () => void;
+  /** Issue #9: marks quiet running runs `stalled` and revives them on progress; never kills. */
+  readonly stalls: RunStallMonitor;
 
   constructor(
     private readonly ctx: GatewayContext,
@@ -96,6 +102,39 @@ export class Scheduler {
   ) {
     this.continuationSweep = setInterval(() => this.kick(), CONTINUATION_SWEEP_INTERVAL_MS);
     this.continuationSweep.unref();
+    this.stalls = new RunStallMonitor(
+      {
+        runs: ctx.runs,
+        appendEvent: (input) => ctx.events.append(input),
+        publish: (run) =>
+          ctx.bus.publish(
+            run.threadId
+              ? { type: "run_status", threadId: run.threadId, run }
+              : { type: "run_status", run },
+          ),
+      },
+      ctx.config.runStallSeconds,
+    );
+    // Every stored event reaches the bus once its transaction has committed.
+    this.unsubscribeStalls = ctx.bus.subscribe((event) => {
+      if (event.type === "run_event") this.stalls.observe(event.event);
+    });
+    this.stallSweep = setInterval(() => this.sweepStalls(), STALL_SWEEP_INTERVAL_MS);
+    this.stallSweep.unref();
+  }
+
+  /**
+   * Issue #9: mark running runs that went quiet `stalled`. An observation only: the run keeps its
+   * process, lane and token, and `RUN_TIMEOUT_SECONDS` stays the only kill.
+   */
+  sweepStalls(): void {
+    if (this.stopped) return;
+    try {
+      for (const run of this.stalls.sweep())
+        this.log("run stalled", { runId: run.id, stallSeconds: this.ctx.config.runStallSeconds });
+    } catch (err) {
+      this.log("stall sweep failed", { error: String(err) });
+    }
   }
 
   /** Ask for a scheduling pass soon. Safe to call from anywhere, any number of times. */
@@ -352,6 +391,8 @@ export class Scheduler {
   stop(): void {
     this.stopped = true;
     clearInterval(this.continuationSweep);
+    clearInterval(this.stallSweep);
+    this.unsubscribeStalls();
   }
 
   /**
@@ -526,7 +567,7 @@ export class Scheduler {
       // `running` row it sees then belongs to that process, not this one. `attempt` is what tells
       // the two apart (ADR-0002 amendment 2, "resume keeps the ledger whole").
       const mine = (r: RunRecord): boolean => r.attempt === request.attempt;
-      if (mine(after) && (after.status === "running" || after.status === "waiting_approval_live")) {
+      if (mine(after) && isExecuting(after.status)) {
         // A sidecar that could not deliver its run_ended post prints it as the last stdout line
         // (exit code 3). Taking it here turns a lost post into a normal end of run.
         const recovered = runEndedFromStdout(run.id, result.stdout);
@@ -540,7 +581,7 @@ export class Scheduler {
           after = this.ctx.runs.mustGet(run.id);
         }
       }
-      if (mine(after) && (after.status === "running" || after.status === "waiting_approval_live")) {
+      if (mine(after) && isExecuting(after.status)) {
         // Keep the tail of stderr: without it a sidecar that died before its first event leaves
         // nothing to diagnose from.
         const tail = result.stderr.trim().split("\n").slice(-5).join(" | ").slice(-600);

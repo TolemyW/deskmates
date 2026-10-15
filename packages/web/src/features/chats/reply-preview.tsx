@@ -10,7 +10,7 @@ import { useT } from "../../i18n/i18n-provider.js";
 
 export type ReplyPreviewState = Readonly<Record<string, ReplyPreviewFrame>>;
 
-const LIVE = new Set(["running", "waiting_approval_live"]);
+const LIVE = new Set(["running", "stalled", "waiting_approval_live"]);
 
 function without(state: ReplyPreviewState, runId: RunId): ReplyPreviewState {
   if (!(runId in state)) return state;

@@ -177,7 +177,7 @@ export class ConsolidationService {
         .prepare(
           `SELECT
            MAX(created_at) AS attempted_at,
-           SUM(CASE WHEN status IN ('queued','running','waiting_approval_live','waiting_approval','waiting_browser','waiting_continuation') THEN 1 ELSE 0 END) AS pending
+           SUM(CASE WHEN status IN ('queued','running','stalled','waiting_approval_live','waiting_approval','waiting_browser','waiting_continuation') THEN 1 ELSE 0 END) AS pending
          FROM runs WHERE bot_id = ? AND run_type = ?`,
         )
         .get(bot.id, CONSOLIDATION_RUN_TYPE) as {
@@ -189,7 +189,7 @@ export class ConsolidationService {
         .prepare(
           `SELECT 1 FROM runs r JOIN bots b ON b.id = r.bot_id
          WHERE b.workspace_id = ? AND r.lane = 'interactive'
-           AND r.status IN ('running', 'waiting_approval_live') LIMIT 1`,
+           AND r.status IN ('running', 'stalled', 'waiting_approval_live') LIMIT 1`,
         )
         .get(bot.workspace_id);
       const recent = this.deps.db
@@ -263,7 +263,7 @@ export class ConsolidationService {
         `SELECT 1 FROM runs r JOIN bots b ON b.id = r.bot_id
          WHERE b.workspace_id = ? AND r.id <> ?
            AND r.run_type = ?
-           AND r.status IN ('running', 'waiting_approval_live', 'waiting_approval', 'waiting_browser', 'waiting_continuation')
+           AND r.status IN ('running', 'stalled', 'waiting_approval_live', 'waiting_approval', 'waiting_browser', 'waiting_continuation')
          LIMIT 1`,
       )
       .get(workspaceId, exceptRunId, CONSOLIDATION_RUN_TYPE);

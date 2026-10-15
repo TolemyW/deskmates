@@ -12,6 +12,7 @@ import { RoleNote } from "../../state/session-roles.js";
 const STATUS_TEXT: Record<RunStatus, MessageKey> = {
   queued: "runContextPanel.status.queued",
   running: "runContextPanel.status.running",
+  stalled: "runContextPanel.status.stalled",
   waiting_approval_live: "runContextPanel.status.waitingApprovalLive",
   waiting_approval: "runContextPanel.status.waitingApproval",
   waiting_browser: "runContextPanel.status.waitingBrowser",

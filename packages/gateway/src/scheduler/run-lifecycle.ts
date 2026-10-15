@@ -29,6 +29,7 @@ import {
   botHomeDir,
   canTransition,
   isEffortLevel,
+  isExecuting,
   isRecordedReasoning,
   isTerminal,
   isThinkingConfig,
@@ -687,7 +688,8 @@ export class RunLifecycle {
   ended(runId: RunId, ended: RunEnded): RunRecord {
     const { ctx } = this;
     const run = ctx.runs.mustGet(runId);
-    if (run.status !== "running" && run.status !== "waiting_approval_live") {
+    // A `stalled` run may end like a running one (issue #9); its route revives it first anyway.
+    if (!isExecuting(run.status)) {
       throw new DeskmatesError("invalid_transition", `run ${runId} is ${run.status}, not running`, {
         runId,
         from: run.status,

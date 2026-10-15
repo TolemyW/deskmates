@@ -75,6 +75,7 @@
   "chatPane.runStatus.queued": "queued",
   "chatPane.runStatus.running": "running",
   "chatPane.runStatus.silent": "silent",
+  "chatPane.runStatus.stalled": "stalled",
   "chatPane.runStatus.stopped": "stopped",
   "chatPane.runStatus.succeeded": "succeeded",
   "chatPane.runStatus.waiting_approval": "waiting approval",

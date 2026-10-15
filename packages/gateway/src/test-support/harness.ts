@@ -38,6 +38,7 @@ export function testConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfi
     threadPayloadMaxTokens: 16000,
     shortWaitSeconds: 1,
     runTimeoutSeconds: 30,
+    runStallSeconds: 300,
     workspaceMemoryLimitMb: 4096,
     cronTimeZone: "UTC",
     webhookBodyMaxBytes: 65536,

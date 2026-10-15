@@ -18,7 +18,7 @@ import { asRecord } from "./validate.js";
 type RunParams = { Params: { runId: string } };
 
 /** Live statuses whose process may still be writing its reply. */
-const LIVE = new Set(["running", "waiting_approval_live"]);
+const LIVE = new Set(["running", "stalled", "waiting_approval_live"]);
 
 /** Bound on remembered runs; the oldest entries go first. A forgotten run only re-marks. */
 const MAX_TRACKED_RUNS = 1000;

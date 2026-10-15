@@ -296,6 +296,7 @@ function runState(status: RunStatus, outputs: number): RoundMemberState {
     case "queued":
       return "queued";
     case "running":
+    case "stalled":
     case "waiting_browser":
       return "running";
     case "waiting_approval":

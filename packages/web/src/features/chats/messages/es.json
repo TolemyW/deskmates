@@ -75,6 +75,7 @@
   "chatPane.runStatus.queued": "en cola",
   "chatPane.runStatus.running": "en ejecución",
   "chatPane.runStatus.silent": "en silencio",
+  "chatPane.runStatus.stalled": "detenido sin avance",
   "chatPane.runStatus.stopped": "detenido",
   "chatPane.runStatus.succeeded": "completado",
   "chatPane.runStatus.waiting_approval": "esperando aprobación",

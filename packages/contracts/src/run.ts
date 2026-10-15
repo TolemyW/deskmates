@@ -12,6 +12,7 @@ export type RunTriggerKind = "thread_message" | "cron" | "webhook" | "approval" 
 export type RunStatus =
   | "queued"
   | "running"
+  | "stalled"
   | "waiting_approval_live"
   | "waiting_approval"
   | "waiting_browser"
@@ -38,13 +39,26 @@ export const PARKED_RUN_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>([
 ]);
 
 /**
+ * Statuses in which a sidecar process is executing the run. `stalled` is `running` that has
+ * produced no progress event for the Gateway's stall interval (issue #9): an observation, not a
+ * decision, so the process keeps its lane and the run returns to `running` on its next event.
+ */
+export const EXECUTING_RUN_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>([
+  "running",
+  "stalled",
+  "waiting_approval_live",
+]);
+
+/**
  * Allowed transitions, from design v0.3 §4:
  *
  *   queued → running → succeeded | silent | failed | cancelled
  *   running → waiting_approval_live → running | waiting_approval
  *   running → waiting_approval → running
  *   running → waiting_browser → running
+ *   running → stalled → running (issue #9; never terminal, never a kill)
  *
+ * A `stalled` run may go wherever a `running` one may: its next event can be its end.
  * `cancelled` is reachable from every non-terminal state; `failed` from every non-terminal state
  * too, including `queued`: a run whose start fails (missing member, sandbox error) must leave the
  * queue with its error, or it holds its lane forever.
@@ -52,6 +66,18 @@ export const PARKED_RUN_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>([
 const RUN_TRANSITIONS: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
   queued: ["running", "failed", "cancelled"],
   running: [
+    "succeeded",
+    "silent",
+    "failed",
+    "cancelled",
+    "stalled",
+    "waiting_approval_live",
+    "waiting_approval",
+    "waiting_browser",
+    "waiting_continuation",
+  ],
+  stalled: [
+    "running",
     "succeeded",
     "silent",
     "failed",
@@ -86,7 +112,26 @@ export function isTerminal(status: RunStatus): boolean {
  * meets a busy member").
  */
 export function occupiesLane(status: RunStatus): boolean {
-  return status === "queued" || status === "running" || status === "waiting_approval_live";
+  return status === "queued" || EXECUTING_RUN_STATUSES.has(status);
+}
+
+/** Whether a sidecar process is executing the run: `running`, `stalled` or a live approval wait. */
+export function isExecuting(status: RunStatus): boolean {
+  return EXECUTING_RUN_STATUSES.has(status);
+}
+
+/**
+ * The `log` source the Gateway writes when a run goes `stalled` and when it comes back (issue #9).
+ * `idleMs` is how long the run had produced no progress event; `stallSeconds` the interval in
+ * force. Telemetry only: nothing routes, kills or authorizes on it.
+ */
+export const RUN_STALL_LOG_SOURCE = "stall";
+
+export interface RunStallLogPayload {
+  source: typeof RUN_STALL_LOG_SOURCE;
+  op: "stalled" | "resumed";
+  idleMs: number;
+  stallSeconds: number;
 }
 
 /**

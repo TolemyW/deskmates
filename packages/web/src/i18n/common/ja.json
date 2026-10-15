@@ -23,6 +23,7 @@
   "pill.runStatus.queued": "待機中",
   "pill.runStatus.running": "実行中",
   "pill.runStatus.silent": "応答なし",
+  "pill.runStatus.stalled": "停滞中",
   "pill.runStatus.stopped": "停止",
   "pill.runStatus.succeeded": "成功",
   "pill.runStatus.waitingApproval": "承認待ち",

@@ -92,6 +92,7 @@ export interface CreateRunInput {
 const ALL_STATUSES: readonly RunStatus[] = [
   "queued",
   "running",
+  "stalled",
   "waiting_approval_live",
   "waiting_approval",
   "waiting_browser",
@@ -381,7 +382,7 @@ export class RunStore {
     const rows = this.db
       .prepare(
         `SELECT r.* FROM runs r JOIN bots b ON b.id = r.bot_id
-           WHERE b.workspace_id = ? AND r.status IN ('running', 'waiting_approval_live')
+           WHERE b.workspace_id = ? AND r.status IN ('running', 'stalled', 'waiting_approval_live')
            ORDER BY r.created_at, r.id`,
       )
       .all(workspaceId) as RunRow[];
@@ -506,6 +507,16 @@ export class RunStore {
     const rows = this.db
       .prepare(`SELECT * FROM runs WHERE status IN (${placeholders}) ORDER BY created_at`)
       .all(...LANE_HOLDING_STATUSES) as RunRow[];
+    return rows.map(toRun);
+  }
+
+  /** Runs in any of `statuses`, oldest first; the stall sweep reads `running` and `stalled`. */
+  listWithStatus(statuses: readonly RunStatus[]): RunRecord[] {
+    if (statuses.length === 0) return [];
+    const placeholders = statuses.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(`SELECT * FROM runs WHERE status IN (${placeholders}) ORDER BY created_at, id`)
+      .all(...statuses) as RunRow[];
     return rows.map(toRun);
   }
 

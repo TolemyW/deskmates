@@ -180,6 +180,7 @@ export function runById(state: ThreadViewState, id: RunId | undefined): RunView 
 const RUN_STATUS_LABELS: Readonly<Record<RunStatus, MessageKey>> = {
   queued: "chatPane.runStatus.queued",
   running: "chatPane.runStatus.running",
+  stalled: "chatPane.runStatus.stalled",
   waiting_approval_live: "chatPane.runStatus.waiting_approval_live",
   waiting_approval: "chatPane.runStatus.waiting_approval",
   waiting_browser: "chatPane.runStatus.waiting_browser",

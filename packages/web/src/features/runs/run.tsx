@@ -39,6 +39,7 @@ import { RunTimelinePanel } from "./run-timeline.js";
 const RUN_STATUS_LABEL: Readonly<Record<RunStatus, MessageKey>> = {
   queued: "run.status.queued",
   running: "run.status.running",
+  stalled: "run.status.stalled",
   waiting_approval_live: "run.status.waitingApprovalLive",
   waiting_approval: "run.status.waitingApproval",
   waiting_browser: "run.status.waitingBrowser",
