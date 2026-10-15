@@ -297,6 +297,18 @@ feature availability is not evidence of quality improvement.
 this helper does not leave a persistent edit lock after a crash. It rejects path traversal,
 symlinks, nonregular/oversized files and stale versions. It never invokes the SDK or a model.
 
+`deskmates-sidecar diary` (ADR-0043 decision 4, `diary-file.ts`) reads `{op, botName, ...}` from
+stdin: `list` answers the bot's `/home/<bot>/memory/YYYY-MM-DD.md` days newest first, `read` one
+day as `{day, lines, version}`, and `delete-line` removes one line only when the day's sha256 and
+the line's exact text still match, by an atomic rename. It opens nothing else, refuses a symlinked
+home, memory directory or day file, and never writes a line of its own.
+
+`deskmates-sidecar bot-rename` (ADR-0043 decision 1, `bot-rename.ts`) reads `{from, to}` and moves
+`/home/<from>` and `/work/bots/<from>` to the new name. Every check runs before the first move: a
+symlink, a non-directory or a target that holds files refuses the whole rename; an empty target is
+replaced; a failure on the second move puts the first back. The Gateway holds the bot's runs while
+it runs and commits the new name only after it succeeded.
+
 `deskmates-sidecar file-read` (ADR-0014, `file-read.ts`) reads `{path, botNames, maxBytes}` from
 stdin for the operator download route and prints `{base64, size}`, or `{error, message}` with
 exit 1. It applies the ADR-0014 decision 2 path policy: an absolute path over

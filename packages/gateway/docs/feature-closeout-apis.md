@@ -23,8 +23,9 @@
 - `GET/PATCH /api/bots/:id/soul` and `GET /api/bots/:id/soul/export`: the Gateway owns the
   canonical SOUL body (ADR-0011 A5). New bots can be configured while their workspace is stopped;
   older bots first import their physical file when the workspace is available. SHA-256 versions
-  guard edits. A changed body invalidates that bot's sessions; its active or parked run blocks an
-  edit until it finishes. The canonical body is delivered again at the next run boundary.
+  guard edits. A changed body invalidates that bot's sessions and is a numbered version
+  (ADR-0043 decision 2); an active or parked run no longer blocks the edit, which answers
+  `appliesFromNextRun` and is delivered at the run's next attempt boundary (decision 3).
 - `GET /api/memory-suggestions`, `POST /api/memory-suggestions/:id/review`: sourced, explicit
   apply/reject review. A completed run creates suggestions, never silently edits memory.
 - Knowledge/proposal listing supports bounded cursors; `GET /api/knowledge/:id/history`
