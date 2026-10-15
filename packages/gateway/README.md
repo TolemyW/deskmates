@@ -38,6 +38,7 @@ a section to this README.
 - [Approvals](docs/approvals.md)
 - [Configuration](docs/configuration.md)
 - [Connectors (ADR-0012)](docs/connectors.md)
+- [Context and prompt-cache observability (ADR-0023 amendment 5)](docs/context-and-cache-observability.md): request shapes, CLI surface knobs
 - [Database and migrations (ADR-0031)](docs/database.md)
 - [Final-reply idempotency and recipient context](docs/final-reply-idempotency.md)
 - [Group routing and direct handoffs (M2 foundation)](docs/group-routing.md)
