@@ -14,7 +14,7 @@ afterEach(async () => {
   h = undefined;
 });
 
-const BIBICLAW = [
+const TESTBOX = [
   { name: "bridge", cidr: "172.17.0.0/16" },
   { name: "vendordb-demo-net", cidr: "172.18.0.0/16" },
 ];
@@ -32,10 +32,10 @@ async function setup() {
       },
     ],
   });
-  Object.assign(h.provider, { networkSubnets: async () => BIBICLAW });
+  Object.assign(h.provider, { networkSubnets: async () => TESTBOX });
   const created = await h.api<{ profile: NetworkProfile }>("POST", "/api/network-profiles", {
     name: "VendorDB test environment",
-    rules: [{ kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [23001] }],
+    rules: [{ kind: "subnet", cidr: "172.18.200.0/24", schemes: ["http"], ports: [23001] }],
   });
   expect(created.status).toBe(200);
   return h;
@@ -64,7 +64,7 @@ describe("Docker/LAN subnet overlap", () => {
     const found = await reportNetworkOverlaps(harness.app.deskmates.ctx, (m) => warnings.push(m));
     expect(found).toHaveLength(4);
     expect(warnings[0]).toBe(
-      "LAN target 10.20.30.0/24 (profile VendorDB test environment) overlaps Docker network vendordb-demo-net (172.18.0.0/16): the host routes it to that bridge, not the LAN",
+      "LAN target 172.18.200.0/24 (profile VendorDB test environment) overlaps Docker network vendordb-demo-net (172.18.0.0/16): the host routes it to that bridge, not the LAN",
     );
     Object.assign(harness.provider, {
       networkSubnets: async () => {

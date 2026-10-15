@@ -23,10 +23,10 @@ Installation level only, in the Gateway's `.env` (see `.env.example`):
 The stable deployment's local services (owner, 2026-10-14):
 
 ```
-VISION_OPERATION_URL=http://172.17.120.16:8005
+VISION_OPERATION_URL=http://10.20.50.16:8005
 VISION_OPERATION_MODEL=qwen3.5-9b-vl
 VISION_OPERATION_PRICE_USD=0
-ASR_OPERATION_URL=http://172.17.120.16:8007/v1/audio/transcriptions
+ASR_OPERATION_URL=http://10.20.50.16:8007/v1/audio/transcriptions
 ASR_OPERATION_MODEL=<the model id the faster-whisper service expects>
 ASR_OPERATION_PRICE_USD=0
 ```

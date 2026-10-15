@@ -19,11 +19,11 @@ never stored in the database and no route returns an upstream URL or token.
 - A free local model is priced with a `MODEL_PRICES` row of zeros: a known `0` USD, never
   `pricing_missing`. All-zero rows are left out of the unknown-price estimate's population.
 
-Example for the tos-00 vLLM servers (no authentication), keeping an internal upstream as
+Example for the GPU-host vLLM servers (no authentication), keeping an internal upstream as
 `default`:
 
 ```
-MODEL_UPSTREAMS=[{"id":"tos-9b","baseUrl":"http://172.17.120.16:8003","models":["qwen3.5-9b"],"protocol":"anthropic"},{"id":"tos-27b","baseUrl":"http://172.17.120.16:8004","models":["qwen3.8-27b"],"protocol":"anthropic"},{"id":"tos-vl","baseUrl":"http://172.17.120.16:8005","models":["qwen3.5-9b-vl"],"protocol":"anthropic"}]
+MODEL_UPSTREAMS=[{"id":"tos-9b","baseUrl":"http://10.20.50.16:8003","models":["qwen3.5-9b"],"protocol":"anthropic"},{"id":"tos-27b","baseUrl":"http://10.20.50.16:8004","models":["qwen3.8-27b"],"protocol":"anthropic"},{"id":"tos-vl","baseUrl":"http://10.20.50.16:8005","models":["qwen3.5-9b-vl"],"protocol":"anthropic"}]
 CHEAP_MODEL=qwen3.8-27b
 ```
 

@@ -17,12 +17,12 @@ functions it replaced (`KnowledgeStore.search` / `searchPage`, `searchMemory` /
 | `RERANK_TOP_N` | Fused candidates reranked (default 20, at most 100). |
 | `RETRIEVAL_MIN_SIMILARITY` | Cosine floor for a vector candidate (default 0.45, from one bge-m3 probe). |
 
-On Testbox with the tos-00 services (owner decisions 2026-10-14, item 9):
+On Testbox with the GPU-host services (owner decisions 2026-10-14, item 9):
 
 ```
-EMBEDDING_URL=http://172.17.120.16:11434/api/embed
+EMBEDDING_URL=http://10.20.50.16:11434/api/embed
 EMBEDDING_MODEL=BAAI/bge-m3:latest
-RERANK_URL=http://172.17.120.16:8899/rerank
+RERANK_URL=http://10.20.50.16:8899/rerank
 RERANK_MODEL=bge-reranker-v2-m3
 ```
 

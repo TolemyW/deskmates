@@ -1,7 +1,7 @@
 # ADR-0041: Hybrid retrieval for Knowledge and learned memory
 
 Date: 2026-10-14
-Status: Accepted for decisions 1, 3 to 9 and 11 (owner-decided 2026-10-14: hybrid Knowledge and memory search with bge-m3 and a reranker on the local tos-00 services, priced as known zero). Decision 2 (the Gateway calls embedding and rerank services itself) and the numeric defaults of decision 6 are proposed: engineering choices awaiting owner review. Decision 10 records what is not yet evidence.
+Status: Accepted for decisions 1, 3 to 9 and 11 (owner-decided 2026-10-14: hybrid Knowledge and memory search with bge-m3 and a reranker on the local GPU-host services, priced as known zero). Decision 2 (the Gateway calls embedding and rerank services itself) and the numeric defaults of decision 6 are proposed: engineering choices awaiting owner review. Decision 10 records what is not yet evidence.
 
 ## Context
 
@@ -9,7 +9,7 @@ Knowledge documents (tenant-wide, ADR-0011 decision 10, ADR-0022 P2) and learned
 
 FTS5 finds words, not meaning. A run asking "how do we back up the database" misses a note that says "pg_dump runs nightly", and the `unicode61` tokenizer keeps a run of CJK characters as one token, which is why `memory_search` already falls back to a substring scan. AGENTS.md lists "Knowledge base search: FTS5 first (recommended) or database vectors from day one" as an open decision.
 
-On 2026-10-14 the owner set up local model services on tos-00 (172.17.120.16, reachable from Testbox, no authentication) and approved hybrid Knowledge and memory search with bge-m3 and a reranker, priced as known zero (owner decisions, item 9). The services were probed once from the workstation on 2026-10-14 (no generation, no cost):
+On 2026-10-14 the owner set up local model services on the GPU host (10.20.50.16, reachable from Testbox, no authentication) and approved hybrid Knowledge and memory search with bge-m3 and a reranker, priced as known zero (owner decisions, item 9). The services were probed once from the workstation on 2026-10-14 (no generation, no cost):
 
 - ollama 0.x at `:11434`, model `BAAI/bge-m3:latest` (gguf F16, 566.7 M parameters, 1024 dimensions, 8192-token context). `POST /api/embed {model, input: string[]}` returns `{model, embeddings: number[][], total_duration, load_duration, prompt_eval_count}`; vectors come back L2-normalised.
 - vLLM 0.8.5.post1 at `:8899`, served model `bge-reranker-v2-m3`. Its OpenAPI document lists `/rerank`, `/v1/rerank` and `/v2/rerank` with `RerankRequest {model?, query, documents: string[], top_n?, truncate_prompt_tokens?}`; a call returns `{id, model, usage: {total_tokens}, results: [{index, document: {text}, relevance_score}]}`, sorted by score.

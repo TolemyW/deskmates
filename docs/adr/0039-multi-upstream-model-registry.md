@@ -1,13 +1,13 @@
 # ADR-0039: Multi-upstream model registry
 
 Date: 2026-10-14
-Status: Accepted for decisions 1-6 (owner-decided 2026-10-14, OWNER-DECISIONS items 9 and 15: credentials installation-level in Deskmates `.env`, no automatic fallback, local tos-00 models priced as known zero, `qwen3.8-27b` as `CHEAP_MODEL`). Decisions 7 and 8 are proposed. Implements phase P1 of `docs/design/multimodal-models-2026-10-14.md` for the chat operation only; specialist operations (OCR, ASR, generation) are later phases and are not decided here. No real upstream was contacted; tests use fake upstreams.
+Status: Accepted for decisions 1-6 (owner-decided 2026-10-14, OWNER-DECISIONS items 9 and 15: credentials installation-level in Deskmates `.env`, no automatic fallback, local GPU-host models priced as known zero, `qwen3.8-27b` as `CHEAP_MODEL`). Decisions 7 and 8 are proposed. Implements phase P1 of `docs/design/multimodal-models-2026-10-14.md` for the chat operation only; specialist operations (OCR, ASR, generation) are later phases and are not decided here. No real upstream was contacted; tests use fake upstreams.
 
 ## Context
 
 Until this ADR the Gateway had one model upstream: `MODEL_BASE_URL` with its Bearer `MODEL_AUTH_TOKEN` (`config/model.ts`). The model proxy (`model-proxy/model-proxy.ts`, ADR-0002 item 4) checked a run's request against its frozen models (ADR-0023 decision 1), admitted it against the workspace budget (ADR-0032 decision 5), swapped the run token for the upstream token and forwarded it to that one URL. Every model id therefore had to be served by the same endpoint.
 
-The owner set up local vLLM servers on tos-00 (`172.17.120.16`, reachable from the stable host, no authentication) that speak the Anthropic `/v1/messages` protocol: port 8003 `qwen3.5-9b`, 8004 `qwen3.8-27b` (intended `CHEAP_MODEL`), 8005 `qwen3.5-9b-vl` (vision). They are separate endpoints, so they cannot sit behind the existing single upstream, and they cost nothing per token. The owner approved a multi-upstream model registry (#115 P1) on 2026-10-14 and ruled that credentials stay installation-level in `.env`, that there is no automatic fallback across destinations, and that local models are priced as a known zero.
+The owner set up local vLLM servers on the GPU host (`10.20.50.16`, reachable from the stable host, no authentication) that speak the Anthropic `/v1/messages` protocol: port 8003 `qwen3.5-9b`, 8004 `qwen3.8-27b` (intended `CHEAP_MODEL`), 8005 `qwen3.5-9b-vl` (vision). They are separate endpoints, so they cannot sit behind the existing single upstream, and they cost nothing per token. The owner approved a multi-upstream model registry (#115 P1) on 2026-10-14 and ruled that credentials stay installation-level in `.env`, that there is no automatic fallback across destinations, and that local models are priced as a known zero.
 
 ## Decision
 
@@ -38,7 +38,7 @@ The owner set up local vLLM servers on tos-00 (`172.17.120.16`, reachable from t
 ## Consequences
 
 - A deployment adds a local upstream with one `.env` line and a zero price row, then sets `CHEAP_MODEL` or a bot override to one of its models; no migration.
-- The stable deployment can keep its internal upstream as `default` and route `qwen3.8-27b` jobs to tos-00. The operator scripts that require `MODEL_BASE_URL` are unchanged; an install with only `MODEL_UPSTREAMS` must not use them as-is.
+- The stable deployment can keep its internal upstream as `default` and route `qwen3.8-27b` jobs to the GPU host. The operator scripts that require `MODEL_BASE_URL` are unchanged; an install with only `MODEL_UPSTREAMS` must not use them as-is.
 - `model_requests` does not record the upstream id per request; the run's `modelUpstreams` and the model id identify it while the registry is unchanged.
 - A refusal for a missing upstream is not a `model_requests` row (the `refusal` CHECK lists only `model_not_selected`); the SDK reports the 503 in the run's error.
 

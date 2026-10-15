@@ -16,19 +16,19 @@ const BASE_ENV = {
 const TOS = [
   {
     id: "tos-9b",
-    baseUrl: "http://172.17.120.16:8003/",
+    baseUrl: "http://10.20.50.16:8003/",
     models: ["qwen3.5-9b"],
     protocol: "anthropic",
   },
   {
     id: "tos-27b",
-    baseUrl: "http://172.17.120.16:8004",
+    baseUrl: "http://10.20.50.16:8004",
     models: ["qwen3.8-27b"],
     protocol: "anthropic",
   },
   {
     id: "tos-vl",
-    baseUrl: "http://172.17.120.16:8005",
+    baseUrl: "http://10.20.50.16:8005",
     authToken: "vl-secret",
     models: ["qwen3.5-9b-vl"],
     protocol: "anthropic",
@@ -52,12 +52,12 @@ describe("MODEL_UPSTREAMS (ADR-0039 decision 1)", () => {
     const registry = modelRegistryOf(config);
     expect(registry.resolve("qwen3.5-9b")).toEqual({
       id: "tos-9b",
-      baseUrl: "http://172.17.120.16:8003",
+      baseUrl: "http://10.20.50.16:8003",
     });
     expect(registry.resolve("qwen3.8-27b")?.id).toBe("tos-27b");
     expect(registry.resolve("qwen3.5-9b-vl")).toEqual({
       id: "tos-vl",
-      baseUrl: "http://172.17.120.16:8005",
+      baseUrl: "http://10.20.50.16:8005",
       authToken: "vl-secret",
     });
     expect(registry.resolve("remote-large")?.id).toBe("default");

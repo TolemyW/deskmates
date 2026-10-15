@@ -20,27 +20,27 @@ describe("readOperationsConfig", () => {
 
   it("appends the route path to a base URL and keeps a full one", () => {
     const config = readOperationsConfig({
-      VISION_OPERATION_URL: "http://172.17.120.16:8005/",
+      VISION_OPERATION_URL: "http://10.20.50.16:8005/",
       VISION_OPERATION_MODEL: "qwen3.5-9b-vl",
-      ASR_OPERATION_URL: "http://172.17.120.16:8007/v1/audio/transcriptions",
+      ASR_OPERATION_URL: "http://10.20.50.16:8007/v1/audio/transcriptions",
       ASR_OPERATION_MODEL: "whisper-large-v3",
     });
     expect(config.operations?.look).toMatchObject({
-      url: "http://172.17.120.16:8005/v1/messages",
+      url: "http://10.20.50.16:8005/v1/messages",
       model: "qwen3.5-9b-vl",
       protocol: "anthropic-messages",
     });
     expect(config.operations?.look?.authToken).toBeUndefined();
     expect(config.operations?.look?.priceUsd).toBeUndefined();
     expect(config.operations?.asr).toMatchObject({
-      url: "http://172.17.120.16:8007/v1/audio/transcriptions",
+      url: "http://10.20.50.16:8007/v1/audio/transcriptions",
       maxBytes: 25 * 1024 * 1024,
       maxSeconds: 1800,
     });
     const stamps = operationStamps(config).operations;
     expect(stamps?.look?.model).toBe("qwen3.5-9b-vl");
     expect(stamps?.look?.endpointSha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(JSON.stringify(stamps)).not.toContain("172.17.120.16");
+    expect(JSON.stringify(stamps)).not.toContain("10.20.50.16");
   });
 
   it("reads the openai-chat route, a token, an explicit zero price and bounds", () => {

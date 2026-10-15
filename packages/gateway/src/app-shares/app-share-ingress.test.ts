@@ -368,7 +368,7 @@ describe("an IP-literal operator and a nip.io base behind a TLS proxy (decision 
       baseUrl: "https://10.20.40.132.nip.io:18443",
       operatorOrigin: "https://10.20.40.132:18443",
     });
-    expect(w.host).toMatch(/^[0-9a-f]{32}\.172\.16\.181\.132\.nip\.io:18443$/);
+    expect(w.host).toMatch(/^[0-9a-f]{32}\.10\.20\.40\.132\.nip\.io:18443$/);
     // Caddy keeps the Host; a request for the base host without its port names nothing.
     expect((await appRequest(w.port, { host: w.host.replace(":18443", "") })).status).toBe(404);
     const { res } = await enter(w, w.r.member, "/board");

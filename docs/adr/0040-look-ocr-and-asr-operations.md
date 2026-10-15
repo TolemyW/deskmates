@@ -7,7 +7,7 @@ Status: Accepted (in part; owner-decided 2026-10-14, owner decisions 8, 9 and 15
 
 The design for issue #115 found that Deskmates has one model surface, the agent's text loop, and no path at all for OCR or speech recognition (§3.7, gaps G5 to G7). ADR-0023 amendments 2 and 3 withhold images and PDFs from a run whose model cannot see: the model is told it cannot view them and must not guess. That removes confabulation but leaves a blind model with no way to read a screenshot, a scanned contract or a photo of a receipt. An audio file (an upload, a voice note) cannot be read by any run.
 
-On 2026-10-14 the owner set up local services on the internal host tos-00 (`172.17.120.16`, reachable from the stable host, no authentication): a vision model `qwen3.5-9b-vl` behind an Anthropic `/v1/messages` route (port 8005) and faster-whisper behind an OpenAI-compatible `/v1/audio/transcriptions` route (port 8007). The owner approved a look/OCR tool on the vision model used automatically by blind models, and ASR through whisper.
+On 2026-10-14 the owner set up local services on the internal GPU host (`10.20.50.16`, reachable from the stable host, no authentication): a vision model `qwen3.5-9b-vl` behind an Anthropic `/v1/messages` route (port 8005) and faster-whisper behind an OpenAI-compatible `/v1/audio/transcriptions` route (port 8007). The owner approved a look/OCR tool on the vision model used automatically by blind models, and ASR through whisper.
 
 The design compares five runtimes (§7.1) and recommends option A for provider-backed operations: a sidecar tool asks a Gateway operation proxy, which forwards to the configured service. Option C (the Gateway calls a model on its own) breaks the thin-core rule; option B (a local engine in the image) needs model weights in the image. The 2026-09-28 protocol check showed that one model can read an image over one route and not another (§3.5), so the route is configuration, not an assumption.
 
@@ -39,7 +39,7 @@ The design compares five runtimes (§7.1) and recommends option A for provider-b
 
 - **The sidecar builds the upstream body and the Gateway only swaps the credential**, as the model proxy does for the chat loop (design §4, principle 1). Rejected for these operations: it would let a run token buy free-form calls on the vision model with any prompt and any `max_tokens`, and the Gateway would have to validate an arbitrary Messages body instead of building a fixed one. The adapter is small and protocol-specific, and the Gateway still only forwards a call the sidecar asked for.
 - **OCR through the chat model's own image input (design option E).** Unavailable exactly where it is needed: a withholding run's model cannot see.
-- **A local OCR engine or speech model in the workspace image (option B).** Grows every workspace image and needs model weights there; the owner chose the tos-00 services.
+- **A local OCR engine or speech model in the workspace image (option B).** Grows every workspace image and needs model weights there; the owner chose the GPU-host services.
 - **An idempotency key per SDK tool-use id (design §7.3).** The in-process MCP tool handler in SDK 0.3.278 does not receive the tool-use id, so a replayed call after a resume buys a second operation. With no automatic retry and local zero-priced services this is accepted for now.
 - **Per-workspace enablement and a service registry in the database (design §5.2, §6.1).** Deferred: the owner fixed credentials at installation level and there is one service per operation.
 

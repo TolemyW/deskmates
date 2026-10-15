@@ -182,7 +182,7 @@ Decay scoring is common; it changes ranking, not truth. A note that is old but t
 | Recency / importance / relevance score | Generative Agents |
 | Agent-driven search through tools | Letta, LangMem hot path, Claude memory tool, Deskmates `memory_search` |
 
-The field converges on "small pinned index plus searched store", which ADR-0011 decision 9 already is. Where Deskmates is behind is the search itself: lexical only, no embeddings, no reranker, no graph neighbourhood. The owner's ruling 9 (2026-10-14) approved hybrid Knowledge and memory search with bge-m3 and the reranker on tos-00 as a next-batch item; §6 C2 is that change with an evaluation attached.
+The field converges on "small pinned index plus searched store", which ADR-0011 decision 9 already is. Where Deskmates is behind is the search itself: lexical only, no embeddings, no reranker, no graph neighbourhood. The owner's ruling 9 (2026-10-14) approved hybrid Knowledge and memory search with bge-m3 and the reranker on the GPU host as a next-batch item; §6 C2 is that change with an evaluation attached.
 
 ### 3.6 Evaluation
 
@@ -254,7 +254,7 @@ Consequences for any change borrowed from the field: model output may **propose*
 
 The owner's instruction is to run the current design first. Each item below states the precondition that must be observed in production before it is worth an experiment. All are strategy changes under AGENTS.md: one knob per experiment, a paired comparison through `evals/compare.ts` per duration bucket, a memory-off arm always included, and the decision rules of `measurement-2026-09-20.md` §4.3 and the M3 plan's "Decision rules" (memory change: paired campaign success difference per bucket with the 95% interval above 0, pass^k not worse; safety gates are not trade-offs: a change that raises injection or cross-session attack success is rejected whatever its gain; poisoning claims need at least 30 trials for a rule-of-three bound under 10%).
 
-None of these is authorised to run as a paid campaign. Memory integration preparation is authorised; the evaluations below would run on the local models of tos-00 (priced as known zero, ruling 9) or wait for an owner authorisation.
+None of these is authorised to run as a paid campaign. Memory integration preparation is authorised; the evaluations below would run on the local models of the GPU host (priced as known zero, ruling 9) or wait for an owner authorisation.
 
 Common to every plan:
 
@@ -264,7 +264,7 @@ Common to every plan:
 
 ### C1. Embedding-assisted fact key
 
-**What changes.** When a new item has no current note with its lexical key, the Gateway asks a local embedding service (bge-m3 on tos-00, via a sidecar or a connector, never a Gateway model call *(a pure embedding call is not a model run in ADR-0023 terms; that classification needs an ADR decision first)*) for the nearest current notes in the same store, and the reranker scores the pairs. Above a calibrated threshold, the pair is a **candidate same-fact**. The candidate is then checked deterministically: same store, same trust, no condition-number conflict (A7's condition rule), and the value or polarity differs. Only then is it treated as same-key for A8 and A9.
+**What changes.** When a new item has no current note with its lexical key, the Gateway asks a local embedding service (bge-m3 on the GPU host, via a sidecar or a connector, never a Gateway model call *(a pure embedding call is not a model run in ADR-0023 terms; that classification needs an ADR decision first)*) for the nearest current notes in the same store, and the reranker scores the pairs. Above a calibrated threshold, the pair is a **candidate same-fact**. The candidate is then checked deterministically: same store, same trust, no condition-number conflict (A7's condition rule), and the value or polarity differs. Only then is it treated as same-key for A8 and A9.
 
 **Benefit.** Fewer missed supersessions on paraphrases; fewer two-current-values cases.
 
@@ -278,7 +278,7 @@ Common to every plan:
 
 ### C2. Hybrid `memory_search` with a reranker
 
-**What changes.** `memory_search` combines FTS with bge-m3 vector search over current notes, fuses with reciprocal rank fusion, and reranks the top 50 with the tos-00 reranker. Trust wrapping, current-only filtering, paging (A23) and the recorded supplied versions (A13) are unchanged. Owner ruling 9 already approved hybrid Knowledge and memory search; this item is the measurement that should accompany it.
+**What changes.** `memory_search` combines FTS with bge-m3 vector search over current notes, fuses with reciprocal rank fusion, and reranks the top 50 with the GPU-host reranker. Trust wrapping, current-only filtering, paging (A23) and the recorded supplied versions (A13) are unchanged. Owner ruling 9 already approved hybrid Knowledge and memory search; this item is the measurement that should accompany it.
 
 **Benefit.** Higher recall when the bot's query words differ from the note's words.
 

@@ -60,13 +60,13 @@ describe("GET /api/config", () => {
       modelUpstreams: [
         {
           id: "local",
-          baseUrl: "http://172.17.120.16:8004",
+          baseUrl: "http://10.20.50.16:8004",
           models: ["local-27b"],
           protocol: "anthropic",
         },
         {
           id: "vl",
-          baseUrl: "http://172.17.120.16:8005",
+          baseUrl: "http://10.20.50.16:8005",
           authToken: "vl-token-never-in-a-response",
           models: ["local-vl"],
           protocol: "anthropic",
@@ -80,7 +80,7 @@ describe("GET /api/config", () => {
       { model: testConfig().defaultModel, upstream: "default" },
     ]);
     const raw = await (await fetch(`${h.baseUrl}/api/config`)).text();
-    for (const secret of ["172.17.120.16", "vl-token-never-in-a-response", TEST_UPSTREAM_TOKEN])
+    for (const secret of ["10.20.50.16", "vl-token-never-in-a-response", TEST_UPSTREAM_TOKEN])
       expect(raw).not.toContain(secret);
   });
 });
