@@ -15,5 +15,11 @@ export interface RunContextMetrics {
   compactions: RunCompaction[];
   contextSections: Record<string, number> | null;
   systemPromptSha256: string | null;
+  /**
+   * The context window the CLI was given (`CLAUDE_CODE_MAX_CONTEXT_TOKENS`): the latest attempt's
+   * `sdk` init log, else what `RunEnded` reported. Null when the run's CLI got none, which is the
+   * default; the CLI then picks its own window and the meter has no denominator (issue #9).
+   */
+  maxContextTokens: number | null;
   modelRequests: { count: number; distinctSystemHashes: number; changedWithinAttempt: boolean };
 }

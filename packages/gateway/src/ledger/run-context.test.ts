@@ -125,8 +125,21 @@ describe("runContextMetrics", () => {
       compactions: [],
       contextSections: null,
       systemPromptSha256: null,
+      maxContextTokens: null,
       modelRequests: { count: 0, distinctSystemHashes: 0, changedWithinAttempt: false },
     });
+  });
+
+  it("takes the context window from the latest init log, else from the run's RunEnded value", () => {
+    const init = (maxContextTokens?: unknown) =>
+      event("log", { source: "sdk", usageSessionFingerprint: "f", maxContextTokens });
+    expect(runContextMetrics([init(180000)], []).maxContextTokens).toBe(180000);
+    expect(runContextMetrics([init(100000), init(64000)], []).maxContextTokens).toBe(64000);
+    expect(
+      runContextMetrics([init(undefined)], [], { claudeCodeMaxContextTokens: 200000 })
+        .maxContextTokens,
+    ).toBe(200000);
+    expect(runContextMetrics([init(0), init("1")], []).maxContextTokens).toBeNull();
   });
 
   it.each([undefined, null, -1, Number.NaN, "10"])(

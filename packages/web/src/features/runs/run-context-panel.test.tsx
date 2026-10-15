@@ -14,6 +14,7 @@ const metrics: RunContextMetrics = {
   compactions: [],
   contextSections: null,
   systemPromptSha256: null,
+  maxContextTokens: null,
   modelRequests: { count: 0, distinctSystemHashes: 0, changedWithinAttempt: false },
 };
 

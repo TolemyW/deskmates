@@ -94,6 +94,7 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
       systemPromptSha256: turns.length
         ? "3f1c0d9e2b7a4c6d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d"
         : null,
+      maxContextTokens: null,
       modelRequests: {
         count: turns.length,
         distinctSystemHashes: turns.length ? 1 : 0,

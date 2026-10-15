@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { runModelJob } from "./model-job.js";
 import { presentationSummary } from "./presentation-summary.js";
 // One run, start to finish (design v0.3 §5 steps 3 to 7): assemble context, register MCP
@@ -71,6 +70,7 @@ import {
   parseScreenshotFile,
   screenshotFileName,
 } from "./screenshots.js";
+import { sdkInitLog } from "./sdk-init-log.js";
 import { carrySessionIntoBotDir } from "./session-carry.js";
 import { materializeSkillPlugin, skillPluginDir } from "./skill-plugin.js";
 import { parseRunSummary } from "./summary.js";
@@ -927,14 +927,7 @@ export async function runOnce(
     }
     if (msg.type === "system" && msg.subtype === "init") {
       state.sdkSessionId = msg.session_id;
-      // The CLI build and the model id the SDK resolved for this attempt: a CLI-side failure such
-      // as `unrecognized_model` is only explainable when they sit next to the error (issue #68).
-      sink.emit("log", {
-        source: "sdk",
-        usageSessionFingerprint: createHash("sha256").update(msg.session_id).digest("hex"),
-        ...(msg.claude_code_version === undefined ? {} : { cliVersion: msg.claude_code_version }),
-        ...(msg.model === undefined ? {} : { model: msg.model }),
-      });
+      sink.emit("log", sdkInitLog(msg, ended.maxContextTokens));
       return;
     }
     if (msg.type === "system" && msg.subtype === "api_retry") {

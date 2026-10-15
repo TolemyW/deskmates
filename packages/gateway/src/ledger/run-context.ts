@@ -9,6 +9,7 @@
 // - cacheHitRatio is sum(cacheRead) / sum(cacheRead + cacheCreate + input) over the turns;
 // - peak/p95 and the cache ratio are unknown if any contributing turn lacks measurements;
 // - contextSections and systemPromptSha256 are the latest attempt's `context_sections` event;
+// - maxContextTokens is the latest `sdk` init log's, else the run config's `RunEnded` value;
 // - modelRequests counts forwarded `messages` requests only (`count_tokens` is not a turn, and a
 //   request the proxy refused never reached a model).
 // A value with no data behind it is null, never 0.
@@ -25,6 +26,10 @@ function count(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
 }
 
+function positive(v: unknown): number | null {
+  return typeof v === "number" && Number.isSafeInteger(v) && v > 0 ? v : null;
+}
+
 /** Nearest-rank percentile of an ascending list; `p` in (0, 1]. */
 function nearestRank(sorted: readonly number[], p: number): number | null {
   if (sorted.length === 0) return null;
@@ -35,6 +40,7 @@ function nearestRank(sorted: readonly number[], p: number): number | null {
 export function runContextMetrics(
   events: readonly RunEvent[],
   requests: readonly ModelRequestRecord[],
+  runConfig: Readonly<Record<string, unknown>> = {},
 ): RunContextMetrics {
   const windows: number[] = [];
   let cacheRead = 0;
@@ -45,6 +51,7 @@ export function runContextMetrics(
   const compactions: RunCompaction[] = [];
   let sections: Record<string, number> | null = null;
   let hash: string | null = null;
+  let window = positive(runConfig.claudeCodeMaxContextTokens);
 
   for (const e of events) {
     const p = e.payload;
@@ -77,6 +84,8 @@ export function runContextMetrics(
         );
       }
       hash = typeof p.systemPromptSha256 === "string" ? p.systemPromptSha256 : null;
+    } else if (e.kind === "log" && p.source === "sdk" && positive(p.maxContextTokens) !== null) {
+      window = positive(p.maxContextTokens);
     }
   }
 
@@ -104,6 +113,7 @@ export function runContextMetrics(
     compactions,
     contextSections: sections,
     systemPromptSha256: hash,
+    maxContextTokens: window,
     modelRequests: {
       count: messages.length,
       distinctSystemHashes: distinct.size,
