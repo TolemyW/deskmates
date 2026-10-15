@@ -28,7 +28,11 @@ beforeAll(() => {
   writeFileSync(join(dist, "index.html"), INDEX_HTML);
   writeFileSync(join(dist, "assets", "index-Ab12Cd34.js"), "console.log('ui');");
   writeFileSync(join(dist, "assets", "index-Ab12Cd34.css"), "body{margin:0}");
-  writeFileSync(join(dist, "icon.svg"), "<svg xmlns='http://www.w3.org/2000/svg'/>");
+  mkdirSync(join(dist, "integration-logos"));
+  writeFileSync(
+    join(dist, "integration-logos", "github.svg"),
+    "<svg xmlns='http://www.w3.org/2000/svg'/>",
+  );
   writeFileSync(join(dist, "favicon-32x32.png"), Buffer.from([137, 80, 78, 71]));
   writeFileSync(join(dist, "apple-touch-icon.png"), Buffer.from([137, 80, 78, 71]));
   mkdirSync(join(dist, "agent-skill"));
@@ -93,7 +97,7 @@ describe("operator listener static UI", () => {
     expect(js.body).toBe("console.log('ui');");
     const css = await operator.inject({ method: "GET", url: "/assets/index-Ab12Cd34.css" });
     expect(css.headers["content-type"]).toMatch(/^text\/css/);
-    const svg = await operator.inject({ method: "GET", url: "/icon.svg" });
+    const svg = await operator.inject({ method: "GET", url: "/integration-logos/github.svg" });
     expect(svg.headers["content-type"]).toBe("image/svg+xml");
     expect(svg.headers["cache-control"]).toBe("no-cache");
     for (const path of ["/favicon-32x32.png", "/apple-touch-icon.png"]) {
