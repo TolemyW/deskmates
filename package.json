@@ -26,6 +26,7 @@
     "power": "tsx --tsconfig evals/tsconfig.json evals/power.ts",
     "delegation-metrics": "tsx --tsconfig evals/tsconfig.json evals/delegation-metrics.ts",
     "latency-report": "tsx --tsconfig evals/tsconfig.json evals/latency-report.ts",
+    "group-rounds": "tsx --tsconfig evals/tsconfig.json evals/group-rounds.ts",
     "golden-site": "npm run serve -w packages/golden-site",
     "dev:gateway": "npm run dev -w packages/gateway",
     "auth": "node scripts/auth-cli.mjs",
