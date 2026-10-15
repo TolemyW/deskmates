@@ -40,6 +40,7 @@ function closerState(status: RunStatus | undefined, synthesized: boolean): Round
     case "queued":
       return "queued";
     case "running":
+    case "stalled":
     case "waiting_browser":
       return "running";
     case "waiting_approval":
