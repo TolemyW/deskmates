@@ -40,6 +40,7 @@ import {
   prepareCanonicalFiles,
   snapshotPeerRuleFiles,
 } from "./canonical-files.js";
+import { ContextUsageProbe } from "./context-usage.js";
 import { buildContext, diaryPath, knowledgeQuery } from "./context.js";
 import type { SidecarDeps } from "./deps.js";
 import { GatewayClient } from "./gateway-client.js";
@@ -74,6 +75,7 @@ import { sdkInitLog } from "./sdk-init-log.js";
 import { carrySessionIntoBotDir } from "./session-carry.js";
 import { materializeSkillPlugin, skillPluginDir } from "./skill-plugin.js";
 import { parseRunSummary } from "./summary.js";
+import { sdkSystemPrompt } from "./system-prompt.js";
 import { createThreadTools } from "./thread-tools.js";
 import { ledgerToolResult } from "./tool-evidence.js";
 import { toolResultText } from "./tool-result-text.js";
@@ -112,6 +114,33 @@ export const DISALLOWED_TOOLS: readonly string[] = [
   "CronList",
   "ScheduleWakeup",
 ];
+
+/**
+ * The fixed list plus the Gateway's extra names (ADR-0023 amendment 5), in that order, each once.
+ * The Gateway can only add to the list: a name it sends never brings back a fixed one.
+ */
+export function disallowedToolsFor(request: Pick<StartRunRequest, "cliSurface">): string[] {
+  return [...new Set([...DISALLOWED_TOOLS, ...(request.cliSurface?.disallowedTools ?? [])])];
+}
+
+/** The SDK's inline `settings`, holding only the switches the Gateway sent; none, no key. */
+export function cliSettingsFor(
+  request: Pick<StartRunRequest, "cliSurface">,
+): Pick<Options, "settings"> {
+  const s = request.cliSurface;
+  const settings: NonNullable<Exclude<Options["settings"], string>> = {
+    ...(s?.disableBundledSkills === undefined
+      ? {}
+      : { disableBundledSkills: s.disableBundledSkills }),
+    ...(s?.includeGitInstructions === undefined
+      ? {}
+      : { includeGitInstructions: s.includeGitInstructions }),
+    ...(s?.skillListingMaxDescChars === undefined
+      ? {}
+      : { skillListingMaxDescChars: s.skillListingMaxDescChars }),
+  };
+  return Object.keys(settings).length > 0 ? { settings } : {};
+}
 
 /** How often the run process looks for the capture file of an action it has the result of. */
 const SCREENSHOT_POLL_MS = 50;
@@ -367,8 +396,14 @@ export async function runOnce(
       reason: redactText(err instanceof Error ? err.message : String(err), secrets),
     }),
   );
+  // What the CLI puts in the window, per category: once after init, then after every response
+  // (ADR-0023 amendment 5, `context-usage.ts`).
+  const contextUsage = new ContextUsageProbe((payload) => sink.emit("log", payload), deps.sleep);
   // One `turn_usage` per model response (M3 context plan, Phase 1; `turn-usage.ts`).
-  const turnUsage = new TurnUsageTracker((payload) => sink.emit("turn_usage", { ...payload }));
+  const turnUsage = new TurnUsageTracker((payload) => {
+    sink.emit("turn_usage", { ...payload });
+    contextUsage.sample("summary", payload.turn);
+  });
   const turnWarning = new TurnWarning(request.maxTurns);
   // ADR-0023 decision 3: the hook and SDK 0.3.278's overload-fallback message both feed it.
   const modelSwitches = new ModelSwitchRecorder((payload) =>
@@ -507,8 +542,14 @@ export async function runOnce(
       kind: "context_sections",
       sections: { ...context.sections },
       systemPromptSha256: context.systemPromptSha256,
+      // ADR-0023 amendment 5: the part before the SDK's dynamic boundary, and the rest.
+      systemPromptStaticSha256: context.systemPromptStaticSha256,
+      ...(context.systemPromptDynamicSha256 === undefined
+        ? {}
+        : { systemPromptDynamicSha256: context.systemPromptDynamicSha256 }),
     });
     ended.systemPromptSha256 = context.systemPromptSha256;
+    ended.systemPromptStaticSha256 = context.systemPromptStaticSha256;
 
     // The run's skill set from the Gateway, written as this attempt's local plugin (ADR-0015
     // decision 1). The ledger names what was enabled; the Gateway already recorded it in
@@ -662,8 +703,33 @@ export async function runOnce(
         to: input.to_model,
         source: input.source,
         ...(input.requested_model === undefined ? {} : { requested: input.requested_model }),
+        // ADR-0023 amendment 5: what the switch cost the prompt cache.
+        ...(typeof input.prompt_cache_warm === "boolean"
+          ? { promptCacheWarm: input.prompt_cache_warm }
+          : {}),
+        ...(typeof input.context_tokens === "number"
+          ? { contextTokens: input.context_tokens }
+          : {}),
       };
       modelSwitches.record(payload);
+      return {};
+    };
+    // ADR-0023 amendment 5: on a resume, how large the re-sent context is and whether the CLI
+    // expects the prompt cache to have expired; on a fresh start, only that the session started.
+    const sessionStart: HookCallback = async (input) => {
+      if (input.hook_event_name !== "SessionStart") return {};
+      sink.emit("log", {
+        source: "sdk",
+        kind: "session_start",
+        sessionSource: input.source,
+        ...(input.context_tokens === undefined ? {} : { contextTokens: input.context_tokens }),
+        ...(input.prompt_cache_likely_expired === undefined
+          ? {}
+          : { promptCacheLikelyExpired: input.prompt_cache_likely_expired }),
+        ...(input.seconds_since_last_response === undefined
+          ? {}
+          : { secondsSinceLastResponse: input.seconds_since_last_response }),
+      });
       return {};
     };
     const options: Options = {
@@ -681,7 +747,9 @@ export async function runOnce(
       plugins: [skillPlugin.plugin],
       skills: skillPlugin.skills,
       permissionMode: "default",
-      systemPrompt: context.systemPrompt,
+      // ADR-0023 amendment 5: the static part before the SDK's dynamic boundary, recorded once
+      // per session (`system-prompt.ts`).
+      systemPrompt: sdkSystemPrompt(context.systemPromptParts),
       env,
       // The turn budget is a Gateway knob recorded in `runs.config_json`, not a container setting:
       // the environment belongs to the whole workspace and a value left there would silently run
@@ -690,7 +758,10 @@ export async function runOnce(
       ...(request.maxTurns === null ? {} : { maxTurns: request.maxTurns }),
       // Final response usage arrives in message_delta after assistant content blocks.
       includePartialMessages: true,
-      disallowedTools: [...DISALLOWED_TOOLS],
+      disallowedTools: disallowedToolsFor(request),
+      // ADR-0023 amendment 5: present only when the Gateway sent a switch, so a run without one
+      // passes the CLI exactly the options it always had.
+      ...cliSettingsFor(request),
       mcpServers,
       hooks: {
         PreToolUse: [
@@ -733,20 +804,27 @@ export async function runOnce(
           },
         ],
         PostModelSwitch: [{ hooks: [postModelSwitch] }],
+        SessionStart: [{ hooks: [sessionStart] }],
       },
       canUseTool: createCanUseTool(sink, state, { browserCode: request.browserCodeApproval }),
       ...(request.sdkSessionId === undefined ? {} : { resume: request.sdkSessionId }),
     };
 
     timeline.mark("query_started", { resume: request.sdkSessionId !== undefined });
-    for await (const msg of deps.query({ prompt: context.prompt, options })) {
+    const query = deps.query({ prompt: context.prompt, options });
+    contextUsage.attach(query);
+    for await (const msg of query) {
       timeline.observe(msg);
       preview?.observe(msg);
       await handleMessage(msg);
     }
+    contextUsage.detach();
     turnUsage.flush();
+    await contextUsage.settle();
   } catch (err) {
+    contextUsage.detach();
     turnUsage.flush();
+    await contextUsage.settle();
     const error = redactText(
       err instanceof Error ? (err.stack ?? err.message) : String(err),
       secrets,
@@ -928,6 +1006,7 @@ export async function runOnce(
     if (msg.type === "system" && msg.subtype === "init") {
       state.sdkSessionId = msg.session_id;
       sink.emit("log", sdkInitLog(msg, ended.maxContextTokens));
+      contextUsage.sample("full", 0);
       return;
     }
     if (msg.type === "system" && msg.subtype === "api_retry") {
@@ -1039,6 +1118,7 @@ export async function runOnce(
       return;
     }
     if (msg.type === "result") {
+      contextUsage.detach();
       turnUsage.flush();
       state.sdkSessionId = msg.session_id;
       resultSubtype = msg.subtype;

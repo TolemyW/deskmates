@@ -8,6 +8,7 @@ import { type AppSharesConfig, readAppSharesConfig } from "./config/app-shares.j
 import type { AuthSettings } from "./config/auth.js";
 import { authConfig } from "./config/auth.js";
 import { type BrowserConfig, readBrowserConfig } from "./config/browser.js";
+import { type CliSurfaceConfig, readCliSurfaceConfig } from "./config/cli-surface.js";
 import { type IntegrationsConfig, readIntegrationsConfig } from "./config/integrations.js";
 import { type ModelConfig, readModelConfig } from "./config/model.js";
 import { type OperationsConfig, readOperationsConfig } from "./config/operations.js";
@@ -38,6 +39,7 @@ export interface GatewayConfig
   extends AppSharesConfig,
     AuthSettings,
     BrowserConfig,
+    CliSurfaceConfig,
     IntegrationsConfig,
     ModelConfig,
     OperationsConfig,
@@ -57,6 +59,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     ...readRunsConfig(env),
     ...readTenancyConfig(env),
     ...readBrowserConfig(env),
+    ...readCliSurfaceConfig(env),
     ...readIntegrationsConfig(env),
     ...readAppSharesConfig(env),
     ...readOperationsConfig(env),

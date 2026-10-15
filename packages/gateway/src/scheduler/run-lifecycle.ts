@@ -41,6 +41,7 @@ import {
 import { approvalAttachment } from "../approvals/broker.js";
 import { continuationPlan, settleContinuationByMode } from "../approvals/continuation-mode.js";
 import { APPROVAL_EXPIRY_ACTOR } from "../approvals/expiry.js";
+import { cliSurfaceStart } from "../config/cli-surface.js";
 import type { GatewayContext } from "../context.js";
 import { nowIso } from "../db/ids.js";
 import { newId } from "../db/ids.js";
@@ -453,6 +454,7 @@ export class RunLifecycle {
       shortWaitSeconds: ctx.config.shortWaitSeconds,
       maxTurns: freezeRunLimits(ctx, run, bot.workspaceId),
       ...this.browserSettings(run),
+      ...cliSurfaceStart(run.config),
       ...this.workdirSettings(run, bot.workspaceId),
       egressAllowlist: ctx.workspaces.mustGet(bot.workspaceId).egressAllowlist,
       connectors: bot.connectors,
@@ -536,6 +538,7 @@ export class RunLifecycle {
       shortWaitSeconds: ctx.config.shortWaitSeconds,
       maxTurns: freezeRunLimits(ctx, run, bot.workspaceId),
       ...this.browserSettings(run),
+      ...cliSurfaceStart(run.config),
       ...this.workdirSettings(run, bot.workspaceId),
       egressAllowlist: ctx.workspaces.mustGet(bot.workspaceId).egressAllowlist,
       connectors: bot.connectors,
@@ -606,6 +609,7 @@ export class RunLifecycle {
       shortWaitSeconds: ctx.config.shortWaitSeconds,
       maxTurns: runMaxTurns(run.config, ctx.config.maxTurns),
       ...this.browserSettings(run),
+      ...cliSurfaceStart(run.config),
       ...this.workdirSettings(run, bot.workspaceId),
       egressAllowlist: ctx.workspaces.mustGet(bot.workspaceId).egressAllowlist,
       connectors: bot.connectors,
@@ -751,6 +755,8 @@ export class RunLifecycle {
         // `context_sections` event.
         const configPatch: Record<string, unknown> = {};
         if (ended.systemPromptSha256) configPatch.systemPromptSha256 = ended.systemPromptSha256;
+        if (ended.systemPromptStaticSha256)
+          configPatch.systemPromptStaticSha256 = ended.systemPromptStaticSha256;
         if (ended.maxContextTokens) configPatch.claudeCodeMaxContextTokens = ended.maxContextTokens;
         // ADR-0011 decision 3: taint is sticky across the attempts of one run and the runs of one
         // SDK session, so a resume starts where the parked process left off.

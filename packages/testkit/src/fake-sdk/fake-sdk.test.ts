@@ -12,6 +12,7 @@ import type {
   SdkPreCompactHookInput,
   SdkPreToolUseHookInput,
   SdkQueryOptions,
+  SdkSessionStartHookInput,
 } from "./sdk-shapes.js";
 
 const allow = (): SdkHookOutput => ({
@@ -789,5 +790,45 @@ describe("per-turn usage and compaction", () => {
       { trigger: "auto", pre_tokens: 90_000 },
     ]);
     expect(msgs.at(-1)).toMatchObject({ type: "result", result: "after" });
+  });
+});
+
+// ADR-0023 amendment 5: the SessionStart hook and `Query.getContextUsage` (sdk.d.ts, 0.3.278).
+describe("session start and context usage", () => {
+  it("runs SessionStart as startup, then as resume with the configured resume facts", async () => {
+    const sdk = createFakeSdk([{ type: "end", summary: "ok" }], {
+      resumeFacts: { context_tokens: 900, prompt_cache_likely_expired: false },
+    });
+    const seen: SdkSessionStartHookInput[] = [];
+    const options: SdkQueryOptions = {
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [
+              async (input) => {
+                seen.push(input);
+                return {};
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const first = await collect(sdk.query({ prompt: "go", options }));
+    const sessionId = first[0]?.session_id ?? "";
+    await collect(sdk.query({ prompt: "again", options: { ...options, resume: sessionId } }));
+    expect(seen.map((i) => [i.source, i.context_tokens, i.prompt_cache_likely_expired])).toEqual([
+      ["startup", undefined, undefined],
+      ["resume", 900, false],
+    ]);
+  });
+
+  it("answers getContextUsage, full by default, and records each call", async () => {
+    const sdk = createFakeSdk([{ type: "end", summary: "ok" }]);
+    const q = sdk.query({ prompt: "go", options: { model: "m" } });
+    expect((await q.getContextUsage()).model).toBe("m");
+    await q.getContextUsage({ detail: "summary" });
+    await collect(q);
+    expect(sdk.contextUsageCalls).toEqual([{ detail: "full" }, { detail: "summary" }]);
   });
 });
