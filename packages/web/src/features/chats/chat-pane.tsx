@@ -914,6 +914,11 @@ export function ChatPane(props: ChatPaneProps) {
                     fallbackBody={m.body}
                     api={api}
                     botName={state.approvals[ref] ? botName(state.approvals[ref].botId) : undefined}
+                    runStatus={
+                      state.approvals[ref]
+                        ? state.runs[state.approvals[ref].runId]?.status
+                        : undefined
+                    }
                     onDecided={(approval) => dispatch({ type: "approval", threadId, approval })}
                     readOnlyNote={
                       channelName !== undefined

@@ -20,6 +20,7 @@ export const runsRoutePolicies: PolicyTable = {
   }),
   "GET /api/runs/:id": member({ params: { id: "run" } }),
   "GET /api/runs/:id/events": member({ params: { id: "run" } }),
+  "GET /api/runs/:id/screenshot": member({ params: { id: "run" } }),
   "POST /api/runs/:id/cancel": member({
     params: { id: "run" },
     handlerCheck:

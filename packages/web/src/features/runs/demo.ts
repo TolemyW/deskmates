@@ -74,6 +74,13 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
     return ok({ events: older.slice(-limit), hasOlder: older.length > limit });
   }
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
+  if ((x = m(/^\/api\/runs\/([^/]+)\/screenshot$/))) {
+    const run = s.runs.get(decodeURIComponent(x[1] ?? "") as RunId);
+    if (!run) return notFound("run");
+    const shots = (s.events.get(run.id) ?? []).filter((e) => e.kind === "screenshot");
+    return ok({ screenshot: shots.at(-1) ?? null });
+  }
+  // biome-ignore lint/suspicious/noAssignInExpressions: route matching
   if ((x = m(/^\/api\/runs\/([^/]+)\/context$/))) {
     const run = s.runs.get(decodeURIComponent(x[1] ?? "") as RunId);
     if (!run) return notFound("run");

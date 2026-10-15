@@ -174,4 +174,14 @@ export function registerRunRoutes(app: FastifyInstance, ctx: GatewayContext): vo
     });
     return { events: slice.events, hasOlder: slice.more };
   });
+
+  /**
+   * The run's latest screenshot event, or null (issue #9): the thumbnail an approval card shows
+   * of what the bot was looking at, without reading the whole ledger for it.
+   */
+  app.get<{ Params: { id: string } }>("/api/runs/:id/screenshot", async (request) => {
+    const id = request.params.id as RunId;
+    ctx.runs.mustGet(id);
+    return { screenshot: ctx.events.latestOfKind(id, "screenshot") ?? null };
+  });
 }

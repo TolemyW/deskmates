@@ -12,6 +12,7 @@ const CASES: GoldenCases<RunsApi> = {
   getRun: (a) => a.getRun(RUN),
   getRunContext: (a) => a.getRunContext(RUN),
   getRunTimeline: (a) => a.getRunTimeline(RUN),
+  latestRunScreenshot: (a) => a.latestRunScreenshot(RUN),
   latestRunsByBot: (a) => a.latestRunsByBot(WS),
   listRunEventSlice: (a) => a.listRunEventSlice(RUN, { beforeSeq: 401, limit: 200 }),
   listRunEvents: (a) => a.listRunEvents(RUN, 0),

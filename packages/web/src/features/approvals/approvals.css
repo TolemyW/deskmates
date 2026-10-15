@@ -226,3 +226,27 @@
 .approval-mode > .approve-all-badge {
   margin-top: 0.5rem;
 }
+
+/* Issue #9: where a pending request's run stands, and the run's latest screen as a thumbnail. */
+.approval-wait {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0;
+}
+.approval-wait-text {
+  margin: 0;
+  color: var(--warning-text);
+  font-variant-numeric: tabular-nums;
+}
+.approval-shot {
+  margin: 0;
+}
+.approval-shot img {
+  display: block;
+  max-width: min(240px, 100%);
+  max-height: 160px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  object-fit: cover;
+  object-position: top left;
+}

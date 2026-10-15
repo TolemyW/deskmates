@@ -147,7 +147,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/workspaces/:workspaceId/tasks/:id/accept` | path `workspaceId`: workspace |
 | `POST /api/workspaces/:workspaceId/tasks/:id/run` | path `workspaceId`: workspace |
 
-#### Member, Admin or Owner of the workspace every identifier names (naming none: a Member of a workspace of the request's tenant) (83)
+#### Member, Admin or Owner of the workspace every identifier names (naming none: a Member of a workspace of the request's tenant) (84)
 
 | Route | Identifiers the guard resolves to the tenant and to their workspace |
 |---|---|
@@ -191,6 +191,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/runs/:id/continuation/decide` | path `id`: run; handler: below Admin (Member or member principal) answers a continuation ask only for the runs it started |
 | `GET /api/runs/:id/events` | path `id`: run |
 | `GET /api/runs/:id/memory-versions` | path `id`: run |
+| `GET /api/runs/:id/screenshot` | path `id`: run |
 | `GET /api/runs/:id/timeline` | path `id`: run |
 | `GET /api/runs/latest-by-bot` | query `workspaceId`: workspace; list scoped to the tenant and the caller's workspaces; handler: one workspace's runs, without other people's private chats |
 | `GET /api/runs/memory-index` | query `workspaceId`: workspace; list scoped to the tenant and the caller's workspaces; handler: one workspace's runs, without other people's private chats |

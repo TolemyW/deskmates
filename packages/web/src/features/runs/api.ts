@@ -58,6 +58,8 @@ export interface RunsApi {
   getRunContext(id: RunId): Promise<RunContextMetrics>;
   /** The run's per-attempt startup timeline, derived from its whole ledger (ADR-0037). */
   getRunTimeline(id: RunId): Promise<RunTimeline>;
+  /** The run's newest screenshot event, or null when it took none (issue #9). */
+  latestRunScreenshot(id: RunId): Promise<RunEvent | null>;
   /** Each bot's newest run in one workspace (replaces a tenant-wide run read). */
   latestRunsByBot(workspaceId: WorkspaceId): Promise<RunView[]>;
   /** The newest run's events, or a bounded tail after `afterSeq`. */
@@ -88,6 +90,13 @@ export function createRunsApi(t: HttpTransport): RunsApi {
     },
     getRunTimeline(id) {
       return t.json("GET", `/api/runs/${encodeURIComponent(id)}/timeline`);
+    },
+    async latestRunScreenshot(id) {
+      const r = await t.json<{ screenshot: RunEvent | null }>(
+        "GET",
+        `/api/runs/${encodeURIComponent(id)}/screenshot`,
+      );
+      return r.screenshot;
     },
     async latestRunsByBot(workspaceId) {
       const r = await t.json<{ runs: RunView[] }>(
