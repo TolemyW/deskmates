@@ -120,7 +120,7 @@
   "chatRunStatus.toggleLabel": "{name} 的 {count} 個執行",
   "chatRunStatus.trigger.approval": "核准後繼續",
   "chatRunStatus.trigger.cron": "排程任務",
-  "chatRunStatus.trigger.manual": "Scheduled task, run now",
+  "chatRunStatus.trigger.manual": "排程工作（立即執行）",
   "chatRunStatus.trigger.message": "回覆「{text}」",
   "chatRunStatus.trigger.messageUnknown": "回覆較早的一則訊息",
   "chatRunStatus.trigger.webhook": "Webhook",

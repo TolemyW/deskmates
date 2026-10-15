@@ -458,3 +458,55 @@ it("shows the workspace restoration requirement without offering automatic certi
   expect(screen.getByText("/root/.pki/nssdb")).toBeTruthy();
   expect(screen.queryByRole("button", { name: /trust|restore certificate/i })).toBeNull();
 });
+
+it("edits an approval rule in place (ADR-0043 decision 6)", async () => {
+  const requests: Array<{ method: string; path: string; body: unknown }> = [];
+  let stored = {
+    id: "rul_1",
+    botId: bot.id,
+    matcher: { toolName: "Bash", argumentPattern: "git push*" },
+    decision: "deny",
+    createdBy: "human:web",
+    createdAt: "2026-09-23T00:00:00.000Z",
+  };
+  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    const method = init?.method ?? "GET";
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    if (method !== "GET") requests.push({ method, path, body });
+    if (path === "/api/config")
+      return Response.json({ defaultModel: "deploy/main", cheapModel: "deploy/cheap" });
+    if (path === "/api/workspaces") return Response.json({ workspaces: [workspace] });
+    if (path.startsWith("/api/bots?") || path === "/api/bots")
+      return Response.json({ bots: [bot] });
+    if (path.endsWith("/soul"))
+      return Response.json({ soul: { body: "Be useful.", version: "1" } });
+    if (path.endsWith("/rule-versions/soul")) return Response.json({ file: "soul", versions: [] });
+    if (path.startsWith("/api/bots/bot_1/approval-rules?") && method === "GET")
+      return Response.json({ rules: [stored], offset: 0, limit: 25, total: 1 });
+    if (path === "/api/approval-rules/rul_1" && method === "PATCH") {
+      stored = { ...stored, ...body };
+      return Response.json({ rule: stored });
+    }
+    throw new Error(`unexpected ${method} ${path}`);
+  });
+  render(<ManagementScreen api={createApiClient({ fetch: fetcher })} />);
+  await screen.findByText(/git push/);
+  const rules = screen.getByLabelText("Approval rules for triage");
+  fireEvent.click(within(rules).getByRole("button", { name: "Edit" }));
+  fireEvent.change(within(rules).getByLabelText("Argument pattern"), {
+    target: { value: "git push --force*" },
+  });
+  fireEvent.click(within(rules).getByRole("button", { name: "Save rule" }));
+  await screen.findByText(/git push --force/);
+  expect(requests).toEqual([
+    {
+      method: "PATCH",
+      path: "/api/approval-rules/rul_1",
+      body: {
+        decision: "deny",
+        matcher: { toolName: "Bash", argumentPattern: "git push --force*" },
+      },
+    },
+  ]);
+});

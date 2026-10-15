@@ -42,6 +42,7 @@
   "knowledge.memoryLatest.label": "Latest saved memory",
   "knowledge.memoryLatest.title": "Latest saved memory",
   "knowledge.notice.memorySaved": "Memory saved.",
+  "knowledge.notice.memorySavedNextRun": "Memory saved. The bot is busy now; it reads this from its next run.",
   "knowledge.notice.proposed": "Proposal awaiting review.",
   "knowledge.notice.published": "Document published.",
   "knowledge.notice.rejected": "Proposal rejected.",

@@ -120,7 +120,7 @@
   "chatRunStatus.toggleLabel": "{name} の {count} 件の実行",
   "chatRunStatus.trigger.approval": "承認後に再開",
   "chatRunStatus.trigger.cron": "スケジュールされたタスク",
-  "chatRunStatus.trigger.manual": "Scheduled task, run now",
+  "chatRunStatus.trigger.manual": "スケジュール（今すぐ実行）",
   "chatRunStatus.trigger.message": "「{text}」への返信",
   "chatRunStatus.trigger.messageUnknown": "以前のメッセージへの返信",
   "chatRunStatus.trigger.webhook": "Webhook",

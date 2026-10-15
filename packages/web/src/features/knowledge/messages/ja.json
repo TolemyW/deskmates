@@ -42,6 +42,7 @@
   "knowledge.memoryLatest.label": "最新の保存済みメモリ",
   "knowledge.memoryLatest.title": "最新の保存済みメモリ",
   "knowledge.notice.memorySaved": "メモリを保存しました。",
+  "knowledge.notice.memorySavedNextRun": "メモリを保存しました。ボットは実行中のため、次の実行からこの内容を読み込みます。",
   "knowledge.notice.proposed": "提案はレビュー待ちです。",
   "knowledge.notice.published": "ドキュメントを公開しました。",
   "knowledge.notice.rejected": "提案を却下しました。",

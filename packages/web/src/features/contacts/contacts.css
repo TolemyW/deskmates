@@ -794,3 +794,64 @@
 .vision-capability[data-status="supported"] strong {
   color: var(--success-text);
 }
+
+/* ADR-0043: the bot's profile fields, its rule-file versions and its diary. */
+.bot-allowlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.bot-allowlist legend,
+.bot-allowlist p {
+  flex-basis: 100%;
+}
+
+.bot-allowlist label.checkbox {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.rule-versions-last-run {
+  margin-left: 8px;
+}
+
+.rule-version-list {
+  display: grid;
+  gap: 6px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.rule-version-compare {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.bot-diary-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.bot-diary-lines {
+  display: grid;
+  gap: 4px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.bot-diary-lines code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rule-edit {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}

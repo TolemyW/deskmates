@@ -42,6 +42,7 @@
   "knowledge.memoryLatest.label": "Última memoria guardada",
   "knowledge.memoryLatest.title": "Última memoria guardada",
   "knowledge.notice.memorySaved": "Memoria guardada.",
+  "knowledge.notice.memorySavedNextRun": "Memoria guardada. El bot está ocupado; la leerá desde su próxima ejecución.",
   "knowledge.notice.proposed": "Propuesta pendiente de revisión.",
   "knowledge.notice.published": "Documento publicado.",
   "knowledge.notice.rejected": "Propuesta rechazada.",
