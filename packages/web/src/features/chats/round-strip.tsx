@@ -10,7 +10,7 @@ import { errorMessage, formatTime } from "../../format.js";
 import type { MessageKey } from "../../i18n/catalogs.js";
 import { useT } from "../../i18n/i18n-provider.js";
 
-const STATE_LABEL: Readonly<Record<RoundMemberState, MessageKey>> = {
+export const STATE_LABEL: Readonly<Record<RoundMemberState, MessageKey>> = {
   pending: "roundStrip.state.pending",
   queued: "roundStrip.state.queued",
   running: "roundStrip.state.running",

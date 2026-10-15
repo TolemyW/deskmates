@@ -20,6 +20,7 @@ export const chatsMessages = defineMessages({
     "mentionQuery",
     "mentionTextarea",
     "privateChatActivity",
+    "roundCard",
     "roundMode",
     "roundStrip",
     "thread",

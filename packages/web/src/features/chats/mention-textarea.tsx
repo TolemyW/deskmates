@@ -53,7 +53,10 @@ export function MentionTextarea(props: MentionTextareaProps) {
   const mention: ActiveMention | undefined = activeMention(value, caret);
   const options = mention ? mentionOptions(members, mention.query) : [];
   const open = mention !== undefined && options.length > 0 && dismissedAt !== mention.start;
-  const preview = useMemo(() => previewMentions(value, members), [value, members]);
+  const preview = useMemo(
+    () => previewMentions(value, members, groupRouting === "round-v1" ? { spaced: true } : {}),
+    [value, members, groupRouting],
+  );
   const unaddressed = unaddressedRoute(members, groupRouting, ownerBotId);
 
   useEffect(() => {

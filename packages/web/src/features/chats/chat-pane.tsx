@@ -24,6 +24,7 @@ import {
 } from "./composer-attachments.js";
 import { IncomingHandoffs } from "./incoming-handoffs.js";
 import { PrivateChatActivity } from "./private-chat-activity.js";
+import { RoundCard, showsRoundCard } from "./round-card.js";
 import {
   RoundModeToggle,
   RoundStrip,
@@ -643,7 +644,14 @@ export function ChatPane(props: ChatPaneProps) {
             <span>{t("chatPane.paused")}</span>
           </output>
         ) : null}
-        {members.length > 1 ? (
+        {members.length > 1 && showsRoundCard(detail?.groupRouting, round) ? (
+          <RoundCard
+            round={round}
+            botName={botName}
+            actorName={actorName}
+            messageBody={(id) => state.messages.find((m) => m.id === id)?.body}
+          />
+        ) : members.length > 1 ? (
           <RoundStrip
             round={round}
             api={api}
@@ -763,7 +771,9 @@ export function ChatPane(props: ChatPaneProps) {
                             attachments={composerFiles}
                             disabled={!attachAllowed}
                           />
-                          {members.length > 1 && mentionsEveryone(draft.body) ? (
+                          {members.length > 1 &&
+                          detail?.groupRouting !== "round-v1" &&
+                          mentionsEveryone(draft.body) ? (
                             <RoundModeToggle value={roundMode} onChange={setRoundMode} />
                           ) : null}
                           <Button
