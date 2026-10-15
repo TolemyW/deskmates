@@ -99,7 +99,8 @@ describe("RunScreen", () => {
     render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
 
     const list = await screen.findByLabelText("Run events");
-    await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(9));
+    // Issue #9: the tool call and its result are one row.
+    await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(8));
     const descending = within(list).getAllByRole("listitem");
     const sequences = descending.map((row) =>
       Number(row.querySelector(".seq")?.textContent?.slice(1)),
@@ -110,7 +111,6 @@ describe("RunScreen", () => {
     expect(rows.map((r) => r.querySelector(".seq")?.textContent)).toEqual([
       "#1",
       "#2",
-      "#3",
       "#4",
       "#5",
       "#6",
@@ -121,7 +121,6 @@ describe("RunScreen", () => {
     expect(rows.map((r) => r.querySelector(".kind")?.textContent)).toEqual([
       "thinking",
       "tool_call",
-      "tool_result",
       "screenshot",
       "approval",
       "takeover",
@@ -159,16 +158,22 @@ describe("RunScreen", () => {
     const thinking = rows[0]?.querySelector("details");
     expect(thinking?.open).toBe(false);
     expect(thinking?.textContent).toContain("let me look");
-    expect(rows[1]?.textContent).toContain("browser_navigate");
-    expect(rows[1]?.querySelector("details")?.open).toBe(false);
-    expect(rows[3]?.querySelector("img")?.getAttribute("src")).toBe(PNG);
-    expect(rows[3]?.textContent).toContain("console");
-    expect(rows[4]?.textContent).toContain("decided · browser_click · deny");
+    expect(rows[1]?.querySelector(".event-summary")?.textContent).toBe(
+      "browser_navigate · L0 · 0 ms",
+    );
+    expect([...(rows[1]?.querySelectorAll("details") ?? [])].map((d) => d.open)).toEqual([
+      false,
+      false,
+    ]);
+    expect(rows[1]?.textContent).toContain("result (#3)");
+    expect(rows[2]?.querySelector("img")?.getAttribute("src")).toBe(PNG);
+    expect(rows[2]?.textContent).toContain("console");
+    expect(rows[3]?.textContent).toContain("decided · browser_click · deny");
     // A takeover that parked a browser call shows the wait message the hook returned.
-    expect(rows[5]?.textContent).toContain("human holds the browser");
-    expect(rows[6]?.textContent).toContain("turn_budget");
-    expect(rows[7]?.textContent).toContain("some-model has no price");
-    expect(rows[8]?.textContent).toContain("all green");
+    expect(rows[4]?.textContent).toContain("human holds the browser");
+    expect(rows[5]?.textContent).toContain("turn_budget");
+    expect(rows[6]?.textContent).toContain("some-model has no price");
+    expect(rows[7]?.textContent).toContain("all green");
   });
 
   it("labels a takeover ledger event with its phase", async () => {
@@ -215,7 +220,7 @@ describe("RunScreen", () => {
     expect(notice.textContent).toContain("(deadline)");
   });
 
-  it("hides timing diagnostics by default and reveals every raw event on request", async () => {
+  it("hides diagnostic log rows by default and reveals every raw event on request", async () => {
     const { fetch } = fakeFetch({
       "GET /api/runs/run_1": { run: run({ status: "succeeded" }), usage: [] },
       "GET /api/runs/run_1/events": {
@@ -223,20 +228,24 @@ describe("RunScreen", () => {
           runEvent(1, "log", { source: "phase_timing", phase: "model_request", edge: "start" }),
           runEvent(2, "log", { source: "assistant", text: "finished" }),
           runEvent(3, "log", { source: "phase_timing", phase: "model_request", edge: "end" }),
+          runEvent(4, "log", { source: "resource_observation", version: 1, memoryMb: 512 }),
+          runEvent(5, "log", { source: "sidecar", level: "error", error: "boom" }),
+          runEvent(6, "log", { source: "stall", op: "stalled", idleMs: 300000, stallSeconds: 300 }),
         ],
       },
     });
     render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
 
     const list = await screen.findByLabelText("Run events");
-    await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(1));
-    expect(screen.getByText("(1 visible of 3 total)")).toBeTruthy();
-    const toggle = screen.getByRole("checkbox", { name: "Show timing diagnostics (2)" });
+    await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(3));
+    expect(screen.getByText("(3 visible of 6 total)")).toBeTruthy();
+    expect(within(list).getByText("no progress for 5 min 0 s: marked stalled")).toBeTruthy();
+    const toggle = screen.getByRole("checkbox", { name: "Show diagnostic log rows (3)" });
     expect((toggle as HTMLInputElement).checked).toBe(false);
 
     fireEvent.click(toggle);
-    expect(within(list).getAllByRole("listitem")).toHaveLength(3);
-    expect(screen.getByText("(3 visible of 3 total)")).toBeTruthy();
+    expect(within(list).getAllByRole("listitem")).toHaveLength(6);
+    expect(screen.getByText("(6)")).toBeTruthy();
   });
 
   it("appends events live from SSE and refetches usage when the run ends", async () => {

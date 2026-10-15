@@ -224,6 +224,60 @@
   .run-metadata[open] > :not(summary) {
     margin-top: 12px;
   }
+  /* Issue #9: a tool call with its result on one row; an error result is marked on the row. */
+  .event.tool-error {
+    border-left: 3px solid var(--danger-text);
+  }
+  .kind.tool-error-badge {
+    background: var(--danger-soft);
+    color: var(--danger-text);
+  }
+  .event.tool-open .event-summary {
+    font-style: italic;
+  }
+  /* Issue #9: phase timing as rows of bars on one shared time axis. */
+  .phase-timing {
+    display: grid;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--app-text-xs);
+  }
+  .phase-span {
+    display: grid;
+    grid-template-columns: minmax(10em, 16em) 1fr minmax(9em, auto);
+    align-items: center;
+    gap: 8px;
+  }
+  .phase-span-label {
+    font-family: var(--app-font-mono);
+    overflow-wrap: anywhere;
+  }
+  .phase-span-track {
+    position: relative;
+    height: 8px;
+    border-radius: var(--app-radius-full);
+    background: var(--surface-3);
+  }
+  .phase-span-bar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: var(--app-radius-full);
+    background: var(--primary-text);
+  }
+  .phase-span[data-outcome="error"] .phase-span-bar {
+    background: var(--danger-text);
+  }
+  .phase-span[data-outcome="cancelled"] .phase-span-bar,
+  .phase-span[data-outcome="open"] .phase-span-bar {
+    background: var(--warning-text);
+  }
+  .phase-span-facts {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
 }
 /* Activity (ADR-0033): one card per run, at most five lines; the summary clamps at three lines. */
 @layer components {

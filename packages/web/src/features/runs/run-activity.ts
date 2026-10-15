@@ -132,6 +132,13 @@ export function formatElapsed(ms: number): string {
   return t("format.duration.minutesSeconds", { minutes, seconds: total - minutes * 60 });
 }
 
+/** A measured duration: milliseconds under a second, whole seconds above. */
+export function formatSpan(ms: number): string {
+  return ms < 1000
+    ? currentI18n().t("format.duration.milliseconds", { milliseconds: Math.round(Math.max(0, ms)) })
+    : formatElapsed(ms);
+}
+
 /** Per-run activity for the runs of one screen, fed by SSE `run_event` frames and fetched tails. */
 export type RunActivityMap = Readonly<Record<string, RunActivityState>>;
 

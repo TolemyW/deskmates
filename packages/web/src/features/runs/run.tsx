@@ -1,6 +1,8 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@deskmates/ui";
 // Run replay screen (M0): header with status, lane, trigger, timestamps and priced usage, then
-// the ledger events in `seq` order, appended live over SSE while the run is still going.
+// the ledger events in `seq` order, appended live over SSE while the run is still going. Issue
+// #9: a tool call and its result are one row, phase timing is its own timeline, and diagnostic
+// log rows are collapsed until asked for (`ledger-rows.ts`).
 
 import {
   type RunEvent,
@@ -31,9 +33,12 @@ import { Markdown } from "../../lib/markdown.js";
 import { threadHref } from "../../router.js";
 import { initialRunView, runViewReducer } from "../../state/run-view.js";
 import { RoleNote, useCan, useCanInOwnSideChat } from "../../state/session-roles.js";
+import { eventsShown, isDiagnosticEvent, ledgerRows } from "./ledger-rows.js";
+import { PhaseTimingTimeline, phaseSpans } from "./phase-timing.js";
 import { RunContextPanel } from "./run-context-panel.js";
 import { RunEventRow } from "./run-event-row.js";
 import { RunTimelinePanel } from "./run-timeline.js";
+import { ToolCallRow } from "./tool-call-row.js";
 
 /** A run's status as the pill shows it; the English is the status code itself. */
 const RUN_STATUS_LABEL: Readonly<Record<RunStatus, MessageKey>> = {
@@ -85,7 +90,7 @@ function RunScreenContent(props: RunScreenProps) {
   // #113 slice R: the replay opens on the newest events; older ones load on request.
   const [hasOlder, setHasOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const [showTimingDiagnostics, setShowTimingDiagnostics] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   // The subscription callbacks outlive a render, so the refetch reads the event list from a ref.
   const stateRef = useRef(state);
@@ -282,10 +287,13 @@ function RunScreenContent(props: RunScreenProps) {
       setCancelling(false);
     }
   };
-  const timingCount = state.events.filter(isTimingDiagnostic).length;
-  const visibleEvents = showTimingDiagnostics
-    ? state.events
-    : state.events.filter((event) => !isTimingDiagnostic(event));
+  const diagnosticCount = state.events.filter(isDiagnosticEvent).length;
+  const rows = ledgerRows(state.events, { diagnostics: showDiagnostics });
+  const shown = eventsShown(rows);
+  const spanCount = phaseSpans(state.events).length;
+  const evidenceUrl = evidenceWorkspace
+    ? (path: string) => api.workspaceFileDownloadUrl(evidenceWorkspace, path)
+    : undefined;
 
   return (
     <section className="run-screen">
@@ -441,12 +449,18 @@ function RunScreenContent(props: RunScreenProps) {
           <RunTimelinePanel api={api} run={run} />
         </details>
       ) : null}
+      {spanCount > 0 ? (
+        <details className="run-metadata">
+          <summary>{t("phaseTiming.heading", { count: spanCount })}</summary>
+          <PhaseTimingTimeline events={state.events} />
+        </details>
+      ) : null}
       <h3>
         {t("run.events.heading")}{" "}
         <span className="muted small">
-          {timingCount > 0
+          {shown !== state.events.length
             ? t("run.events.visibleOfTotal", {
-                visible: visibleEvents.length,
+                visible: shown,
                 total: state.events.length,
               })
             : `(${state.events.length})`}
@@ -460,33 +474,25 @@ function RunScreenContent(props: RunScreenProps) {
       <Button size="sm" onClick={() => setOldestFirst((value) => !value)}>
         {oldestFirst ? t("run.events.newestFirst") : t("run.events.oldestFirst")}
       </Button>
-      {timingCount > 0 ? (
+      {diagnosticCount > 0 ? (
         <label className="small">
           <input
             type="checkbox"
-            checked={showTimingDiagnostics}
-            onChange={(event) => setShowTimingDiagnostics(event.currentTarget.checked)}
+            checked={showDiagnostics}
+            onChange={(event) => setShowDiagnostics(event.currentTarget.checked)}
           />{" "}
-          {t("run.events.showTiming", { count: timingCount })}
+          {t("run.events.showDiagnostics", { count: diagnosticCount })}
         </label>
       ) : null}
       <ol className="events" aria-label={t("run.events.list")}>
-        {(oldestFirst ? visibleEvents : [...visibleEvents].reverse()).map((e) => (
-          <RunEventRow
-            key={e.seq}
-            event={e}
-            evidenceUrl={
-              evidenceWorkspace
-                ? (path) => api.workspaceFileDownloadUrl(evidenceWorkspace, path)
-                : undefined
-            }
-          />
-        ))}
+        {(oldestFirst ? rows : [...rows].reverse()).map((row) =>
+          row.kind === "tool" ? (
+            <ToolCallRow key={row.call.seq} row={row} evidenceUrl={evidenceUrl} />
+          ) : (
+            <RunEventRow key={row.event.seq} event={row.event} evidenceUrl={evidenceUrl} />
+          ),
+        )}
       </ol>
     </section>
   );
-}
-
-function isTimingDiagnostic(event: RunEvent): boolean {
-  return event.kind === "log" && event.payload.source === "phase_timing";
 }
