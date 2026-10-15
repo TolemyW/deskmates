@@ -20,7 +20,7 @@
     "test:container": "vitest run .container.test.ts",
     "test:container:smoke": "vitest run $(grep -Ev '^[[:space:]]*(#|$)' acceptance/t2-smoke.list)",
     "test:acceptance": "vitest run .acceptance.test.ts",
-    "evals": "tsx evals/run.ts",
+    "evals": "tsx --tsconfig evals/tsconfig.json evals/run.ts",
     "replay": "tsx --tsconfig evals/tsconfig.json evals/replay.ts",
     "compare": "tsx --tsconfig evals/tsconfig.json evals/compare.ts",
     "power": "tsx --tsconfig evals/tsconfig.json evals/power.ts",

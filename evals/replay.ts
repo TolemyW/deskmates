@@ -2,7 +2,7 @@
 // Trajectory replay (measurement §5.1, item 2). Two commands, zero tokens:
 //
 //   npm run replay -- export --gateway http://localhost:8080 [--since <iso>] [--run <id>]... \
-//                    [--out evals/traces]
+//                    [--out evals/traces]    (bearer, if required: DESKMATES_OPERATOR_TOKEN)
 //   npm run replay -- replay evals/traces/<runId>.json... [--report evals/results/<date>-replay.md]
 //
 // `export` reads the ledger through the operator API and writes one self-contained trace per run.
@@ -77,8 +77,11 @@ async function runExport(args: ParsedArgs, log: (line: string) => void): Promise
   const since = one(args.options, "since");
   const runIds = args.options.get("run");
   const outDir = one(args.options, "out") ?? DEFAULT_OUT_DIR;
+  // ADR-0006: an authenticated Gateway needs a bearer; from the environment, never argv.
+  const token = process.env.DESKMATES_OPERATOR_TOKEN?.trim();
   const traces = await exportTraces({
     gateway,
+    ...(token ? { token } : {}),
     ...(since === undefined ? {} : { since }),
     ...(runIds === undefined ? {} : { runIds }),
   });
