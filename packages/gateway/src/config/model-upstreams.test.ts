@@ -44,6 +44,7 @@ describe("MODEL_UPSTREAMS (ADR-0039 decision 1)", () => {
       id: "default",
       baseUrl: "http://upstream.test",
       authToken: "upstream-secret",
+      protocol: "anthropic",
     });
   });
 
@@ -53,12 +54,14 @@ describe("MODEL_UPSTREAMS (ADR-0039 decision 1)", () => {
     expect(registry.resolve("qwen3.5-9b")).toEqual({
       id: "tos-9b",
       baseUrl: "http://10.20.50.16:8003",
+      protocol: "anthropic",
     });
     expect(registry.resolve("qwen3.8-27b")?.id).toBe("tos-27b");
     expect(registry.resolve("qwen3.5-9b-vl")).toEqual({
       id: "tos-vl",
       baseUrl: "http://10.20.50.16:8005",
       authToken: "vl-secret",
+      protocol: "anthropic",
     });
     expect(registry.resolve("remote-large")?.id).toBe("default");
     expect(registry.secrets().sort()).toEqual(["upstream-secret", "vl-secret"]);
@@ -138,7 +141,7 @@ describe("MODEL_UPSTREAMS (ADR-0039 decision 1)", () => {
       [one({ baseUrl: "ftp://a.test" }), /http or https/],
       [one({ baseUrl: "http://user:pw@a.test" }), /must not carry credentials/],
       [one({ authToken: "" }), /authToken/],
-      [one({ protocol: "openai" }), /protocol must be one of anthropic/],
+      [one({ protocol: "gemini" }), /protocol must be one of anthropic, openai/],
       [one({ protocol: undefined }), /protocol/],
       [one({ models: [] }), /at least one model/],
       [one({ models: [" m"] }), /not a non-empty string/],

@@ -22,7 +22,8 @@ export function countImageBlocks(value: unknown, depth = 0): number {
   if (Array.isArray(value))
     return value.reduce((n, item) => n + countImageBlocks(item, depth + 1), 0);
   const block = value as { type?: unknown; content?: unknown };
-  if (block.type === "image") return 1;
+  // Anthropic `image` blocks, and the OpenAI Chat Completions `image_url` part (ADR-0042).
+  if (block.type === "image" || block.type === "image_url") return 1;
   return countImageBlocks(block.content, depth + 1);
 }
 

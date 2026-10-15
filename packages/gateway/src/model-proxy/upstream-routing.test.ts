@@ -259,7 +259,11 @@ describe("the model proxy routes by model to its upstream (ADR-0039)", () => {
 describe("admission precedes routing", () => {
   it("a 402 budget refusal asks no upstream", async () => {
     const app = Fastify();
-    const upstreamFor = vi.fn(() => ({ id: "default", baseUrl: "http://127.0.0.1:1" }));
+    const upstreamFor = vi.fn(() => ({
+      id: "default",
+      baseUrl: "http://127.0.0.1:1",
+      protocol: "anthropic" as const,
+    }));
     const fetchImpl = vi.fn<typeof fetch>();
     const tokens = {
       verify: () => ({ runId: "run_1" }),

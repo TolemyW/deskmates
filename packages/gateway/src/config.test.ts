@@ -492,11 +492,14 @@ describe("no model name literal under packages/*/src (ADR-0002 item 7, AGENTS.md
       ["cla|ude-", "gp|t-", "gl|m-", "deep|seek"].map(unfragment).join("|"),
       "i",
     );
-    // The SDK's own package name contains a matching fragment and is imported by the sidecar and
-    // the testkit; it names a dependency, not a model, so it is removed before the pattern runs.
-    const sdkPackage = ["@anthropic-ai/cla|ude-agent-sdk"].map(unfragment)[0] as string;
+    // The SDK.s own package name contains a matching fragment and is imported by the sidecar and
+    // the testkit, and the runtime id of ADR-0042 is that name without its scope; both name a
+    // dependency, not a model, so they are removed before the pattern runs.
+    const notModels = ["@anthropic-ai/cla|ude-agent-sdk", "cla|ude-agent-sdk"].map(unfragment);
     const offenders = walkPackageSources().filter((f) =>
-      pattern.test(readFileSync(f, "utf8").split(sdkPackage).join("")),
+      pattern.test(
+        notModels.reduce((text, name) => text.split(name).join(""), readFileSync(f, "utf8")),
+      ),
     );
     expect(offenders).toEqual([]);
   });

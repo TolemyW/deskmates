@@ -13,6 +13,7 @@ import { type ModelConfig, readModelConfig } from "./config/model.js";
 import { type OperationsConfig, readOperationsConfig } from "./config/operations.js";
 import { type RetrievalConfig, readRetrievalConfig } from "./config/retrieval.js";
 import { type RunsConfig, readRunsConfig } from "./config/runs.js";
+import { type RuntimeConfig, readRuntimeConfig } from "./config/runtime.js";
 import { type SandboxConfig, readSandboxConfig, readSandboxProvider } from "./config/sandbox.js";
 import { type ServerConfig, readServerConfig } from "./config/server.js";
 import { type TenancyConfig, readTenancyConfig } from "./config/tenancy.js";
@@ -42,6 +43,7 @@ export interface GatewayConfig
     OperationsConfig,
     RetrievalConfig,
     RunsConfig,
+    RuntimeConfig,
     SandboxConfig,
     ServerConfig,
     TenancyConfig {}
@@ -60,6 +62,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     ...readAppSharesConfig(env),
     ...readOperationsConfig(env),
     ...readRetrievalConfig(env),
+    ...readRuntimeConfig(env),
     auth: authConfig(env),
   };
 }

@@ -3,6 +3,7 @@
 
 import { createHash } from "node:crypto";
 import {
+  type AgentRuntime,
   type BotAvatar,
   type BotDefinition,
   type BotId,
@@ -11,6 +12,7 @@ import {
   type EffortLevel,
   type ThinkingConfig,
   type WorkspaceId,
+  isAgentRuntime,
   isBotAvatar,
   isThinkingConfig,
 } from "@deskmates/contracts";
@@ -24,6 +26,7 @@ interface BotRow {
   workspace_id: string;
   model: string | null;
   cheap_model: string | null;
+  runtime: string | null;
   effort: string | null;
   thinking_json: string | null;
   avatar_json: string | null;
@@ -45,6 +48,8 @@ export interface CreateBotInput {
   workspaceId: WorkspaceId;
   model?: string;
   cheapModel?: string;
+  /** ADR-0042: the agent loop; absent inherits `DEFAULT_RUNTIME`. */
+  runtime?: AgentRuntime;
   effort?: EffortLevel;
   thinking?: ThinkingConfig;
   avatar?: BotAvatar;
@@ -63,6 +68,8 @@ export interface CreateBotInput {
 export interface BotPatch {
   model?: string | null;
   cheapModel?: string | null;
+  /** ADR-0042: `null` clears the override, so the bot inherits `DEFAULT_RUNTIME` again. */
+  runtime?: AgentRuntime | null;
   /** Reasoning knob (contracts `reasoning.ts`); `null` clears it back to the SDK default. */
   effort?: EffortLevel | null;
   thinking?: ThinkingConfig | null;
@@ -102,10 +109,10 @@ export class BotStore {
     const id = newId("bot") as BotId;
     this.db
       .prepare(
-        `INSERT INTO bots (id, name, role, workspace_id, model, cheap_model, effort, thinking_json,
-           avatar_json, soul_version, soul_body, memory_body, connectors_json,
+        `INSERT INTO bots (id, name, role, workspace_id, model, cheap_model, runtime, effort,
+           thinking_json, avatar_json, soul_version, soul_body, memory_body, connectors_json,
            message_allowlist_json, cron_json, webhook_token_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '', '', ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '', '', ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -114,6 +121,7 @@ export class BotStore {
         input.workspaceId,
         input.model ?? null,
         input.cheapModel ?? null,
+        input.runtime ?? null,
         input.effort ?? null,
         input.thinking === undefined ? null : JSON.stringify(input.thinking),
         input.avatar === undefined ? null : JSON.stringify(input.avatar),
@@ -222,6 +230,10 @@ export class BotStore {
     if (patch.cheapModel !== undefined) {
       sets.push("cheap_model = ?");
       values.push(patch.cheapModel);
+    }
+    if (patch.runtime !== undefined) {
+      sets.push("runtime = ?");
+      values.push(patch.runtime);
     }
     if (patch.effort !== undefined) {
       sets.push("effort = ?");
@@ -385,6 +397,8 @@ function toBot(row: BotRow): BotDefinition {
   };
   if (row.model !== null) bot.model = row.model;
   if (row.cheap_model !== null) bot.cheapModel = row.cheap_model;
+  // A value a newer Gateway wrote and this one does not know is left unset, like `thinking`.
+  if (isAgentRuntime(row.runtime)) bot.runtime = row.runtime;
   if (row.effort !== null) bot.effort = row.effort as EffortLevel;
   if (row.thinking_json !== null) {
     const thinking = parseJson<unknown>(row.thinking_json, undefined);

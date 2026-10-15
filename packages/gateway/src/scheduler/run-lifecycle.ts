@@ -6,6 +6,7 @@ import { ACTIVITY_SUMMARY } from "../ledger/activity-summaries.js";
 // rows, the bot's reply message, `last_seen_seq` and the terminal status.
 
 import {
+  type AgentRuntime,
   type ApprovalId,
   type BotId,
   type DeferredAction,
@@ -28,6 +29,7 @@ import {
   type WorkspaceId,
   botHomeDir,
   canTransition,
+  isAgentRuntime,
   isEffortLevel,
   isRecordedReasoning,
   isTerminal,
@@ -94,8 +96,8 @@ export class RunLifecycle {
    */
   private effectiveModels(
     run: RunRecord,
-    bot: { model?: string; cheapModel?: string; workspaceId: WorkspaceId },
-  ): Pick<StartRunRequest, "model" | "cheapModel" | "fallbackModel" | "visionPolicy"> {
+    bot: { model?: string; cheapModel?: string; runtime?: AgentRuntime; workspaceId: WorkspaceId },
+  ): Pick<StartRunRequest, "model" | "cheapModel" | "fallbackModel" | "visionPolicy" | "runtime"> {
     const recordedModel = typeof run.config.model === "string" ? run.config.model : undefined;
     const recordedCheap =
       typeof run.config.cheapModel === "string" ? run.config.cheapModel : undefined;
@@ -103,6 +105,10 @@ export class RunLifecycle {
     // the bot was re-pointed while the run sat waiting for a human.
     const model = recordedModel ?? bot.model ?? this.ctx.config.defaultModel;
     const cheapModel = recordedCheap ?? bot.cheapModel ?? this.ctx.config.cheapModel;
+    // ADR-0042 decision 1: the agent loop is frozen the same way, so a run row attributes its
+    // runtime on its own and a resume keeps the loop that parked.
+    const recordedRuntime = isAgentRuntime(run.config.runtime) ? run.config.runtime : undefined;
+    const runtime = recordedRuntime ?? bot.runtime ?? this.ctx.config.defaultRuntime;
     // ADR-0023 decision 3: FALLBACK_MODEL is frozen the same way; `null` records "none", so a
     // run started without one does not gain one when the Gateway is reconfigured.
     const fallbackRecorded = "fallbackModel" in run.config;
@@ -117,6 +123,7 @@ export class RunLifecycle {
     const patch = {
       ...(recordedModel === undefined ? { model } : {}),
       ...(recordedCheap === undefined ? { cheapModel } : {}),
+      ...(recordedRuntime === undefined ? { runtime } : {}),
       ...(fallbackRecorded ? {} : { fallbackModel: fallbackModel ?? null }),
       ...("modelUpstreams" in run.config
         ? {}
@@ -127,6 +134,7 @@ export class RunLifecycle {
     return {
       model,
       cheapModel,
+      runtime,
       ...(fallbackModel === undefined ? {} : { fallbackModel }),
       ...vision.request,
     };
@@ -462,7 +470,8 @@ export class RunLifecycle {
       ),
       ...tasks,
     };
-    const sdkSessionId = ctx.sessions.get(run.botId, thread.id);
+    // ADR-0042 decision 6: only a session the run's own runtime wrote is resumed.
+    const sdkSessionId = ctx.sessions.get(run.botId, thread.id, models.runtime);
     if (sdkSessionId !== undefined) {
       request.sdkSessionId = sdkSessionId;
       ctx.runs.setConfig(run.id, {
@@ -763,7 +772,13 @@ export class RunLifecycle {
         if (tainted) configPatch.memoryTainted = true;
         if (Object.keys(configPatch).length > 0) ctx.runs.setConfig(runId, configPatch);
         if (ended.sdkSessionId && run.threadId) {
-          ctx.sessions.set(run.botId, run.threadId, ended.sdkSessionId, tainted);
+          ctx.sessions.set(
+            run.botId,
+            run.threadId,
+            ended.sdkSessionId,
+            tainted,
+            isAgentRuntime(run.config.runtime) ? run.config.runtime : undefined,
+          );
         }
         const sessionPatch = ended.sdkSessionId ? { sdkSessionId: ended.sdkSessionId } : {};
 

@@ -294,6 +294,7 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
     modelAuthToken: opts.modelAuthToken,
     defaultModel: opts.defaultModel,
     cheapModel: opts.cheapModel,
+    defaultRuntime: "claude-agent-sdk",
     ...(opts.fallbackModel === undefined ? {} : { fallbackModel: opts.fallbackModel }),
     ...(opts.cliSmallFastModel === undefined ? {} : { cliSmallFastModel: opts.cliSmallFastModel }),
     sandboxProvider: "docker",

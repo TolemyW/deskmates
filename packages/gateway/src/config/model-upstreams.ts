@@ -9,9 +9,19 @@ import { httpUrl } from "./env.js";
 /** The id of the upstream `MODEL_BASE_URL` configures; reserved in `MODEL_UPSTREAMS`. */
 export const DEFAULT_UPSTREAM_ID = "default";
 
-/** Protocols with an adapter in the model proxy. Only Anthropic Messages today. */
-export const MODEL_UPSTREAM_PROTOCOLS = ["anthropic"] as const;
+/**
+ * Protocols with an adapter in the model proxy: Anthropic Messages (`/v1/messages`) and, since
+ * ADR-0042, OpenAI Chat Completions (`/v1/chat/completions`). A request is forwarded only to an
+ * upstream of its own protocol; the proxy never translates.
+ */
+export const MODEL_UPSTREAM_PROTOCOLS = ["anthropic", "openai"] as const;
 export type ModelUpstreamProtocol = (typeof MODEL_UPSTREAM_PROTOCOLS)[number];
+
+export function isUpstreamProtocol(value: unknown): value is ModelUpstreamProtocol {
+  return (
+    typeof value === "string" && (MODEL_UPSTREAM_PROTOCOLS as readonly string[]).includes(value)
+  );
+}
 
 /** One upstream of `MODEL_UPSTREAMS`. */
 export interface ModelUpstream {
@@ -30,6 +40,7 @@ export interface ResolvedUpstream {
   id: string;
   baseUrl: string;
   authToken?: string;
+  protocol: ModelUpstreamProtocol;
 }
 
 /** What the registry is built from: the model part of the Gateway configuration. */
@@ -90,7 +101,7 @@ export function parseModelUpstreams(
         upstream: id,
       });
     }
-    if (protocol !== "anthropic") {
+    if (!isUpstreamProtocol(protocol)) {
       invalid(
         key,
         `upstream "${id}" protocol must be one of ${MODEL_UPSTREAM_PROTOCOLS.join(", ")}`,
@@ -142,6 +153,7 @@ export class ModelRegistry {
             id: DEFAULT_UPSTREAM_ID,
             baseUrl: base.replace(/\/+$/, ""),
             ...(source.modelAuthToken ? { authToken: source.modelAuthToken } : {}),
+            protocol: "anthropic",
           };
   }
 
@@ -153,6 +165,7 @@ export class ModelRegistry {
         id: listed.id,
         baseUrl: listed.baseUrl,
         ...(listed.authToken === undefined ? {} : { authToken: listed.authToken }),
+        protocol: listed.protocol,
       };
     }
     return this.fallthrough;

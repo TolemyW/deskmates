@@ -134,9 +134,15 @@ export class ResponseUsageObserver {
   private handleLine(raw: string): void {
     const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
     if (!line.startsWith("data:")) return;
-    if (!line.includes('"message_start"') && !line.includes('"message_delta"')) return;
+    // Anthropic names its usage events; an OpenAI chat chunk carries `usage` on its last chunk
+    // (`stream_options.include_usage`) and `model` on every chunk (ADR-0042 decision 5).
+    const anthropic = line.includes('"message_start"') || line.includes('"message_delta"');
+    const openai = line.includes('"chat.completion') && line.includes('"usage"');
+    if (!anthropic && !openai) return;
     let data: {
       type?: unknown;
+      object?: unknown;
+      model?: unknown;
       message?: { usage?: unknown; model?: unknown };
       usage?: unknown;
     };
@@ -150,16 +156,24 @@ export class ResponseUsageObserver {
       const model = data.message?.model;
       if (typeof model === "string" && model !== "") this.served = model;
     } else if (data.type === "message_delta") this.merge(data.usage);
+    else if (typeof data.object === "string" && data.object.startsWith("chat.completion")) {
+      this.merge(data.usage);
+      if (typeof data.model === "string" && data.model !== "") this.served = data.model;
+    }
   }
 
   private merge(raw: unknown): void {
     if (raw === null || typeof raw !== "object") return;
     const u = raw as Record<string, unknown>;
+    // The Anthropic shape, then the OpenAI Chat Completions shape (ADR-0042 decision 5), where
+    // `prompt_tokens` includes the cached part and `cached_tokens` sits one level down.
     const fields: [keyof ResponseUsage, string][] = [
       ["inputTokens", "input_tokens"],
       ["outputTokens", "output_tokens"],
       ["cacheReadTokens", "cache_read_input_tokens"],
       ["cacheCreateTokens", "cache_creation_input_tokens"],
+      ["inputTokens", "prompt_tokens"],
+      ["outputTokens", "completion_tokens"],
     ];
     for (const [to, from] of fields) {
       const v = u[from];
@@ -168,9 +182,18 @@ export class ResponseUsageObserver {
         this.seen = true;
       }
     }
+    const prompt = u.prompt_tokens_details;
+    if (prompt !== null && typeof prompt === "object") {
+      const v = (prompt as Record<string, unknown>).cached_tokens;
+      if (typeof v === "number" && Number.isFinite(v)) {
+        this.usage.cacheReadTokens = v;
+        this.seen = true;
+      }
+    }
     // Thinking tokens sit one level down. The Anthropic shape is `thinking_tokens`; an
-    // Anthropic-protocol gateway in front of another model may spell it `reasoning_tokens`.
-    const details = u.output_tokens_details;
+    // Anthropic-protocol gateway in front of another model may spell it `reasoning_tokens`, and
+    // OpenAI reports `completion_tokens_details.reasoning_tokens`.
+    const details = u.output_tokens_details ?? u.completion_tokens_details;
     if (details !== null && typeof details === "object") {
       const d = details as Record<string, unknown>;
       const v = d.thinking_tokens ?? d.reasoning_tokens;

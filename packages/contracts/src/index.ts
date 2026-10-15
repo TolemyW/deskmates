@@ -6,6 +6,7 @@
 // in its sorted place.
 
 export * from "./activity-summary.js";
+export * from "./agent-runtime.js";
 export * from "./app-share.js";
 export * from "./approval-review.js";
 export * from "./approval.js";

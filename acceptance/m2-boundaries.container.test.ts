@@ -40,6 +40,7 @@ const config: GatewayConfig = {
   modelAuthToken: "unused",
   defaultModel: "fixture-model",
   cheapModel: "fixture-model",
+  defaultRuntime: "claude-agent-sdk",
   sandboxProvider: "docker",
   workspaceImage: IMAGE,
   egressImage: PROXY_IMAGE,

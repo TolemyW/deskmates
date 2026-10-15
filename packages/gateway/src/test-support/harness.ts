@@ -30,6 +30,7 @@ export function testConfig(overrides: Partial<GatewayConfig> = {}): GatewayConfi
     modelAuthToken: TEST_UPSTREAM_TOKEN,
     defaultModel: "test-model-default",
     cheapModel: "test-model-cheap",
+    defaultRuntime: "claude-agent-sdk",
     sandboxProvider: "docker",
     workspaceImage: "deskmates/workspace:test",
     egressImage: "deskmates/egress-proxy:test",

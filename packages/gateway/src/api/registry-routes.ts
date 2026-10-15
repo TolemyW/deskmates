@@ -1,8 +1,23 @@
 // Operator-facing registry routes: bots (packages/gateway/docs/http-api.md). Workspace routes
 // are in `workspace-routes.ts`.
 
-import type { BotAvatar, BotDefinition, BotId, Thread, WorkspaceId } from "@deskmates/contracts";
-import { DeskmatesError, canRetryWelcome, decidedByHuman, isBotAvatar } from "@deskmates/contracts";
+import type {
+  AgentRuntime,
+  BotAvatar,
+  BotDefinition,
+  BotId,
+  Thread,
+  WorkspaceId,
+} from "@deskmates/contracts";
+import {
+  AGENT_RUNTIMES,
+  DeskmatesError,
+  canRetryWelcome,
+  decidedByHuman,
+  isAgentRuntime,
+  isBotAvatar,
+  runtimeProtocol,
+} from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
 import type { BotPatch } from "../bots/bots.js";
 import { hashWebhookToken, newWebhookToken } from "../bots/webhook-token.js";
@@ -80,6 +95,13 @@ export function registerRegistryRoutes(
     const cheapModel = optionalString(body, "cheapModel");
     if (model !== undefined) requirePricedModel(ctx, "model", model);
     if (cheapModel !== undefined) requirePricedModel(ctx, "cheapModel", cheapModel);
+    // ADR-0042 decision 7: the loop and the model it will drive must speak the same protocol.
+    const runtime = optionalRuntime(body) ?? undefined;
+    requireRuntimeModel(
+      ctx,
+      runtime ?? ctx.config.defaultRuntime,
+      model ?? ctx.config.defaultModel,
+    );
     // The reasoning knob (contracts `reasoning.ts`); `null` at create means the same as absent.
     const effort = optionalEffort(body) ?? undefined;
     const thinking = optionalThinking(body) ?? undefined;
@@ -103,6 +125,7 @@ export function registerRegistryRoutes(
         workspaceId: requireString(body, "workspaceId") as WorkspaceId,
         ...(model !== undefined ? { model } : {}),
         ...(cheapModel !== undefined ? { cheapModel } : {}),
+        ...(runtime !== undefined ? { runtime } : {}),
         ...(effort ? { effort } : {}),
         ...(thinking ? { thinking } : {}),
         ...(avatar ? { avatar } : {}),
@@ -195,6 +218,8 @@ export function registerRegistryRoutes(
       requirePricedModel(ctx, key, value);
       patch[key] = value;
     }
+    const runtime = optionalRuntime(body);
+    if (runtime !== undefined) patch.runtime = runtime;
     const effort = optionalEffort(body);
     if (effort !== undefined) patch.effort = effort;
     const thinking = optionalThinking(body);
@@ -204,8 +229,19 @@ export function registerRegistryRoutes(
     if (Object.keys(patch).length === 0) {
       throw new DeskmatesError(
         "validation",
-        "nothing to update: send cron, model, cheapModel, effort, thinking or avatar",
+        "nothing to update: send cron, model, cheapModel, runtime, effort, thinking or avatar",
       );
+    }
+    // ADR-0042 decision 7: judged on what the bot will run with after the patch.
+    if (patch.runtime !== undefined || patch.model !== undefined) {
+      const current = ctx.bots.mustGet(id);
+      const effectiveRuntime =
+        (patch.runtime === undefined ? current.runtime : (patch.runtime ?? undefined)) ??
+        ctx.config.defaultRuntime;
+      const effectiveModel =
+        (patch.model === undefined ? current.model : (patch.model ?? undefined)) ??
+        ctx.config.defaultModel;
+      requireRuntimeModel(ctx, effectiveRuntime, effectiveModel);
     }
     const actor = decidedByHuman(requestActorId(request, body));
     const updated = {
@@ -257,12 +293,40 @@ function optionalWelcome(body: Record<string, unknown>): boolean {
 }
 
 /** The configuration a bot's audit rows record: never its webhook token or SOUL text. */
+/** `runtime` in a body: absent → undefined, `null` → null (clear), else a known runtime. */
+function optionalRuntime(body: Record<string, unknown>): AgentRuntime | null | undefined {
+  const value = body.runtime;
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (isAgentRuntime(value)) return value;
+  throw new DeskmatesError("validation", `runtime must be one of ${AGENT_RUNTIMES.join(", ")}`, {
+    field: "runtime",
+  });
+}
+
+/**
+ * ADR-0042 decision 7: a bot's loop and the upstream serving its effective model must speak the
+ * same protocol, since the proxy never translates. A model with no upstream is refused too.
+ */
+function requireRuntimeModel(ctx: GatewayContext, runtime: AgentRuntime, model: string): void {
+  const upstream = modelRegistryOf(ctx.config).resolve(model);
+  const expected = runtimeProtocol(runtime);
+  if (upstream === undefined || upstream.protocol !== expected) {
+    throw new DeskmatesError(
+      "validation",
+      `runtime ${runtime} needs model ${model} on a ${expected}-protocol upstream`,
+      { field: "runtime", runtime, model, upstreamProtocol: upstream?.protocol ?? null },
+    );
+  }
+}
+
 function botConfiguration(bot: BotDefinition): Record<string, unknown> {
   return {
     name: bot.name,
     role: bot.role,
     model: bot.model ?? null,
     cheapModel: bot.cheapModel ?? null,
+    runtime: bot.runtime ?? null,
     effort: bot.effort ?? null,
     thinking: bot.thinking ?? null,
     avatar: bot.avatar ?? null,

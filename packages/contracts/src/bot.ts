@@ -1,6 +1,7 @@
 // Bot definition row (design v0.3 §3.1). SOUL.md, MEMORY.md, diary and skills live in the
 // workspace filesystem under /home/<bot>/, not here.
 
+import type { AgentRuntime } from "./agent-runtime.js";
 import type { BotId, IsoTimestamp, WorkspaceId } from "./ids.js";
 import type { EffortLevel, ThinkingConfig } from "./reasoning.js";
 
@@ -75,6 +76,8 @@ export interface BotDefinition {
   /** Model ids are deployment configuration; `undefined` means use DEFAULT_MODEL / CHEAP_MODEL. */
   model?: string;
   cheapModel?: string;
+  /** The agent loop this bot's runs use (ADR-0042); `undefined` means `DEFAULT_RUNTIME`. */
+  runtime?: AgentRuntime;
   /**
    * Reasoning overrides, recorded on every run row (`runs.config_json.reasoning`). `undefined`
    * means the SDK's own default, which is a real configuration and is recorded as `sdk-default`.

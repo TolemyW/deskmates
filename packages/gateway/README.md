@@ -34,6 +34,7 @@ Each feature documents itself in its own file under `docs/`. A new feature adds 
 `docs/<topic>.md` (kebab-case) and one line to this list, in its sorted place; it does not add
 a section to this README.
 
+- [Agent runtimes (ADR-0042)](docs/agent-runtimes.md): `DEFAULT_RUNTIME`, a bot's `runtime`, the OpenAI upstream protocol
 - [App sharing: published workspace apps (ADR-0035)](docs/app-shares.md)
 - [Approvals](docs/approvals.md)
 - [Configuration](docs/configuration.md)
