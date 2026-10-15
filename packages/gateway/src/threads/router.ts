@@ -80,6 +80,11 @@ export interface ThreadRouterOptions {
   rounds?: RoundStore;
   /** Workspace caps (amendment 5); a router without them keeps decision 6's fixed caps. */
   limits?: Pick<WorkspaceLimitStore, "threadCaps">;
+  /**
+   * ADR-0026 amendment 1: a paused bot is never woken. A router without it treats every bot as
+   * awake.
+   */
+  isPaused?: (botId: BotId) => boolean;
 }
 
 export class ThreadRouter {
@@ -188,6 +193,8 @@ export class ThreadRouter {
     const runs = members
       .filter((member) => member.botId !== opts.wakeExcept)
       .filter((member) => opts.wakeOnly === undefined || member.botId === opts.wakeOnly)
+      // A notice is not a request: a paused member reads it when it is next woken.
+      .filter((member) => !this.options.isPaused?.(member.botId))
       .filter((member) => !this.runs.findQueued(member.botId, threadId))
       .map((member) => this.createWake(thread, member.botId, message));
     return { message, runs };
@@ -334,7 +341,7 @@ export class ThreadRouter {
         return { message, runs: [], changed: [], wakeBlocked: "deadline_passed" };
       }
       const created = forceTarget
-        ? this.directWakes(thread, message, [forceTarget])
+        ? this.directWakes(thread, message, this.withoutPaused(thread, message, [forceTarget]))
         : this.route(thread, members, message, false);
       return { message, runs: created, changed: [] };
     };
@@ -364,14 +371,22 @@ export class ThreadRouter {
     const sequential = message.authorKind === "human" && requested === "sequential";
     let created: RunRecord[];
     if (explicit.length > 0) {
-      const targets = explicit.map((m) => m.botId);
+      const targets = this.withoutPaused(
+        thread,
+        message,
+        explicit.map((m) => m.botId),
+      );
       if (message.authorKind === "human") this.openRound(thread, message, "parallel", targets);
       created = this.directWakes(thread, message, targets);
     } else if (everyone && !sequential) {
       // Amendment 4, decision 28: every eligible member at once; a bot never consults itself.
-      const targets = members
-        .filter((member) => message.authorKind !== "bot" || member.botId !== message.authorId)
-        .map((member) => member.botId);
+      const targets = this.withoutPaused(
+        thread,
+        message,
+        members
+          .filter((member) => message.authorKind !== "bot" || member.botId !== message.authorId)
+          .map((member) => member.botId),
+      );
       this.openRound(thread, message, "parallel", targets);
       created = this.directWakes(thread, message, targets);
     } else created = this.routeUnaddressed(thread, members, message);
@@ -432,6 +447,10 @@ export class ThreadRouter {
             state: member.state,
           },
         );
+      if (this.options.isPaused?.(botId))
+        throw new DeskmatesError("invalid_transition", "the bot is paused; resume it first", {
+          botId,
+        });
       const thread = this.threads.mustGet(round.threadId);
       if (thread.status === "paused" || isPastDeadline(thread))
         throw new DeskmatesError(
@@ -584,10 +603,19 @@ export class ThreadRouter {
     mode: WalkMode,
   ): RunRecord[] {
     if (thread.status === "paused") return [];
-    const targets =
+    const awake = new Set(
+      this.withoutPaused(
+        thread,
+        message,
+        members.map((member) => member.botId),
+      ),
+    );
+    const targets = (
       message.authorKind === "bot"
         ? members.filter((member) => member.botId !== message.authorId)
-        : members;
+        : members
+    ).filter((member) => awake.has(member.botId));
+    if (targets.length === 0) return [];
     this.walks.enqueue(
       message.id,
       thread.id,
@@ -643,6 +671,12 @@ export class ThreadRouter {
         continue;
       }
       const message = this.messages.mustGet(walk.messageId);
+      // Paused after the walk began: passed over like a member that has seen the message.
+      if (this.options.isPaused?.(botId)) {
+        this.notePaused(thread, message, [botId]);
+        this.walks.finishMember(walk.messageId);
+        continue;
+      }
       const member = this.threads.member(threadId, botId);
       // A successful/silent run from an earlier walk may already have delivered this queued
       // message. It satisfies this member without another model call; failures do not advance
@@ -664,6 +698,31 @@ export class ThreadRouter {
       this.relate(walk.messageId, botId, run, "created");
       return [run];
     }
+  }
+
+  /**
+   * ADR-0026 amendment 1: drop paused bots from a wake and say so in the thread, once per message.
+   * The message stays unseen by them, so the first wake after they are resumed delivers it.
+   */
+  private withoutPaused(thread: Thread, message: ThreadMessage, botIds: readonly BotId[]): BotId[] {
+    const isPaused = this.options.isPaused;
+    const paused = isPaused ? botIds.filter((botId) => isPaused(botId)) : [];
+    if (paused.length === 0) return [...botIds];
+    this.notePaused(thread, message, paused);
+    return botIds.filter((botId) => !paused.includes(botId));
+  }
+
+  private notePaused(thread: Thread, message: ThreadMessage, paused: readonly BotId[]): void {
+    const names = this.threads.workspaceBotNames(thread.id);
+    const who = paused.map((botId) => names.get(botId) ?? botId).join(", ");
+    const notice = this.messages.append({
+      threadId: thread.id,
+      authorKind: "system",
+      authorId: "",
+      body: `${who} ${paused.length === 1 ? "is" : "are"} paused and was not woken by message #${message.seq}. A paused bot reads what it missed when it is resumed and woken again.`,
+      relayCount: 0,
+    });
+    this.onMessageCreated(notice);
   }
 
   private createWake(thread: Thread, botId: BotId, message: ThreadMessage): RunRecord {

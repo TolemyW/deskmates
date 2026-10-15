@@ -34,6 +34,8 @@ export interface CronRunnerDeps {
   bus: EventBus;
   clock?: () => Date;
   log?: (msg: string, data?: Record<string, unknown>) => void;
+  /** A paused bot's matching entry was skipped (ADR-0026 amendment 1); the Gateway tells its chat. */
+  onPausedSkip?: (bot: BotDefinition, entry: number, schedule: string) => void;
 }
 
 /** The minute `date` falls in, as an ISO timestamp with seconds and milliseconds zeroed. */
@@ -101,6 +103,19 @@ export class CronRunner {
           return;
         }
         if (!cronMatches(schedule, now, this.deps.timeZone)) return;
+        // ADR-0026 amendment 1: a paused bot's entry is skipped, not queued for later. The
+        // Gateway log names each skipped round; the bot's private chat is told once per pause.
+        if (bot.pausedAt !== undefined) {
+          this.log("cron round skipped: the bot is paused", {
+            botId: bot.id,
+            entry: index,
+            schedule: entry.schedule,
+            minute,
+            pausedAt: bot.pausedAt,
+          });
+          this.deps.onPausedSkip?.(bot, index, entry.schedule);
+          return;
+        }
         this.fire(bot, index, entry.schedule, entry.prompt, minute);
       });
     }

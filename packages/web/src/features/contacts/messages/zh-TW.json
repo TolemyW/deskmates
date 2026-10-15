@@ -50,6 +50,7 @@
   "botActivity.schedule.title": "依排程",
   "botActivity.trigger.approval": "一項核准",
   "botActivity.trigger.cron": "排程",
+  "botActivity.trigger.manual": "a Run now",
   "botActivity.trigger.threadMessage": "一則訊息",
   "botActivity.trigger.webhook": "Webhook",
   "botActivity.until.days": "{days} 天後",

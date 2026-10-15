@@ -67,6 +67,7 @@
   "run.title": "运行",
   "run.trigger.approval": "审批",
   "run.trigger.cron": "定时计划",
+  "run.trigger.manual": "manual",
   "run.trigger.threadMessage": "会话消息",
   "run.trigger.webhook": "Webhook",
   "run.trigger.welcome": "欢迎消息",

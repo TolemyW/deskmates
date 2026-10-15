@@ -67,6 +67,7 @@
   "run.title": "執行",
   "run.trigger.approval": "核准",
   "run.trigger.cron": "排程",
+  "run.trigger.manual": "manual",
   "run.trigger.threadMessage": "對話串訊息",
   "run.trigger.webhook": "Webhook",
   "run.trigger.welcome": "歡迎訊息",

@@ -67,6 +67,7 @@
   "run.title": "実行",
   "run.trigger.approval": "承認",
   "run.trigger.cron": "定期実行",
+  "run.trigger.manual": "manual",
   "run.trigger.threadMessage": "スレッドのメッセージ",
   "run.trigger.webhook": "Webhook",
   "run.trigger.welcome": "ウェルカム",

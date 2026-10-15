@@ -50,6 +50,7 @@
   "botActivity.schedule.title": "スケジュール実行",
   "botActivity.trigger.approval": "承認",
   "botActivity.trigger.cron": "スケジュール",
+  "botActivity.trigger.manual": "a Run now",
   "botActivity.trigger.threadMessage": "メッセージ",
   "botActivity.trigger.webhook": "Webhook",
   "botActivity.until.days": "{days} 日後",

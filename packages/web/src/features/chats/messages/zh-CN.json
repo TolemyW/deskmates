@@ -120,6 +120,7 @@
   "chatRunStatus.toggleLabel": "{name} 的 {count} 个运行",
   "chatRunStatus.trigger.approval": "审批后恢复",
   "chatRunStatus.trigger.cron": "定时任务",
+  "chatRunStatus.trigger.manual": "Scheduled task, run now",
   "chatRunStatus.trigger.message": "回复“{text}”",
   "chatRunStatus.trigger.messageUnknown": "回复较早的一条消息",
   "chatRunStatus.trigger.webhook": "Webhook",

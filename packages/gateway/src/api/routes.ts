@@ -13,6 +13,7 @@ import type { Scheduler } from "../scheduler/scheduler.js";
 import { registerApprovalRoutes } from "./approval-routes.js";
 import { registerAuthRoutes } from "./auth-routes.js";
 import { registerBoardRoutes } from "./board-routes.js";
+import { registerBotConfigRoutes } from "./bot-config-routes.js";
 import { registerBudgetRoutes } from "./budget-routes.js";
 import { registerCapacityRoutes } from "./capacity-routes.js";
 import { registerChannelRoutes, registerChannelWebhookRoutes } from "./channel-routes.js";
@@ -88,6 +89,7 @@ export const OPERATOR_ROUTE_FAMILIES: ReadonlyArray<readonly [name: string, Regi
   ["app-shares", (scope, { ctx }) => registerAppShareRoutes(scope, ctx)],
   ["approvals", (scope, { ctx, scheduler }) => registerApprovalRoutes(scope, ctx, scheduler)],
   ["board", (scope, { ctx }) => registerBoardRoutes(scope, ctx)],
+  ["bot-config", (scope, { ctx, scheduler }) => registerBotConfigRoutes(scope, ctx, scheduler)],
   ["budgets", (scope, { ctx, scheduler }) => registerBudgetRoutes(scope, ctx, scheduler)],
   ["capacity", (scope, { ctx, scheduler }) => registerCapacityRoutes(scope, ctx, scheduler)],
   ["channels", (scope, { ctx }) => registerChannelRoutes(scope, ctx)],

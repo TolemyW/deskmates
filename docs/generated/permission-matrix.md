@@ -61,20 +61,24 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `DELETE /api/network-profiles/:id` | handler: the root, or the Owner who created the profile; anyone else 403 profile_owner |
 | `PUT /api/network-profiles/:id` | handler: the root, or the Owner who created the profile; anyone else 403 profile_owner |
 
-#### Admin or Owner of the workspace every identifier names (naming none: of a workspace of the request's tenant) (81)
+#### Admin or Owner of the workspace every identifier names (naming none: of a workspace of the request's tenant) (85)
 
 | Route | Identifiers the guard resolves to the tenant and to their workspace |
 |---|---|
 | `POST /api/accounts` | handler: Admin or Owner of the account's workspace; people only: a service principal of any role is refused (people_only) |
 | `DELETE /api/approval-rules/:id` | path `id`: approvalRule |
+| `PATCH /api/approval-rules/:id` | path `id`: approvalRule |
 | `POST /api/bots` | body `workspaceId`: workspace |
 | `DELETE /api/bots/:id` | path `id`: bot |
 | `PATCH /api/bots/:id` | path `id`: bot |
 | `POST /api/bots/:id/approval-rules` | path `id`: bot |
 | `POST /api/bots/:id/archive` | path `id`: bot |
+| `POST /api/bots/:id/cron/:entry/run` | path `id`: bot; handler: entry is an index into the guarded bot's own cron list |
+| `POST /api/bots/:id/diary/:day/delete-line` | path `id`: bot; handler: day is YYYY-MM-DD, read only under the guarded bot's home |
 | `PATCH /api/bots/:id/memory` | path `id`: bot |
 | `POST /api/bots/:id/memory/consolidate` | path `id`: bot |
 | `POST /api/bots/:id/restore` | path `id`: bot |
+| `POST /api/bots/:id/rule-versions/:file/:version/restore` | path `id`: bot; handler: file is soul or memory; versions are read only under the guarded bot; version is a number of that bot's own history |
 | `PATCH /api/bots/:id/soul` | path `id`: bot |
 | `POST /api/bots/:id/soul-proposals` | path `id`: bot |
 | `POST /api/bots/:id/soul-proposals/:proposalId/apply` | path `id`: bot; handler: the proposal must belong to the bot in the path |
@@ -147,7 +151,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/workspaces/:workspaceId/tasks/:id/accept` | path `workspaceId`: workspace |
 | `POST /api/workspaces/:workspaceId/tasks/:id/run` | path `workspaceId`: workspace |
 
-#### Member, Admin or Owner of the workspace every identifier names (naming none: a Member of a workspace of the request's tenant) (83)
+#### Member, Admin or Owner of the workspace every identifier names (naming none: a Member of a workspace of the request's tenant) (88)
 
 | Route | Identifiers the guard resolves to the tenant and to their workspace |
 |---|---|
@@ -155,8 +159,13 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `GET /api/approvals/:id` | path `id`: approval |
 | `POST /api/approvals/:id/decide` | path `id`: approval; handler: below Admin (Member or member principal) answers only approvals of the runs it started, allow_once or deny only; allow_always and an egress allow-this-site need an Admin |
 | `GET /api/bots/:id/approval-rules` | path `id`: bot |
+| `GET /api/bots/:id/diary` | path `id`: bot |
+| `GET /api/bots/:id/diary/:day` | path `id`: bot; handler: day is YYYY-MM-DD, read only under the guarded bot's home |
 | `GET /api/bots/:id/memory` | path `id`: bot |
 | `GET /api/bots/:id/memory/export` | path `id`: bot |
+| `GET /api/bots/:id/rule-versions/:file` | path `id`: bot; handler: file is soul or memory; versions are read only under the guarded bot |
+| `GET /api/bots/:id/rule-versions/:file/:version` | path `id`: bot; handler: file is soul or memory; versions are read only under the guarded bot; version is a number of that bot's own history |
+| `GET /api/bots/:id/rule-versions/:file/diff` | path `id`: bot; handler: file is soul or memory; versions are read only under the guarded bot; version is a number of that bot's own history |
 | `GET /api/bots/:id/screen` | path `id`: bot |
 | `POST /api/bots/:id/screen/access` | path `id`: bot |
 | `POST /api/bots/:id/screen/start` | path `id`: bot |

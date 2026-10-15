@@ -50,6 +50,7 @@
   "botActivity.schedule.title": "按定时计划",
   "botActivity.trigger.approval": "一次审批",
   "botActivity.trigger.cron": "定时计划",
+  "botActivity.trigger.manual": "a Run now",
   "botActivity.trigger.threadMessage": "一条消息",
   "botActivity.trigger.webhook": "Webhook",
   "botActivity.until.days": "{days} 天后",

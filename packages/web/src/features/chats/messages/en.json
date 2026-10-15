@@ -120,6 +120,7 @@
   "chatRunStatus.toggleLabel": "{count, plural, one {# run} other {# runs}} of {name}",
   "chatRunStatus.trigger.approval": "Resumed after an approval",
   "chatRunStatus.trigger.cron": "Scheduled task",
+  "chatRunStatus.trigger.manual": "Scheduled task, run now",
   "chatRunStatus.trigger.message": "Reply to “{text}”",
   "chatRunStatus.trigger.messageUnknown": "Reply to an earlier message",
   "chatRunStatus.trigger.webhook": "Webhook",

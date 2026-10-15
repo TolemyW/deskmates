@@ -18,6 +18,7 @@ import type { OwnedKind } from "../tenancy/ownership.js";
 import { appSharesRoutePolicies } from "./route-policies/app-shares.js";
 import { approvalsRoutePolicies } from "./route-policies/approvals.js";
 import { boardRoutePolicies } from "./route-policies/board.js";
+import { botConfigRoutePolicies } from "./route-policies/bot-config.js";
 import { botsRoutePolicies } from "./route-policies/bots.js";
 import { browserRoutePolicies } from "./route-policies/browser.js";
 import { channelsRoutePolicies } from "./route-policies/channels.js";
@@ -51,6 +52,7 @@ export const ROUTE_POLICY_DOMAINS: ReadonlyArray<readonly [domain: string, Polic
   ["app-shares", appSharesRoutePolicies],
   ["approvals", approvalsRoutePolicies],
   ["board", boardRoutePolicies],
+  ["bot-config", botConfigRoutePolicies],
   ["bots", botsRoutePolicies],
   ["browser", browserRoutePolicies],
   ["channels", channelsRoutePolicies],

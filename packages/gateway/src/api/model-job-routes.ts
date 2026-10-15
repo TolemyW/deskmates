@@ -5,7 +5,6 @@
 import {
   type BotId,
   DeskmatesError,
-  PARKED_RUN_STATUSES,
   SOUL_PROPOSAL_INSTRUCTION_MAX_CHARS,
   type WorkspaceId,
   decidedByHuman,
@@ -15,7 +14,7 @@ import type { GatewayContext } from "../context.js";
 import type { RunRecord } from "../ledger/runs.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
 import { requestActorId } from "./actor.js";
-import { ensureCanonicalSoul } from "./memory-routes.js";
+import { ensureCanonicalSoul, ruleWriteNotice } from "./memory-routes.js";
 import { asRecord, requireString } from "./validate.js";
 
 type WorkspaceParams = { Params: { id: string } };
@@ -25,17 +24,6 @@ function started(ctx: GatewayContext, scheduler: Scheduler, run: RunRecord | und
   if (!run) return;
   ctx.bus.publish({ type: "run_status", run });
   scheduler.kick();
-}
-
-/** The same refusals as `PATCH /api/bots/:id/soul`: no write under a parked or live run. */
-function assertSoulWritable(ctx: GatewayContext, botId: BotId, workspaceId: WorkspaceId): void {
-  if (ctx.runs.list({ botId }).some((run) => PARKED_RUN_STATUSES.has(run.status)))
-    throw new DeskmatesError(
-      "invalid_transition",
-      "Finish or cancel this bot's parked run before editing SOUL",
-    );
-  if (ctx.runs.listLiveInWorkspace(workspaceId).some((run) => run.botId === botId))
-    throw new DeskmatesError("lane_busy", "Wait for this bot's current run before editing SOUL");
 }
 
 export function registerModelJobRoutes(
@@ -96,9 +84,10 @@ export function registerModelJobRoutes(
   });
 
   /**
-   * Explicit confirm. Idempotent for an applied proposal; refused while the bot has a parked or
-   * live run, and when SOUL has changed since the proposal's base, so an older preview can never
-   * overwrite a newer edit: the operator regenerates against the current version instead.
+   * Explicit confirm. Idempotent for an applied proposal; refused when SOUL has changed since the
+   * proposal's base, so an older preview can never overwrite a newer edit: the operator
+   * regenerates against the current version instead. A live or parked run of the bot does not
+   * refuse it: like a hand edit, it applies from the next run (ADR-0043 decision 3).
    */
   app.post<ProposalParams>("/api/bots/:id/soul-proposals/:proposalId/apply", async (request) => {
     const bot = ctx.bots.mustGet(request.params.id as BotId);
@@ -109,9 +98,7 @@ export function registerModelJobRoutes(
       throw new DeskmatesError("invalid_transition", `proposal is ${proposal.status}`, {
         status: proposal.status,
       });
-    assertSoulWritable(ctx, bot.id, bot.workspaceId);
     const current = await ensureCanonicalSoul(ctx, bot.id);
-    assertSoulWritable(ctx, bot.id, bot.workspaceId);
     if (current.version !== proposal.baseVersion)
       throw new DeskmatesError(
         "invalid_transition",
@@ -120,8 +107,10 @@ export function registerModelJobRoutes(
       );
     const actor = decidedByHuman(requestActorId(request, request.body ?? {}));
     const body = proposal.proposedBody;
-    return ctx.db.transaction(() => {
-      const soul = ctx.bots.updateCanonicalSoul(bot.id, body, proposal.baseVersion);
+    const applied = ctx.db.transaction(() => {
+      const soul = ctx.bots.updateCanonicalSoul(bot.id, body, proposal.baseVersion, {
+        createdBy: actor,
+      });
       ctx.audit.record({
         action: "bot.update",
         actor,
@@ -129,10 +118,15 @@ export function registerModelJobRoutes(
         targetKind: "bot",
         targetId: bot.id,
         before: { soulVersion: proposal.baseVersion },
-        after: { soulVersion: soul.version, soulProposalId: proposal.id },
+        after: {
+          soulVersion: soul.version,
+          soulRevision: ctx.bots.versions.latestNumber(bot.id, "soul") ?? null,
+          soulProposalId: proposal.id,
+        },
       });
       return { proposal: ctx.modelJobs.souls.markApplied(proposal, soul.version, actor), soul };
     })();
+    return { ...applied, ...ruleWriteNotice(ctx, bot.id) };
   });
 
   app.post<ProposalParams>("/api/bots/:id/soul-proposals/:proposalId/discard", async (request) => {

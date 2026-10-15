@@ -335,6 +335,20 @@ export class RunStore {
     return row ? toRun(row) : undefined;
   }
 
+  /**
+   * The bot's own newest runs that reached the sandbox, newest first: no Gateway job hosted on it
+   * (`run_type`), none still queued. "Last run used SOUL v N" reads the first (ADR-0043).
+   */
+  latestStartedOwnRuns(botId: BotId, limit: number): RunRecord[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM runs WHERE bot_id = ? AND run_type IS NULL AND started_at IS NOT NULL
+           ORDER BY created_at DESC, id DESC LIMIT ?`,
+      )
+      .all(botId, limit) as RunRow[];
+    return rows.map(toRun);
+  }
+
   /** The bot's newest run of this trigger kind, e.g. its latest welcome (ADR-0024 decision 9). */
   latestOfTrigger(botId: BotId, triggerKind: RunTriggerKind): RunRecord | undefined {
     const row = this.db

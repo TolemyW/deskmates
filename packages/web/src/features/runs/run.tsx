@@ -61,6 +61,7 @@ const TRIGGER_LABEL: Readonly<Record<RunTriggerKind, MessageKey>> = {
   webhook: "run.trigger.webhook",
   approval: "run.trigger.approval",
   welcome: "run.trigger.welcome",
+  manual: "run.trigger.manual",
 };
 
 export interface RunScreenProps {

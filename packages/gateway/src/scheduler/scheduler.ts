@@ -4,9 +4,11 @@
 // `exec` resolves the sidecar process is gone; if it never sent `run_ended`, the run is `failed`.
 
 import {
+  type BotId,
   DeskmatesError,
   type ExecRequest,
   type ExecResult,
+  PARKED_RUN_STATUSES,
   type RunEnded,
   type RunId,
   type RunTimelineMark,
@@ -33,6 +35,7 @@ import { isConsolidationRun } from "../memory/consolidation.js";
 import { queueMemoryMaintenance } from "../memory/maintenance-due.js";
 import { MODEL_JOB_RUN_TYPES } from "../model-jobs/model-jobs.js";
 import type { SandboxOrigin } from "../workspaces/sandboxes.js";
+import { ruleRevisionsOf } from "./rule-revisions.js";
 import type { RunLifecycle } from "./run-lifecycle.js";
 import { markAttemptStarted, recordTimelineMark } from "./run-timeline-marks.js";
 
@@ -86,6 +89,8 @@ export class Scheduler {
   private scheduled = false;
   private stopped = false;
   private readonly maintenance = new Set<WorkspaceId>();
+  /** Bots whose directories the operator is moving; none of their runs starts meanwhile. */
+  private readonly heldBots = new Set<BotId>();
   private lastTokenPruneMs = Number.NEGATIVE_INFINITY;
   private readonly continuationSweep: ReturnType<typeof setInterval>;
 
@@ -224,6 +229,32 @@ export class Scheduler {
       } catch (err) {
         this.log("deadline cancellation failed", { runId: run.id, error: String(err) });
       }
+    }
+  }
+
+  /**
+   * Hold one bot's starts and resumes while the operator moves its directories (a rename,
+   * ADR-0043 decision 1). Refused while the bot has a live or parked run: a run's home and working
+   * directory are fixed when it starts, and a parked run resumes in the ones it started in.
+   */
+  async withIdleBot<T>(botId: BotId, operation: () => Promise<T>): Promise<T> {
+    const bot = this.ctx.bots.mustGet(botId);
+    if (
+      this.heldBots.has(botId) ||
+      this.ctx.runs.listLiveInWorkspace(bot.workspaceId).some((run) => run.botId === botId)
+    )
+      throw new DeskmatesError("lane_busy", "Wait for this bot's current run before renaming it");
+    if (this.ctx.runs.list({ botId }).some((run) => PARKED_RUN_STATUSES.has(run.status)))
+      throw new DeskmatesError(
+        "invalid_transition",
+        "Finish or cancel this bot's parked run before renaming it",
+      );
+    this.heldBots.add(botId);
+    try {
+      return await operation();
+    } finally {
+      this.heldBots.delete(botId);
+      this.kick();
     }
   }
 
@@ -385,8 +416,16 @@ export class Scheduler {
   }
 
   private launch(run: RunRecord): void {
-    const workspaceId = this.ctx.bots.mustGet(run.botId).workspaceId;
-    if (this.maintenance.has(workspaceId)) return;
+    const bot = this.ctx.bots.mustGet(run.botId);
+    const workspaceId = bot.workspaceId;
+    if (this.maintenance.has(workspaceId) || this.heldBots.has(run.botId)) return;
+    // ADR-0026 amendment 1: a paused bot's own work waits, a queued run and an answered parked one
+    // alike, and starts when the bot is resumed. Gateway jobs hosted on the bot (a presentation
+    // summary, a probe, a SOUL draft) carry a `runType` and are not the bot's work.
+    if (bot.pausedAt !== undefined && run.config.runType === undefined) {
+      this.waitForCapacity(run.id, { waitReason: "bot_paused" });
+      return;
+    }
     // The tenant is read from the persisted workspace, never from a trigger payload (ADR-0022
     // JOB-01). A run whose workspace has no tenant is an orphan and never starts a sidecar; a
     // suspended tenant's runs stay queued until it is active again.
@@ -474,9 +513,12 @@ export class Scheduler {
       }
       const canonicalSoul = this.ctx.bots.canonicalSoul(run.botId);
       const canonicalMemory = canonicalMemoryForBot(this.ctx, run.botId);
+      // ADR-0043 decision 2: the numbered versions this attempt's files are, next to the hashes;
+      // "last run used v N" on the bot page reads them.
       this.ctx.runs.setConfig(run.id, {
         canonicalSoulVersion: canonicalSoul?.version ?? null,
         canonicalMemoryVersion: canonicalMemory.version,
+        ...ruleRevisionsOf(this.ctx, run.botId),
       });
       request = {
         ...request,

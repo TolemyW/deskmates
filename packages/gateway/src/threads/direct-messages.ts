@@ -87,7 +87,11 @@ export function postDirectMessage(
         message,
         delivered: recipientRun !== undefined,
         ...(!recipientRun
-          ? { reason: "handoff conversation is paused or its conversation limit was reached" }
+          ? {
+              reason: target.pausedAt
+                ? "the recipient bot is paused"
+                : "handoff conversation is paused or its conversation limit was reached",
+            }
           : {}),
       };
       if (run.threadId && ctx.threads.mustGet(run.threadId).kind === "chat") {

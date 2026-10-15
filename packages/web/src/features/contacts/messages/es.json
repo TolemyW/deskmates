@@ -50,6 +50,7 @@
   "botActivity.schedule.title": "Programado",
   "botActivity.trigger.approval": "una aprobación",
   "botActivity.trigger.cron": "una programación",
+  "botActivity.trigger.manual": "a Run now",
   "botActivity.trigger.threadMessage": "un mensaje",
   "botActivity.trigger.webhook": "un webhook",
   "botActivity.until.days": "en {days} d",

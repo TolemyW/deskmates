@@ -11,6 +11,7 @@ export * from "./approval-review.js";
 export * from "./approval.js";
 export * from "./auth.js";
 export * from "./board.js";
+export * from "./bot-rule-files.js";
 export * from "./bot.js";
 export * from "./browser-evidence.js";
 export * from "./budget.js";

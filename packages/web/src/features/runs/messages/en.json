@@ -67,6 +67,7 @@
   "run.title": "Run",
   "run.trigger.approval": "approval",
   "run.trigger.cron": "cron",
+  "run.trigger.manual": "manual",
   "run.trigger.threadMessage": "thread_message",
   "run.trigger.webhook": "webhook",
   "run.trigger.welcome": "welcome",
