@@ -214,6 +214,8 @@
   "roles.action.privateChat.open": "Open a bot's main chat",
   "roles.action.run.cancel": "Cancel runs",
   "roles.action.run.continue": "Let a run continue past its turn limit",
+  "roles.action.run.mark": "Mark a run as wrong",
+  "roles.action.run.read": "See the runs index",
   "roles.action.runs.read": "See runs and Activity",
   "roles.action.servicePrincipal.manage": "Manage service principals",
   "roles.action.sideChat.open": "Open their own private chat with a bot",

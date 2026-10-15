@@ -17,6 +17,7 @@ export { knowledgeMessages } from "../features/knowledge/messages/index.js";
 export { limitsMessages } from "../features/limits/messages/index.js";
 export { membersMessages } from "../features/members/messages/index.js";
 export { networkMessages } from "../features/network/messages/index.js";
+export { runIndexMessages } from "../features/run-index/messages/index.js";
 export { runsMessages } from "../features/runs/messages/index.js";
 export { skillsMessages } from "../features/skills/messages/index.js";
 export { tasksMessages } from "../features/tasks/messages/index.js";

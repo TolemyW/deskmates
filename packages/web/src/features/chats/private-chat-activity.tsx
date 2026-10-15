@@ -50,6 +50,7 @@ export function PrivateChatActivity({
           runs={feed}
           botName={() => botName ?? t("privateChatActivity.bot")}
           loadEvents={(runId) => api.listRunEvents(runId)}
+          markRun={{ mark: api.markRun, unmark: api.unmarkRun }}
           linkThreads
           older={hasOlder ? { loading: loadingOlder, onLoad: () => void loadOlder() } : undefined}
         />

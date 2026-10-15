@@ -1,7 +1,9 @@
 // Demo routes of the run drawer: run lists, detail with usage, events, context metrics, cancel
-// (only the named run, issue #76) and the continue-or-stop decision.
+// (only the named run, issue #76), the continue-or-stop decision, and the run audit of ADR-0042:
+// the index filters, what a run changed, and the "wrong" mark.
 
 import {
+  type RunChanges,
   type RunContextMetrics,
   type RunId,
   buildRunTimeline,
@@ -24,12 +26,24 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
     const threadId = q.get("threadId");
     const botId = q.get("botId");
     const phase = q.get("phase");
+    const statuses = q.get("status")?.split(",");
+    const lane = q.get("lane");
+    const since = q.get("since");
+    const until = q.get("until");
+    const failureClass = q.get("failureClass");
+    const text = q.get("q")?.toLowerCase();
     const all = [...s.runs.values()]
       .filter(
         (r) =>
           (!threadId || r.threadId === threadId) &&
           (!botId || r.botId === botId) &&
-          (phase === null || (phase === "active") === !isTerminal(r.status)),
+          (phase === null || (phase === "active") === !isTerminal(r.status)) &&
+          (!statuses || statuses.includes(r.status)) &&
+          (!lane || r.lane === lane) &&
+          (!since || r.createdAt >= since) &&
+          (!until || r.createdAt < until) &&
+          (!failureClass || r.failureClass === failureClass) &&
+          (!text || (r.error ?? "").toLowerCase().includes(text)),
       )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
     if (phase === "active") return ok({ runs: all });
@@ -117,6 +131,43 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
         events: s.events.get(run.id) ?? [],
       }),
     );
+  }
+  // biome-ignore lint/suspicious/noAssignInExpressions: route matching
+  if ((x = m(/^\/api\/runs\/([^/]+)\/changes$/))) {
+    const run = s.runs.get(decodeURIComponent(x[1] ?? "") as RunId);
+    if (!run) return notFound("run");
+    const changes: RunChanges = {
+      approvals: [...s.approvals.values()].filter((a) => a.runId === run.id),
+      checkpoints: [],
+      artifacts: [],
+      memoryWritten: [],
+      ...(run.mark ? { mark: run.mark } : {}),
+    };
+    return ok(changes);
+  }
+  // biome-ignore lint/suspicious/noAssignInExpressions: route matching
+  if ((x = m(/^\/api\/runs\/([^/]+)\/memory-versions$/))) {
+    if (!s.runs.has(decodeURIComponent(x[1] ?? "") as RunId)) return notFound("run");
+    return ok({ versions: [] });
+  }
+  // biome-ignore lint/suspicious/noAssignInExpressions: route matching
+  if ((x = m(/^\/api\/runs\/([^/]+)\/mark$/))) {
+    const run = s.runs.get(decodeURIComponent(x[1] ?? "") as RunId);
+    if (!run) return notFound("run");
+    if (method === "DELETE") {
+      const removed = run.mark !== undefined;
+      Reflect.deleteProperty(run, "mark");
+      return ok({ removed });
+    }
+    const note = typeof b.note === "string" && b.note.trim() ? b.note.trim() : undefined;
+    run.mark = {
+      runId: run.id,
+      verdict: "wrong",
+      ...(note ? { note } : {}),
+      markedBy: "user:demo",
+      markedAt: new Date().toISOString(),
+    };
+    return ok({ mark: run.mark });
   }
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
   if (method === "POST" && (x = m(/^\/api\/runs\/([^/]+)\/cancel$/))) {

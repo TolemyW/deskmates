@@ -1,0 +1,22 @@
+{
+  "runIndex.empty": "没有符合这些条件的运行。",
+  "runIndex.filter.any": "全部",
+  "runIndex.filter.bot": "机器人",
+  "runIndex.filter.clear": "清除筛选",
+  "runIndex.filter.failureClass": "失败类别",
+  "runIndex.filter.lane": "通道",
+  "runIndex.filter.search": "搜索",
+  "runIndex.filter.since": "开始日期",
+  "runIndex.filter.status": "状态",
+  "runIndex.filter.text": "错误文本",
+  "runIndex.filter.textPlaceholder": "错误中的词",
+  "runIndex.filter.until": "结束日期",
+  "runIndex.intro": "这个工作区的所有运行，最新的在前。打开一条可查看它改变了什么，或将其标记为错误。",
+  "runIndex.lane.background": "后台",
+  "runIndex.lane.interactive": "前台",
+  "runIndex.list": "运行记录",
+  "runIndex.loadOlder": "加载更早的运行",
+  "runIndex.loadingOlder": "正在加载更早的运行…",
+  "runIndex.nav": "运行记录",
+  "runIndex.title": "运行记录"
+}

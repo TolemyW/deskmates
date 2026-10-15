@@ -214,6 +214,8 @@
   "roles.action.privateChat.open": "Abrir el chat principal de un bot",
   "roles.action.run.cancel": "Cancelar ejecuciones",
   "roles.action.run.continue": "Dejar que una ejecución supere su límite de turnos",
+  "roles.action.run.mark": "Marcar una ejecución como incorrecta",
+  "roles.action.run.read": "Ver el índice de ejecuciones",
   "roles.action.runs.read": "Ver ejecuciones y actividad",
   "roles.action.servicePrincipal.manage": "Gestionar entidades de servicio",
   "roles.action.sideChat.open": "Abrir su propio chat privado con un bot",

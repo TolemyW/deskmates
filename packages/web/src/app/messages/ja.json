@@ -214,6 +214,8 @@
   "roles.action.privateChat.open": "ボットのメインチャットを開く",
   "roles.action.run.cancel": "実行をキャンセルする",
   "roles.action.run.continue": "ターン上限を超えて実行を続けさせる",
+  "roles.action.run.mark": "実行を誤りとしてマーク",
+  "roles.action.run.read": "実行一覧を見る",
   "roles.action.runs.read": "実行とアクティビティを見る",
   "roles.action.servicePrincipal.manage": "サービスプリンシパルを管理する",
   "roles.action.sideChat.open": "ボットとの自分専用チャットを開く",

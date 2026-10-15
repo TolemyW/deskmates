@@ -3,9 +3,14 @@
 
 import type {
   BotId,
+  RunChanges,
   RunContextMetrics,
   RunEvent,
+  RunFailureClass,
   RunId,
+  RunLane,
+  RunMark,
+  RunStatus,
   RunTimeline,
   RunUsageReceipt,
   ThreadId,
@@ -23,6 +28,24 @@ export interface RunListFilter {
   phase?: "active" | "finished";
   cursor?: string;
   limit?: number;
+  /** The runs index (issue #11, ADR-0042 decision 2): these statuses only. */
+  status?: readonly RunStatus[];
+  lane?: RunLane;
+  /** `createdAt` at or after this ISO time. */
+  since?: string;
+  /** `createdAt` before this ISO time. */
+  until?: string;
+  failureClass?: RunFailureClass;
+  /** Case-insensitive text in the run's error. */
+  q?: string;
+}
+
+/** One memory version a run's model context was given (ADR-0011 A13). */
+export interface RunSuppliedMemoryVersion {
+  entryId: string;
+  version: number;
+  via: string;
+  suppliedAt: string;
 }
 
 /** One page of runs, newest first; `nextCursor` means older runs exist. */
@@ -55,6 +78,8 @@ export interface RunsApi {
     usage: RunUsageReceipt[];
     usageCoverage?: UsageCoverage;
   }>;
+  /** What the run changed beyond its row: approvals, task records, memory written (ADR-0042). */
+  getRunChanges(id: RunId): Promise<RunChanges>;
   getRunContext(id: RunId): Promise<RunContextMetrics>;
   /** The run's per-attempt startup timeline, derived from its whole ledger (ADR-0037). */
   getRunTimeline(id: RunId): Promise<RunTimeline>;
@@ -66,8 +91,14 @@ export interface RunsApi {
     id: RunId,
     slice?: { afterSeq?: number; beforeSeq?: number; limit?: number },
   ): Promise<RunEventSlice>;
+  /** The memory versions the run's context was given. */
+  listRunMemoryVersions(id: RunId): Promise<RunSuppliedMemoryVersion[]>;
   listRuns(filter?: RunListFilter): Promise<RunPage>;
+  /** Marks the run wrong, or replaces its note (ADR-0042 decision 3; Owner or Admin). */
+  markRun(id: RunId, note?: string): Promise<RunMark>;
   memoryIndexObservation(workspaceId: WorkspaceId): Promise<MemoryIndexObservation | null>;
+  /** Removes the run's mark; whether there was one. */
+  unmarkRun(id: RunId): Promise<boolean>;
 }
 
 export function createRunsApi(t: HttpTransport): RunsApi {
@@ -82,6 +113,9 @@ export function createRunsApi(t: HttpTransport): RunsApi {
     },
     getRun(id) {
       return t.json("GET", `/api/runs/${encodeURIComponent(id)}`);
+    },
+    getRunChanges(id) {
+      return t.json("GET", `/api/runs/${encodeURIComponent(id)}/changes`);
     },
     getRunContext(id) {
       return t.json("GET", `/api/runs/${encodeURIComponent(id)}/context`);
@@ -113,6 +147,13 @@ export function createRunsApi(t: HttpTransport): RunsApi {
         })}`,
       );
     },
+    async listRunMemoryVersions(id) {
+      const r = await t.json<{ versions: RunSuppliedMemoryVersion[] }>(
+        "GET",
+        `/api/runs/${encodeURIComponent(id)}/memory-versions`,
+      );
+      return r.versions;
+    },
     listRuns(filter = {}) {
       return t.json(
         "GET",
@@ -123,8 +164,22 @@ export function createRunsApi(t: HttpTransport): RunsApi {
           phase: filter.phase,
           cursor: filter.cursor,
           limit: filter.limit,
+          status: filter.status && filter.status.length > 0 ? filter.status.join(",") : undefined,
+          lane: filter.lane,
+          since: filter.since,
+          until: filter.until,
+          failureClass: filter.failureClass,
+          q: filter.q,
         })}`,
       );
+    },
+    async markRun(id, note) {
+      const r = await t.json<{ mark: RunMark }>(
+        "PUT",
+        `/api/runs/${encodeURIComponent(id)}/mark`,
+        note === undefined ? {} : { note },
+      );
+      return r.mark;
     },
     async memoryIndexObservation(workspaceId) {
       const r = await t.json<{ observation: MemoryIndexObservation | null }>(
@@ -132,6 +187,13 @@ export function createRunsApi(t: HttpTransport): RunsApi {
         `/api/runs/memory-index${query({ workspaceId })}`,
       );
       return r.observation;
+    },
+    async unmarkRun(id) {
+      const r = await t.json<{ removed: boolean }>(
+        "DELETE",
+        `/api/runs/${encodeURIComponent(id)}/mark`,
+      );
+      return r.removed;
     },
   };
 }
