@@ -61,7 +61,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `DELETE /api/network-profiles/:id` | handler: the root, or the Owner who created the profile; anyone else 403 profile_owner |
 | `PUT /api/network-profiles/:id` | handler: the root, or the Owner who created the profile; anyone else 403 profile_owner |
 
-#### Admin or Owner of the workspace every identifier names (naming none: of a workspace of the request's tenant) (81)
+#### Admin or Owner of the workspace every identifier names (naming none: of a workspace of the request's tenant) (83)
 
 | Route | Identifiers the guard resolves to the tenant and to their workspace |
 |---|---|
@@ -101,6 +101,8 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/memory/entries/:id/confirm` | path `id`: memoryEntry |
 | `POST /api/memory/entries/:id/forget` | path `id`: memoryEntry |
 | `POST /api/memory/entries/:id/undo` | path `id`: memoryEntry |
+| `DELETE /api/runs/:id/mark` | path `id`: run |
+| `PUT /api/runs/:id/mark` | path `id`: run |
 | `PATCH /api/skills/:id` | path `id`: skill |
 | `POST /api/skills/:id/assign` | path `id`: skill; body `botIds`: bot[] |
 | `POST /api/skills/:id/promote` | path `id`: skill; handler: evidence bots must belong to the skill's workspace |
@@ -147,7 +149,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/workspaces/:workspaceId/tasks/:id/accept` | path `workspaceId`: workspace |
 | `POST /api/workspaces/:workspaceId/tasks/:id/run` | path `workspaceId`: workspace |
 
-#### Member, Admin or Owner of the workspace every identifier names (naming none: a Member of a workspace of the request's tenant) (83)
+#### Member, Admin or Owner of the workspace every identifier names (naming none: a Member of a workspace of the request's tenant) (84)
 
 | Route | Identifiers the guard resolves to the tenant and to their workspace |
 |---|---|
@@ -187,6 +189,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `GET /api/runs` | query `threadId`: thread; query `botId`: bot; query `workspaceId`: workspace; list scoped to the tenant and the caller's workspaces; handler: listed only from the caller's workspaces, without other people's private chats |
 | `GET /api/runs/:id` | path `id`: run |
 | `POST /api/runs/:id/cancel` | path `id`: run; handler: below Admin (Member or member principal) cancels only the runs it started (run_not_started_by_you) |
+| `GET /api/runs/:id/changes` | path `id`: run |
 | `GET /api/runs/:id/context` | path `id`: run |
 | `POST /api/runs/:id/continuation/decide` | path `id`: run; handler: below Admin (Member or member principal) answers a continuation ask only for the runs it started |
 | `GET /api/runs/:id/events` | path `id`: run |

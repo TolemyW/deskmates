@@ -22,6 +22,7 @@ import { type GatewayConfig, loadConfig } from "./config.js";
 import { type GatewayContext, buildContext } from "./context.js";
 import { openDatabase } from "./db/open.js";
 import { invokedDirectly } from "./invoked-directly.js";
+import { RunRetention } from "./ledger/run-retention.js";
 import { reportNetworkOverlaps } from "./network/network-overlaps.js";
 import { resolveProvider } from "./provider.js";
 import { RunLifecycle } from "./scheduler/run-lifecycle.js";
@@ -145,6 +146,10 @@ export function buildGateway(
     undefined,
     (msg, data) => app.log.info(data ?? {}, msg),
   );
+  // ADR-0042 decision 6: off unless RUN_EVENTS_RETENTION_DAYS is set.
+  const retention = new RunRetention(db, config.runEventsRetentionDays, (msg, data) =>
+    app.log.info(data ?? {}, msg),
+  );
   app.decorate("deskmates", { ctx, scheduler, lifecycle, cron, taskSchedules });
   if (opts.surface === "combined-test") registerRoutes(app, ctx, lifecycle, scheduler, opts);
   else registerSandboxRoutes(app, ctx, lifecycle, scheduler, opts);
@@ -167,12 +172,14 @@ export function buildGateway(
       taskSchedules.start();
       // ADR-0041 decision 4: the backfill, then a pass every interval; absent when unconfigured.
       ctx.retrieval.indexer?.start();
+      retention.start();
     }
   });
   app.addHook("onClose", async () => {
     await ctx.channels.stop();
     cron.stop();
     taskSchedules.stop();
+    retention.stop();
     scheduler.stop();
     await ctx.retrieval.indexer?.stop();
     db.close();

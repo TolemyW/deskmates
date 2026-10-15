@@ -44,6 +44,7 @@ import type { GatewayContext } from "../context.js";
 import { nowIso } from "../db/ids.js";
 import { newId } from "../db/ids.js";
 import type { GatewayEvent } from "../events/bus.js";
+import { MARKED_WRONG_REASON, RunMarkStore } from "../ledger/run-marks.js";
 import { refreshRunUsageSummary } from "../ledger/run-usage-summaries.js";
 import type { RunRecord } from "../ledger/runs.js";
 import { isConsolidationRun } from "../memory/consolidation.js";
@@ -1096,6 +1097,11 @@ export class RunLifecycle {
     const { ctx } = this;
     const summary = ended.summary;
     if (!summary) return;
+    // ADR-0042 decision 3: a run an operator marked wrong before it ended learns nothing.
+    if (new RunMarkStore(ctx.db).isWrong(run.id)) {
+      this.recordSkippedLearned(run, ended, MARKED_WRONG_REASON);
+      return;
+    }
     const learned =
       summary.learned && summary.learned.length > 0
         ? summary.learned

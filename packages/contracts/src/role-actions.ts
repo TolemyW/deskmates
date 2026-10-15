@@ -138,6 +138,10 @@ export const ROLE_ACTIONS = {
     role: "admin",
     handlerCheck: "a Member answers a continuation ask only for the runs they started",
   },
+  // ADR-0042: the runs index lists a Member's workspaces' runs; marking a run wrong changes what
+  // the group learns, which is the Owner's or Admin's (decision 3).
+  "run.read": { route: "GET /api/runs", role: "member" },
+  "run.mark": { route: "PUT /api/runs/:id/mark", role: "admin" },
   "costAlert.acknowledge": { route: "POST /api/cost-alerts/:id/acknowledge", role: "member" },
   "approvalRule.create": { route: "POST /api/bots/:id/approval-rules", role: "admin" },
   "approvalRule.delete": { route: "DELETE /api/approval-rules/:id", role: "admin" },

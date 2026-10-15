@@ -23,6 +23,7 @@ import {
 } from "@deskmates/contracts";
 import { nowIso } from "../db/ids.js";
 import type { GatewayDb } from "../db/open.js";
+import { notMarkedWrong } from "../ledger/run-marks.js";
 import type { RunRecord, RunStore } from "../ledger/runs.js";
 import { modelsForJob } from "../scheduler/job-models.js";
 import {
@@ -220,6 +221,7 @@ export class ConsolidationService {
              AND e.tombstoned = 0 AND e.consolidated_by_run IS NULL
              AND r.status IN ('succeeded','silent')
              AND r.run_type IS NOT ?
+             AND ${notMarkedWrong("r.id")}
              AND NOT EXISTS (SELECT 1 FROM runs prior,
                json_each(prior.config_json, '$.consolidationSources') source
                WHERE prior.bot_id = e.bot_id AND prior.status IN ('succeeded','silent')

@@ -9,7 +9,7 @@ import {
   SHORT_WAIT_SECONDS_DEFAULT,
   isGroupRouting,
 } from "@deskmates/contracts";
-import { type Env, optionalInt } from "./env.js";
+import { type Env, optionalInt, optionalLimit } from "./env.js";
 
 /** ADR-0005 definitions: delivered slice cap, a guess to be calibrated. */
 export const THREAD_PAYLOAD_MAX_TOKENS_DEFAULT = 16000;
@@ -77,6 +77,12 @@ export interface RunsConfig {
   webhookQueueMax: number;
   /** SDK `maxTurns` per run; recorded in `runs.config_json` and sent on every StartRunRequest. */
   maxTurns: number;
+  /**
+   * `RUN_EVENTS_RETENTION_DAYS` (ADR-0042 decision 6): prune the events, usage rows and model
+   * requests of terminal runs that finished longer ago. Undefined (the default) keeps everything.
+   * Not a run knob: it changes what the ledger keeps, never what a run does.
+   */
+  runEventsRetentionDays?: number;
 }
 
 export function readRunsConfig(env: Env): RunsConfig {
@@ -94,7 +100,14 @@ export function readRunsConfig(env: Env): RunsConfig {
     webhookBodyMaxBytes: optionalInt(env, "WEBHOOK_BODY_MAX_BYTES", WEBHOOK_BODY_MAX_BYTES_DEFAULT),
     webhookQueueMax: optionalInt(env, "WEBHOOK_QUEUE_MAX", WEBHOOK_QUEUE_MAX_DEFAULT),
     maxTurns: optionalInt(env, "DESKMATES_MAX_TURNS", MAX_TURNS_DEFAULT),
+    ...runEventsRetention(env),
   };
+}
+
+/** Empty or 0 is off (the default); anything else must be a whole number of days. */
+function runEventsRetention(env: Env): { runEventsRetentionDays?: number } {
+  const days = optionalLimit(env, "RUN_EVENTS_RETENTION_DAYS", 0);
+  return days > 0 ? { runEventsRetentionDays: days } : {};
 }
 
 function groupRouting(env: Env): GroupRouting {
