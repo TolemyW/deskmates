@@ -72,10 +72,11 @@ Unicode forms do not change the assignment; different names may share a color.
 Colors indicate identity only, never status. Use the same full name at every size
 (`md` or `sm`); display-name changes may change the color. Empty names show `?`.
 
-`BrandMark` renders the Deskmates icon, a square transparent PNG in
-`src/assets/deskmates-logo.png`, at its own colors and at `size` pixels a side. Use
-`<BrandMark size={28} />` beside an accessible brand name; the image itself is
-decorative. The PNG is included in package builds.
+`BrandMark` renders the Deskmates icon, a 256 px square transparent PNG in
+`src/assets/deskmates-logo.png` cropped to the artwork's edges, at its own colors and at
+`size` pixels a side, so `size` is the glyph's size. The image is decorative and not
+draggable. Use `<BrandMark size={28} />` beside an accessible brand name. The PNG is
+included in package builds.
 
 `MessageComposer` is an owned multiline chat composition: provide `value`,
 `onChange` and `onSend`; optional `context` sits beside the send control. Enter

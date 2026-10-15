@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Breaking: `BrandMark` renders the Deskmates icon as a 1:1 `<img>` of a cropped 256 px PNG
+  in its own colors, no longer an inline `<svg>` with a 784:628 viewBox that followed
+  `currentColor`; consumers styling `.brand-mark > svg` or relying on text color must
+  update. The image is not draggable.
 - Add a presentational `Pager`: a labelled navigation landmark with Previous/Next, a
   caller-formatted live range text and disabled boundaries; it owns no paging state.
 - Add controlled `ResizeHandle` with pointer capture, keyboard sizing and bounds.

@@ -18,7 +18,6 @@
 }
 .brand-mark {
   background: transparent 0 0;
-  color: var(--foreground);
   box-shadow: none;
 }
 .nav-group {
@@ -230,9 +229,6 @@
     bottom: auto;
     left: auto;
   }
-}
-.brand-mark > img {
-  display: block;
 }
 .brand-mark {
   padding: 0;
@@ -752,7 +748,6 @@ a.signed-in-user:focus-visible {
     align-items: center;
     border-radius: 9px;
     background: var(--primary);
-    color: var(--on-primary);
     box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 28%, transparent);
     flex-shrink: 0;
   }
