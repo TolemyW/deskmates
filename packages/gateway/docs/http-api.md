@@ -42,6 +42,7 @@ Types named below are the `@deskmates/contracts` shapes. `Run` responses are `Ru
 | `GET /api/runs/memory-index?workspaceId=` | | `{observation: {runId, counts} \| null}`: the newest run of that workspace that recorded memory index counts (#113 slice R) |
 | `GET /api/runs/:id` | | `{run: Run, usage: RunUsage[]}`; `run.visibility` as for the list |
 | `GET /api/runs/:id/events?afterSeq=&beforeSeq=&limit=` | | Ordered by `seq` (#113 slice R). With `afterSeq`: `{events, hasMore}`, the tail after it, at most 500 per request. Otherwise `{events, hasOlder}`, the newest events before `beforeSeq` (or of all), 200 by default and at most 500. Both seqs at once, or a larger limit, is 400 |
+| `GET /api/runs/:id/screenshot` | | `{screenshot: RunEvent \| null}`: the run's newest `screenshot` event, for an approval card's thumbnail (issue #9) |
 | `GET /api/cost-alert-rules?offset=&limit=` | | `{rules: CostAlertRule[], offset, limit, total}` oldest first (ADR-0018), 25 a page, `limit` at most 100 (#113) |
 | `POST /api/cost-alert-rules` | `{kind: "known_cost" \| "unpriced_usage", window: "day" \| "month", botId?, thresholdUsd?, authorId?}` | 201 `{rule: CostAlertRule}`; a `known_cost` rule needs a positive `thresholdUsd`, an `unpriced_usage` rule takes none; `botId` must exist (404 otherwise); `window` is a UTC calendar day or month, the cost report's own bucketing. A rule is a soft threshold: it never stops, delays or refuses a run |
 | `DELETE /api/cost-alert-rules/:id` | | `{deleted: true}`; the alerts the rule fired stay, with the rule's facts copied on them |
