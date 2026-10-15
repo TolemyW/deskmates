@@ -1151,8 +1151,15 @@
     min-width: 0;
     overflow-wrap: anywhere;
   }
+  .chat-run-bot[data-state="stalled"] .chat-run-bot-icon {
+    background: var(--app-warning-soft);
+    color: var(--warning-text);
+  }
   .chat-run-bot-extra {
     font-size: var(--app-text-xs);
+  }
+  .chat-run-bot-activity {
+    font-variant-numeric: tabular-nums;
   }
   .chat-run-bot-extra::before {
     content: "·";

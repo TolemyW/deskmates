@@ -143,6 +143,7 @@ function membersSummary(
 }
 import { WorkspaceFilePreview } from "../files/workspace-file-preview.js";
 import { ReplyPreviews, replyPreviewReducer } from "./reply-preview.js";
+import { useRunActivity } from "./use-run-activity.js";
 import { type WorkspaceLockState, useWorkspaceLock } from "./use-workspace-lock.js";
 import { VisionNotice } from "./vision-notice.js";
 
@@ -167,6 +168,12 @@ export function ChatPane(props: ChatPaneProps) {
   const actorName = useActorLabel();
   const [state, dispatch] = useReducer(threadViewReducer, EMPTY_THREAD_VIEW);
   const [previews, applyPreview] = useReducer(replyPreviewReducer, {});
+  // Issue #9: what each live run is doing now, for the status row.
+  const { activity: runActivity, apply: applyRunActivity } = useRunActivity(
+    api,
+    threadId,
+    activeRuns(state),
+  );
   const [detail, setDetail] = useState<ThreadDetailView | undefined>();
   const members = detail?.members ?? [];
   // Only `owner-v1` offers an unaddressed message to the owner first; under the walk (or an older
@@ -328,6 +335,7 @@ export function ChatPane(props: ChatPaneProps) {
         if (event.type === "run_status") runRevisionRef.current += 1;
         dispatch(event);
         applyPreview(event);
+        applyRunActivity(event);
         // Messages can add a member or pause/reset the thread; run changes affect each member's
         // activity. Refresh the authoritative detail while the reducer applies the live frame.
         if (
@@ -375,7 +383,7 @@ export function ChatPane(props: ChatPaneProps) {
       if (lifecycleRevisionRef.current === lifecycleRevision) lifecycleRevisionRef.current += 1;
       stop();
     };
-  }, [threadId, api]);
+  }, [threadId, api, applyRunActivity]);
 
   useEffect(() => {
     if (!props.messageId || !state.messages.some((message) => message.id === props.messageId))
@@ -922,6 +930,7 @@ export function ChatPane(props: ChatPaneProps) {
               key={threadId}
               api={api}
               runs={pending}
+              activity={runActivity}
               botName={botName}
               messageBody={(id) => state.messages.find((m) => m.id === id)?.body}
               thread={detail?.thread}
