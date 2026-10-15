@@ -61,6 +61,7 @@ a section to this README.
 - [Per-bot working directories (ADR-0038)](docs/per-bot-working-directory.md): soft write guard between bots
 - [Private-chat handoffs (ADR-0024)](docs/private-chat-handoffs.md)
 - [Reviewed knowledge and memory administration (B5)](docs/knowledge-and-memory-administration.md)
+- [Run audit and ledger retention (ADR-0042)](docs/run-audit.md): failure classes, marks, `RUN_EVENTS_RETENTION_DAYS`
 - [Run startup timeline and reply preview (ADR-0037)](docs/run-startup-timeline.md)
 - [Run usage summaries for Costs (ADR-0032 amendment 1)](docs/run-usage-summaries.md)
 - [Snapshot delivery experiment](docs/snapshot-delivery-experiment.md)
