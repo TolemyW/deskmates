@@ -347,3 +347,46 @@ The workspace image has no PDF text extractor, so a withheld PDF has no text sub
 | 15 | Under `withhold` a `.pdf` or `.PDF` `Read` is denied with the PDF notice and one `image_withheld` event with `media: "application/pdf"`; under `deliver` it runs | T0 `packages/sidecar/src/vision-withhold.test.ts`; T1 `packages/sidecar/src/vision-withhold-run.test.ts` (fake SDK) | `image_withheld` events per withholding run, by media |
 | 16 | Under `withhold` a connector or integration value with a `data:` image URI, a base64 PNG, JPEG, GIF or WebP and an `image`-typed object reaches the model as notices, an image link and ordinary base64 text do not change, and an `image` item of any `deskmates` tool result becomes text; under `deliver` results are byte-identical | T0 `vision-withhold.test.ts`; T1 `packages/sidecar/src/connector-tools.test.ts`, `packages/sidecar/src/integration-tools.test.ts` | Withholding runs with `image_blocks` > 0 on any request = 0 |
 | 17 | One cleaned result emits exactly one `image_withheld` event with its tool name, count and media types; a result with nothing to clean emits none | T1 `connector-tools.test.ts`, `integration-tools.test.ts` | `image_withheld` events per withholding run |
+
+## Amendment 4 (2026-10-14): a model job fails inside its cap, naming the cause
+
+Status: Accepted. Decisions 1 to 17 stay in force; decision 3 (the SDK is the only retry owner)
+is unchanged, this amendment only bounds how many retries a model job gives it.
+
+### Context
+
+On the stable deployment of 2026-10-14 `CHEAP_MODEL` named a model the upstream had no worker
+for. Every activity summary (ADR-0033) then ran on it: the upstream answered each request with
+an error, the SDK retried with its default of ten attempts and exponential backoff, the seventh
+retry was still waiting when the job's 55-second deadline aborted the query, and the run row
+said only `Error: Claude Code process aborted by user`. Two jobs failed that way, 47 seconds
+each, and nothing in the ledger or the UI named the model or the HTTP status. Decision 5 gives
+a model job a 60-second cap; ten retries can never finish inside it.
+
+### Decisions
+
+18. **A model job bounds the SDK's retries.** The sidecar sets `CLAUDE_CODE_MAX_RETRIES` to
+    `MODEL_JOB_MAX_RETRIES` (four) in the job's query environment and nowhere else: an agent run
+    keeps the SDK's default. Four retries, about nine seconds of backoff, survive a short
+    upstream blip and still leave the SDK time to end the query with the upstream's error as
+    the run error. Each retry is still a `model_retry` event (decision 3).
+19. **The deadline names its cause.** When the job's deadline (`MODEL_JOB_DEADLINE_MS`, 55 s)
+    aborts the query, the run error is `model job did not finish within 55 s`, followed, when
+    the SDK reported retries, by how many and the last one's HTTP status (or `no response`) and
+    error kind. The SDK's abort message never becomes a run error on its own.
+
+### Open items
+
+- The upstream of 2026-10-14 answers a request for a model it does not serve with HTTP 500 to
+  the SDK's request and 404 `model_not_found` to a plain one; which field of the SDK's body
+  turns the 404 into a 500 is not known. Either way the model is not served, and the fix for
+  the deployment is the `CHEAP_MODEL` value, which this amendment does not touch.
+- A startup check of `DEFAULT_MODEL` and `CHEAP_MODEL` against the upstream would need the
+  Gateway to make a model request, which the architecture forbids; not proposed here.
+
+### Verification (amendment 4)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 18 | A model job's `query()` environment carries `CLAUDE_CODE_MAX_RETRIES` equal to `MODEL_JOB_MAX_RETRIES`, which is below the SDK's default of ten, and the deadline is below the Gateway's 60-second cap; an agent run never sets the variable (by construction: `run-once.ts` builds its own environment and no test asserts the absence) | T1 `packages/sidecar/src/model-job.test.ts` ("bounds the SDK's retries") | `model_retry` events per failed model job (expected at most four) |
+| 19 | A job whose query reports two `api_retry` messages and then only ends on the deadline's abort fails with the deadline error naming two retries, `HTTP 500` and `server_error`, never "aborted by user"; the error for no retry and for a connection failure reads as specified | T1 `packages/sidecar/src/model-job.test.ts` ("names the retries when the deadline ends the job") | Failed model jobs whose error names no cause = 0 |

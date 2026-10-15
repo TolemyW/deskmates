@@ -3,8 +3,14 @@
 
 import type { StartRunRequest } from "@deskmates/contracts";
 import { createFakeSdk } from "@deskmates/testkit";
-import { describe, expect, it } from "vitest";
-import { jobPrompt } from "./model-job.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SidecarDeps } from "./deps.js";
+import {
+  MODEL_JOB_DEADLINE_MS,
+  MODEL_JOB_MAX_RETRIES,
+  jobPrompt,
+  modelJobDeadlineError,
+} from "./model-job.js";
 import { renderDigits } from "./probe-image.js";
 import { runOnce } from "./run-once.js";
 import { parseStartRunRequest } from "./start-run-request.js";
@@ -247,6 +253,88 @@ describe("approval review job (ADR-0002 amendment 4, B4)", () => {
       }),
     );
     expect(parsed).toMatchObject({ ok: true });
+  });
+});
+
+describe("a model job fails inside its deadline (ADR-0023 amendment 4)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("bounds the SDK's retries so a dead model ends the query with its real error", async () => {
+    const { calls } = await run({ kind: "vision_probe", code: "4096" }, "4096");
+    const env = (calls[0]?.options as { env?: Record<string, string> }).env ?? {};
+    expect(env.CLAUDE_CODE_MAX_RETRIES).toBe(String(MODEL_JOB_MAX_RETRIES));
+    // The SDK's default of ten retries with exponential backoff cannot end inside the deadline.
+    expect(MODEL_JOB_MAX_RETRIES).toBeLessThan(10);
+    expect(MODEL_JOB_DEADLINE_MS).toBeLessThan(60_000);
+  });
+
+  it("names the retries when the deadline ends the job, not the SDK's abort", async () => {
+    vi.useFakeTimers();
+    const gateway = createFakeGateway();
+    const sdk = createFakeSdk([]);
+    // A model the upstream does not serve: every request fails, the SDK keeps retrying, and the
+    // query only ends when the job's deadline aborts it, as the real SDK's AbortError does.
+    const query: SidecarDeps["query"] = ((params: {
+      options?: { abortController?: AbortController };
+    }) =>
+      (async function* () {
+        for (const attempt of [1, 2]) {
+          yield {
+            type: "system",
+            subtype: "api_retry",
+            attempt,
+            max_retries: MODEL_JOB_MAX_RETRIES,
+            retry_delay_ms: 500,
+            error_status: 500,
+            error: "server_error",
+            uuid: `retry-${attempt}`,
+            session_id: "session",
+          };
+        }
+        await new Promise((_resolve, reject) => {
+          params.options?.abortController?.signal.addEventListener(
+            "abort",
+            () => reject(new Error("Claude Code process aborted by user")),
+            { once: true },
+          );
+        });
+      })()) as unknown as SidecarDeps["query"];
+    const pending = runOnce(
+      request({ kind: "vision_probe", code: "4096" }),
+      {
+        query,
+        tool: sdk.tool,
+        createSdkMcpServer: sdk.createSdkMcpServer,
+        fs: createMemoryFs({}),
+        fetch: gateway.fetch,
+        env: {},
+        now: () => new Date(),
+        sleep: async () => {},
+      },
+      {},
+    );
+    for (let elapsed = 0; elapsed <= MODEL_JOB_DEADLINE_MS; elapsed += 1000)
+      await vi.advanceTimersByTimeAsync(1000);
+    const result = await pending;
+    expect(result.outcome).toBe("failed");
+    expect(result.error).toBe(
+      modelJobDeadlineError([
+        { errorStatus: 500, error: "server_error" },
+        { errorStatus: 500, error: "server_error" },
+      ]),
+    );
+    expect(result.error).toContain("2 times, last on HTTP 500 (server_error)");
+    expect(result.error).not.toContain("aborted by user");
+    expect(gateway.events.filter((event) => event.kind === "model_retry")).toHaveLength(2);
+  });
+
+  it("describes a deadline with no retry and with a connection failure", () => {
+    expect(modelJobDeadlineError([])).toBe("model job did not finish within 55 s");
+    expect(modelJobDeadlineError([{ errorStatus: null, error: "connection_error" }])).toBe(
+      "model job did not finish within 55 s: the SDK retried the model request once, last on no response (connection_error)",
+    );
   });
 });
 

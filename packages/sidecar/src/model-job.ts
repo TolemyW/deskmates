@@ -8,13 +8,47 @@
 // takes the same path as every other model request: the CLI, the model proxy, the upstream.
 
 import type { Options, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { ModelJobRequest, RunEnded, StartRunRequest } from "@deskmates/contracts";
+import type {
+  ModelJobRequest,
+  ModelRetryPayload,
+  RunEnded,
+  StartRunRequest,
+} from "@deskmates/contracts";
 import type { SidecarDeps } from "./deps.js";
 import type { EventSink } from "./ledger.js";
 import { ModelSwitchRecorder, fallbackSwitch, isModelFallbackMessage } from "./model-switch.js";
 import { probePngBase64 } from "./probe-image.js";
 import { redactText } from "./redact.js";
 import { TurnUsageTracker } from "./turn-usage.js";
+
+/**
+ * How long one model job may take: ADR-0023 amendment 1 decision 5's 60-second cap, less the
+ * sidecar's own start-up. The Gateway kills the process at 60 s; this deadline ends the job
+ * first, so the run row carries a cause instead of "sidecar killed".
+ */
+export const MODEL_JOB_DEADLINE_MS = 55_000;
+
+/**
+ * The SDK's retries of a failed model request during a job (ADR-0023 amendment 3). The SDK owns
+ * retries; its default of ten with exponential backoff needs minutes, so under the deadline a
+ * model the upstream did not serve was seen failing seven times over 47 s and then dying on the
+ * abort with no cause named (stable, 2026-10-14). Four retries, about nine seconds of backoff,
+ * survive a short upstream blip and still leave the SDK time to end the query with the real
+ * error.
+ */
+export const MODEL_JOB_MAX_RETRIES = 4;
+
+/** The run error when the deadline ends a job: the cause, not the SDK's "aborted by user". */
+export function modelJobDeadlineError(
+  retries: readonly Pick<ModelRetryPayload, "errorStatus" | "error">[],
+): string {
+  const seconds = MODEL_JOB_DEADLINE_MS / 1000;
+  const last = retries.at(-1);
+  if (!last) return `model job did not finish within ${seconds} s`;
+  const status = last.errorStatus === null ? "no response" : `HTTP ${last.errorStatus}`;
+  const times = retries.length === 1 ? "once" : `${retries.length} times`;
+  return `model job did not finish within ${seconds} s: the SDK retried the model request ${times}, last on ${status} (${last.error})`;
+}
 
 export const VISION_PROBE_QUESTION =
   "The image shows a number written in large digits. Reply with exactly those digits and nothing else. If you cannot see an image, reply exactly: NO IMAGE";
@@ -193,7 +227,9 @@ export async function runModelJob(
   const turns = new TurnUsageTracker((payload) => sink?.emit("turn_usage", { ...payload }));
   const switches = new ModelSwitchRecorder((payload) => sink?.emit("model_switch", { ...payload }));
   const abortController = new AbortController();
-  const deadline = setTimeout(() => abortController.abort(), 55_000);
+  const deadline = setTimeout(() => abortController.abort(), MODEL_JOB_DEADLINE_MS);
+  /** Every `api_retry` the SDK reported, for the deadline's error message. */
+  const retries: ModelRetryPayload[] = [];
   const prompt = jobPrompt(job);
   const directory = `/tmp/deskmates-model-job-${request.runId}`;
   const secrets = [request.modelAuthToken];
@@ -216,6 +252,7 @@ export async function runModelJob(
           DISABLE_ERROR_REPORTING: "1",
           DISABLE_AUTOUPDATER: "1",
           CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(prompt.maxOutputTokens),
+          CLAUDE_CODE_MAX_RETRIES: String(MODEL_JOB_MAX_RETRIES),
         },
         systemPrompt: prompt.systemPrompt,
         settingSources: [],
@@ -262,14 +299,17 @@ export async function runModelJob(
         )
           turns.observeStream({ parent_tool_use_id: msg.parent_tool_use_id, event });
       }
-      if (msg.type === "system" && msg.subtype === "api_retry")
-        sink?.emit("model_retry", {
+      if (msg.type === "system" && msg.subtype === "api_retry") {
+        const retry: ModelRetryPayload = {
           attempt: msg.attempt,
           maxRetries: msg.max_retries,
           retryDelayMs: msg.retry_delay_ms,
           errorStatus: msg.error_status,
           error: msg.error,
-        });
+        };
+        retries.push(retry);
+        sink?.emit("model_retry", { ...retry });
+      }
       if (isModelFallbackMessage(msg)) switches.record(fallbackSwitch(msg));
       if (msg.type !== "result") continue;
       ended.usage = Object.entries(msg.modelUsage).map(([model, u]) => ({
@@ -297,7 +337,11 @@ export async function runModelJob(
     if (ended.outcome !== "completed") ended.error ??= "The model returned no answer";
   } catch (error) {
     ended.outcome = "failed";
-    ended.error = redactText(String(error), secrets);
+    // The deadline's abort surfaces as the SDK's "Claude Code process aborted by user", which
+    // names no cause; the retries it reported before the abort do.
+    ended.error = abortController.signal.aborted
+      ? modelJobDeadlineError(retries)
+      : redactText(String(error), secrets);
   } finally {
     turns.flush();
     clearTimeout(deadline);
