@@ -245,7 +245,13 @@ describe.skipIf(!available)("ADR-0023 model proxy (real Docker/SDK, scripted ups
       expect(curls.map((r) => r.body?.model)).toEqual([CHEAP_MODEL, FALLBACK_MODEL, CHEAP_MODEL]);
       expect(up.requests.some((r) => r.body?.model === OTHER_MODEL)).toBe(false);
       expect(up.requests.some((r) => r.body?.model === SMALL_FAST_MODEL)).toBe(false);
-      expect(up.requests.some((r) => r.url.startsWith("/v1/messages/count_tokens"))).toBe(false);
+      // The CLI counts tokens on the frozen model through the proxy; the refused id's count never
+      // arrives.
+      expect(
+        up.requests.some(
+          (r) => r.url.startsWith("/v1/messages/count_tokens") && r.body?.model === OTHER_MODEL,
+        ),
+      ).toBe(false);
       expect(curls.at(-1)?.rawBody).toContain(`${CURL_MARKER} small-fast`);
 
       // The ledger: one row per request in arrival order, refusals and the rewrite included.
@@ -264,7 +270,10 @@ describe.skipIf(!available)("ADR-0023 model proxy (real Docker/SDK, scripted ups
       // response's, never the request's.
       for (const row of forwardedRows) {
         expect([DEFAULT_MODEL, CHEAP_MODEL, FALLBACK_MODEL]).toContain(row.model);
-        expect(row.servedModel, `seq ${row.seq}`).toBe(served(row.model as string));
+        // A count_tokens answer names no model, so only a messages row has a served model.
+        if (row.requestKind === "messages")
+          expect(row.servedModel, `seq ${row.seq}`).toBe(served(row.model as string));
+        else expect(row.servedModel, `seq ${row.seq}`).toBeNull();
       }
       expect(forwardedRows.map((r) => r.model)).toEqual(
         expect.arrayContaining([DEFAULT_MODEL, CHEAP_MODEL, FALLBACK_MODEL]),

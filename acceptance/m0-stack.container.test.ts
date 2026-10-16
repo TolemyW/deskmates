@@ -246,7 +246,11 @@ describe.skipIf(!dockerUp)(
         expect(`${r.method} ${path}`, "route the proxy forwarded").toBe(`POST ${path}`);
         expect(PROXIED_PATHS, `upstream route ${r.method} ${path}`).toContain(path);
       }
-      const messages = upstream.requests.filter((r) => r.url.startsWith("/v1/messages"));
+      // The CLI also counts tokens through the proxy (`/v1/messages/count_tokens`, tools included,
+      // never streamed): the route loop above covers those; the turn checks below are `messages`.
+      const messages = upstream.requests.filter(
+        (r) => (r.url.split("?", 1)[0] ?? r.url) === "/v1/messages",
+      );
       expect(messages.length).toBeGreaterThanOrEqual(1);
       for (const r of messages) {
         expect(r.headers.authorization).toBe(`Bearer ${UPSTREAM_TOKEN}`);
