@@ -111,5 +111,5 @@ a section to this README.
 - [Responsive detail panes](docs/responsive-detail-panes.md)
 - [Roadmap](docs/roadmap.md): bot management
 - [Run progress: chat activity, run screen, approval waits (issue #9)](docs/run-progress.md)
-- [Runs index and run audit (ADR-0042)](docs/run-index.md): filters, what a run changed, marks
+- [Run audit (ADR-0042)](docs/run-index.md): the run drawer's story, what a run changed, marks
 - [Web interaction closeout: management and screen recovery](docs/management-and-screen-recovery.md)

@@ -19,8 +19,6 @@ const DESTINATIONS = [
   "Skills",
   "Computer",
   "Costs",
-  // The runs index (issue #11, ADR-0042).
-  "Runs",
   "Integrations",
   "People",
   // A tenant Owner sees Network (ADR-0027 amendment 1 decision 12, owner-decided 2026-10-14).
@@ -116,7 +114,7 @@ it("groups Files, Knowledge and Skills under Resources and puts Computer first u
     { label: "Resources", links: ["#/resources/files", "#/knowledge/documents", "#/skills"] },
     {
       label: "Operate",
-      links: ["#/computer", "#/costs", "#/run-index", "#/integrations", "#/members", "#/network"],
+      links: ["#/computer", "#/costs", "#/integrations", "#/members", "#/network"],
     },
   ]);
 });

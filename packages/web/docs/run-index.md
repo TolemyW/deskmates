@@ -1,12 +1,16 @@
-# Runs index and run audit (ADR-0042)
+# Run audit (ADR-0042)
 
 Issue #11. Gateway side: [Run audit and ledger retention](../../gateway/docs/run-audit.md).
 
-## Runs index
+## Where runs are reached
 
-`features/run-index/`, route `runIndex` at `#/run-index`, a **Runs** link in the Operate group after Costs, shown to roles that may take `run.read` (Member and above). It lists the runs of the workspace selected in the sidebar, newest first, through `RunsApi.listRuns`; outside the shell (tests, demo) it sends no workspace and the Gateway scopes the list to the caller's workspaces.
+There is no runs screen. A run is opened from where it happened: the Activity cards of a chat, an approval card, a task, or a link to `#/runs/<id>`, which opens the run drawer over the screen that was showing. The runs index of issue #11 (`#/run-index`, a **Runs** link in the Operate group with status, bot, lane, date, failure-class and text filters) was withdrawn by the owner on 2026-10-16: it listed raw errors next to successes and nobody triaged from it. The filters stay on `GET /api/runs` for scripts and for the compare tooling.
 
-Filters: status, bot (from `listBots` of the workspace), lane, a date range (`until` counts the whole day), failure class, and text over the error, applied on Search so typing does not send a request per key. Every other filter change refetches the first page with the composed filter; **Load older** follows `nextCursor` with the same filter. A row shows time, bot, lane, status, failure class, the mark badge, and its text: the run's Activity summary (ADR-0033) when one is ready, else the first line of its error or reply. A row opens the run drawer (`#/runs/<id>`).
+## Run drawer: the story first
+
+`features/runs/run.tsx` leads with the run's status, bot, trigger and duration, then **What the bot is doing** (`run-story-panel.tsx`, derived by `run-story.ts` from the ledger alone): each `thinking` event heads a segment with the bot's first sentence (the whole thought opens on demand), and the tool calls, approvals, screenshots, takeovers, stalls, caps and model retries that follow are its steps, one verb and object per line (`Ran a command` with the command, `Opened a page` with the host and path, `Posted in the chat` with the first line). The open call of a live run ticks; a screenshot sits under the step that took it. Telemetry (`turn_usage`, compactions, memory bookkeeping, diagnostic logs) is not part of the story.
+
+Everything else is behind two blocks: **Details** (facts, the run id, usage, the progress and intervention panel, startup timeline, phase timing, what the run changed) and **Technical log** (the raw ledger, oldest or newest first, diagnostic rows on request). A run waiting for a continuation opens Details with the intervention panel first.
 
 ## Run drawer: what this run changed
 
