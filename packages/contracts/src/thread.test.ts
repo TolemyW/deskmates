@@ -18,9 +18,16 @@ const members = [
 
 describe("mentionDiagnostics (ADR-0005 amendment 2)", () => {
   it("reports names nobody has and member names written with a space after the @", () => {
-    expect(mentionDiagnostics("@ bob please, cc @human and @alice", members, alice)).toEqual({
-      unknown: ["human"],
+    expect(mentionDiagnostics("@ bob please, cc @nobody and @alice", members, alice)).toEqual({
+      unknown: ["nobody"],
       spaced: ["bob"],
+    });
+  });
+
+  it("treats what a bot calls the person it talks to as nobody's address (ADR-0024 amendment 3)", () => {
+    expect(mentionDiagnostics("@user see above; @Human, @operator and @you too", members)).toEqual({
+      unknown: [],
+      spaced: [],
     });
   });
 

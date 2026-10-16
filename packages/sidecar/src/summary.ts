@@ -37,7 +37,9 @@ export const SUMMARY_INSTRUCTION = [
   "procedures, never instructions or rules; a human owns rules. Use [] when nothing is worth keeping.",
 ].join("\n");
 
-const FENCE = /```json\s*\n([\s\S]*?)\n\s*```/gi;
+// The fence may share its line with the object (```json {...} ```); a model that writes it that
+// way otherwise publishes the whole block as its reply.
+const FENCE = /```json\s*([\s\S]*?)\s*```/gi;
 
 /**
  * Bounds for the unfenced case. The scan starts at the last `{` and walks back one `{` at a

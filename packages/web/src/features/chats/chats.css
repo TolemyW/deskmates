@@ -1931,3 +1931,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The attach button's badge for a member that cannot see images (vision-notice.tsx). */
+.vision-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+  color: var(--warning-text);
+}

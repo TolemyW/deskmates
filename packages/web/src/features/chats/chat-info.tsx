@@ -90,6 +90,13 @@ export function ChatInfo(props: ChatInfoProps) {
     </button>
   );
 
+  // Only what is unusual: a turn limit when one is on, paused when the chat is paused.
+  const budget = shownTurnBudget(detail, t("limits.off"));
+  const headerNote = [
+    ...(typeof budget === "number" ? [t("chatInfo.turnLimit", { budget })] : []),
+    ...(detail.thread.status === "paused" ? [t("chatInfo.status.paused")] : []),
+  ].join(" · ");
+
   return (
     <DetailPane
       open={props.shown}
@@ -119,15 +126,7 @@ export function ChatInfo(props: ChatInfoProps) {
                   : t("chatInfo.kind.private")}
             </span>
             <h2>{detail.thread.title || nameOf(members[0]?.botId ?? "")}</h2>
-            <p className="muted small">
-              {t("chatInfo.turnBudget", {
-                budget: shownTurnBudget(detail, t("limits.off")),
-                status:
-                  detail.thread.status === "paused"
-                    ? t("chatInfo.status.paused")
-                    : t("chatInfo.status.active"),
-              })}
-            </p>
+            {headerNote ? <p className="muted small">{headerNote}</p> : null}
           </header>
 
           {section("members", <Users size={15} />, t("chatInfo.section.members"), members.length)}

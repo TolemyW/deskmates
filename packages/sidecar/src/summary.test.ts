@@ -136,6 +136,15 @@ describe("parseRunSummary with unescaped quotes inside the strings", () => {
     '"reply": "@team_chief 【最省钱方案】单价"基于已有知识，未在线核实"。\\n\\n(a) 方案：S3 + Athena。"}',
   ].join(" ");
 
+  it("reads a block whose fence shares its line with the object", () => {
+    const { summary, parsed } = parseRunSummary(
+      '```json {"done": "checked the labels", "reply": "All labels verified."} ```',
+    );
+    expect(parsed).toBe(true);
+    expect(summary.reply).toBe("All labels verified.");
+    expect(summary.done).toBe("checked the labels");
+  });
+
   it("recovers the reply and done from a fenced block", () => {
     const { summary, parsed } = parseRunSummary(`\`\`\`json\n${broken}\n\`\`\``, "fallback");
     expect(parsed).toBe(false);

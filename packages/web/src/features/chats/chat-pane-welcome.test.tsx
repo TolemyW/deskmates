@@ -107,6 +107,18 @@ describe("welcome delivery in the chat pane", () => {
     expect(screen.queryByRole("button", { name: "Retry welcome" })).toBeNull();
   });
 
+  it("drops the failure banner once the conversation has moved on", async () => {
+    renderPane(
+      routes(
+        [welcome({ status: "failed", welcomeDelivery: "undelivered" })],
+        [message(40, "human", "a later question", { ts: "2026-09-21T10:05:00.000Z" })],
+      ),
+    );
+    await screen.findByText("a later question");
+    expect(screen.queryByText(FAILED_TEXT)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry welcome" })).toBeNull();
+  });
+
   it("keeps an empty silent welcome retryable and submits a double click once", async () => {
     let resolveRetry: (value: unknown) => void = () => {};
     const { calls } = renderPane(

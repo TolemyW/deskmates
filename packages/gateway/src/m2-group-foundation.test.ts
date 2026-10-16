@@ -549,7 +549,7 @@ describe("ADR-0005 amendment 2 through the Gateway: an unaddressed request gets 
       if (req.botName === "chief" && ++chiefRuns === 1) {
         for (const body of [
           "@alice count item K",
-          "@ bob, and you look up the price. cc @human",
+          "@ bob, and you look up the price. cc @nobody",
           "@everyone status?",
         ]) {
           const res = await gw.post("messages", {
@@ -581,7 +581,7 @@ describe("ADR-0005 amendment 2 through the Gateway: an unaddressed request gets 
         seq: posted[1]?.seq,
         addressed: [],
         everyone: false,
-        unknown: ["human"],
+        unknown: ["nobody"],
         spaced: ["bob"],
       },
       { seq: posted[2]?.seq, addressed: [], everyone: true, unknown: [], spaced: [] },

@@ -33,6 +33,7 @@ import {
   useWorkspaceUploads,
 } from "../files/files-upload.js";
 import type { UploadApi } from "../files/upload-driver.js";
+import { VisionBadge } from "./vision-notice.js";
 
 /** The icon of a file's type, from its extension only. */
 export function FileTypeIcon({ name, size = 16 }: { name: string; size?: number }) {
@@ -207,9 +208,12 @@ export function ComposerAttachmentChips({ attachments }: { attachments: Composer
 export function ComposerAttachButton({
   attachments,
   disabled,
+  blindNames = [],
 }: {
   attachments: ComposerAttachments;
   disabled?: boolean;
+  /** Members whose model cannot see an attached image: the clip says so beside itself. */
+  blindNames?: readonly string[];
 }) {
   const t = useT();
   const input = useRef<HTMLInputElement>(null);
@@ -239,6 +243,7 @@ export function ComposerAttachButton({
       >
         <Paperclip size={18} aria-hidden="true" />
       </Button>
+      <VisionBadge names={blindNames} />
     </span>
   );
 }

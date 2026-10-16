@@ -98,8 +98,8 @@ describe("ChatInfo turn budget (ADR-0005 amendment 5 decision 38)", () => {
   it("shows the workspace's effective budget, not the thread row's", async () => {
     renderChat({ effectiveTurnBudget: { value: 20, source: "workspace" } });
     const dialog = await screen.findByRole("dialog", { name: "Chat info" });
-    expect(within(dialog).getByText(/Turn budget 20/)).toBeTruthy();
-    expect(within(dialog).queryByText(/Turn budget 8/)).toBeNull();
+    expect(within(dialog).getByText(/Turn limit 20/)).toBeTruthy();
+    expect(within(dialog).queryByText(/Turn limit 8/)).toBeNull();
   });
 
   it("says off when the workspace turned the budget off, and falls back to the row", () => {

@@ -345,6 +345,20 @@ function closeSpacedMentions(body: string, byName: ReadonlyMap<string, unknown>)
 }
 
 /**
+ * What a bot calls the person it is talking to. These address no member and are never an
+ * attempted handoff to another bot, so diagnostics and the private-chat router leave them alone
+ * (ADR-0024 amendment 3). A member of that name still matches as a member; a non-member bot of
+ * that name is not reached by it.
+ */
+export const HUMAN_ADDRESSES: ReadonlySet<string> = new Set([
+  "user",
+  "human",
+  "operator",
+  "owner",
+  "you",
+]);
+
+/**
  * What a message looks like it meant to address and did not (ADR-0005 amendment 2): `@names`
  * that match no member, and member names written as `@ name`, with a space, which the parser
  * above does not read as a mention. Facts for whoever posted the message, so a hand-off that
@@ -361,7 +375,8 @@ export function mentionDiagnostics(
   const unknown = new Set<string>();
   for (const match of body.matchAll(MENTION_PATTERN)) {
     const name = match[2] ?? "";
-    if (name.toLowerCase() === "everyone" || byName.has(name.toLowerCase())) continue;
+    const key = name.toLowerCase();
+    if (key === "everyone" || HUMAN_ADDRESSES.has(key) || byName.has(key)) continue;
     unknown.add(name);
   }
   const spaced = new Set<string>();

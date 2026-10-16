@@ -146,7 +146,7 @@ import { WorkspaceFilePreview } from "../files/workspace-file-preview.js";
 import { ReplyPreviews, replyPreviewReducer } from "./reply-preview.js";
 import { useRunActivity } from "./use-run-activity.js";
 import { type WorkspaceLockState, useWorkspaceLock } from "./use-workspace-lock.js";
-import { VisionNotice } from "./vision-notice.js";
+import { VisionNotice, useBlindMembers } from "./vision-notice.js";
 
 export interface ChatPaneProps {
   threadId: ThreadId;
@@ -231,6 +231,8 @@ export function ChatPane(props: ChatPaneProps) {
     mirrorChannel === undefined &&
     detail?.thread.workspaceId !== undefined;
   const dropTarget = useChatDropTarget(composerFiles, attachAllowed);
+  // ADR-0023 amendment 2 decision 14: members whose model cannot see what gets attached.
+  const blindNames = useBlindMembers(api, detail?.thread.workspaceId, members);
   // The subscription callbacks outlive a render, so the refetch reads the transcript from a ref.
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -474,7 +476,17 @@ export function ChatPane(props: ChatPaneProps) {
           state.messages.some((message) => isWelcomeGreeting(latestWelcome, message)),
       )
     : undefined;
-  const canRetryWelcome = welcomeState === "undelivered";
+  // Once the conversation has moved on (a human or bot message after the welcome, other than
+  // the welcome's own), its banner would only sit above every later exchange.
+  const conversationMovedOn =
+    latestWelcome !== undefined &&
+    state.messages.some(
+      (message) =>
+        message.authorKind !== "system" &&
+        message.runId !== latestWelcome.id &&
+        message.ts > latestWelcome.createdAt,
+    );
+  const canRetryWelcome = welcomeState === "undelivered" && !conversationMovedOn;
 
   const retryWelcome = async () => {
     if (!latestWelcome || retryingWelcome) return;
@@ -689,7 +701,7 @@ export function ChatPane(props: ChatPaneProps) {
                     {retryingWelcome ? t("chatPane.welcome.retrying") : t("chatPane.welcome.retry")}
                   </Button>
                 </aside>
-              ) : welcomeState === "partial" && latestWelcome ? (
+              ) : welcomeState === "partial" && latestWelcome && !conversationMovedOn ? (
                 <output className="chat-notice">
                   {t("chatPane.welcome.partial", { status: runStatusLabel(latestWelcome.status) })}
                 </output>
@@ -748,7 +760,6 @@ export function ChatPane(props: ChatPaneProps) {
                   <p className="muted small">{t("chatPane.composer.sideChatHint")}</p>
                 </div>
               )}
-              <VisionNotice api={api} workspaceId={detail?.thread.workspaceId} members={members} />
               {mirrorChannel !== undefined ? null : (
                 <form
                   className="composer"
@@ -756,6 +767,9 @@ export function ChatPane(props: ChatPaneProps) {
                   hidden={!canPost.allowed}
                   onPaste={onComposerPaste(composerFiles, attachAllowed)}
                 >
+                  {composerFiles.uploads.jobs.length > 0 ? (
+                    <VisionNotice names={blindNames} />
+                  ) : null}
                   <ComposerAttachmentChips attachments={composerFiles} />
                   <div className="composer-box">
                     <MentionTextarea
@@ -778,6 +792,7 @@ export function ChatPane(props: ChatPaneProps) {
                           <ComposerAttachButton
                             attachments={composerFiles}
                             disabled={!attachAllowed}
+                            blindNames={blindNames}
                           />
                           {members.length > 1 &&
                           detail?.groupRouting !== "round-v1" &&
