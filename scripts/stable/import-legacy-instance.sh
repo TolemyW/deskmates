@@ -178,7 +178,16 @@ cmd_cutover() {
         [ -n "$(docker run --rm -v "$dst:/to:ro" "$COPY_IMAGE" sh -c 'ls -A /to' 2>/dev/null)" ]; then
         warn "$dst exists and is not empty; left as is"; skipped=$((skipped + 1)); continue
       fi
-      run docker volume create "$dst" >/dev/null
+      # The provider refuses a volume whose ownership labels it did not write (docker-provider.ts
+      # ensureWorkspaceVolume), so the copy carries the legacy labels under the new prefix:
+      # <former>.managed/.workspace/.tenant become deskmates.managed/.workspace/.tenant.
+      local labels=()
+      while IFS= read -r kv; do
+        [ -n "$kv" ] && labels+=(--label "${NEW_PREFIX}.${kv#"${LEGACY_PREFIX}".}")
+      done < <(docker volume inspect -f '{{range $k, $v := .Labels}}{{$k}}={{$v}}{{"\n"}}{{end}}' "$src" |
+        grep "^${LEGACY_PREFIX}\." || true)
+      [ "${#labels[@]}" -gt 0 ] || warn "$src carries no ${LEGACY_PREFIX}.* label; $dst gets none and the new Gateway will refuse it"
+      run docker volume create "${labels[@]}" "$dst" >/dev/null
       run docker run --rm -v "$src:/from:ro" -v "$dst:/to" "$COPY_IMAGE" sh -c 'cp -a /from/. /to/'
       copied=$((copied + 1))
     done
