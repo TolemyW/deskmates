@@ -11,7 +11,7 @@ import {
   getDefaultEnvironment,
 } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import type { ToolOutcome, ToolSpec } from "./types.js";
+import type { ToolImage, ToolOutcome, ToolSpec } from "./types.js";
 
 export interface McpConnection {
   name: string;
@@ -19,22 +19,28 @@ export interface McpConnection {
   close(): Promise<void>;
 }
 
-/** The text the model gets for a non-text content block; images are notices on this runtime. */
-function contentText(content: unknown): string {
-  if (!Array.isArray(content)) return "";
+/**
+ * The text the model gets for the content blocks, and the images apart: an image block becomes
+ * a numbered note in the text and travels as a user message (`model-wrapper.ts`).
+ */
+function contentParts(content: unknown): { text: string; images: ToolImage[] } {
+  const images: ToolImage[] = [];
+  if (!Array.isArray(content)) return { text: "", images };
   const parts: string[] = [];
   for (const block of content as Record<string, unknown>[]) {
     if (block.type === "text" && typeof block.text === "string") parts.push(block.text);
-    else if (block.type === "image")
-      parts.push(
-        `[image ${typeof block.mimeType === "string" ? block.mimeType : ""} omitted on this runtime]`,
-      );
-    else if (block.type === "resource" && block.resource && typeof block.resource === "object") {
+    else if (block.type === "image" && typeof block.data === "string") {
+      images.push({
+        mediaType: typeof block.mimeType === "string" ? block.mimeType : "image/png",
+        base64: block.data,
+      });
+      parts.push(`[image ${images.length} attached]`);
+    } else if (block.type === "resource" && block.resource && typeof block.resource === "object") {
       const r = block.resource as { text?: unknown };
       if (typeof r.text === "string") parts.push(r.text);
     }
   }
-  return parts.join("\n");
+  return { text: parts.join("\n"), images };
 }
 
 async function toolsOf(name: string, client: Client): Promise<ToolSpec[]> {
@@ -52,7 +58,12 @@ async function toolsOf(name: string, client: Client): Promise<ToolSpec[]> {
         content?: unknown;
         isError?: boolean;
       };
-      return { text: contentText(result.content), ...(result.isError ? { isError: true } : {}) };
+      const { text, images } = contentParts(result.content);
+      return {
+        text,
+        ...(images.length > 0 ? { images } : {}),
+        ...(result.isError ? { isError: true } : {}),
+      };
     },
   }));
 }

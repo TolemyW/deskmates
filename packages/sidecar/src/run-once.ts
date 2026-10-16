@@ -201,8 +201,9 @@ export function resolveAllowlist(
  */
 export function maxContextTokensOf(
   env: Readonly<Record<string, string | undefined>>,
+  key = "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
 ): number | undefined {
-  const raw = env.CLAUDE_CODE_MAX_CONTEXT_TOKENS?.trim();
+  const raw = env[key]?.trim();
   if (raw === undefined || !/^\d+$/.test(raw)) return undefined;
   const n = Number(raw);
   return Number.isSafeInteger(n) && n > 0 ? n : undefined;
@@ -643,7 +644,11 @@ export async function runOnce(
     };
     // Recorded from what the CLI actually receives, not from the container environment: a value
     // the passthrough drops has no effect on compaction and must not be attributed to the run.
-    const maxContextTokens = maxContextTokensOf(env);
+    // ADR-0042: the OpenAI runtime has its own knob, read from the same passthrough environment.
+    const maxContextTokens =
+      request.runtime === "openai-agents"
+        ? maxContextTokensOf(env, "DESKMATES_OPENAI_MAX_CONTEXT_TOKENS")
+        : maxContextTokensOf(env);
     if (maxContextTokens !== undefined) ended.maxContextTokens = maxContextTokens;
     // ADR-0023 decision 3: one `model_switch` per switch the SDK makes, whatever asked for it.
     // An overload fallback does not come through here in SDK 0.3.278 (see `model-switch.ts`).
@@ -747,6 +752,12 @@ export async function runOnce(
         botName: request.botName,
         runId: request.runId,
         cwd,
+        skills: {
+          dir: skillDir,
+          names: skillPlugin.set.map((s) => s.name),
+          readFile: (path) => deps.fs.readFile(path),
+        },
+        ...(maxContextTokens === undefined ? {} : { maxContextTokens }),
       });
     } else {
       stream = deps.query({ prompt: context.prompt, options });

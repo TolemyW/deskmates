@@ -1,7 +1,7 @@
 // The OpenAI Agents SDK as a second agent loop (ADR-0042). `runOnce` hands it the same prompt and
 // options it would hand the Claude SDK; this module runs the loop in-process and yields
-// messages shaped like the Claude SDK's, so the ledger, approvals, taint and handoff code never learn which
-// runtime ran.
+// messages shaped like the Claude SDK's, so the ledger, approvals, taint and handoff code never
+// learn which runtime ran.
 //
 // One gate for both runtimes (decision 2): before any tool runs, the sidecar's PreToolUse hook is
 // called with the Agents SDK call id as the tool-use id. `allow` runs the tool; `deny` becomes the
@@ -11,8 +11,12 @@
 // pending interruptions are judged by the same hook, which turns the `approval` trigger into
 // allow or deny, and the state is approved or rejected and run on.
 //
-// Not on this runtime in this version: compaction, the reply-preview stream, per-turn usage
-// events, image tool results, `Skill`, subagents (ADR-0042 consequences).
+// The model's raw stream is turned into the Claude SDK's `stream_event`s (message_start, text
+// deltas, message_delta with usage, message_stop), which feed the reply preview and the per-turn
+// usage events; images a tool returns travel to the model through `model-wrapper.ts`, and so
+// does compaction when `DESKMATES_OPENAI_MAX_CONTEXT_TOKENS` is set (`compaction.ts`).
+//
+// Not on this runtime: subagents (`Agent`/`Task`), a fallback model (ADR-0042 consequences).
 
 import { randomUUID } from "node:crypto";
 import type { HookCallback, HookInput, Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
@@ -21,6 +25,7 @@ import {
   type AgentInputItem,
   type AgentOutputType,
   MaxTurnsExceededError,
+  type ModelProvider,
   OpenAIProvider,
   RunState,
   type RunToolApprovalItem,
@@ -32,16 +37,24 @@ import {
 import { builtinTools } from "./builtin-tools.js";
 import { FileSession, sessionDirOf } from "./file-session.js";
 import { connectMcpServers } from "./mcp-tools.js";
+import { wrapModel } from "./model-wrapper.js";
 import {
   type ModelUsageTotals,
   assistantText,
   assistantThinking,
   assistantToolUse,
+  compactBoundaryMessage,
+  contentBlockStartEvent,
   initMessage,
+  messageDeltaEvent,
+  messageStartEvent,
+  messageStopEvent,
   resultMessage,
+  textDeltaEvent,
   toolResultMessage,
 } from "./sdk-messages.js";
-import type { OpenAiQueryFn, OpenAiQueryParams, ToolSpec } from "./types.js";
+import { skillTool } from "./skill-tool.js";
+import type { OpenAiQueryFn, OpenAiQueryParams, ToolImage, ToolSpec } from "./types.js";
 
 /**
  * The non-strict JSON schema shape `tool()` accepts (`JsonObjectSchemaNonStrict`, which the SDK
@@ -88,6 +101,7 @@ export interface OpenAiRuntimeOptions {
   attachStdio?: boolean;
   /** Test seam: where file and shell tools run instead of the request's working directory. */
   cwdOverride?: string;
+  now?: () => Date;
 }
 
 export function createOpenAiQuery(opts: OpenAiRuntimeOptions = {}): OpenAiQueryFn {
@@ -126,12 +140,20 @@ function outputText(output: unknown): string {
   return String(output ?? "");
 }
 
-function usageTotals(usage: {
+interface SdkUsage {
   inputTokens: number;
   outputTokens: number;
-  inputTokensDetails: Array<Record<string, number>>;
-}): ModelUsageTotals {
-  const cached = usage.inputTokensDetails.reduce((n, d) => n + (d.cached_tokens ?? 0), 0);
+  inputTokensDetails?: Record<string, number> | Array<Record<string, number>>;
+}
+
+function cachedOf(usage: SdkUsage): number {
+  const details = usage.inputTokensDetails;
+  if (Array.isArray(details)) return details.reduce((n, d) => n + (d.cached_tokens ?? 0), 0);
+  return details?.cached_tokens ?? 0;
+}
+
+function usageTotals(usage: SdkUsage): ModelUsageTotals {
+  const cached = cachedOf(usage);
   // The Claude SDK counts cache reads outside `input_tokens`; OpenAI counts them inside
   // `prompt_tokens`. Report the Claude way so one price table applies to both runtimes.
   return {
@@ -156,6 +178,7 @@ async function* runOpenAi(
   const { options } = params;
   const env = opts.env ?? process.env;
   const cwd = opts.cwdOverride ?? params.cwd;
+  const now = opts.now ?? (() => new Date());
   const startedAt = Date.now();
   const model = options.model ?? "";
   const sessionId = options.resume ?? randomUUID();
@@ -168,6 +191,12 @@ async function* runOpenAi(
   const decisions = new Map<string, GateDecision>();
   /** Calls whose result the model should see as an error. */
   const erroredCalls = new Set<string>();
+  /** Images tools returned, by call id, carried to the model by the model wrapper. */
+  const images = new Map<string, ToolImage>();
+  /** Messages produced outside the event stream (a compaction), yielded at the next event. */
+  const pendingMessages: SDKMessage[] = [];
+  /** Prompt tokens the last response reported, cached part included (compaction judges it). */
+  let lastPromptTokens = session.lastPromptTokens;
 
   async function gate(
     toolName: string,
@@ -242,8 +271,6 @@ async function* runOpenAi(
     return tool({
       name: spec.name,
       description: spec.description,
-      // The model sees the MCP server's or the built-in tool's own JSON schema; the SDK's typed
-      // schema parameter cannot describe a schema only known at run time.
       parameters: nonStrictSchema(spec.parameters),
       strict: false,
       needsApproval: async (_ctx, input, callId) => {
@@ -267,27 +294,45 @@ async function* runOpenAi(
         }
         const outcome = await spec.run(args, details?.signal);
         if (outcome.isError) erroredCalls.add(id);
+        // One image per call reaches the model; the first is the page, the rest are rare.
+        const image = outcome.images?.[0];
+        if (image !== undefined) images.set(id, image);
         return postTool(spec.name, args, id, outcome.text);
       },
     });
   }
 
   const servers = await connectMcpServers(options.mcpServers, env, opts.attachStdio ?? true);
-  const specs: ToolSpec[] = [...builtinTools(cwd), ...servers.flatMap((s) => s.tools)];
+  const specs: ToolSpec[] = [
+    ...builtinTools(cwd),
+    ...(params.skills && params.skills.names.length > 0 ? [skillTool(params.skills)] : []),
+    ...servers.flatMap((s) => s.tools),
+  ];
   const agent: Agent<unknown, AgentOutputType> = new Agent({
     name: params.botName,
     instructions: systemPrompt,
     model,
     tools: specs.map(gatedTool),
   });
-  const runner = new Runner({
-    modelProvider: new OpenAIProvider({
-      baseURL: `${params.modelBaseUrl.replace(/\/+$/, "")}/v1`,
-      apiKey: params.modelAuthToken,
-      useResponses: false,
-    }),
-    tracingDisabled: true,
+  const provider = new OpenAIProvider({
+    baseURL: `${params.modelBaseUrl.replace(/\/+$/, "")}/v1`,
+    apiKey: params.modelAuthToken,
+    useResponses: false,
   });
+  const modelProvider: ModelProvider = {
+    getModel: async (name) =>
+      wrapModel(await provider.getModel(name), {
+        images,
+        lastPromptTokens: () => lastPromptTokens,
+        maxContextTokens: params.maxContextTokens,
+        onCompacted: async ({ preTokens, items }) => {
+          await session.compactTo(items, now());
+          lastPromptTokens = undefined;
+          pendingMessages.push(compactBoundaryMessage(sessionId, preTokens));
+        },
+      }),
+  };
+  const runner = new Runner({ modelProvider, tracingDisabled: true });
   const maxTurns = options.maxTurns ?? UNCAPPED_TURNS;
 
   yield initMessage({
@@ -310,6 +355,7 @@ async function* runOpenAi(
     if (delta.inputTokens + delta.outputTokens + delta.cacheReadInputTokens > 0)
       await session.addUsage({ [model]: delta });
   };
+  const messageIdOf = (turn: number) => `msg_${sessionId.slice(0, 8)}_${turn}`;
 
   try {
     let input: string | AgentInputItem[] | RunState<unknown, typeof agent> = params.prompt;
@@ -346,16 +392,28 @@ async function* runOpenAi(
         session,
       });
       for await (const event of streamed) {
+        while (pendingMessages.length > 0) yield pendingMessages.shift() as SDKMessage;
         if (event.type === "raw_model_stream_event") {
-          if (event.data.type === "response_started") {
+          const data = event.data;
+          if (data.type === "response_started") {
             numTurns += 1;
             turnId += 1;
+            yield messageStartEvent(sessionId, messageIdOf(turnId), model);
+            yield contentBlockStartEvent(sessionId);
+          } else if (data.type === "output_text_delta") {
+            yield textDeltaEvent(sessionId, data.delta);
+          } else if (data.type === "response_done") {
+            const usage = data.response.usage as SdkUsage;
+            lastPromptTokens = usage.inputTokens;
+            await session.setLastPromptTokens(usage.inputTokens);
+            yield messageDeltaEvent(sessionId, usageTotals(usage));
+            yield messageStopEvent(sessionId);
           }
           continue;
         }
         if (event.type !== "run_item_stream_event") continue;
         const raw = event.item.rawItem as Record<string, unknown> | undefined;
-        const messageId = `msg_${sessionId.slice(0, 8)}_${turnId}`;
+        const messageId = messageIdOf(turnId);
         if (event.name === "message_output_created") {
           const text = outputText(
             Array.isArray(raw?.content)
@@ -388,6 +446,7 @@ async function* runOpenAi(
         }
       }
       await streamed.completed;
+      while (pendingMessages.length > 0) yield pendingMessages.shift() as SDKMessage;
       latest = usageTotals(streamed.state.usage);
       const interruptions = streamed.interruptions ?? [];
       if (interruptions.length === 0) break;

@@ -7,6 +7,7 @@ import { dirname } from "node:path";
 import { createSdkMcpServer, query, tool } from "@anthropic-ai/claude-agent-sdk";
 import type { SidecarDeps, SidecarFs } from "./deps.js";
 import { readResourceObservation } from "./resource-observation.js";
+import { createOpenAiCompletion } from "./runtime/openai/complete.js";
 import { createOpenAiQuery } from "./runtime/openai/openai-runtime.js";
 import { saveToolEvidence } from "./tool-evidence-store.js";
 
@@ -82,6 +83,7 @@ export function createRealDeps(
     query: (params) => query(params),
     // ADR-0042: the second loop, in this process; nothing else in the repository imports it.
     queryOpenAi: createOpenAiQuery({ env }),
+    completeOpenAi: createOpenAiCompletion(),
     tool,
     createSdkMcpServer,
     fetch: (input, init) => globalThis.fetch(input, init),

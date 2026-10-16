@@ -201,3 +201,82 @@ export function resultMessage(opts: {
     errors: opts.outcome.errors,
   });
 }
+
+/** The per-response usage in the Anthropic shape the turn-usage tracker reads. */
+export interface ResponseUsageCounts {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+}
+
+function streamEvent(sessionId: string, event: Record<string, unknown>): SDKMessage {
+  return asSdk({
+    type: "stream_event",
+    uuid: randomUUID(),
+    session_id: sessionId,
+    parent_tool_use_id: null,
+    event,
+  });
+}
+
+/** A model response begins: opens the turn for the usage tracker and the reply preview. */
+export function messageStartEvent(sessionId: string, messageId: string, model: string): SDKMessage {
+  return streamEvent(sessionId, {
+    type: "message_start",
+    message: {
+      id: messageId,
+      type: "message",
+      role: "assistant",
+      model,
+      content: [],
+      stop_reason: null,
+      stop_sequence: null,
+      usage: {},
+    },
+  });
+}
+
+export function contentBlockStartEvent(sessionId: string): SDKMessage {
+  return streamEvent(sessionId, {
+    type: "content_block_start",
+    index: 0,
+    content_block: { type: "text", text: "" },
+  });
+}
+
+export function textDeltaEvent(sessionId: string, text: string): SDKMessage {
+  return streamEvent(sessionId, {
+    type: "content_block_delta",
+    index: 0,
+    delta: { type: "text_delta", text },
+  });
+}
+
+/** A model response ends: its usage, then the stop that finalises the turn. */
+export function messageDeltaEvent(sessionId: string, usage: ResponseUsageCounts): SDKMessage {
+  return streamEvent(sessionId, {
+    type: "message_delta",
+    delta: { stop_reason: "end_turn", stop_sequence: null },
+    usage: {
+      input_tokens: usage.inputTokens,
+      output_tokens: usage.outputTokens,
+      cache_read_input_tokens: usage.cacheReadInputTokens,
+      cache_creation_input_tokens: 0,
+    },
+  });
+}
+
+export function messageStopEvent(sessionId: string): SDKMessage {
+  return streamEvent(sessionId, { type: "message_stop" });
+}
+
+/** The runtime compacted the session (`compaction.ts`); the run loop ledgers it like the SDK's. */
+export function compactBoundaryMessage(sessionId: string, preTokens: number): SDKMessage {
+  return asSdk({
+    type: "system",
+    subtype: "compact_boundary",
+    uuid: randomUUID(),
+    session_id: sessionId,
+    compact_metadata: { trigger: "auto", pre_tokens: preTokens },
+  });
+}

@@ -233,7 +233,11 @@ export function registerRegistryRoutes(
       );
     }
     // ADR-0042 decision 7: judged on what the bot will run with after the patch.
-    if (patch.runtime !== undefined || patch.model !== undefined) {
+    if (
+      patch.runtime !== undefined ||
+      patch.model !== undefined ||
+      patch.cheapModel !== undefined
+    ) {
       const current = ctx.bots.mustGet(id);
       const effectiveRuntime =
         (patch.runtime === undefined ? current.runtime : (patch.runtime ?? undefined)) ??
@@ -241,7 +245,11 @@ export function registerRegistryRoutes(
       const effectiveModel =
         (patch.model === undefined ? current.model : (patch.model ?? undefined)) ??
         ctx.config.defaultModel;
+      const effectiveCheap =
+        (patch.cheapModel === undefined ? current.cheapModel : (patch.cheapModel ?? undefined)) ??
+        ctx.config.cheapModel;
       requireRuntimeModel(ctx, effectiveRuntime, effectiveModel);
+      requireRuntimeModel(ctx, effectiveRuntime, effectiveCheap);
     }
     const actor = decidedByHuman(requestActorId(request, body));
     const updated = {

@@ -22,9 +22,9 @@ let h: Harness;
 
 beforeEach(async () => {
   h = await startHarness({
-    modelPrices: [priced(OAI), priced("model-swapped")],
+    modelPrices: [priced(OAI), priced("oai-cheap"), priced("model-swapped")],
     modelUpstreams: [
-      { id: "oai", baseUrl: "http://127.0.0.1:1", models: [OAI], protocol: "openai" },
+      { id: "oai", baseUrl: "http://127.0.0.1:1", models: [OAI, "oai-cheap"], protocol: "openai" },
     ],
   });
 });
@@ -40,6 +40,7 @@ describe("bot runtime", () => {
       name: "oai",
       workspaceId: workspace.id,
       model: OAI,
+      cheapModel: "oai-cheap",
       runtime: "openai-agents",
       welcome: false,
     });
@@ -54,10 +55,8 @@ describe("bot runtime", () => {
     const cleared = await h.api<{ bot: BotDefinition }>(
       "PATCH",
       `/api/bots/${created.json.bot.id}`,
-      {
-        runtime: null,
-        model: "model-swapped",
-      },
+      // The cheap model goes back to the default too: it must speak the runtime's protocol.
+      { runtime: null, model: "model-swapped", cheapModel: null },
     );
     expect(cleared.status).toBe(200);
     expect(cleared.json.bot.runtime).toBeUndefined();
@@ -127,6 +126,7 @@ describe("bot runtime", () => {
       name: "oai",
       workspaceId: workspace.id,
       model: OAI,
+      cheapModel: "oai-cheap",
       runtime: "openai-agents",
       welcome: false,
     });

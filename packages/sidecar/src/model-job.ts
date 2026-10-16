@@ -19,6 +19,7 @@ import type { EventSink } from "./ledger.js";
 import { ModelSwitchRecorder, fallbackSwitch, isModelFallbackMessage } from "./model-switch.js";
 import { probePngBase64 } from "./probe-image.js";
 import { redactText } from "./redact.js";
+import { runOpenAiModelJob } from "./runtime/openai/model-job.js";
 import { TurnUsageTracker } from "./turn-usage.js";
 
 /**
@@ -223,6 +224,8 @@ export async function runModelJob(
   env: Options["env"],
   sink?: Pick<EventSink, "emit">,
 ): Promise<RunEnded> {
+  // ADR-0042 decision 7: a bot on the OpenAI runtime runs its jobs there too.
+  if (request.runtime === "openai-agents") return runOpenAiModelJob(request, job, deps, sink);
   const ended: RunEnded = { type: "run_ended", runId: request.runId, outcome: "failed", usage: [] };
   const turns = new TurnUsageTracker((payload) => sink?.emit("turn_usage", { ...payload }));
   const switches = new ModelSwitchRecorder((payload) => sink?.emit("model_switch", { ...payload }));

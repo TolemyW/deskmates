@@ -28,8 +28,10 @@ beforeEach(async () => {
     servedModel: `${OAI}-served`,
   });
   h = await startHarness({
-    modelPrices: [priced(OAI)],
-    modelUpstreams: [{ id: "oai", baseUrl: fake.baseUrl, models: [OAI], protocol: "openai" }],
+    modelPrices: [priced(OAI), priced("oai-cheap")],
+    modelUpstreams: [
+      { id: "oai", baseUrl: fake.baseUrl, models: [OAI, "oai-cheap"], protocol: "openai" },
+    ],
   });
 });
 
