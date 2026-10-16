@@ -1,78 +1,329 @@
 /* Styles of the network feature,
-   loaded after app.css by src/styles/feature-styles.ts. */
-.network-page .network-note {
-  color: var(--text-muted, inherit);
+   loaded after app.css by src/styles/feature-styles.ts. The workspace block, the editor and the
+   table of every profile; expired rows and choices are dimmed. */
+.network-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.network-form,
-.network-selection {
-  display: grid;
-  gap: 0.5rem;
-  max-width: 48rem;
-  margin-block: 1rem;
+.network-page .card {
+  padding: 16px 20px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
 }
 
-.network-form label,
-.network-selection label {
-  display: grid;
-  gap: 0.25rem;
+.network-page .card > h2 {
+  margin: 0 0 10px;
+  font-size: var(--app-text-md);
 }
 
-.network-form textarea {
-  font-family: var(--font-mono, monospace);
+.network-workspace-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.network-selection fieldset label:not(.network-expiry) {
+.network-workspace-head h2 {
+  margin: 0;
+}
+
+.network-picker {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
+  font-size: var(--app-text-sm);
 }
 
-.network-profiles > li {
-  margin-block: 0.75rem;
-  overflow-wrap: anywhere;
+/* The workspace's selection. */
+.network-selection {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .network-badge[data-trusted="true"] {
   font-weight: 600;
 }
 
-.network-publications li[data-status="failed"] {
-  color: var(--danger, #b42318);
+.network-choices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
 }
 
-.network-preflight {
+.network-choice {
   display: grid;
-  gap: 0.5rem;
-  max-width: 48rem;
-  margin-block: 1rem;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--app-radius);
+}
+
+.network-choice[data-selected="true"] {
+  background: var(--primary-soft);
+}
+
+.network-choice[data-expired="true"] .network-choice-name,
+.network-choice[data-expired="true"] .network-choice-targets {
+  color: var(--app-text-4);
+}
+
+.network-choice-main {
+  display: grid;
+  grid-template-columns: auto minmax(8em, 1fr) minmax(0, 2fr) auto;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--app-text-sm);
+  cursor: pointer;
+}
+
+.network-choice-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.network-choice-targets code,
+.network-rule-list code {
+  font-size: var(--app-text-xs);
   overflow-wrap: anywhere;
 }
 
-.network-preflight label,
-.network-selection fieldset .network-choice {
-  display: grid;
-  gap: 0.25rem;
+.network-choice-expiry {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-3);
+  white-space: nowrap;
 }
 
-.network-overlaps {
-  max-width: 48rem;
-  margin-block: 1rem;
-  padding: 0.75rem 1rem;
-  border-inline-start: 3px solid var(--danger, #b42318);
-  overflow-wrap: anywhere;
+.network-expired {
+  color: var(--warning-text);
+  font-weight: 600;
 }
 
-.network-preflight [data-ok="false"] {
-  color: var(--danger, #b42318);
+.network-expiry-never {
+  color: var(--app-text-3);
+}
+
+.network-expiry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 30px;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-3);
 }
 
 .network-selection label.network-switch {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
+  font-size: var(--app-text-sm);
 }
 
-.network-page .network-scope {
-  color: var(--text-muted, inherit);
+.network-selection .network-note {
+  margin: -4px 0 0 26px;
+}
+
+.network-apply {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.network-publications li[data-status="failed"] {
+  color: var(--danger-text);
+}
+
+/* Connectivity check, folded. */
+.network-preflight-block > summary {
+  cursor: pointer;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-3);
+}
+
+.network-preflight {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.network-preflight-row {
+  display: flex;
+  gap: 8px;
+}
+
+.network-preflight-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.network-preflight [data-ok="false"] {
+  color: var(--danger-text);
+}
+
+/* Overlaps: one line, the list behind it. */
+.network-overlaps {
+  padding: 8px 12px;
+  border-inline-start: 3px solid var(--warning-text);
+  background: var(--app-warning-soft);
+  border-radius: var(--app-radius);
+  font-size: var(--app-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.network-overlaps > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.network-warn {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: var(--app-radius-full);
+  background: var(--app-warning-soft);
+  color: var(--warning-text);
+  font-size: var(--app-text-xs);
+}
+
+/* The table of every profile. */
+.network-table td {
+  vertical-align: top;
+}
+
+.network-table tr[data-expired="true"] td {
+  color: var(--app-text-4);
+}
+
+.network-rule-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.network-table .network-scope {
+  white-space: nowrap;
+}
+
+.network-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+/* The editor. */
+.network-form {
+  display: grid;
+  gap: 12px;
+}
+
+.network-form > h3 {
+  margin: 0;
+  font-size: var(--app-text-md);
+}
+
+.network-form > label {
+  display: grid;
+  gap: 4px;
+  font-size: var(--app-text-sm);
+}
+
+.network-form fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.network-form legend {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 4px;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+}
+
+.network-expiry-choice {
+  grid-template-columns: repeat(auto-fit, minmax(8em, max-content));
+  align-items: center;
+}
+
+.network-expiry-choice legend {
+  grid-column: 1 / -1;
+}
+
+.network-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--app-text-sm);
+}
+
+.network-target-row {
+  display: grid;
+  grid-template-columns: max-content minmax(10em, 2fr) auto auto minmax(8em, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.network-target-row input[aria-label] {
+  min-width: 0;
+}
+
+.network-scheme {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--app-text-sm);
+  white-space: nowrap;
+}
+
+.network-form textarea {
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text-xs);
+}
+
+.network-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--primary-text);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  cursor: pointer;
+}
+
+.network-link:disabled {
+  color: var(--app-text-4);
+  cursor: default;
+}
+
+.network-form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .network-choice-main {
+    grid-template-columns: auto 1fr;
+  }
+  .network-choice-targets,
+  .network-choice-expiry {
+    grid-column: 2;
+  }
+  .network-target-row {
+    grid-template-columns: 1fr 1fr;
+  }
 }

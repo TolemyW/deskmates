@@ -1,48 +1,31 @@
 // Network profiles (ADR-0027 amendment 1, decisions 12 and 13 owner-decided 2026-10-14): the
 // administrator account and workspace Owners define named LAN grants; a workspace's Admins select
-// them. Authorization is the Gateway's: a refused call shows its message.
+// them. The screen leads with the workspace at hand (what it can reach, what it may select), then
+// lists every profile the caller may see in one table, with the editor above it when one is open.
+// Authorization is the Gateway's: a refused call shows its message.
 
 import type {
   NetworkOverlap,
   NetworkProfile,
   NetworkPublication,
-  NetworkRule,
   Workspace,
   WorkspaceId,
 } from "@deskmates/contracts";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@deskmates/ui";
 import { useCallback, useEffect, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { Button } from "../../components/ui/button.js";
-import { errorMessage, formatDateTime } from "../../format.js";
-import type { MessageKey } from "../../i18n/catalogs.js";
+import { errorMessage } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
+import { useWorkspaceForCalls } from "../../state/workspace-scope.js";
 import type { NetworkApi } from "./api.js";
-import { Publications, ruleSummary } from "./network-format.js";
+import { Expiry, Publications, isExpired, ruleSummary } from "./network-format.js";
+import { type ProfileDraft, ProfileForm, type ProfileInput, draftOf } from "./profile-form.js";
 import { WorkspaceNetworkPanel } from "./workspace-network-panel.js";
 
 export { ruleSummary } from "./network-format.js";
 
 type Api = Pick<ApiClient, "listWorkspaces"> & NetworkApi;
-
-const EXAMPLE_RULES: NetworkRule[] = [
-  { kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [23001] },
-];
-
-interface Draft {
-  id?: string;
-  revision?: number;
-  name: string;
-  description: string;
-  expiresAt: string;
-  rules: string;
-}
-
-const emptyDraft = (): Draft => ({
-  name: "",
-  description: "",
-  expiresAt: "",
-  rules: JSON.stringify(EXAMPLE_RULES, null, 2),
-});
 
 export function NetworkScreen({ api }: { api: Api }) {
   const t = useT();
@@ -50,9 +33,10 @@ export function NetworkScreen({ api }: { api: Api }) {
   const [manageAll, setManageAll] = useState(false);
   const [note, setNote] = useState<string>();
   const [error, setError] = useState<string>();
-  const [draft, setDraft] = useState<Draft>();
+  const [draft, setDraft] = useState<ProfileDraft>();
   const [publications, setPublications] = useState<NetworkPublication[]>([]);
   const [busy, setBusy] = useState(false);
+  const [overlaps, setOverlaps] = useState<NetworkOverlap[]>([]);
 
   const reload = useCallback(async () => {
     try {
@@ -69,6 +53,25 @@ export function NetworkScreen({ api }: { api: Api }) {
     void reload();
   }, [reload]);
 
+  // Amendment 2 decision 15: LAN targets the host routes into a Docker bridge. Advisory, root
+  // only, reread whenever the profile list changes; a failed read shows nothing.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `profiles` is the trigger to reread.
+  useEffect(() => {
+    if (!manageAll) return;
+    let active = true;
+    api.getNetworkOverlaps().then(
+      (report) => {
+        if (active) setOverlaps(report.overlaps);
+      },
+      () => {
+        if (active) setOverlaps([]);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [api, manageAll, profiles]);
+
   const run = async (action: () => Promise<NetworkPublication[] | undefined>) => {
     setBusy(true);
     setError(undefined);
@@ -82,20 +85,8 @@ export function NetworkScreen({ api }: { api: Api }) {
     }
   };
 
-  const save = (d: Draft) =>
+  const save = (d: ProfileDraft, input: ProfileInput) =>
     run(async () => {
-      let rules: NetworkRule[];
-      try {
-        rules = JSON.parse(d.rules) as NetworkRule[];
-      } catch (err) {
-        throw new Error(t("network.rulesInvalid", { error: errorMessage(err) }));
-      }
-      const input = {
-        name: d.name,
-        description: d.description,
-        rules,
-        ...(d.expiresAt.trim() ? { expiresAt: d.expiresAt.trim() } : {}),
-      };
       let result: NetworkPublication[] | undefined;
       if (d.id === undefined) await api.createNetworkProfile(input);
       else result = (await api.replaceNetworkProfile(d.id, input, d.revision)).publications;
@@ -108,216 +99,189 @@ export function NetworkScreen({ api }: { api: Api }) {
     void run(async () => (await api.deleteNetworkProfile(profile.id)).publications);
   };
 
+  const overlapping = new Set(overlaps.filter((o) => o.source === "profile").map((o) => o.label));
+
   return (
     <section className="workspace-screen resource-page page-container network-page">
       <header className="resource-heading">
         <div className="resource-heading-text">
           <h1>{t("network.title")}</h1>
           <p>{t("network.intro")}</p>
-          {note ? <p className="network-note">{note}</p> : null}
         </div>
         <Button disabled={busy} onClick={() => void reload()}>
           {t("network.refresh")}
         </Button>
-        <Button disabled={busy} onClick={() => setDraft(emptyDraft())}>
+        <Button disabled={busy || draft !== undefined} onClick={() => setDraft(draftOf())}>
           {t("network.new")}
         </Button>
       </header>
-      {error ? <p role="alert">{error}</p> : null}
+      {error ? (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      ) : null}
       <Publications publications={publications} />
-      {manageAll ? <Overlaps api={api} revision={profiles} /> : null}
       {draft ? (
         <ProfileForm
           draft={draft}
           busy={busy}
           onChange={setDraft}
-          onSave={() => void save(draft)}
+          onSave={(input) => void save(draft, input)}
           onCancel={() => setDraft(undefined)}
         />
       ) : null}
-      {profiles === undefined ? (
-        <p>{t("network.loading")}</p>
-      ) : profiles.length === 0 ? (
-        <p>{t("network.empty")}</p>
-      ) : (
-        <ul className="network-profiles">
-          {profiles.map((profile) => (
-            <li key={profile.id}>
-              <strong>{profile.name}</strong>{" "}
-              <span>{t("network.revision", { revision: profile.revision })}</span>{" "}
-              <span>
-                {profile.expiresAt
-                  ? t("network.expires", { date: formatDateTime(profile.expiresAt) })
-                  : t("network.persistent")}
-              </span>{" "}
-              <span className="network-scope">
-                {profile.ownerUserId ? t("network.scopeOwner") : t("network.scopeAll")}
-              </span>
-              {profile.description ? <p>{profile.description}</p> : null}
-              <ul>
-                {profile.rules.map((rule) => (
-                  <li key={ruleSummary(rule)}>
-                    <code>{ruleSummary(rule)}</code>
-                  </li>
-                ))}
-              </ul>
-              {profile.editable === false ? null : (
-                <>
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      setDraft({
-                        id: profile.id,
-                        revision: profile.revision,
-                        name: profile.name,
-                        description: profile.description,
-                        expiresAt: profile.expiresAt ?? "",
-                        rules: JSON.stringify(profile.rules, null, 2),
-                      })
-                    }
-                  >
-                    {t("network.edit")}
-                  </Button>
-                  <Button disabled={busy} onClick={() => remove(profile)}>
-                    {t("network.delete")}
-                  </Button>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      <WorkspaceSelection api={api} extraProfiles={manageAll ? (profiles ?? []) : []} note={note} />
+      <WorkspaceBlock api={api} extraProfiles={manageAll ? (profiles ?? []) : []} note={note} />
+      {overlaps.length > 0 ? (
+        <details className="network-overlaps">
+          <summary>{t("network.overlaps.summary", { count: overlaps.length })}</summary>
+          <p>{t("network.overlaps.intro")}</p>
+          <ul>
+            {overlaps.map((o) => (
+              <li key={`${o.source}:${o.label}:${o.cidr}:${o.network}:${o.networkCidr}`}>
+                {t("network.overlaps.item", {
+                  cidr: o.cidr,
+                  label: o.label,
+                  network: o.network,
+                  networkCidr: o.networkCidr,
+                })}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      <section className="card network-all" aria-labelledby="network-all-title">
+        <h2 id="network-all-title">{t("network.allProfiles")}</h2>
+        {profiles === undefined ? (
+          <p className="muted">{t("network.loading")}</p>
+        ) : profiles.length === 0 ? (
+          <p className="muted">{t("network.empty")}</p>
+        ) : (
+          <Table className="network-table" aria-label={t("network.allProfiles")}>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("network.col.name")}</TableHead>
+                <TableHead>{t("network.col.targets")}</TableHead>
+                <TableHead>{t("network.col.expires")}</TableHead>
+                <TableHead>{t("network.col.scope")}</TableHead>
+                <TableHead>{t("network.col.actions")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {profiles.map((profile) => (
+                <TableRow key={profile.id} data-expired={isExpired(profile.expiresAt)}>
+                  <TableCell>
+                    <strong>{profile.name}</strong>
+                    {overlapping.has(profile.name) ? (
+                      <span className="network-warn" title={t("network.overlaps.badge")}>
+                        {t("network.overlaps.badgeShort")}
+                      </span>
+                    ) : null}
+                    {profile.description ? (
+                      <p className="muted small">{profile.description}</p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>
+                    <ul className="network-rule-list">
+                      {profile.rules.map((rule) => (
+                        <li key={ruleSummary(rule)}>
+                          <code>{ruleSummary(rule)}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </TableCell>
+                  <TableCell>
+                    <Expiry expiresAt={profile.expiresAt} />
+                  </TableCell>
+                  <TableCell>
+                    <span className="network-scope">
+                      {profile.ownerUserId ? t("network.scopeOwner") : t("network.scopeAll")}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {profile.editable === false ? null : (
+                      <span className="network-actions">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => setDraft(draftOf(profile))}
+                        >
+                          {t("network.edit")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => remove(profile)}
+                        >
+                          {t("network.delete")}
+                        </Button>
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </section>
     </section>
   );
 }
 
-function ProfileForm(props: {
-  draft: Draft;
-  busy: boolean;
-  onChange: (draft: Draft) => void;
-  onSave: () => void;
-  onCancel: () => void;
-}) {
-  const t = useT();
-  const { draft, onChange } = props;
-  const field = (key: "name" | "description" | "expiresAt", label: MessageKey) => (
-    <label>
-      {t(label)}
-      <input value={draft[key]} onChange={(e) => onChange({ ...draft, [key]: e.target.value })} />
-    </label>
-  );
-  return (
-    <form
-      className="network-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        props.onSave();
-      }}
-    >
-      {field("name", "network.name")}
-      {field("description", "network.description")}
-      {field("expiresAt", "network.expiresAt")}
-      <label>
-        {t("network.rules")}
-        <textarea
-          rows={8}
-          value={draft.rules}
-          onChange={(e) => onChange({ ...draft, rules: e.target.value })}
-        />
-      </label>
-      <Button type="submit" disabled={props.busy}>
-        {t("network.save")}
-      </Button>
-      <Button disabled={props.busy} onClick={props.onCancel}>
-        {t("network.cancel")}
-      </Button>
-    </form>
-  );
-}
-
-/** A workspace picker over the shared panel; the root may select any profile. */
-function WorkspaceSelection(props: {
+/**
+ * The workspace at hand: the one selected in the sidebar, else the first the caller has; a
+ * picker appears only when there is more than one to choose from.
+ */
+function WorkspaceBlock(props: {
   api: Api;
   extraProfiles: readonly NetworkProfile[];
   note?: string | undefined;
 }) {
   const { api } = props;
   const t = useT();
+  const scope = useWorkspaceForCalls();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [workspaceId, setWorkspaceId] = useState<WorkspaceId>();
+  const [picked, setPicked] = useState<WorkspaceId>();
   const [error, setError] = useState<string>();
 
   useEffect(() => {
     api.listWorkspaces().then(
-      (list) => {
-        setWorkspaces(list);
-        setWorkspaceId((current) => current ?? list[0]?.id);
-      },
+      (list) => setWorkspaces(list),
       (err) => setError(errorMessage(err)),
     );
   }, [api]);
 
-  if (workspaces.length === 0)
-    return error ? <p role="alert">{error}</p> : <p>{t("network.noWorkspaces")}</p>;
+  const workspaceId = picked ?? scope.workspaceId ?? workspaces[0]?.id;
+  const current = workspaces.find((w) => w.id === workspaceId);
+  if (error) return <p role="alert">{error}</p>;
+  if (workspaces.length === 0 || workspaceId === undefined)
+    return <p className="muted">{t("network.noWorkspaces")}</p>;
   return (
-    <section className="network-selection">
-      <label>
-        {t("network.workspace")}
-        <select
-          value={workspaceId ?? ""}
-          onChange={(e) => setWorkspaceId(e.target.value as WorkspaceId)}
-        >
-          {workspaces.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {workspaceId ? (
-        <WorkspaceNetworkPanel
-          api={api}
-          workspaceId={workspaceId}
-          extraProfiles={props.extraProfiles}
-          note={props.note}
-        />
-      ) : null}
-    </section>
-  );
-}
-
-/**
- * Amendment 2 decision 15: LAN targets the host routes into a Docker bridge. Advisory; reread
- * whenever the profile list changes. A failed read shows nothing: the screen still works.
- */
-function Overlaps({ api, revision }: { api: Api; revision: unknown }) {
-  const t = useT();
-  const [overlaps, setOverlaps] = useState<NetworkOverlap[]>([]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `revision` triggers the reread.
-  useEffect(() => {
-    api.getNetworkOverlaps().then(
-      (report) => setOverlaps(report.overlaps),
-      () => setOverlaps([]),
-    );
-  }, [api, revision]);
-  if (overlaps.length === 0) return null;
-  return (
-    <section className="network-overlaps" aria-live="polite">
-      <h2>{t("network.overlaps.title")}</h2>
-      <p>{t("network.overlaps.intro")}</p>
-      <ul>
-        {overlaps.map((o) => (
-          <li key={`${o.source}:${o.label}:${o.cidr}:${o.network}:${o.networkCidr}`}>
-            {t("network.overlaps.item", {
-              cidr: o.cidr,
-              label: o.label,
-              network: o.network,
-              networkCidr: o.networkCidr,
-            })}
-          </li>
-        ))}
-      </ul>
+    <section className="card network-workspace" aria-labelledby="network-workspace-title">
+      <div className="network-workspace-head">
+        <h2 id="network-workspace-title">
+          {t("network.thisWorkspace", { workspace: current?.name ?? workspaceId })}
+        </h2>
+        {workspaces.length > 1 ? (
+          <label className="network-picker">
+            {t("network.workspacePicker")}
+            <select value={workspaceId} onChange={(e) => setPicked(e.target.value as WorkspaceId)}>
+              {workspaces.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+      </div>
+      <WorkspaceNetworkPanel
+        api={api}
+        workspaceId={workspaceId}
+        extraProfiles={props.extraProfiles}
+        note={props.note}
+      />
     </section>
   );
 }

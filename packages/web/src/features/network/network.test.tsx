@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
-// T0: the network profiles screen lists profiles, shows a workspace's grants, saves a selection
-// and reports each publication outcome; a refusal from the Gateway is shown as it came.
+// T0: the network profiles screen leads with the workspace at hand (its selection, with expired
+// profiles shown but not selectable, applied as one change), lists every profile in a table,
+// edits one in the structured form or as JSON, and reports each publication outcome; a refusal
+// from the Gateway is shown as it came.
 import "@testing-library/jest-dom/vitest";
 import type {
   NetworkProfile,
@@ -8,7 +10,7 @@ import type {
   WorkspaceId,
   WorkspaceNetworkView,
 } from "@deskmates/contracts";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { workspace } from "../../test-support/fixtures.js";
 import { NetworkScreen, ruleSummary } from "./network.js";
@@ -26,7 +28,14 @@ const profile: NetworkProfile = {
   updatedBy: "user:root",
 };
 
-function fakeApi(overrides: Record<string, unknown> = {}) {
+const expired: NetworkProfile = {
+  ...profile,
+  id: "netp_old",
+  name: "Old lab",
+  expiresAt: "2026-01-01T00:00:00Z",
+};
+
+function fakeApi(overrides: Record<string, unknown> = {}, available: NetworkProfile[] = [profile]) {
   const view = (trusted: boolean): WorkspaceNetworkView => ({
     workspaceId: workspace.id,
     trustedTest: trusted,
@@ -36,12 +45,12 @@ function fakeApi(overrides: Record<string, unknown> = {}) {
     grants: trusted ? profile.rules : [],
     openInternet: false,
     profilesOnOpenInternet: true,
-    available: [profile],
+    available,
   });
   return {
     listWorkspaces: vi.fn(async () => [workspace as Workspace]),
     listNetworkProfiles: vi.fn(async () => ({
-      profiles: [profile],
+      profiles: available,
       note: "Reload closes.",
       manageAll: true,
     })),
@@ -59,7 +68,7 @@ function fakeApi(overrides: Record<string, unknown> = {}) {
     setWorkspaceNetworkSettings: vi.fn(async (_id: WorkspaceId, allowed: boolean) => ({
       network: { ...view(false), profilesOnOpenInternet: allowed },
     })),
-    createNetworkProfile: vi.fn(),
+    createNetworkProfile: vi.fn(async (_input: unknown) => profile),
     replaceNetworkProfile: vi.fn(),
     deleteNetworkProfile: vi.fn(),
     ...overrides,
@@ -81,14 +90,19 @@ it("summarizes host and subnet rules", () => {
   ).toBe("https console.lab.test→10.0.0.5 :443,8443");
 });
 
-it("selects a profile for a workspace and shows the acknowledged outcome", async () => {
+it("selects a profile for the workspace at hand and shows the acknowledged outcome", async () => {
   const api = fakeApi();
   render(<NetworkScreen api={api as never} />);
-  expect(await screen.findByText("VendorDB test environment")).toBeInTheDocument();
-  expect(screen.getAllByText("Reload closes.").length).toBeGreaterThan(0);
+  expect(
+    await screen.findByRole("heading", { name: `What ${workspace.name} can reach on the LAN` }),
+  ).toBeInTheDocument();
   expect(await screen.findByText("No LAN access")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("checkbox", { name: "VendorDB test environment" }));
-  fireEvent.click(screen.getByRole("button", { name: "Save selection" }));
+  expect(screen.getAllByText("Reload closes.").length).toBeGreaterThan(0);
+  const apply = screen.getByRole("button", { name: "Apply" });
+  // Nothing changed yet, so there is nothing to apply.
+  expect(apply).toBeDisabled();
+  fireEvent.click(screen.getByRole("checkbox", { name: /VendorDB test environment/ }));
+  fireEvent.click(apply);
   await waitFor(() =>
     expect(api.setWorkspaceNetworkProfiles).toHaveBeenCalledWith(workspace.id, [
       { profileId: "netp_1" },
@@ -98,18 +112,32 @@ it("selects a profile for a workspace and shows the acknowledged outcome", async
   expect(screen.getByText(`${workspace.id}: applied`)).toBeInTheDocument();
 });
 
-it("sends a per-selection expiry only for a selection that has one", async () => {
+it("sends a per-selection end as an instant only for a selection that has one", async () => {
   const api = fakeApi();
   render(<NetworkScreen api={api as never} />);
-  fireEvent.click(await screen.findByRole("checkbox", { name: "VendorDB test environment" }));
-  const expiry = screen.getByRole("textbox", { name: "Selection expires at (ISO UTC, optional)" });
-  fireEvent.change(expiry, { target: { value: " 2026-10-31T00:00:00Z " } });
-  fireEvent.click(screen.getByRole("button", { name: "Save selection" }));
+  fireEvent.click(await screen.findByRole("checkbox", { name: /VendorDB test environment/ }));
+  fireEvent.change(screen.getByLabelText("Ends on (optional)"), {
+    target: { value: "2026-10-31T08:00" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Apply" }));
   await waitFor(() =>
     expect(api.setWorkspaceNetworkProfiles).toHaveBeenCalledWith(workspace.id, [
-      { profileId: "netp_1", expiresAt: "2026-10-31T00:00:00Z" },
+      { profileId: "netp_1", expiresAt: new Date("2026-10-31T08:00").toISOString() },
     ]),
   );
+});
+
+it("shows an expired profile dimmed, not selectable, in the selection and the table", async () => {
+  const api = fakeApi({}, [profile, expired]);
+  render(<NetworkScreen api={api as never} />);
+  const choice = await screen.findByRole("checkbox", { name: /Old lab/ });
+  expect(choice).toBeDisabled();
+  expect(choice.closest("li")?.getAttribute("data-expired")).toBe("true");
+  const table = screen.getByRole("table", { name: "All profiles" });
+  const row = within(table).getByText("Old lab").closest("tr");
+  expect(row?.getAttribute("data-expired")).toBe("true");
+  expect(within(row as HTMLElement).getByText("Expired")).toBeInTheDocument();
+  expect(within(table).getByText("Never expires")).toBeInTheDocument();
 });
 
 it("runs a preflight for the workspace and names the failing layer", async () => {
@@ -139,7 +167,7 @@ it("runs a preflight for the workspace and names the failing layer", async () =>
   );
 });
 
-it("warns about a LAN target inside a Docker network and is silent without one", async () => {
+it("sums up LAN targets inside a Docker network in one line, marks the row, and is silent without one", async () => {
   const api = fakeApi({
     getNetworkOverlaps: vi.fn(async () => ({
       checked: true,
@@ -156,16 +184,22 @@ it("warns about a LAN target inside a Docker network and is silent without one",
     })),
   });
   render(<NetworkScreen api={api as never} />);
-  expect(await screen.findByText("LAN targets inside a Docker network")).toBeInTheDocument();
+  expect(
+    await screen.findByText(
+      "1 LAN target sits inside a Docker network on this host and cannot be reached.",
+    ),
+  ).toBeInTheDocument();
   expect(
     screen.getByText(
       "10.20.30.0/24 (VendorDB test environment) overlaps vendordb-demo-net (172.18.0.0/16)",
     ),
   ).toBeInTheDocument();
+  const table = screen.getByRole("table", { name: "All profiles" });
+  expect(within(table).getByTitle(/Inside a Docker network/)).toBeInTheDocument();
   cleanup();
   render(<NetworkScreen api={fakeApi() as never} />);
-  await screen.findByText("VendorDB test environment");
-  expect(screen.queryByText("LAN targets inside a Docker network")).toBeNull();
+  await screen.findByRole("table", { name: "All profiles" });
+  expect(screen.queryByText(/inside a Docker network/)).toBeNull();
 });
 
 it("shows the Gateway's refusal and sends the revision with an edit", async () => {
@@ -185,6 +219,78 @@ it("shows the Gateway's refusal and sends the revision with an edit", async () =
   );
 });
 
+it("creates a profile from the structured form, with a week's expiry", async () => {
+  const api = fakeApi();
+  render(<NetworkScreen api={api as never} />);
+  fireEvent.click(await screen.findByRole("button", { name: "New profile" }));
+  const form = screen.getByRole("form", { name: "New profile" });
+  fireEvent.change(within(form).getByLabelText("Name"), { target: { value: "Lab console" } });
+  fireEvent.change(within(form).getByLabelText("Target kind"), { target: { value: "host" } });
+  fireEvent.change(within(form).getByLabelText("Host name"), {
+    target: { value: "console.lab.test" },
+  });
+  fireEvent.change(within(form).getByLabelText("IPv4 address"), {
+    target: { value: "10.0.0.5" },
+  });
+  fireEvent.click(within(form).getByLabelText("https"));
+  fireEvent.change(within(form).getByLabelText("Ports"), { target: { value: "443, 8443" } });
+  fireEvent.click(within(form).getByLabelText("In 7 days"));
+  const before = Date.now();
+  fireEvent.click(within(form).getByRole("button", { name: "Save profile" }));
+  await waitFor(() => expect(api.createNetworkProfile).toHaveBeenCalled());
+  const input = api.createNetworkProfile.mock.calls[0]?.[0] as {
+    name: string;
+    rules: unknown;
+    expiresAt?: string;
+  };
+  expect(input.name).toBe("Lab console");
+  expect(input.rules).toEqual([
+    {
+      kind: "host",
+      hostname: "console.lab.test",
+      address: "10.0.0.5",
+      schemes: ["http", "https"],
+      ports: [443, 8443],
+    },
+  ]);
+  const expiresAt = Date.parse(input.expiresAt ?? "");
+  expect(expiresAt - before).toBeGreaterThanOrEqual(7 * 24 * 3_600_000 - 1000);
+  expect(expiresAt - before).toBeLessThan(7 * 24 * 3_600_000 + 60_000);
+});
+
+it("names a bad row before asking the Gateway, and switches to JSON and back", async () => {
+  const api = fakeApi();
+  render(<NetworkScreen api={api as never} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+  const form = screen.getByRole("form", { name: "Edit profile" });
+  fireEvent.change(within(form).getByLabelText("Subnet (CIDR)"), {
+    target: { value: "8.8.8.0/24" },
+  });
+  fireEvent.click(within(form).getByRole("button", { name: "Save profile" }));
+  expect(await within(form).findByRole("alert")).toHaveTextContent(/RFC1918/);
+  expect(api.replaceNetworkProfile).not.toHaveBeenCalled();
+
+  fireEvent.click(within(form).getByRole("button", { name: "Advanced: edit as JSON" }));
+  const json = within(form).getByLabelText("Rules as JSON") as HTMLTextAreaElement;
+  expect(JSON.parse(json.value)).toEqual([
+    { kind: "subnet", cidr: "8.8.8.0/24", schemes: ["http"], ports: [23001] },
+  ]);
+  fireEvent.change(json, { target: { value: "[{nope" } });
+  fireEvent.click(within(form).getByRole("button", { name: "Back to the form" }));
+  expect(await within(form).findByRole("alert")).toHaveTextContent(/not a list of rules/);
+  fireEvent.change(json, {
+    target: {
+      value: JSON.stringify([
+        { kind: "subnet", cidr: "10.20.31.0/24", schemes: ["https"], ports: [8443] },
+      ]),
+    },
+  });
+  fireEvent.click(within(form).getByRole("button", { name: "Back to the form" }));
+  expect(within(form).getByLabelText("Subnet (CIDR)")).toHaveValue("10.20.31.0/24");
+  expect(within(form).getByLabelText("https")).toBeChecked();
+  expect(within(form).getByLabelText("Ports")).toHaveValue("8443");
+});
+
 it("an Owner edits only their own profiles and sees no overlap report (decision 12)", async () => {
   const theirs = { ...profile, id: "netp_2", name: "Owen's service", ownerUserId: "usr_owen" };
   const api = fakeApi({
@@ -197,10 +303,11 @@ it("an Owner edits only their own profiles and sees no overlap report (decision 
     })),
   });
   render(<NetworkScreen api={api as never} />);
-  expect(await screen.findByText("Owen's service")).toBeInTheDocument();
-  expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
-  expect(screen.getByText("Workspaces of its Owner")).toBeInTheDocument();
-  expect(screen.getByText("All workspaces")).toBeInTheDocument();
+  const table = await screen.findByRole("table", { name: "All profiles" });
+  expect(within(table).getByText("Owen's service")).toBeInTheDocument();
+  expect(within(table).getAllByRole("button", { name: "Edit" })).toHaveLength(1);
+  expect(within(table).getByText("Workspaces of its Owner")).toBeInTheDocument();
+  expect(within(table).getByText("All workspaces")).toBeInTheDocument();
   expect(api.getNetworkOverlaps).not.toHaveBeenCalled();
 });
 

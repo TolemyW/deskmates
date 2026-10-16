@@ -92,8 +92,8 @@ it("lets an Admin select an available profile and set the open-internet switch",
   render(<NetworkProfilesSection api={api} entry={entry("admin")} onChanged={() => {}} />);
   expect(await screen.findByText("Network profiles")).toBeInTheDocument();
   expect(await screen.findByText(/This workspace browses the open internet/)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("checkbox", { name: "Owen's service" }));
-  fireEvent.click(screen.getByRole("button", { name: "Save selection" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: /Owen's service/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Apply" }));
   expect(await screen.findByText("Trusted-test workspace")).toBeInTheDocument();
   expect(calls).toContain("PUT /api/workspaces/ws_1/network-profiles");
   const toggle = screen.getByRole("checkbox", {
