@@ -89,7 +89,7 @@ export const MODEL_PROXY_BODY_LIMIT_BYTES = 256 * 1024 * 1024;
 
 /**
  * Upstream paths the proxy forwards, all `POST`. The query string (e.g. `?beta=true`) passes.
- * `/v1/chat/completions` is the OpenAI runtime's path (ADR-0042 decision 5); each path is
+ * `/v1/chat/completions` is the OpenAI runtime's path (ADR-0044 decision 5); each path is
  * forwarded only to an upstream of its own protocol (`PATH_PROTOCOL`).
  */
 export const PROXIED_PATHS: ReadonlySet<string> = new Set([
@@ -226,7 +226,7 @@ export function registerModelProxy(app: FastifyInstance, opts: ModelProxyOptions
             details: { model: verdict.model },
           });
       }
-      // ADR-0042 decision 5: a request goes only to an upstream of its own protocol. The proxy
+      // ADR-0044 decision 5: a request goes only to an upstream of its own protocol. The proxy
       // never translates one protocol into the other.
       const protocol = PATH_PROTOCOL[path];
       if (protocol !== undefined && !upstreamSpeaks(upstreamTarget, protocol)) {

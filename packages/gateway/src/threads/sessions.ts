@@ -1,6 +1,6 @@
 // Per-(bot, thread) SDK session ids (design v0.3 §3.2). The transcript is not here; only the
 // handle the sidecar passes to `resume` so the bot continues its private view of the thread.
-// A session belongs to the runtime that wrote it (ADR-0042 decision 6): a bot moved to the other
+// A session belongs to the runtime that wrote it (ADR-0044 decision 6): a bot moved to the other
 // runtime starts a new session instead of resuming a transcript it cannot read.
 
 import type { AgentRuntime, BotId, ThreadId } from "@deskmates/contracts";

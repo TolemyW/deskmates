@@ -17,7 +17,7 @@ ARG PLAYWRIGHT_MCP_VERSION=0.0.82
 ARG PLAYWRIGHT_CLI_VERSION=0.1.21
 ARG AGENT_SDK_VERSION=0.3.278
 ARG NODE_PTY_VERSION=1.1.0
-# The second agent runtime (ADR-0042) and the MCP client the sidecar attaches its tools with.
+# The second agent runtime (ADR-0044) and the MCP client the sidecar attaches its tools with.
 # Pinned with packages/sidecar/package.json.
 ARG OPENAI_AGENTS_VERSION=0.20.0
 ARG MCP_SDK_VERSION=1.30.0

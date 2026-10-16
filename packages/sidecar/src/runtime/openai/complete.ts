@@ -1,4 +1,4 @@
-// One tool-free model turn over the OpenAI Chat Completions API (ADR-0042 decision 7, as
+// One tool-free model turn over the OpenAI Chat Completions API (ADR-0044 decision 7, as
 // amended): what a model job or a presentation summary needs when the bot's runtime is
 // `openai-agents`. The request goes to the Gateway's model proxy with the run's token, like the
 // agent loop's; the proxy swaps the credential and records the usage.

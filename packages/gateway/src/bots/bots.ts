@@ -48,7 +48,7 @@ export interface CreateBotInput {
   workspaceId: WorkspaceId;
   model?: string;
   cheapModel?: string;
-  /** ADR-0042: the agent loop; absent inherits `DEFAULT_RUNTIME`. */
+  /** ADR-0044: the agent loop; absent inherits `DEFAULT_RUNTIME`. */
   runtime?: AgentRuntime;
   effort?: EffortLevel;
   thinking?: ThinkingConfig;
@@ -68,7 +68,7 @@ export interface CreateBotInput {
 export interface BotPatch {
   model?: string | null;
   cheapModel?: string | null;
-  /** ADR-0042: `null` clears the override, so the bot inherits `DEFAULT_RUNTIME` again. */
+  /** ADR-0044: `null` clears the override, so the bot inherits `DEFAULT_RUNTIME` again. */
   runtime?: AgentRuntime | null;
   /** Reasoning knob (contracts `reasoning.ts`); `null` clears it back to the SDK default. */
   effort?: EffortLevel | null;

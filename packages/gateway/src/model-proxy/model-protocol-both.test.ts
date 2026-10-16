@@ -1,4 +1,4 @@
-// T1: an upstream that speaks both protocols (ADR-0042 decision 5): the same model id serves a
+// T1: an upstream that speaks both protocols (ADR-0044 decision 5): the same model id serves a
 // bot on the default runtime over `/v1/messages` and one on the OpenAI runtime over `/v1/chat/completions`, which
 // is what a paired comparison of the two runtimes on one model needs.
 

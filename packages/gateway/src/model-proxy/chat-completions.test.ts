@@ -1,4 +1,4 @@
-// T1: the model proxy's OpenAI Chat Completions path (ADR-0042 decision 5): forwarded only to an
+// T1: the model proxy's OpenAI Chat Completions path (ADR-0044 decision 5): forwarded only to an
 // `openai` upstream, with the frozen-model check and OpenAI-shaped usage recorded; `/v1/messages`
 // for a model on an `openai` upstream is refused, never translated.
 

@@ -1,4 +1,4 @@
-// T0: `DEFAULT_RUNTIME` (ADR-0042 decision 1).
+// T0: `DEFAULT_RUNTIME` (ADR-0044 decision 1).
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";

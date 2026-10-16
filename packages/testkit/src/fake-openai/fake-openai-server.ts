@@ -1,4 +1,4 @@
-// A scripted OpenAI Chat Completions server for T1 tests of the OpenAI runtime (ADR-0042) and of
+// A scripted OpenAI Chat Completions server for T1 tests of the OpenAI runtime (ADR-0044) and of
 // the Gateway's model proxy. It speaks only what the OpenAI Agents SDK's chat model sends:
 // `POST /v1/chat/completions`, streaming or not. Each request is answered by the next step of
 // the script: a text reply, or one or more tool calls. Every request is recorded so a test can

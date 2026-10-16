@@ -1,4 +1,4 @@
-// T0: the `openai` upstream protocol (ADR-0042 decision 5) on top of ADR-0039's registry.
+// T0: the `openai` upstream protocol (ADR-0044 decision 5) on top of ADR-0039's registry.
 
 import { describe, expect, it } from "vitest";
 import { ModelRegistry, parseModelUpstreams } from "./model-upstreams.js";

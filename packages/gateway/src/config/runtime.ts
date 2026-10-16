@@ -1,4 +1,4 @@
-// The installation's default agent runtime (ADR-0042 decision 1): `DEFAULT_RUNTIME` in `.env`,
+// The installation's default agent runtime (ADR-0044 decision 1): `DEFAULT_RUNTIME` in `.env`,
 // one of the runtimes the sidecar hosts. Empty means the Claude Agent SDK, so an installation
 // that never heard of the knob runs exactly as before. A bot may override it; every run freezes
 // the value it ran with.

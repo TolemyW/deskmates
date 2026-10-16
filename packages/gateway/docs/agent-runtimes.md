@@ -1,4 +1,4 @@
-# Agent runtimes (ADR-0042)
+# Agent runtimes (ADR-0044)
 
 A bot's runs use one of two agent loops, both hosted by the sidecar: the Claude Agent SDK (the
 default, and every run before the knob existed) or the OpenAI Agents SDK. The runtime is a knob

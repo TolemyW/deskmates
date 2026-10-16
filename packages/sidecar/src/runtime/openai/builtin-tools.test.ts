@@ -1,4 +1,4 @@
-// T0: the file and shell tools the OpenAI runtime provides (ADR-0042 decision 4) behave like
+// T0: the file and shell tools the OpenAI runtime provides (ADR-0044 decision 4) behave like
 // their Claude SDK namesakes on a real temporary directory.
 
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";

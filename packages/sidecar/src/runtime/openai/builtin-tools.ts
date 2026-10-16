@@ -1,4 +1,4 @@
-// The file and shell tools the OpenAI runtime offers (ADR-0042 decision 4). The Claude Agent SDK
+// The file and shell tools the OpenAI runtime offers (ADR-0044 decision 4). The Claude Agent SDK
 // has these built in; the OpenAI Agents SDK has none, so the sidecar provides them under the same
 // names and parameter names (`file_path`, `content`, `old_string`, `new_string`, `command`,
 // `pattern`, `path`), which is what keeps the tier tables, the bot-directory guard and the

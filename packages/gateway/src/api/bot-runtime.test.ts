@@ -1,4 +1,4 @@
-// T1: a bot's `runtime` (ADR-0042 decisions 1, 6 and 7): accepted and audited through the bot
+// T1: a bot's `runtime` (ADR-0044 decisions 1, 6 and 7): accepted and audited through the bot
 // routes, refused when its model's upstream speaks the other protocol, frozen on every run row
 // and handed to the sidecar, and sessions kept per runtime.
 

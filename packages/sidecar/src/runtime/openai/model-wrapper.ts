@@ -1,4 +1,4 @@
-// A `Model` in front of the provider's model (ADR-0042): the one place the runtime can see and
+// A `Model` in front of the provider's model (ADR-0044): the one place the runtime can see and
 // change what the Agents SDK is about to send. Two things happen here, both before the request
 // leaves the process:
 //

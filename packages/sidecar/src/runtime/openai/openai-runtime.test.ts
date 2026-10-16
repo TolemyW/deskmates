@@ -1,4 +1,4 @@
-// T1: the OpenAI Agents SDK runtime inside `runOnce` (ADR-0042), against a scripted Chat
+// T1: the OpenAI Agents SDK runtime inside `runOnce` (ADR-0044), against a scripted Chat
 // Completions server and the fake Gateway. The real Agents SDK runs; no model does. The Claude
 // SDK's `createSdkMcpServer` and `tool` build the in-process `deskmates` MCP server the runtime
 // attaches; they start no CLI and call no model.
@@ -235,7 +235,7 @@ describe("openai-agents runtime: the loop", () => {
   });
 });
 
-describe("openai-agents runtime: L2 approvals through the one hook (ADR-0042 decisions 2 and 3)", () => {
+describe("openai-agents runtime: L2 approvals through the one hook (ADR-0044 decisions 2 and 3)", () => {
   const push = { name: "Bash", arguments: { command: "git push origin main" } };
 
   it("an immediate deny from the Gateway becomes the tool's error result and the run completes", async () => {

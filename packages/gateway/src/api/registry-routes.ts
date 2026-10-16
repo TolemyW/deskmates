@@ -95,7 +95,7 @@ export function registerRegistryRoutes(
     const cheapModel = optionalString(body, "cheapModel");
     if (model !== undefined) requirePricedModel(ctx, "model", model);
     if (cheapModel !== undefined) requirePricedModel(ctx, "cheapModel", cheapModel);
-    // ADR-0042 decision 7: the loop and the model it will drive must speak the same protocol.
+    // ADR-0044 decision 7: the loop and the model it will drive must speak the same protocol.
     const runtime = optionalRuntime(body) ?? undefined;
     requireRuntimeModel(
       ctx,
@@ -232,7 +232,7 @@ export function registerRegistryRoutes(
         "nothing to update: send cron, model, cheapModel, runtime, effort, thinking or avatar",
       );
     }
-    // ADR-0042 decision 7: judged on what the bot will run with after the patch.
+    // ADR-0044 decision 7: judged on what the bot will run with after the patch.
     if (
       patch.runtime !== undefined ||
       patch.model !== undefined ||
@@ -313,7 +313,7 @@ function optionalRuntime(body: Record<string, unknown>): AgentRuntime | null | u
 }
 
 /**
- * ADR-0042 decision 7: a bot's loop and the upstream serving its effective model must speak the
+ * ADR-0044 decision 7: a bot's loop and the upstream serving its effective model must speak the
  * same protocol, since the proxy never translates. A model with no upstream is refused too.
  */
 function requireRuntimeModel(ctx: GatewayContext, runtime: AgentRuntime, model: string): void {

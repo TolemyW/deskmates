@@ -135,7 +135,7 @@ export class ResponseUsageObserver {
     const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
     if (!line.startsWith("data:")) return;
     // Anthropic names its usage events; an OpenAI chat chunk carries `usage` on its last chunk
-    // (`stream_options.include_usage`) and `model` on every chunk (ADR-0042 decision 5).
+    // (`stream_options.include_usage`) and `model` on every chunk (ADR-0044 decision 5).
     const anthropic = line.includes('"message_start"') || line.includes('"message_delta"');
     const openai = line.includes('"chat.completion') && line.includes('"usage"');
     if (!anthropic && !openai) return;
@@ -165,7 +165,7 @@ export class ResponseUsageObserver {
   private merge(raw: unknown): void {
     if (raw === null || typeof raw !== "object") return;
     const u = raw as Record<string, unknown>;
-    // The Anthropic shape, then the OpenAI Chat Completions shape (ADR-0042 decision 5), where
+    // The Anthropic shape, then the OpenAI Chat Completions shape (ADR-0044 decision 5), where
     // `prompt_tokens` includes the cached part and `cached_tokens` sits one level down.
     const fields: [keyof ResponseUsage, string][] = [
       ["inputTokens", "input_tokens"],

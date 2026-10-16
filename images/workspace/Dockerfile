@@ -25,7 +25,7 @@ RUN G="$(npm root -g)" \
  && ln -s "$G/node-pty" /opt/deskmates/node_modules/node-pty \
  && ln -s "$G/undici" /opt/deskmates/node_modules/undici \
  && ln -s "$G/playwright" /opt/deskmates/node_modules/playwright \
- # The OpenAI Agents SDK runtime (ADR-0042) and the MCP client it attaches the sidecar's tools
+ # The OpenAI Agents SDK runtime (ADR-0044) and the MCP client it attaches the sidecar's tools
  # with; both are preinstalled in the base image like the Claude Agent SDK.
  && mkdir -p /opt/deskmates/node_modules/@openai /opt/deskmates/node_modules/@modelcontextprotocol \
  && ln -s "$G/@openai/agents" /opt/deskmates/node_modules/@openai/agents \

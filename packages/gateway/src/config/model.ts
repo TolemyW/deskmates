@@ -28,7 +28,7 @@ export interface ModelConfig {
   modelAuthToken: string;
   /** `MODEL_UPSTREAMS`: further upstreams, each serving the model ids it lists (ADR-0039). */
   modelUpstreams?: ModelUpstream[];
-  /** `MODEL_PROTOCOL`: what the default upstream speaks (ADR-0042); absent means anthropic. */
+  /** `MODEL_PROTOCOL`: what the default upstream speaks (ADR-0044); absent means anthropic. */
   modelProtocol?: ModelUpstreamProtocol;
   defaultModel: string;
   cheapModel: string;

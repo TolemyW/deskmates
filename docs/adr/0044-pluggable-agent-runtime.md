@@ -1,4 +1,4 @@
-# ADR-0042: A second agent runtime (OpenAI Agents SDK), selected per bot, behind the same hook
+# ADR-0044: A second agent runtime (OpenAI Agents SDK), selected per bot, behind the same hook
 
 Status: Proposed (engineering choices awaiting owner review). Decision 1 records the owner's request of 2026-10-16: a switchable Claude Agent SDK / OpenAI SDK runtime so the two can be compared. Everything else is how that request fits the existing rules.
 

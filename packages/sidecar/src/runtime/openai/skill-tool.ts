@@ -1,4 +1,4 @@
-// The `Skill` tool on the OpenAI runtime (ADR-0015 on ADR-0042): loads one enabled skill's
+// The `Skill` tool on the OpenAI runtime (ADR-0015 on ADR-0044): loads one enabled skill's
 // SKILL.md into context, from the plugin directory the run materialised, by name. The Claude SDK
 // has this built in; here it is a function tool with the same name and input, so the hook's
 // `skill_used` measurement (ADR-0015 decision 6) and the L0 tier row apply unchanged. Only a

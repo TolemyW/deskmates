@@ -1,4 +1,4 @@
-// The sidecar's MCP servers attached to the OpenAI runtime through MCP clients (ADR-0042
+// The sidecar's MCP servers attached to the OpenAI runtime through MCP clients (ADR-0044
 // decision 4): the in-process `deskmates` server over an in-memory transport, the browser
 // `mcp-proxy` over stdio, so the proxy's untrusted-content wrapping and screenshot capture stay
 // exactly where they are. Each listed tool becomes a `ToolSpec` named `mcp__<server>__<tool>`,

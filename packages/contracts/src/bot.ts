@@ -76,7 +76,7 @@ export interface BotDefinition {
   /** Model ids are deployment configuration; `undefined` means use DEFAULT_MODEL / CHEAP_MODEL. */
   model?: string;
   cheapModel?: string;
-  /** The agent loop this bot's runs use (ADR-0042); `undefined` means `DEFAULT_RUNTIME`. */
+  /** The agent loop this bot's runs use (ADR-0044); `undefined` means `DEFAULT_RUNTIME`. */
   runtime?: AgentRuntime;
   /**
    * Reasoning overrides, recorded on every run row (`runs.config_json.reasoning`). `undefined`

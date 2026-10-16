@@ -1,4 +1,4 @@
-// Messages shaped like the Claude SDK's, built from what the OpenAI Agents SDK reports (ADR-0042). The run
+// Messages shaped like the Claude SDK's, built from what the OpenAI Agents SDK reports (ADR-0044). The run
 // loop (`run-once.ts`) reads `assistant`, `user`, `result` and `system/init` messages; these
 // builders fill exactly the fields it and its observers read, with the SDK's own types as the
 // target so a field the loop starts reading tomorrow is a type error here, not a silent gap.
@@ -67,7 +67,7 @@ function assistantEnvelope(
       model,
       content,
       // Unknown per-response usage: the turn-usage tracker records null counts for a response
-      // whose stop reason it never saw, which is honest (ADR-0042 consequences).
+      // whose stop reason it never saw, which is honest (ADR-0044 consequences).
       stop_reason: null,
       stop_sequence: null,
       usage: {

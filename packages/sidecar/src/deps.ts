@@ -23,7 +23,7 @@ export type ToolFn = typeof tool;
 
 export type CreateSdkMcpServerFn = typeof createSdkMcpServer;
 
-/** The OpenAI Agents SDK loop (ADR-0042), yielding the same message shapes as `query()`. */
+/** The OpenAI Agents SDK loop (ADR-0044), yielding the same message shapes as `query()`. */
 export type OpenAiQueryFn = import("./runtime/openai/types.js").OpenAiQueryFn;
 /** One tool-free Chat Completions turn, for model jobs on the `openai-agents` runtime. */
 export type OpenAiCompletionFn = import("./runtime/openai/types.js").OpenAiCompletionFn;

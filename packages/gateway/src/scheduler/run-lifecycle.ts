@@ -105,7 +105,7 @@ export class RunLifecycle {
     // the bot was re-pointed while the run sat waiting for a human.
     const model = recordedModel ?? bot.model ?? this.ctx.config.defaultModel;
     const cheapModel = recordedCheap ?? bot.cheapModel ?? this.ctx.config.cheapModel;
-    // ADR-0042 decision 1: the agent loop is frozen the same way, so a run row attributes its
+    // ADR-0044 decision 1: the agent loop is frozen the same way, so a run row attributes its
     // runtime on its own and a resume keeps the loop that parked.
     const recordedRuntime = isAgentRuntime(run.config.runtime) ? run.config.runtime : undefined;
     const runtime = recordedRuntime ?? bot.runtime ?? this.ctx.config.defaultRuntime;
@@ -470,7 +470,7 @@ export class RunLifecycle {
       ),
       ...tasks,
     };
-    // ADR-0042 decision 6: only a session the run's own runtime wrote is resumed.
+    // ADR-0044 decision 6: only a session the run's own runtime wrote is resumed.
     const sdkSessionId = ctx.sessions.get(run.botId, thread.id, models.runtime);
     if (sdkSessionId !== undefined) {
       request.sdkSessionId = sdkSessionId;

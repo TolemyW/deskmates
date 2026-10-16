@@ -644,7 +644,7 @@ export async function runOnce(
     };
     // Recorded from what the CLI actually receives, not from the container environment: a value
     // the passthrough drops has no effect on compaction and must not be attributed to the run.
-    // ADR-0042: the OpenAI runtime has its own knob, read from the same passthrough environment.
+    // ADR-0044: the OpenAI runtime has its own knob, read from the same passthrough environment.
     const maxContextTokens =
       request.runtime === "openai-agents"
         ? maxContextTokensOf(env, "DESKMATES_OPENAI_MAX_CONTEXT_TOKENS")
@@ -736,13 +736,13 @@ export async function runOnce(
     };
 
     timeline.mark("query_started", { resume: request.sdkSessionId !== undefined });
-    // ADR-0042 decision 1: the run row froze which loop runs; both consume the same options and
+    // ADR-0044 decision 1: the run row froze which loop runs; both consume the same options and
     // yield the same message shapes, so everything below this line is runtime-neutral.
     const runtime = request.runtime ?? "claude-agent-sdk";
     let stream: AsyncIterable<SDKMessage>;
     if (runtime === "openai-agents") {
       if (deps.queryOpenAi === undefined)
-        throw new Error("this sidecar cannot host the openai-agents runtime (ADR-0042)");
+        throw new Error("this sidecar cannot host the openai-agents runtime (ADR-0044)");
       stream = deps.queryOpenAi({
         prompt: context.prompt,
         options,

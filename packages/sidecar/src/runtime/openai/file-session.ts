@@ -1,4 +1,4 @@
-// The OpenAI runtime's transcript (ADR-0042 decision 6): one JSON file per session in the bot's
+// The OpenAI runtime's transcript (ADR-0044 decision 6): one JSON file per session in the bot's
 // home directory, holding the conversation items the Agents SDK replays on the next run, the
 // cumulative token totals the Gateway's per-session accounting expects (`ledger/usage.ts`) and
 // the prompt size the last response reported, which is what compaction judges. A parked run's

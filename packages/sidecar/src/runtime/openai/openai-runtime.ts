@@ -1,4 +1,4 @@
-// The OpenAI Agents SDK as a second agent loop (ADR-0042). `runOnce` hands it the same prompt and
+// The OpenAI Agents SDK as a second agent loop (ADR-0044). `runOnce` hands it the same prompt and
 // options it would hand the Claude SDK; this module runs the loop in-process and yields
 // messages shaped like the Claude SDK's, so the ledger, approvals, taint and handoff code never
 // learn which runtime ran.
@@ -16,7 +16,7 @@
 // usage events; images a tool returns travel to the model through `model-wrapper.ts`, and so
 // does compaction when `DESKMATES_OPENAI_MAX_CONTEXT_TOKENS` is set (`compaction.ts`).
 //
-// Not on this runtime: subagents (`Agent`/`Task`), a fallback model (ADR-0042 consequences).
+// Not on this runtime: subagents (`Agent`/`Task`), a fallback model (ADR-0044 consequences).
 
 import { randomUUID } from "node:crypto";
 import type { HookCallback, HookInput, Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";

@@ -224,7 +224,7 @@ export async function runModelJob(
   env: Options["env"],
   sink?: Pick<EventSink, "emit">,
 ): Promise<RunEnded> {
-  // ADR-0042 decision 7: a bot on the OpenAI runtime runs its jobs there too.
+  // ADR-0044 decision 7: a bot on the OpenAI runtime runs its jobs there too.
   if (request.runtime === "openai-agents") return runOpenAiModelJob(request, job, deps, sink);
   const ended: RunEnded = { type: "run_ended", runId: request.runId, outcome: "failed", usage: [] };
   const turns = new TurnUsageTracker((payload) => sink?.emit("turn_usage", { ...payload }));

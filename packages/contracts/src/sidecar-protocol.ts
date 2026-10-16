@@ -142,7 +142,7 @@ export interface StartRunRequest {
   attempt: number;
   trigger: TriggerPayload;
   /**
-   * The agent loop for this run, frozen on the run row (ADR-0042 decision 1). Absent means the
+   * The agent loop for this run, frozen on the run row (ADR-0044 decision 1). Absent means the
    * Claude Agent SDK, which is what every run was before the knob existed.
    */
   runtime?: "claude-agent-sdk" | "openai-agents";

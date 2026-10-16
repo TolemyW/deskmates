@@ -1,4 +1,4 @@
-// Context compaction for the OpenAI runtime (ADR-0042, `summary-v1`). The Chat Completions API
+// Context compaction for the OpenAI runtime (ADR-0044, `summary-v1`). The Chat Completions API
 // has no server-side compaction, so when the last response reported a prompt above the knob
 // (`DESKMATES_OPENAI_MAX_CONTEXT_TOKENS`), the items older than a short tail are rendered as text,
 // summarised by the run's own model in one extra call, and replaced by one user message holding

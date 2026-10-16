@@ -1,6 +1,6 @@
 // Production wiring of `SidecarDeps`: the real Agent SDK, global fetch, node:fs and the clock.
 // This and `runtime/openai/` are the only modules that import an agent SDK runtime (ADR-0002
-// decision 1, ADR-0042).
+// decision 1, ADR-0044).
 
 import { access, appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -81,7 +81,7 @@ export function createRealDeps(
       };
     },
     query: (params) => query(params),
-    // ADR-0042: the second loop, in this process; nothing else in the repository imports it.
+    // ADR-0044: the second loop, in this process; nothing else in the repository imports it.
     queryOpenAi: createOpenAiQuery({ env }),
     completeOpenAi: createOpenAiCompletion(),
     tool,

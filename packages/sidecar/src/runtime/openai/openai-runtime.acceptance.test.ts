@@ -1,5 +1,5 @@
 // T3: the OpenAI runtime against a real model over the OpenAI Chat Completions protocol
-// (ADR-0042). Skipped unless MODEL_BASE_URL, MODEL_AUTH_TOKEN and DEFAULT_MODEL are set; the
+// (ADR-0044). Skipped unless MODEL_BASE_URL, MODEL_AUTH_TOKEN and DEFAULT_MODEL are set; the
 // endpoint must serve `/v1/chat/completions` for that model. The Gateway side is the fake
 // Gateway of the T1 tests (approvals denied), so this exercises the loop, the tools and the gate
 // with a real model, not the proxy.

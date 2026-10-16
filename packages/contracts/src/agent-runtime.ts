@@ -1,4 +1,4 @@
-// Which agent loop a bot's runs use (ADR-0042). A knob like the model: set per bot, defaulted by
+// Which agent loop a bot's runs use (ADR-0044). A knob like the model: set per bot, defaulted by
 // the installation (`DEFAULT_RUNTIME`), frozen on every run row so a paired comparison can pair
 // runs by it. The sidecar hosts both; nothing else in the product depends on which one ran.
 
@@ -16,7 +16,7 @@ export function isAgentRuntime(value: unknown): value is AgentRuntime {
 /**
  * The model-endpoint protocol a runtime speaks to the Gateway's model proxy: the Claude Agent SDK
  * sends Anthropic Messages requests, the OpenAI Agents SDK sends Chat Completions requests. A bot's
- * effective model must be served by an upstream of that protocol (ADR-0042 decision 7).
+ * effective model must be served by an upstream of that protocol (ADR-0044 decision 7).
  */
 export function runtimeProtocol(runtime: AgentRuntime): "anthropic" | "openai" {
   return runtime === "openai-agents" ? "openai" : "anthropic";

@@ -1,4 +1,4 @@
-// T1: what the OpenAI runtime carries beyond the loop and the gate (ADR-0042): the reply
+// T1: what the OpenAI runtime carries beyond the loop and the gate (ADR-0044): the reply
 // preview and per-turn usage from the model stream, the Skill tool, compaction across runs, and
 // model jobs on the same runtime. Same harness shape as openai-runtime.test.ts.
 

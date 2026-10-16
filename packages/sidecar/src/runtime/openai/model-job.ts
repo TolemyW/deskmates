@@ -1,4 +1,4 @@
-// Model jobs and presentation summaries on the `openai-agents` runtime (ADR-0042 decision 7, as
+// Model jobs and presentation summaries on the `openai-agents` runtime (ADR-0044 decision 7, as
 // amended): one tool-free Chat Completions turn through the Gateway's model proxy, composed into
 // the same `RunEnded` the Claude path produces (`model-job.ts`, `presentation-summary.ts`), so
 // the Gateway's job modules read either the same way.
@@ -30,7 +30,7 @@ async function oneTurn(
 ): Promise<{ ended: RunEnded; result?: OpenAiCompletionResult }> {
   const ended: RunEnded = { type: "run_ended", runId: request.runId, outcome: "failed", usage: [] };
   if (deps.completeOpenAi === undefined) {
-    ended.error = "this sidecar cannot host the openai-agents runtime (ADR-0042)";
+    ended.error = "this sidecar cannot host the openai-agents runtime (ADR-0044)";
     return { ended };
   }
   const abort = new AbortController();

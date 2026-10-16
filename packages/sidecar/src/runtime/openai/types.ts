@@ -1,4 +1,4 @@
-// The OpenAI Agents SDK runtime as `runOnce` calls it (ADR-0042): the same prompt and `Options`
+// The OpenAI Agents SDK runtime as `runOnce` calls it (ADR-0044): the same prompt and `Options`
 // the Claude path builds (system prompt, model, turn cap, MCP servers, the PreToolUse hook, the
 // session to resume) plus what the Claude SDK would have read from its process environment. It
 // yields messages shaped like the Claude SDK's, so the run loop's ledger, approvals, taint and

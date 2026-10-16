@@ -1,4 +1,4 @@
-// T0: the model wrapper (ADR-0042): images a tool returned reach the model as a user message
+// T0: the model wrapper (ADR-0044): images a tool returned reach the model as a user message
 // after the tool's result, and a history over the compaction knob is summarised by the same
 // model and replaced before the turn is sent.
 

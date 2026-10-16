@@ -227,7 +227,7 @@ export const startRunRequestSchema = z.object({
       startedAt: z.string().min(1).max(64),
     })
     .optional(),
-  // ADR-0042 decision 1: which agent loop runs; absent is the Claude Agent SDK.
+  // ADR-0044 decision 1: which agent loop runs; absent is the Claude Agent SDK.
   runtime: z.enum(["claude-agent-sdk", "openai-agents"]).optional(),
   model: z.string().min(1),
   cheapModel: z.string().min(1),

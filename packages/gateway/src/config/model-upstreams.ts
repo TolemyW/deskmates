@@ -11,7 +11,7 @@ export const DEFAULT_UPSTREAM_ID = "default";
 
 /**
  * Protocols with an adapter in the model proxy: Anthropic Messages (`/v1/messages`) and, since
- * ADR-0042, OpenAI Chat Completions (`/v1/chat/completions`). `both` is an endpoint that serves
+ * ADR-0044, OpenAI Chat Completions (`/v1/chat/completions`). `both` is an endpoint that serves
  * the same model ids over either, which is what lets one model be compared across the two
  * runtimes. A request is forwarded only to an upstream that speaks its protocol; the proxy
  * never translates.
