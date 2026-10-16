@@ -137,7 +137,7 @@ interface ContainerInspect {
   HostConfig?: { ExtraHosts?: string[]; NetworkMode?: string };
   NetworkSettings: {
     Ports?: Record<string, { HostIp: string; HostPort: string }[] | null>;
-    Networks?: Record<string, { IPAddress?: string; Gateway?: string }>;
+    Networks?: Record<string, { IPAddress?: string; Gateway?: string; Aliases?: string[] }>;
   };
 }
 
@@ -593,9 +593,14 @@ export class DockerProvider implements SandboxProvider {
     await this.ensureWorkspaceNetwork(workspaceId);
     await this.assertWorkspaceNetwork(workspaceId, found.Id, inspect);
     const pinnedProxyIp = proxyIpFromExtraHosts(inspect.HostConfig?.ExtraHosts);
-    const attachedProxy = await this.findAndValidateProxy(workspaceId, true, pinnedProxyIp);
-    const attachedProxyIp =
+    let attachedProxy = await this.findAndValidateProxy(workspaceId, true, pinnedProxyIp);
+    let attachedProxyIp =
       attachedProxy.NetworkSettings.Networks?.[networkName(workspaceId)]?.IPAddress;
+    if (pinnedProxyIp !== undefined && attachedProxyIp !== pinnedProxyIp) {
+      attachedProxy = await this.repinProxy(workspaceId, inspect, attachedProxy, pinnedProxyIp);
+      attachedProxyIp =
+        attachedProxy.NetworkSettings.Networks?.[networkName(workspaceId)]?.IPAddress;
+    }
     if (pinnedProxyIp === undefined || attachedProxyIp !== pinnedProxyIp) {
       throw this.networkError(workspaceId, "workspace egress-proxy address is missing or stale");
     }
@@ -1048,10 +1053,60 @@ export class DockerProvider implements SandboxProvider {
     }
   }
 
-  private async connectNetwork(network: string, containerId: string): Promise<void> {
+  private async connectNetwork(
+    network: string,
+    containerId: string,
+    endpoint?: { Aliases?: string[]; IPAMConfig?: { IPv4Address: string } },
+  ): Promise<void> {
     const path = `/networks/${encodeURIComponent(network)}/connect`;
-    const res = await this.client.request("POST", path, { Container: containerId });
+    const res = await this.client.request("POST", path, {
+      Container: containerId,
+      ...(endpoint === undefined ? {} : { EndpointConfig: endpoint }),
+    });
     if (res.status !== 200) throw dockerApiError("POST", path, res);
+  }
+
+  private async disconnectNetwork(network: string, containerId: string): Promise<void> {
+    const path = `/networks/${encodeURIComponent(network)}/disconnect`;
+    const res = await this.client.request("POST", path, { Container: containerId, Force: false });
+    if (res.status !== 200) throw dockerApiError("POST", path, res);
+  }
+
+  /**
+   * A daemon restart without live-restore, or a host reboot, starts the workspace and its proxy
+   * in whatever order and Docker hands out the network's addresses in that order: the proxy
+   * that had `.2` comes back as `.3`, and the workspace container, whose `/etc/hosts` pins
+   * `egress-proxy` to `.2`, often sits on `.2` itself. The pin cannot change on a running
+   * container, so the proxy is moved back instead: the workspace is taken off the network while
+   * it holds the pinned address, the proxy is reattached at that address with its alias, and
+   * the workspace is reattached with its own aliases. Nothing is recreated, so the browser
+   * profile, the files and the open desktop stay as they were.
+   */
+  private async repinProxy(
+    workspaceId: WorkspaceId,
+    workspace: ContainerInspect,
+    proxy: ContainerInspect,
+    pinnedIp: string,
+  ): Promise<ContainerInspect> {
+    const network = networkName(workspaceId);
+    const endpoint = workspace.NetworkSettings.Networks?.[network];
+    const displaced = endpoint?.IPAddress === pinnedIp;
+    if (displaced) await this.disconnectNetwork(network, workspace.Id);
+    await this.disconnectNetwork(network, proxy.Id);
+    await this.connectNetwork(network, proxy.Id, {
+      Aliases: ["egress-proxy"],
+      IPAMConfig: { IPv4Address: pinnedIp },
+    });
+    if (displaced) {
+      // Docker lists the container's own short id among the aliases; it adds that one itself.
+      const aliases = (endpoint?.Aliases ?? []).filter((alias) => !workspace.Id.startsWith(alias));
+      await this.connectNetwork(
+        network,
+        workspace.Id,
+        aliases.length === 0 ? undefined : { Aliases: aliases },
+      );
+    }
+    return await this.inspect(proxy.Id);
   }
 
   private async findManagedContainer(
