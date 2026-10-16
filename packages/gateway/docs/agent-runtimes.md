@@ -12,8 +12,8 @@ so `evals/compare.ts` can pair runs that differ in it alone.
 - `POST /api/bots` and `PATCH /api/bots/:id` accept `runtime`; `null` on PATCH clears the
   override. The bot's effective model must be served by an upstream of the runtime's protocol
   (`anthropic` for the Claude SDK, `openai` for the OpenAI Agents SDK), or the request is refused
-  with `validation`. The cheap model is not checked: model jobs and summaries run on the Claude
-  SDK whatever the bot's runtime, so it must stay on an `anthropic` upstream.
+  with `validation`. The cheap model is checked the same way: model jobs and summaries run on
+  the bot's runtime, so an `openai-agents` bot needs both models on `openai` upstreams.
 - `MODEL_UPSTREAMS` entries may carry `"protocol": "openai"`: an OpenAI Chat Completions endpoint.
   The proxy forwards `POST /v1/chat/completions` only to such an upstream and `/v1/messages` only
   to an `anthropic` one; a mismatch is `503 model_upstream_missing` naming both protocols. The
@@ -40,9 +40,15 @@ own, with the Claude SDK's parameter names, so the tier tables apply unchanged; 
 tools and the browser `mcp-proxy` are attached through MCP clients under their usual
 `mcp__<server>__<tool>` names.
 
-Not on this runtime yet: compaction, the reply-preview stream, per-turn `turn_usage` events,
-image tool results (a notice replaces the image), `Skill`, subagents, a fallback model. A thread
-that outgrows the model's context ends on the model's error, and the run row says so.
+The reply preview and the per-turn `turn_usage` events come from the model stream as on the
+Claude path. An image a tool returns is carried to the model as a user message after that
+call's result (Chat Completions tool messages are text only). Compaction is off unless the
+workspace container sets `DESKMATES_OPENAI_MAX_CONTEXT_TOKENS` (recorded on the run row as
+`claudeCodeMaxContextTokens`, the same key the Claude knob uses): past it, the history older
+than a six-item tail is summarised by the same model and archived beside the session file, and
+the run ledgers a `compact_boundary`. Model jobs and summaries run as one Chat Completions turn.
+
+Not on this runtime yet: subagents and a fallback model.
 
 Switching a bot's runtime is a strategy change (AGENTS.md): measure it with `evals/compare.ts`
 on a paired run before calling either runtime better.
