@@ -21,6 +21,7 @@ export const runsMessages = defineMessages({
     "runEventRow",
     "runFailure",
     "runMark",
+    "runStory",
     "runTimeline",
   ],
   locales: { en, "zh-CN": zhCN, "zh-TW": zhTW, ja, es },

@@ -129,7 +129,7 @@ describe("RunScreen", () => {
       "log",
     ]);
 
-    fireEvent.click(screen.getByText("Details and usage"));
+    fireEvent.click(screen.getByText("Details"));
     // Header facts.
     expect(screen.getByText("succeeded").className).toContain("status");
     expect(screen.getByText("interactive")).toBeTruthy();
@@ -260,7 +260,7 @@ describe("RunScreen", () => {
       "GET /api/runs/run_1/events": { events: [runEvent(1, "log", { text: "start" })] },
     });
     render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
-    await screen.findByText("start");
+    await screen.findAllByText("start");
     expect(screen.getByText("running").className).toContain("status");
     expect(screen.getByText(/No usage recorded yet/)).toBeTruthy();
     await waitFor(() => expect(FakeEventSource.last.url).toBe(`/api/events?threadId=${THREAD_ID}`));
@@ -282,7 +282,7 @@ describe("RunScreen", () => {
       threadId: THREAD_ID,
       event: { ...runEvent(99, "log", { text: "other" }), runId: "run_other" as typeof RUN_ID },
     });
-    await screen.findByText("third");
+    await screen.findAllByText("third");
     const list = screen.getByLabelText("Run events");
     expect(
       within(list)
@@ -328,7 +328,7 @@ describe("RunScreen", () => {
     // Always the pre-change row: the response left the Gateway before the run finished.
     releaseRun({ run: run({ status: "running" }), usage: [] });
 
-    await screen.findByText("start");
+    await screen.findAllByText("start");
     expect(subscribedAtFetch).toBe(true);
     // The status that arrived first is kept; the stale row does not roll it back to running.
     expect(screen.getByText("succeeded").className).toContain("status");
@@ -347,7 +347,7 @@ describe("RunScreen", () => {
       },
     });
     render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
-    await screen.findByText("start");
+    await screen.findAllByText("start");
 
     // The browser drops the stream and gets it back. Frames sent meanwhile are never replayed.
     // The stream is opened by an effect React may flush after the fetch answered, so wait for it.
@@ -355,7 +355,7 @@ describe("RunScreen", () => {
     es.drop();
     es.open();
 
-    await screen.findByText("missed while down");
+    await screen.findAllByText("missed while down");
     expect(calls.map((c) => c.path)).toContain("/api/runs/run_1/events?afterSeq=1");
     const list = screen.getByLabelText("Run events");
     expect(
@@ -388,7 +388,7 @@ describe("RunScreen", () => {
     es.emit({ type: "run_status", threadId: THREAD_ID, run: completed });
     await screen.findByText("late-priced-model");
     releaseFirst({ run: run({ status: "running" }), usage: [] });
-    await screen.findByText("initial snapshot event");
+    await screen.findAllByText("initial snapshot event");
     expect(screen.getByText("succeeded").className).toContain("status");
     expect(screen.getByText("late-priced-model")).toBeTruthy();
     expect(screen.queryByText("No usage recorded.")).toBeNull();
@@ -414,17 +414,18 @@ describe("RunScreen", () => {
     const api = createApiClient({ fetch });
     const view = render(<RunScreen runId={RUN_ID} api={api} />);
 
-    expect(screen.getByText(RUN_ID)).toBeTruthy();
+    const screenOf = (id: string) => view.container.querySelector(`[data-run-id="${id}"]`);
+    expect(screenOf(RUN_ID)).toBeTruthy();
     view.rerender(<RunScreen runId={secondId} api={api} />);
-    expect(screen.queryByText("from A")).toBeNull();
-    expect(screen.getByText(secondId)).toBeTruthy();
-    await screen.findByText("from B");
+    expect(screen.queryAllByText("from A")).toEqual([]);
+    expect(screenOf(secondId)).toBeTruthy();
+    await screen.findAllByText("from B");
     expect(screen.getByText("B failed")).toBeTruthy();
 
     resolveFirst?.({ run: run({ status: "succeeded" }), usage: [] });
     await Promise.resolve();
-    expect(screen.queryByText("from A")).toBeNull();
-    expect(screen.getByText(secondId)).toBeTruthy();
+    expect(screen.queryAllByText("from A")).toEqual([]);
+    expect(screenOf(secondId)).toBeTruthy();
   });
 
   it("cancels a live run from the header and shows the cancelled status", async () => {
