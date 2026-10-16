@@ -14,9 +14,12 @@ so `evals/compare.ts` can pair runs that differ in it alone.
   (`anthropic` for the Claude SDK, `openai` for the OpenAI Agents SDK), or the request is refused
   with `validation`. The cheap model is checked the same way: model jobs and summaries run on
   the bot's runtime, so an `openai-agents` bot needs both models on `openai` upstreams.
-- `MODEL_UPSTREAMS` entries may carry `"protocol": "openai"`: an OpenAI Chat Completions endpoint.
-  The proxy forwards `POST /v1/chat/completions` only to such an upstream and `/v1/messages` only
-  to an `anthropic` one; a mismatch is `503 model_upstream_missing` naming both protocols. The
+- `MODEL_UPSTREAMS` entries may carry `"protocol": "openai"` (an OpenAI Chat Completions
+  endpoint) or `"both"` (one endpoint serving the same model ids over either protocol);
+  `MODEL_PROTOCOL` says the same of `MODEL_BASE_URL`. With `both`, a bot can switch runtime without
+  changing model, which is the clean A/B. The proxy forwards `POST /v1/chat/completions` only to an
+  upstream that speaks `openai` and `/v1/messages` only to one that speaks `anthropic`; a mismatch
+  is `503 model_upstream_missing` naming both protocols. The
   frozen-model check, the token swap, budget admission and the `model_requests` row are the same
   for both paths; usage is read from the OpenAI shape (`prompt_tokens`, `completion_tokens`,
   `prompt_tokens_details.cached_tokens`) and `image_url` parts count as image blocks.

@@ -25,7 +25,7 @@
 import { Readable, Transform } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { ResolvedUpstream } from "../config/model-upstreams.js";
+import { type ResolvedUpstream, upstreamSpeaks } from "../config/model-upstreams.js";
 import type { ModelRefusal, ModelRequestKind } from "../ledger/model-requests.js";
 import type { RunTokenStore } from "../secrets/run-tokens.js";
 import { type FrozenModels, modelVerdict, withModel } from "./frozen-models.js";
@@ -229,7 +229,7 @@ export function registerModelProxy(app: FastifyInstance, opts: ModelProxyOptions
       // ADR-0042 decision 5: a request goes only to an upstream of its own protocol. The proxy
       // never translates one protocol into the other.
       const protocol = PATH_PROTOCOL[path];
-      if (protocol !== undefined && upstreamTarget.protocol !== protocol) {
+      if (protocol !== undefined && !upstreamSpeaks(upstreamTarget, protocol)) {
         return reply
           .code(503)
           .header("x-should-retry", "false")

@@ -5,7 +5,14 @@
 import { DeskmatesError, type ModelPrice } from "@deskmates/contracts";
 import { parseModelPrices } from "../ledger/model-price.js";
 import { type Env, optionalInt, optionalValue, required } from "./env.js";
-import { ModelRegistry, type ModelUpstream, parseModelUpstreams } from "./model-upstreams.js";
+import {
+  MODEL_UPSTREAM_PROTOCOLS,
+  ModelRegistry,
+  type ModelUpstream,
+  type ModelUpstreamProtocol,
+  isUpstreamProtocol,
+  parseModelUpstreams,
+} from "./model-upstreams.js";
 
 /** ADR-0002 definitions: short-lived token TTL default 4 h. */
 export const MODEL_TOKEN_TTL_SECONDS_DEFAULT = 14400;
@@ -21,6 +28,8 @@ export interface ModelConfig {
   modelAuthToken: string;
   /** `MODEL_UPSTREAMS`: further upstreams, each serving the model ids it lists (ADR-0039). */
   modelUpstreams?: ModelUpstream[];
+  /** `MODEL_PROTOCOL`: what the default upstream speaks (ADR-0042); absent means anthropic. */
+  modelProtocol?: ModelUpstreamProtocol;
   defaultModel: string;
   cheapModel: string;
   /**
@@ -75,8 +84,17 @@ export function readModelConfig(env: Env): ModelConfig {
  */
 function upstreams(
   env: Env,
-): Pick<ModelConfig, "modelBaseUrl" | "modelAuthToken" | "modelUpstreams"> {
+): Pick<ModelConfig, "modelBaseUrl" | "modelAuthToken" | "modelUpstreams" | "modelProtocol"> {
   const modelUpstreams = parseModelUpstreams(env.MODEL_UPSTREAMS);
+  const protocolRaw = env.MODEL_PROTOCOL?.trim() ?? "";
+  if (protocolRaw !== "" && !isUpstreamProtocol(protocolRaw)) {
+    throw new DeskmatesError(
+      "validation",
+      `MODEL_PROTOCOL must be one of ${MODEL_UPSTREAM_PROTOCOLS.join(", ")}`,
+      { key: "MODEL_PROTOCOL", raw: protocolRaw },
+    );
+  }
+  const modelProtocol = protocolRaw === "" ? undefined : protocolRaw;
   const base = env.MODEL_BASE_URL?.trim() ?? "";
   if (base === "" && modelUpstreams.length > 0) {
     return { modelBaseUrl: "", modelAuthToken: "", modelUpstreams };
@@ -85,6 +103,7 @@ function upstreams(
     modelBaseUrl: required(env, "MODEL_BASE_URL").replace(/\/+$/, ""),
     modelAuthToken: required(env, "MODEL_AUTH_TOKEN"),
     ...(modelUpstreams.length > 0 ? { modelUpstreams } : {}),
+    ...(modelProtocol === undefined ? {} : { modelProtocol }),
   };
 }
 

@@ -11,16 +11,28 @@ export const DEFAULT_UPSTREAM_ID = "default";
 
 /**
  * Protocols with an adapter in the model proxy: Anthropic Messages (`/v1/messages`) and, since
- * ADR-0042, OpenAI Chat Completions (`/v1/chat/completions`). A request is forwarded only to an
- * upstream of its own protocol; the proxy never translates.
+ * ADR-0042, OpenAI Chat Completions (`/v1/chat/completions`). `both` is an endpoint that serves
+ * the same model ids over either, which is what lets one model be compared across the two
+ * runtimes. A request is forwarded only to an upstream that speaks its protocol; the proxy
+ * never translates.
  */
-export const MODEL_UPSTREAM_PROTOCOLS = ["anthropic", "openai"] as const;
+export const MODEL_UPSTREAM_PROTOCOLS = ["anthropic", "openai", "both"] as const;
 export type ModelUpstreamProtocol = (typeof MODEL_UPSTREAM_PROTOCOLS)[number];
+/** The protocol of one request: the path it was posted to. */
+export type WireProtocol = "anthropic" | "openai";
 
 export function isUpstreamProtocol(value: unknown): value is ModelUpstreamProtocol {
   return (
     typeof value === "string" && (MODEL_UPSTREAM_PROTOCOLS as readonly string[]).includes(value)
   );
+}
+
+/** Whether an upstream answers requests of `wanted`'s protocol. */
+export function upstreamSpeaks(
+  upstream: { protocol: ModelUpstreamProtocol },
+  wanted: WireProtocol,
+): boolean {
+  return upstream.protocol === "both" || upstream.protocol === wanted;
 }
 
 /** One upstream of `MODEL_UPSTREAMS`. */
@@ -47,6 +59,8 @@ export interface ResolvedUpstream {
 export interface ModelRegistrySource {
   modelBaseUrl?: string;
   modelAuthToken?: string;
+  /** `MODEL_PROTOCOL`: what the default upstream speaks; absent means Anthropic Messages. */
+  modelProtocol?: ModelUpstreamProtocol;
   modelUpstreams?: readonly ModelUpstream[];
   defaultModel: string;
   cheapModel: string;
@@ -153,7 +167,7 @@ export class ModelRegistry {
             id: DEFAULT_UPSTREAM_ID,
             baseUrl: base.replace(/\/+$/, ""),
             ...(source.modelAuthToken ? { authToken: source.modelAuthToken } : {}),
-            protocol: "anthropic",
+            protocol: source.modelProtocol ?? "anthropic",
           };
   }
 

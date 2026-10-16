@@ -21,7 +21,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import type { BotPatch } from "../bots/bots.js";
 import { hashWebhookToken, newWebhookToken } from "../bots/webhook-token.js";
-import { modelRegistryOf } from "../config/model-upstreams.js";
+import { modelRegistryOf, upstreamSpeaks } from "../config/model-upstreams.js";
 import type { GatewayContext } from "../context.js";
 import { newId } from "../db/ids.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
@@ -319,7 +319,7 @@ function optionalRuntime(body: Record<string, unknown>): AgentRuntime | null | u
 function requireRuntimeModel(ctx: GatewayContext, runtime: AgentRuntime, model: string): void {
   const upstream = modelRegistryOf(ctx.config).resolve(model);
   const expected = runtimeProtocol(runtime);
-  if (upstream === undefined || upstream.protocol !== expected) {
+  if (upstream === undefined || !upstreamSpeaks(upstream, expected)) {
     throw new DeskmatesError(
       "validation",
       `runtime ${runtime} needs model ${model} on a ${expected}-protocol upstream`,
