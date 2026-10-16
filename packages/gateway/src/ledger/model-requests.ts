@@ -7,6 +7,7 @@
 
 import type { RunId } from "@deskmates/contracts";
 import type { GatewayDb } from "../db/open.js";
+import type { RequestShape } from "../model-proxy/request-facts.js";
 
 export type ModelRequestKind = "messages" | "count_tokens";
 
@@ -27,6 +28,8 @@ export interface ModelRequestInput {
   refusal?: ModelRefusal;
   /** Image blocks the body carried (ADR-0023 amendment 1); absent when it was unreadable. */
   imageBlocks?: number;
+  /** The request's shape (ADR-0023 amendment 5); absent when the body was unreadable. */
+  shape?: RequestShape;
 }
 
 export interface ModelRequestUsage {
@@ -61,6 +64,8 @@ export interface ModelRequestRecord {
   refusal: ModelRefusal | null;
   servedModel: string | null;
   imageBlocks?: number | null;
+  /** ADR-0023 amendment 5; null on a row whose body was unreadable or that predates it. */
+  shape?: RequestShape | null;
 }
 
 interface ModelRequestRow {
@@ -81,6 +86,46 @@ interface ModelRequestRow {
   refusal: ModelRefusal | null;
   served_model: string | null;
   image_blocks: number | null;
+  cache_control_blocks: number | null;
+  system_blocks: number | null;
+  system_chars: number | null;
+  system_static_sha256: string | null;
+  system_dynamic_sha256: string | null;
+  system_block_hashes_json: string | null;
+  tools_count: number | null;
+  tools_chars: number | null;
+  messages_count: number | null;
+}
+
+/** A row's shape, or null when the proxy recorded none (the counts are written together). */
+function shapeOf(r: ModelRequestRow): RequestShape | null {
+  if (
+    r.cache_control_blocks === null ||
+    r.system_blocks === null ||
+    r.system_chars === null ||
+    r.tools_count === null ||
+    r.tools_chars === null ||
+    r.messages_count === null
+  )
+    return null;
+  let hashes: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(r.system_block_hashes_json ?? "[]");
+    if (Array.isArray(parsed)) hashes = parsed.filter((h): h is string => typeof h === "string");
+  } catch {
+    hashes = [];
+  }
+  return {
+    cacheControlBlocks: r.cache_control_blocks,
+    systemBlocks: r.system_blocks,
+    systemChars: r.system_chars,
+    ...(r.system_static_sha256 === null ? {} : { systemStaticSha256: r.system_static_sha256 }),
+    ...(r.system_dynamic_sha256 === null ? {} : { systemDynamicSha256: r.system_dynamic_sha256 }),
+    systemBlockHashes: hashes,
+    toolsCount: r.tools_count,
+    toolsChars: r.tools_chars,
+    messagesCount: r.messages_count,
+  };
 }
 
 export class ModelRequestStore {
@@ -88,13 +133,16 @@ export class ModelRequestStore {
 
   /** Records a request as it starts; returns the row id `setUsage` takes. */
   insert(input: ModelRequestInput): number {
+    const shape = input.shape;
     // One statement, so the next seq and the insert cannot interleave with another request.
     const result = this.db
       .prepare(
         `INSERT INTO model_requests
            (run_id, attempt, seq, ts, request_kind, model, system_sha256, stream,
-            rewritten_from, refusal, image_blocks)
-         SELECT ?, ?, coalesce(max(seq), 0) + 1, ?, ?, ?, ?, ?, ?, ?, ?
+            rewritten_from, refusal, image_blocks, cache_control_blocks, system_blocks,
+            system_chars, system_static_sha256, system_dynamic_sha256, system_block_hashes_json,
+            tools_count, tools_chars, messages_count)
+         SELECT ?, ?, coalesce(max(seq), 0) + 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
            FROM model_requests WHERE run_id = ?`,
       )
       .run(
@@ -108,6 +156,15 @@ export class ModelRequestStore {
         input.rewrittenFrom ?? null,
         input.refusal ?? null,
         input.imageBlocks ?? null,
+        shape?.cacheControlBlocks ?? null,
+        shape?.systemBlocks ?? null,
+        shape?.systemChars ?? null,
+        shape?.systemStaticSha256 ?? null,
+        shape?.systemDynamicSha256 ?? null,
+        shape ? JSON.stringify(shape.systemBlockHashes) : null,
+        shape?.toolsCount ?? null,
+        shape?.toolsChars ?? null,
+        shape?.messagesCount ?? null,
         input.runId,
       );
     return Number(result.lastInsertRowid);
@@ -149,7 +206,9 @@ export class ModelRequestStore {
         .prepare(
           `SELECT run_id, attempt, seq, ts, request_kind, model, system_sha256, stream,
                   input_tokens, output_tokens, cache_read_tokens, cache_create_tokens, thinking_tokens,
-                  rewritten_from, refusal, served_model, image_blocks
+                  rewritten_from, refusal, served_model, image_blocks, cache_control_blocks,
+                  system_blocks, system_chars, system_static_sha256, system_dynamic_sha256,
+                  system_block_hashes_json, tools_count, tools_chars, messages_count
              FROM model_requests WHERE run_id IN (${chunk.map(() => "?").join(",")})
             ORDER BY run_id, seq`,
         )
@@ -173,6 +232,7 @@ export class ModelRequestStore {
           refusal: r.refusal,
           servedModel: r.served_model,
           imageBlocks: r.image_blocks,
+          shape: shapeOf(r),
         });
     }
     return out;

@@ -3,6 +3,7 @@
 // current-round strip and Activity (ADR-0033) do.
 
 import type { BotId, MessageId, RunId, ThreadId, WorkspaceId } from "./ids.js";
+import type { RunStatus } from "./run.js";
 
 /** Decision 28: parallel; decision 29: an explicit one-by-one walk; amendment 2's offer. */
 export type RoundMode = "parallel" | "sequential" | "offer";
@@ -69,6 +70,36 @@ export interface RoundMember {
 }
 
 /**
+ * Where a triaged round is (ADR-0005 amendment 6): its triage job runs, its assigned members
+ * work, its closer was woken, it is done, or triage fell back to `owner-v1` routing.
+ */
+export type RoundPlanPhase = "triage" | "working" | "closing" | "closed" | "fallback";
+
+export const ROUND_PLAN_PHASES: readonly RoundPlanPhase[] = [
+  "triage",
+  "working",
+  "closing",
+  "closed",
+  "fallback",
+];
+
+/** The plan of a round under `round-v1` (amendment 6, decisions 44 to 48). */
+export interface RoundPlan {
+  phase: RoundPlanPhase;
+  triageRunId?: RunId;
+  /** Assigned members in the order triage named them, each with its one-line task. */
+  assignments: { botId: BotId; task: string }[];
+  closerBotId?: BotId;
+  /** The closer's one wake; absent until every assigned run ended, or when none was needed. */
+  closerRunId?: RunId;
+  closerRunStatus?: RunStatus;
+  /** Messages the closer run posted in the thread: the round's synthesis. */
+  synthesisMessageIds: MessageId[];
+  /** Why triage fell back or the round closed without a closer wake. */
+  reason?: string;
+}
+
+/**
  * A round is keyed by its originating message (decision 30): a redelivery cannot make a second
  * one, and its id in the API is that message's id.
  */
@@ -89,4 +120,6 @@ export interface ThreadRound {
   members: RoundMember[];
   completed: number;
   total: number;
+  /** Present for a round triaged under `round-v1` (amendment 6). */
+  plan?: RoundPlan;
 }

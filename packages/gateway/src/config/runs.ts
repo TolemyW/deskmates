@@ -9,7 +9,7 @@ import {
   SHORT_WAIT_SECONDS_DEFAULT,
   isGroupRouting,
 } from "@deskmates/contracts";
-import { type Env, optionalInt } from "./env.js";
+import { type Env, optionalInt, optionalLimit } from "./env.js";
 
 /** ADR-0005 definitions: delivered slice cap, a guess to be calibrated. */
 export const THREAD_PAYLOAD_MAX_TOKENS_DEFAULT = 16000;
@@ -20,6 +20,15 @@ export const THREAD_PAYLOAD_MAX_TOKENS_DEFAULT = 16000;
  * allow 10 minutes; the default leaves room for a long browser session and an L2 short wait.
  */
 export const RUN_TIMEOUT_SECONDS_DEFAULT = 1800;
+
+/**
+ * Issue #9: a `running` run that has produced no progress event for this long is marked
+ * `stalled`, and goes back to `running` on its next one. The 10 s `resource_observation` only
+ * proves the sidecar process is alive, so it does not count; an upstream that never answers
+ * stalls the run. Never a kill: `RUN_TIMEOUT_SECONDS` stays the only one. 0 turns detection off.
+ * An observation, not a knob the agent sees, so it is not recorded in `runs.config_json`.
+ */
+export const RUN_STALL_SECONDS_DEFAULT = 300;
 
 /**
  * Largest webhook body the Gateway accepts, in bytes. The body is stored on the run row and put
@@ -57,6 +66,8 @@ export interface RunsConfig {
   shortWaitSeconds: number;
   /** Recorded in `runs.config_json`; a change is a knob change (AGENTS.md). */
   runTimeoutSeconds: number;
+  /** Seconds without a progress event before a running run is `stalled`; 0 is off (issue #9). */
+  runStallSeconds: number;
   /**
    * How a message with no explicit recipient is routed in a group (ADR-0005 amendment 2).
    * Omitted means `GROUP_ROUTING_DEFAULT`. Recorded in `runs.config_json` as `groupRouting`.
@@ -77,6 +88,12 @@ export interface RunsConfig {
   webhookQueueMax: number;
   /** SDK `maxTurns` per run; recorded in `runs.config_json` and sent on every StartRunRequest. */
   maxTurns: number;
+  /**
+   * `RUN_EVENTS_RETENTION_DAYS` (ADR-0042 decision 6): prune the events, usage rows and model
+   * requests of terminal runs that finished longer ago. Undefined (the default) keeps everything.
+   * Not a run knob: it changes what the ledger keeps, never what a run does.
+   */
+  runEventsRetentionDays?: number;
 }
 
 export function readRunsConfig(env: Env): RunsConfig {
@@ -88,19 +105,30 @@ export function readRunsConfig(env: Env): RunsConfig {
     ),
     shortWaitSeconds: SHORT_WAIT_SECONDS_DEFAULT,
     runTimeoutSeconds: optionalInt(env, "RUN_TIMEOUT_SECONDS", RUN_TIMEOUT_SECONDS_DEFAULT),
+    runStallSeconds: optionalLimit(env, "RUN_STALL_SECONDS", RUN_STALL_SECONDS_DEFAULT),
     groupRouting: groupRouting(env),
     botWorkdir: botWorkdir(env),
     cronTimeZone: cronTimeZone(env),
     webhookBodyMaxBytes: optionalInt(env, "WEBHOOK_BODY_MAX_BYTES", WEBHOOK_BODY_MAX_BYTES_DEFAULT),
     webhookQueueMax: optionalInt(env, "WEBHOOK_QUEUE_MAX", WEBHOOK_QUEUE_MAX_DEFAULT),
     maxTurns: optionalInt(env, "DESKMATES_MAX_TURNS", MAX_TURNS_DEFAULT),
+    ...runEventsRetention(env),
   };
+}
+
+/** Empty or 0 is off (the default); anything else must be a whole number of days. */
+function runEventsRetention(env: Env): { runEventsRetentionDays?: number } {
+  const days = optionalLimit(env, "RUN_EVENTS_RETENTION_DAYS", 0);
+  return days > 0 ? { runEventsRetentionDays: days } : {};
 }
 
 function groupRouting(env: Env): GroupRouting {
   const value = env.DESKMATES_GROUP_ROUTING?.trim() || GROUP_ROUTING_DEFAULT;
   if (!isGroupRouting(value))
-    throw new DeskmatesError("validation", "DESKMATES_GROUP_ROUTING must be walk-v1 or owner-v1");
+    throw new DeskmatesError(
+      "validation",
+      "DESKMATES_GROUP_ROUTING must be walk-v1, owner-v1 or round-v1",
+    );
   return value;
 }
 

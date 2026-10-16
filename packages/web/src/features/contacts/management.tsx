@@ -19,9 +19,11 @@ import { PageBar } from "../../lib/page-bar.js";
 import { usePagedQuery } from "../../lib/use-paged-query.js";
 import { RoleNote, useCan } from "../../state/session-roles.js";
 import { EgressModePicker } from "../workspaces/egress-mode-picker.js";
+import { BotIdentity } from "./bot-identity.js";
 import { BotSchedules } from "./bot-schedules.js";
 import { VisionCapability } from "./model-capability.js";
 import { ModelPicker, ModelSuggestions, registeredModelLabel } from "./model-picker.js";
+import { RuleVersions } from "./rule-versions.js";
 import { SoulProposalPanel } from "./soul-proposal.js";
 
 interface SoulDraft {
@@ -358,7 +360,10 @@ function SoulEditor({ api, bot }: { api: ApiClient; bot: BotDefinition }) {
       setVersion(saved.version);
       setLatest(undefined);
       soulDraftMap(api).delete(bot.id);
-      setNotice(t("management.soul.saved"));
+      // ADR-0043 decision 3: a live or parked run keeps what it started with.
+      setNotice(
+        saved.appliesFromNextRun ? t("management.soul.savedNextRun") : t("management.soul.saved"),
+      );
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         try {
@@ -433,6 +438,24 @@ function SoulEditor({ api, bot }: { api: ApiClient; bot: BotDefinition }) {
           }}
         />
       ) : null}
+      {loaded ? (
+        <RuleVersions
+          api={api}
+          bot={bot}
+          file="soul"
+          currentVersion={version}
+          refreshKey={version}
+          disabled={body !== savedBody}
+          onRestored={(restored) => {
+            setBody(restored.body);
+            setSavedBody(restored.body);
+            setVersion(restored.version);
+            setLatest(undefined);
+            setError("");
+            soulDraftMap(api).delete(bot.id);
+          }}
+        />
+      ) : null}
       {latest ? (
         <div className="management-conflict">
           <p>{t("management.soul.latest")}</p>
@@ -488,6 +511,94 @@ function matcherSummary(matcher: ApprovalRuleMatcher): string {
   return values.length ? values.join(" · ") : t("management.rules.matcherAll");
 }
 
+/**
+ * Edit one rule in place (ADR-0043 decision 6): same id and place in the oldest-first order, so
+ * only what it says changes. The fields a hand-made rule has; any other matcher key is kept.
+ */
+function ApprovalRuleEditForm({
+  api,
+  rule,
+  onDone,
+}: {
+  api: ApiClient;
+  rule: ApprovalRule;
+  onDone: (saved?: ApprovalRule) => void;
+}) {
+  const [decision, setDecision] = useState<"allow_always" | "deny">(rule.decision);
+  const [toolName, setToolName] = useState(rule.matcher.toolName ?? "");
+  const [targetOrigin, setTargetOrigin] = useState(rule.matcher.targetOrigin ?? "");
+  const [argumentPattern, setArgumentPattern] = useState(rule.matcher.argumentPattern ?? "");
+  const [filePath, setFilePath] = useState(rule.matcher.filePath ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const t = useT();
+  const save = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const {
+        toolName: _tool,
+        targetOrigin: _origin,
+        argumentPattern: _pattern,
+        filePath: _path,
+        ...kept
+      } = rule.matcher;
+      const matcher: ApprovalRuleMatcher = {
+        ...kept,
+        ...(toolName.trim() ? { toolName: toolName.trim() } : {}),
+        ...(targetOrigin.trim() ? { targetOrigin: targetOrigin.trim() } : {}),
+        ...(argumentPattern.trim() ? { argumentPattern: argumentPattern.trim() } : {}),
+        ...(filePath.trim() ? { filePath: filePath.trim() } : {}),
+      };
+      onDone(await api.updateApprovalRule(rule.id, { decision, matcher }));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <fieldset className="rule-edit" disabled={busy}>
+      {error ? <p role="alert">{error}</p> : null}
+      <Select
+        label={t("management.rules.decision")}
+        value={decision}
+        onValueChange={(value) => setDecision(value as typeof decision)}
+        disabled={busy}
+        options={[
+          { value: "allow_always", label: t("management.rules.alwaysAllow") },
+          { value: "deny", label: t("management.rules.deny") },
+        ]}
+      />
+      <label>
+        {t("management.rules.toolName")}
+        <input value={toolName} onChange={(event) => setToolName(event.target.value)} />
+      </label>
+      <label>
+        {t("management.rules.targetOrigin")}
+        <input value={targetOrigin} onChange={(event) => setTargetOrigin(event.target.value)} />
+      </label>
+      <label>
+        {t("management.rules.argumentPattern")}
+        <input
+          value={argumentPattern}
+          onChange={(event) => setArgumentPattern(event.target.value)}
+        />
+      </label>
+      <label>
+        {t("management.rules.filePath")}
+        <input value={filePath} onChange={(event) => setFilePath(event.target.value)} />
+      </label>
+      <Button type="button" onClick={() => void save()}>
+        {t("management.rules.saveEdit")}
+      </Button>
+      <Button type="button" onClick={() => onDone()}>
+        {t("management.cancel")}
+      </Button>
+    </fieldset>
+  );
+}
+
 /** Approval rules per page (#113 slice B, plan row 31). */
 export const RULE_PAGE_SIZE = 25;
 
@@ -511,6 +622,8 @@ function ApprovalRulesEditor({ api, bot }: { api: ApiClient; bot: BotDefinition 
   const [filePath, setFilePath] = useState("");
   const [decision, setDecision] = useState<"allow_always" | "deny">("allow_always");
   const [confirmDelete, setConfirmDelete] = useState<string>();
+  const [editing, setEditing] = useState<string>();
+  const canUpdate = useCan("approvalRule.update").allowed;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const canCreate = useCan("approvalRule.create").allowed;
@@ -576,6 +689,20 @@ function ApprovalRulesEditor({ api, bot }: { api: ApiClient; bot: BotDefinition 
                 : t("management.rules.deny")}
             </span>{" "}
             {matcherSummary(rule.matcher)}
+            {editing === rule.id ? (
+              <ApprovalRuleEditForm
+                api={api}
+                rule={rule}
+                onDone={(saved) => {
+                  setEditing(undefined);
+                  if (saved) reloadRules();
+                }}
+              />
+            ) : canUpdate ? (
+              <Button type="button" disabled={busy} onClick={() => setEditing(rule.id)}>
+                {t("management.rules.edit")}
+              </Button>
+            ) : null}
             {confirmDelete === rule.id ? (
               <span className="management-confirm">
                 {t("management.rules.confirmRemove")}
@@ -731,6 +858,9 @@ export function BotEditor({
       <p className="sr-only">{workspaceName}</p>
       {error ? <p role="alert">{error}</p> : null}
       {notice ? <output>{notice}</output> : null}
+      <section className="card settings-section">
+        <BotIdentity key={bot.id} api={api} bot={bot} onSaved={onSaved} />
+      </section>
       <section className="card settings-section">
         <SoulEditor api={api} bot={bot} />
       </section>

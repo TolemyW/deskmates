@@ -56,6 +56,13 @@ export const ROLE_ACTIONS = {
   "bot.create": { route: "POST /api/bots", role: "admin" },
   "bot.configure": { route: "PATCH /api/bots/:id", role: "admin" },
   "bot.editSoul": { route: "PATCH /api/bots/:id/soul", role: "admin" },
+  // ADR-0043: restoring a SOUL/MEMORY version, deleting a diary line and "Run now".
+  "bot.restoreRuleVersion": {
+    route: "POST /api/bots/:id/rule-versions/:file/:version/restore",
+    role: "admin",
+  },
+  "bot.editDiary": { route: "POST /api/bots/:id/diary/:day/delete-line", role: "admin" },
+  "bot.runCronNow": { route: "POST /api/bots/:id/cron/:entry/run", role: "admin" },
   "bot.archive": { route: "POST /api/bots/:id/archive", role: "admin" },
   "bot.restore": { route: "POST /api/bots/:id/restore", role: "admin" },
   "bot.delete": { route: "DELETE /api/bots/:id", role: "admin" },
@@ -138,9 +145,14 @@ export const ROLE_ACTIONS = {
     role: "admin",
     handlerCheck: "a Member answers a continuation ask only for the runs they started",
   },
+  // ADR-0042: the runs index lists a Member's workspaces' runs; marking a run wrong changes what
+  // the group learns, which is the Owner's or Admin's (decision 3).
+  "run.read": { route: "GET /api/runs", role: "member" },
+  "run.mark": { route: "PUT /api/runs/:id/mark", role: "admin" },
   "costAlert.acknowledge": { route: "POST /api/cost-alerts/:id/acknowledge", role: "member" },
   "approvalRule.create": { route: "POST /api/bots/:id/approval-rules", role: "admin" },
   "approvalRule.delete": { route: "DELETE /api/approval-rules/:id", role: "admin" },
+  "approvalRule.update": { route: "PATCH /api/approval-rules/:id", role: "admin" },
   "costRule.create": { route: "POST /api/cost-alert-rules", role: "admin" },
   "costRule.delete": { route: "DELETE /api/cost-alert-rules/:id", role: "admin" },
   // Workspace monetary budget (ADR-0032)

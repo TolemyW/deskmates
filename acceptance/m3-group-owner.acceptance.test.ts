@@ -26,8 +26,16 @@
 //              through one teammate or two, possibly through a teammate that asks the other.
 //              Oracle: RELAY_VALUE=63. Item R appears nowhere else either.
 //
+//   everyone   a fresh thread: "@everyone, what is item V's stock value?". Under the parallel arm
+//              every member answers on its own; in turn each sees the earlier answers; under
+//              `round-v1` a triage picks who works and one closer answers. Oracle:
+//              EVERYONE_VALUE=72. Item V appears nowhere else.
+//
 // The suite runs under whichever routing the stack is given (`DESKMATES_GROUP_ROUTING`), so the
-// same file measures `walk-v1` and `owner-v1`. One report per scenario is written whether or
+// same file measures `walk-v1`, `owner-v1` and `round-v1` (ADR-0005 amendment 6, proposed). The
+// arm of the group-round evaluation (`M2_GROUP_ROUND_ARM`: parallel, in-turn or round-v1) decides
+// how the `everyone` scenario is sent; `evals/group-rounds.ts` turns the reports into rows for
+// `evals/compare.ts`. No campaign of the three arms has been run. One report per scenario is written whether or
 // not the oracle holds: runs offered the request, who took it, delegations by mention, outcome
 // notices, the owner, wall time and per-run usage.
 
@@ -37,6 +45,11 @@ import type { BotDefinition, Thread, ThreadMessage } from "@deskmates/contracts"
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { dockerAvailable, requireWorkspaceImageId } from "./support/docker.js";
 import { missingModelEnv, modelEnv, skipReason } from "./support/env.js";
+import {
+  GROUP_ROUND_ARM_ENV,
+  type GroupRoundArmConfig,
+  groupRoundArm,
+} from "./support/group-round-arms.js";
 import {
   createGroupBot,
   createGroupThread,
@@ -77,6 +90,7 @@ You are the only one who knows the unit price list:
 - item K costs 17 per unit
 - item M costs 40 per unit
 - item R costs 9 per unit
+- item V costs 6 per unit
 You do not know how many units of anything are in stock.
 ${COMMON}`,
   lead: (name: string) => `# ${name}
@@ -90,6 +104,7 @@ You are the only one who knows the stock counts:
 - item M: 3 units in stock
 - item Q: 61 units in stock
 - item R: 7 units in stock
+- item V: 12 units in stock
 You do not know any price.
 ${COMMON}`,
 };
@@ -100,11 +115,13 @@ const ROLES = {
   stock: "stock keeper: knows how many units of every item are in stock",
 };
 
-type Scenario = "combine" | "follow-up" | "single" | "relay";
+type Scenario = "combine" | "follow-up" | "single" | "relay" | "everyone";
 
 interface ScenarioReport {
   scenario: Scenario;
   routing: string;
+  /** The group-round evaluation arm (ADR-0005 amendment 6, decision 52). */
+  arm: string;
   passed: boolean;
   error?: string;
   model: string;
@@ -115,6 +132,14 @@ interface ScenarioReport {
   answeredBy: string | null;
   wallMs: number;
   msToAnswer: number | null;
+  /** Time to the first bot message after the request, whatever it says. */
+  msToFirstReply: number | null;
+  /** Bot messages after the request: duplicates show here before a judge reads them. */
+  botMessages: number;
+  /** Round triage jobs the request started (`round-v1` only). */
+  triageRuns: number;
+  /** Cap and loop-breaker notices in the thread after the request. */
+  capBreaches: number;
   ownerAfter: string | null;
   /** Runs whose trigger is the human request, in creation order. */
   offered: { bot: string; status: string }[];
@@ -168,12 +193,14 @@ describe.skipIf(skip)(`group owner acceptance${skipReason(missing, dockerUp)}`, 
   let bots: BotDefinition[];
   let names: Map<string, string>;
   let shared: Thread;
+  let arm: GroupRoundArmConfig;
 
   beforeAll(async () => {
     requireWorkspaceImageId();
     stack = await startStack({ ...modelEnv(), label: "m3-group-owner", botName: "g_bootstrap" });
     stack.config.maxTurns = 8;
     stack.config.runTimeoutSeconds = 180;
+    arm = groupRoundArm(process.env[GROUP_ROUND_ARM_ENV], groupRoutingOf(stack));
     // Join order is the order of this list: the pricing analyst is offered first.
     bots = [];
     for (const key of ["prices", "lead", "stock"] as const) {
@@ -198,15 +225,17 @@ describe.skipIf(skip)(`group owner acceptance${skipReason(missing, dockerUp)}`, 
     thread: Thread,
     request: string,
     expected: string,
+    options: { roundMode?: "parallel" | "sequential" } = {},
   ): Promise<ScenarioReport> {
     const started = Date.now();
     const runsBefore = (await threadRuns(stack, thread)).length;
-    const posted = await postGroupMessage(stack, thread, request);
+    const posted = await postGroupMessage(stack, thread, request, options);
     const runs = (await settle(stack, thread, runsBefore + 1)).slice(runsBefore);
     const all: ThreadMessage[] = await groupMessages(stack, thread);
     const messages = all.filter((m) => m.seq > posted.message.seq);
     const name = (id: string): string => names.get(id) ?? id;
     const answer = messages.find((m) => m.authorKind === "bot" && m.body.includes(expected));
+    const botMessages = messages.filter((m) => m.authorKind === "bot");
     const offered = runs
       .filter((run) => run.triggerRef === posted.message.id)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -228,6 +257,7 @@ describe.skipIf(skip)(`group owner acceptance${skipReason(missing, dockerUp)}`, 
     return {
       scenario,
       routing: groupRoutingOf(stack),
+      arm: arm.arm,
       passed: false,
       model: modelEnv().defaultModel,
       image: process.env.WORKSPACE_IMAGE ?? "",
@@ -237,6 +267,16 @@ describe.skipIf(skip)(`group owner acceptance${skipReason(missing, dockerUp)}`, 
       answeredBy: answer ? name(answer.authorId) : null,
       wallMs: Date.now() - started,
       msToAnswer: answer ? Date.parse(answer.ts) - Date.parse(posted.message.ts) : null,
+      msToFirstReply: botMessages[0]
+        ? Date.parse(botMessages[0].ts) - Date.parse(posted.message.ts)
+        : null,
+      botMessages: botMessages.length,
+      triageRuns: runs.filter((run) => run.config.runType === "round_triage").length,
+      capBreaches: messages.filter(
+        (m) =>
+          m.authorKind === "system" &&
+          /^(turn budget reached|relay cap reached|loop breaker tripped)/.test(m.body),
+      ).length,
       ownerAfter: detail.json.thread.ownerBotId ? name(detail.json.thread.ownerBotId) : null,
       offered: offered.map((run) => ({ bot: name(run.botId), status: run.status })),
       takenBy: taker ? name(taker.botId) : null,
@@ -275,10 +315,11 @@ describe.skipIf(skip)(`group owner acceptance${skipReason(missing, dockerUp)}`, 
     thread: Thread,
     request: string,
     expected: string,
+    options: { roundMode?: "parallel" | "sequential" } = {},
   ): Promise<void> {
     let report: ScenarioReport | undefined;
     try {
-      report = await observe(scenario, thread, request, expected);
+      report = await observe(scenario, thread, request, expected, options);
       expect(report.failedRuns, "no run failed").toBe(0);
       expect(report.answered, `a bot posted ${expected}`).toBe(true);
       report.passed = true;
@@ -345,6 +386,21 @@ describe.skipIf(skip)(`group owner acceptance${skipReason(missing, dockerUp)}`, 
         thread,
         `@g_lead ${MARKER} What is the total stock value of item R, that is its unit price times the units in stock? Give the final answer as one line: RELAY_VALUE=<number>`,
         "RELAY_VALUE=63",
+      );
+    },
+    11 * 60_000,
+  );
+
+  it(
+    "everyone: a request to every member is answered, sent the way the arm says",
+    async () => {
+      const thread = await createGroupThread(stack, bots, "operations team, fourth thread");
+      await check(
+        "everyone",
+        thread,
+        `@everyone ${MARKER} What is the total stock value of item V, that is its unit price times the units in stock? Give the final answer as one line: EVERYONE_VALUE=<number>`,
+        "EVERYONE_VALUE=72",
+        { roundMode: arm.everyoneRoundMode },
       );
     },
     11 * 60_000,

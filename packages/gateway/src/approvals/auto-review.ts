@@ -182,7 +182,7 @@ export class ApprovalReviews {
     const workspaceId = this.workspaceOf(run);
     const row = this.deps.db
       .prepare(
-        `SELECT COUNT(*) AS n FROM runs WHERE workspace_id = ? AND status = 'running'
+        `SELECT COUNT(*) AS n FROM runs WHERE workspace_id = ? AND status IN ('running', 'stalled')
            AND run_type = ?`,
       )
       .get(workspaceId, APPROVAL_REVIEW) as { n: number };
@@ -245,7 +245,7 @@ function triggerInstruction(run: RunRecord): OriginatingInstruction | undefined 
   const payload = run.triggerPayload ?? {};
   const text = (value: unknown): string | undefined =>
     typeof value === "string" && value.trim() !== "" ? value : undefined;
-  if (run.triggerKind === "cron") {
+  if (run.triggerKind === "cron" || run.triggerKind === "manual") {
     const prompt = text(payload.prompt);
     return prompt === undefined ? undefined : { source: "cron_prompt", text: prompt };
   }

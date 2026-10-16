@@ -119,3 +119,21 @@ describe("unaddressedRoute", () => {
     expect(unaddressedRoute(one, "owner-v1", undefined)).toEqual(WALK);
   });
 });
+
+describe("round-v1 in the composer (ADR-0005 amendment 6)", () => {
+  it("says a plan picks who works and answers, in a group only", () => {
+    expect(unaddressedRoute(members, "round-v1", "b1" as BotId)).toEqual({
+      line: "No @mention: a quick plan picks who works on it and who answers",
+      warning: ". With no valid mention, a quick plan picks who works on it and who answers.",
+    });
+    expect(unaddressedRoute(members.slice(0, 1), "round-v1", undefined).line).toBe(
+      "No @mention: every member is woken in turn",
+    );
+  });
+
+  it("previews `@ name` as the Gateway reads it under round-v1", () => {
+    expect(previewMentions("@ team_chief", members, { spaced: true }).woken).toEqual([
+      "team_chief",
+    ]);
+  });
+});

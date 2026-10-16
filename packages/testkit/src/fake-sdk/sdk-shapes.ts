@@ -354,11 +354,64 @@ export interface SdkPostModelSwitchHookMatcher {
   timeout?: number;
 }
 
+/**
+ * `SessionStartHookInput`: `BaseHookInput & { hook_event_name: "SessionStart", ... }`. The
+ * resume fields are filled only when a session is resumed or forked.
+ */
+export interface SdkSessionStartHookInput {
+  hook_event_name: "SessionStart";
+  session_id: string;
+  transcript_path: string;
+  cwd: string;
+  source: "startup" | "resume" | "clear" | "compact" | "fork";
+  model?: string;
+  seconds_since_last_response?: number;
+  context_tokens?: number;
+  prompt_cache_likely_expired?: boolean;
+  estimated_cache_write_usd?: number;
+}
+
+export type SdkSessionStartHookCallback = (
+  input: SdkSessionStartHookInput,
+  toolUseID: string | undefined,
+  options: { signal: AbortSignal },
+) => Promise<SdkHookOutput>;
+
+export interface SdkSessionStartHookMatcher {
+  matcher?: string;
+  hooks: SdkSessionStartHookCallback[];
+  timeout?: number;
+}
+
 /** The hook events the fake runs; the real `Options.hooks` (every event) is assignable to it. */
 export interface SdkHooks {
   PreToolUse?: SdkHookMatcher[];
   PreCompact?: SdkPreCompactHookMatcher[];
   PostModelSwitch?: SdkPostModelSwitchHookMatcher[];
+  SessionStart?: SdkSessionStartHookMatcher[];
+}
+
+/**
+ * The fields of `SDKControlGetContextUsageResponse` (`Query.getContextUsage`) the fake answers;
+ * the sidecar reads no others.
+ */
+export interface SdkContextUsageResponse {
+  categories: {
+    name: string;
+    tokens: number;
+    color: string;
+    isDeferred?: boolean;
+    kind: "used" | "free" | "buffer" | "deferred";
+  }[];
+  totalTokens: number;
+  maxTokens: number;
+  rawMaxTokens: number;
+  percentage: number;
+  model: string;
+  memoryFiles: { path: string; type: string; tokens: number }[];
+  mcpTools: { name: string; serverName: string; tokens: number; isLoaded?: boolean }[];
+  systemTools?: { name: string; tokens: number }[];
+  systemPromptSections?: { name: string; tokens: number }[];
 }
 
 export interface SdkCanUseToolOptions {

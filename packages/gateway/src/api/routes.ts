@@ -13,6 +13,7 @@ import type { Scheduler } from "../scheduler/scheduler.js";
 import { registerApprovalRoutes } from "./approval-routes.js";
 import { registerAuthRoutes } from "./auth-routes.js";
 import { registerBoardRoutes } from "./board-routes.js";
+import { registerBotConfigRoutes } from "./bot-config-routes.js";
 import { registerBudgetRoutes } from "./budget-routes.js";
 import { registerCapacityRoutes } from "./capacity-routes.js";
 import { registerChannelRoutes, registerChannelWebhookRoutes } from "./channel-routes.js";
@@ -45,6 +46,7 @@ import { registerPriceRoutes } from "./price-routes.js";
 import { registerProfileRoutes } from "./profile-routes.js";
 import { registerRegistryRoutes } from "./registry-routes.js";
 import { registerRoutePolicy } from "./route-policy.js";
+import { registerRunAuditRoutes } from "./run-audit-routes.js";
 import { registerRunCancelRoutes } from "./run-cancel-routes.js";
 import { registerRunContextRoutes } from "./run-context-routes.js";
 import { registerRunRoutes } from "./run-routes.js";
@@ -88,6 +90,7 @@ export const OPERATOR_ROUTE_FAMILIES: ReadonlyArray<readonly [name: string, Regi
   ["app-shares", (scope, { ctx }) => registerAppShareRoutes(scope, ctx)],
   ["approvals", (scope, { ctx, scheduler }) => registerApprovalRoutes(scope, ctx, scheduler)],
   ["board", (scope, { ctx }) => registerBoardRoutes(scope, ctx)],
+  ["bot-config", (scope, { ctx, scheduler }) => registerBotConfigRoutes(scope, ctx, scheduler)],
   ["budgets", (scope, { ctx, scheduler }) => registerBudgetRoutes(scope, ctx, scheduler)],
   ["capacity", (scope, { ctx, scheduler }) => registerCapacityRoutes(scope, ctx, scheduler)],
   ["channels", (scope, { ctx }) => registerChannelRoutes(scope, ctx)],
@@ -121,6 +124,7 @@ export const OPERATOR_ROUTE_FAMILIES: ReadonlyArray<readonly [name: string, Regi
   // So do the person's own profile and avatar (ADR-0022 amendment 3).
   ["profile", (scope, { ctx }) => registerProfileRoutes(scope, ctx)],
   ["registry", (scope, { ctx, scheduler }) => registerRegistryRoutes(scope, ctx, scheduler)],
+  ["run-audit", (scope, { ctx }) => registerRunAuditRoutes(scope, ctx)],
   ["run-cancel", (scope, { ctx, scheduler }) => registerRunCancelRoutes(scope, ctx, scheduler)],
   ["run-context", (scope, { ctx }) => registerRunContextRoutes(scope, ctx)],
   ["run-timeline", (scope, { ctx }) => registerRunTimelineRoutes(scope, ctx)],

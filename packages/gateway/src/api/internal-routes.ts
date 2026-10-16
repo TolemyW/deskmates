@@ -48,6 +48,8 @@ import {
 const EVENT_KINDS: ReadonlySet<string> = new Set<string>(RUN_EVENT_KINDS);
 
 type RunParams = { Params: { runId: string } };
+
+const EVENTS_ROUTE = "/internal/runs/:runId/events";
 type ApprovalParams = { Params: { runId: string; approvalId: string } };
 
 export function registerInternalRoutes(
@@ -68,6 +70,9 @@ export function registerInternalRoutes(
           runId: request.params.runId,
         });
       }
+      // Issue #9: a sidecar that calls the Gateway is moving, so a stalled run is running again.
+      // Event batches are judged per event instead: a heartbeat alone is not progress.
+      if (request.routeOptions.url !== EVENTS_ROUTE) scheduler.stalls.touch(verified.runId);
     });
 
     registerAppShareInternalRoutes(scope, ctx);
@@ -79,7 +84,7 @@ export function registerInternalRoutes(
     registerReplyPreviewRoutes(scope, ctx);
     registerTaskInternalRoutes(scope, ctx);
 
-    scope.post<RunParams>("/internal/runs/:runId/events", async (request) => {
+    scope.post<RunParams>(EVENTS_ROUTE, async (request) => {
       const runId = request.params.runId as RunId;
       const run = ctx.runs.mustGet(runId);
       const raw = Array.isArray(request.body) ? request.body : [request.body];
@@ -229,7 +234,7 @@ export function registerInternalRoutes(
               mention.kind === "bot" ? [names.get(mention.botId) ?? mention.botId] : [],
             ),
             everyone: message.mentions.some((mention) => mention.kind === "everyone"),
-            ...mentionDiagnostics(messageBody, members, run.botId),
+            ...mentionDiagnostics(messageBody, members, run.botId, ctx.router.mentionOptions),
           };
           // A mention the Gateway did not deliver is said where it was written (issue #68); a
           // message that mentions nobody would have woken nobody anyway.

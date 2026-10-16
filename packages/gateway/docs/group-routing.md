@@ -67,6 +67,40 @@ do. One-member chats behave the same under both values.
 `npm run delegation-metrics` reports what unaddressed requests cost: runs
 offered, the silent share, requests nobody took and time to first reply.
 
+**Triaged rounds (ADR-0005 amendment 6, proposed).** `DESKMATES_GROUP_ROUTING=round-v1`
+keeps everything `owner-v1` does and changes how a human request to the group is
+routed; `owner-v1` stays the default, and no paired evaluation of `round-v1` has
+been run yet (`npm run group-rounds`, below). In a `chat` thread with more than one
+member:
+
+- A human message that mentions no bot, or mentions `@everyone`, opens its round
+  (mode `offer` or `parallel`, every member in the snapshot) and a plan
+  (`thread_round_plans`, phase `triage`), and queues a `round_triage` model job of
+  the owner, or of the first member (`src/model-jobs/round-triage.ts`). The job
+  starts even while that bot's lane is busy. `roundMode` is not used. An explicit
+  `@bot` still wakes the bot directly, and a bot's `@everyone` keeps amendment 4.
+- When the job succeeds, its validated answer (`thread_round_assignments`) wakes
+  the assigned members at once, each run related to the round; unassigned members
+  show `skipped`; the closer becomes the owner. When it fails, returns no valid
+  plan, or there is no job, the plan records `fallback` with the reason and the
+  message is routed as `owner-v1` routes it (offer owner first, or every member
+  for `@everyone`). A cancelled job wakes nobody; a round cancel takes the job and
+  the closer wake with it.
+- When the latest related run of every assignee is terminal, the closer is woken
+  once (or its queued wake is reused) with `{source: "round_close"}` on that run;
+  not when it was the only assignee, or the thread is paused or past its deadline.
+- Worker and closer wakes carry `routing.round` (the plan, and for the closer how
+  each part ended); the sidecar renders it in the first user turn, so the system
+  prompt equals an `owner-v1` group run's (`src/threads/round-delivery.ts`).
+- The turn budget counts the bot messages of one triaged round as one
+  (`RoundPlanStore.botCountByRound`); relay depth and the loop breaker count every
+  message. `@ name` with a space is a mention of that member, so the `thread_post`
+  answer's `spaced` list is empty. A final reply with an `@name` no member has is
+  recorded on its run (`finalReplyRouting`, `{source: "final_reply_routing"}`) and
+  delivered as `routing.lastReply` to the bot's next wake in the thread.
+- `GET /api/threads/:id/rounds` adds `plan` (phase, assignments, closer, closer run
+  and status, synthesis message ids, reason) to a triaged round.
+
 A human mentioning a same-workspace non-member joins it with `last_seen_seq = 0`,
 subject to the six-member chat limit. Bots cannot add members. These checks route
 messages; they do not isolate bots from their shared workspace.

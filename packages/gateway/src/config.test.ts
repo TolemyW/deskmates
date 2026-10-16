@@ -6,6 +6,7 @@ import {
   GROUP_ROUTING_DEFAULT,
   MAX_TURNS_DEFAULT,
   MODEL_TOKEN_TTL_SECONDS_DEFAULT,
+  RUN_STALL_SECONDS_DEFAULT,
   RUN_TIMEOUT_SECONDS_DEFAULT,
   WEBHOOK_BODY_MAX_BYTES_DEFAULT,
   WEBHOOK_QUEUE_MAX_DEFAULT,
@@ -129,6 +130,13 @@ describe("config", () => {
     expect(() => loadConfig({ ...BASE_ENV, RUN_TIMEOUT_SECONDS: "0" })).toThrow(
       /RUN_TIMEOUT_SECONDS/,
     );
+  });
+
+  it("reads RUN_STALL_SECONDS, where 0 turns stall detection off (issue #9)", () => {
+    expect(loadConfig(BASE_ENV).runStallSeconds).toBe(RUN_STALL_SECONDS_DEFAULT);
+    expect(loadConfig({ ...BASE_ENV, RUN_STALL_SECONDS: "45" }).runStallSeconds).toBe(45);
+    expect(loadConfig({ ...BASE_ENV, RUN_STALL_SECONDS: "0" }).runStallSeconds).toBe(0);
+    expect(() => loadConfig({ ...BASE_ENV, RUN_STALL_SECONDS: "-1" })).toThrow(/RUN_STALL_SECONDS/);
   });
 
   it("reads EGRESS_PROXY_DNS as a list of IP addresses and fails startup on a bad one (ADR-0010)", () => {
@@ -308,6 +316,11 @@ describe("config", () => {
     expect(loadConfig({ ...BASE_ENV, DESKMATES_GROUP_ROUTING: "owner-v1" }).groupRouting).toBe(
       "owner-v1",
     );
+    // ADR-0005 amendment 6: proposed, never the default.
+    expect(loadConfig({ ...BASE_ENV, DESKMATES_GROUP_ROUTING: "round-v1" }).groupRouting).toBe(
+      "round-v1",
+    );
+    expect(GROUP_ROUTING_DEFAULT).toBe("owner-v1");
     expect(() => loadConfig({ ...BASE_ENV, DESKMATES_GROUP_ROUTING: "owner" })).toThrow(
       /DESKMATES_GROUP_ROUTING/,
     );

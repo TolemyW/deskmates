@@ -12,6 +12,7 @@ export const CHEAP_MODEL_JOB_KINDS = [
   "memory_consolidation",
   "memory_organize",
   "memory_recheck",
+  "round_triage",
   "soul_proposal",
 ] as const;
 

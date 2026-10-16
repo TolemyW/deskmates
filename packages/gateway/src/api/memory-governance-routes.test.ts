@@ -93,17 +93,16 @@ it("versions SOUL, invalidates sessions, and applies a gated learned item as a m
     config: ctx.runConfig(),
   });
   ctx.db.prepare("UPDATE runs SET status='waiting_approval' WHERE id=?").run(parked.id);
-  expect(
-    (
-      await app.inject({
-        method: "PATCH",
-        url: `/api/bots/${bot.id}/soul`,
-        headers,
-        payload: { body: "blocked", expectedVersion: soulVersion },
-      })
-    ).statusCode,
-  ).toBe(409);
-  expect(ctx.sessions.get(bot.id, thread.id)).toBe("session-before-soul-change");
+  // ADR-0043 decision 3: a parked run no longer refuses the edit; it is saved and applies from
+  // the next run (the parked one sees it when it resumes as a new attempt).
+  const savedSoul = await app.inject({
+    method: "PATCH",
+    url: `/api/bots/${bot.id}/soul`,
+    headers,
+    payload: { body: "You are a careful writer.", expectedVersion: soulVersion },
+  });
+  expect(savedSoul.statusCode).toBe(200);
+  expect(savedSoul.json().appliesFromNextRun).toBe(true);
   ctx.db.prepare("UPDATE runs SET status='cancelled' WHERE id=?").run(parked.id);
   expect(
     (
@@ -115,14 +114,6 @@ it("versions SOUL, invalidates sessions, and applies a gated learned item as a m
       })
     ).statusCode,
   ).toBe(409);
-  expect(files.get("SOUL.md")).toBe("You are a writer.");
-  const savedSoul = await app.inject({
-    method: "PATCH",
-    url: `/api/bots/${bot.id}/soul`,
-    headers,
-    payload: { body: "You are a careful writer.", expectedVersion: soulVersion },
-  });
-  expect(savedSoul.statusCode).toBe(200);
   // SOUL is canonical Gateway configuration (migration 0019); runs receive it, so the edit
   // does not write the workspace file.
   expect(ctx.bots.canonicalSoul(bot.id)?.body).toBe("You are a careful writer.");

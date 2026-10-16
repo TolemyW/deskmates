@@ -4,21 +4,29 @@
 // pinned memory index, MEMORY.md, the diary window and approved knowledge hits) is placed in the
 // first user turn, before the rendered trigger. An approval resume adds none of it: the resumed
 // session already holds the first turn of its run.
+//
+// ADR-0023 amendment 5 splits the system prompt at the SDK's dynamic boundary: the static part
+// (SOUL.md and the guidance) before it, the sections chosen per run (today only the withheld-image
+// notice) after it (`system-prompt.ts`). The joined text is unchanged.
 
 import { createHash } from "node:crypto";
 import {
   type KnowledgeHit,
+  type RoundAssignmentOutcome,
   type StartRunRequest,
   type ThreadMessageDelivery,
   type ThreadMessageTrigger,
+  type ThreadRoundBrief,
   type TriggerPayload,
   botWorkDir,
   isApprovalAttachmentMime,
   renderPinnedIndex,
 } from "@deskmates/contracts";
 import type { SidecarFs } from "./deps.js";
+import { describeLastReply } from "./posted-message.js";
 import { deskmatesToolName } from "./risk-tier.js";
 import { SUMMARY_INSTRUCTION } from "./summary.js";
+import type { SystemPromptParts } from "./system-prompt.js";
 import { UNTRUSTED_NOTICE, wrapKnowledgeContent, wrapUntrusted } from "./untrusted.js";
 import {
   VISION_LOOK_GUIDANCE,
@@ -106,11 +114,22 @@ export interface ContextSectionSizes {
 }
 
 export interface RunContext {
+  /** The whole system prompt as the model reads it: the parts joined by one blank line. */
   systemPrompt: string;
+  /** The same text split at the SDK's dynamic boundary (ADR-0023 amendment 5). */
+  systemPromptParts: SystemPromptParts;
   prompt: string;
   sections: ContextSectionSizes;
   /** Hex sha256 of `systemPrompt` (UTF-8): tells two runs' prompts apart without storing them. */
   systemPromptSha256: string;
+  /** Hex sha256 of the static part alone: equal across every run of a bot in the same thread. */
+  systemPromptStaticSha256: string;
+  /** Hex sha256 of the dynamic parts joined as in `systemPrompt`; absent when there are none. */
+  systemPromptDynamicSha256?: string;
+}
+
+function sha256Hex(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
 export function isoDate(d: Date): string {
@@ -186,6 +205,53 @@ function renderRoster(routing: Routing): string[] {
   return lines;
 }
 
+const OUTCOME_LABEL: Readonly<Record<RoundAssignmentOutcome, string>> = {
+  replied: "replied",
+  silent: "ended without a reply",
+  failed: "failed",
+  cancelled: "was cancelled",
+  stopped: "was stopped",
+};
+
+/**
+ * The plan of a triaged round and how to work in it (ADR-0005 amendment 6, decisions 47 and 48).
+ * It is in the first user turn, never the system prompt, so a `round-v1` run's system prompt stays
+ * byte-identical to an `owner-v1` group run's and the cached prefix survives. Names and tasks are
+ * the Gateway's validated plan; the request itself is in the delivered messages.
+ */
+export function renderRound(round: ThreadRoundBrief): string[] {
+  const plan = [
+    `Message #${round.messageSeq} was triaged into a round. The Gateway's plan for it:`,
+    ...round.assignments.map(
+      (a) => `- ${a.name}${a.you ? " (you)" : ""}: ${a.task || "no task given"}`,
+    ),
+    `Closer: ${round.closer}${round.youClose ? " (you)" : ""}.`,
+  ];
+  if (round.phase === "close") {
+    return [
+      ...plan,
+      "How each part ended:",
+      ...(round.outcomes ?? []).map(
+        (o) =>
+          `- ${o.name}: ${OUTCOME_LABEL[o.outcome]}${o.seqs.length > 0 ? ` (message ${o.seqs.map((seq) => `#${seq}`).join(", ")})` : ""}`,
+      ),
+      "Every part of this round has ended and you close it. Read the replies in this batch and answer the human once, combining them into one answer; say plainly which part failed or produced nothing. Do not ask members to repeat work they did; mention a member only when a missing part must be done again.",
+    ];
+  }
+  return [
+    ...plan,
+    "Working in this round:",
+    `- Do your part only. Do not repeat or redo another member's part, and do not answer the whole request${round.youClose ? "" : `: ${round.closer} answers the human once every part has ended`}.`,
+    ...(round.youClose
+      ? [
+          "- You also close: once every part has ended you are woken once more with all the replies, and you answer the human then. If your part is the whole answer, give it now.",
+        ]
+      : []),
+    `- Post your result once, as your final reply or with ${THREAD_POST}, not both. When you have nothing to add, end with an empty summary \`reply\`.`,
+    "- Do not mention other members to hand them your part or to thank them: a mention wakes them.",
+  ];
+}
+
 export function renderTrigger(trigger: TriggerPayload): string {
   switch (trigger.kind) {
     case "thread_message": {
@@ -202,6 +268,8 @@ export function renderTrigger(trigger: TriggerPayload): string {
       return [
         `Gateway routing context v${routing.version}: you are ${JSON.stringify(routing.recipientName)} (bot ${routing.recipientBotId}).`,
         ...renderRoster(routing),
+        ...(routing.round ? renderRound(routing.round) : []),
+        ...(routing.lastReply ? [describeLastReply(routing.lastReply)] : []),
         ...(routing.sourceMessageSeq === undefined
           ? []
           : [
@@ -358,19 +426,18 @@ export async function buildContext(
     SUMMARY_INSTRUCTION,
   ].join("\n");
 
-  // ADR-0023 amendment 2: only a withholding run gets the section, so every other prompt is
-  // byte-identical to before.
-  const systemPrompt = [
-    soulText,
-    guidanceText,
-    ...(withholdsImages(request)
-      ? [
-          offersLook(request)
-            ? `${VISION_WITHHELD_GUIDANCE}\n${VISION_LOOK_GUIDANCE}`
-            : VISION_WITHHELD_GUIDANCE,
-        ]
-      : []),
-  ].join("\n\n");
+  // ADR-0023 amendment 5: SOUL.md and the guidance are the static part; a section chosen per run
+  // goes after the boundary. ADR-0023 amendment 2: only a withholding run gets the image section,
+  // so every other prompt is byte-identical to before.
+  const staticPrompt = [soulText, guidanceText].join("\n\n");
+  const dynamicPrompt = withholdsImages(request)
+    ? [
+        offersLook(request)
+          ? `${VISION_WITHHELD_GUIDANCE}\n${VISION_LOOK_GUIDANCE}`
+          : VISION_WITHHELD_GUIDANCE,
+      ]
+    : [];
+  const systemPrompt = [staticPrompt, ...dynamicPrompt].join("\n\n");
   const trigger = [
     renderIdentity(request),
     renderTrigger(request.trigger),
@@ -379,6 +446,7 @@ export async function buildContext(
   ].join("\n");
   return {
     systemPrompt,
+    systemPromptParts: { static: staticPrompt, dynamic: dynamicPrompt },
     prompt: firstTurn.length > 0 ? [...firstTurn, `## This run\n${trigger}`].join("\n\n") : trigger,
     sections: {
       soul: soulText.length,
@@ -388,7 +456,11 @@ export async function buildContext(
       knowledge: knowledgeText?.length ?? 0,
       guidance: guidanceText.length,
     },
-    systemPromptSha256: createHash("sha256").update(systemPrompt, "utf8").digest("hex"),
+    systemPromptSha256: sha256Hex(systemPrompt),
+    systemPromptStaticSha256: sha256Hex(staticPrompt),
+    ...(dynamicPrompt.length > 0
+      ? { systemPromptDynamicSha256: sha256Hex(dynamicPrompt.join("\n\n")) }
+      : {}),
   };
 }
 

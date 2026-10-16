@@ -1,5 +1,10 @@
 // Optional ADR-0007 admission. Registered inside the authenticated sidecar route scope.
-import { type BrowserOriginRequest, DeskmatesError, type RunId } from "@deskmates/contracts";
+import {
+  type BrowserOriginRequest,
+  DeskmatesError,
+  type RunId,
+  isExecuting,
+} from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
 import type { GatewayContext } from "../context.js";
 import { asRecord } from "./validate.js";
@@ -50,7 +55,7 @@ export function registerBrowserOriginRoutes(scope: FastifyInstance, ctx: Gateway
       const run = ctx.runs.mustGet(runId);
       if (run.config.browserCoordinationMode !== "origin-v2")
         throw new DeskmatesError("validation", "origin coordination is not enabled for this run");
-      if (run.status !== "running" && run.status !== "waiting_approval_live")
+      if (!isExecuting(run.status))
         throw new DeskmatesError("invalid_transition", "origin coordination requires a live run");
       const body = asRecord(request.body);
       if (body.op !== "acquire" && body.op !== "renew" && body.op !== "release")

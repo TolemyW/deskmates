@@ -11,7 +11,7 @@ import { runContextMetrics } from "../ledger/run-context.js";
 export function registerRunContextRoutes(app: FastifyInstance, ctx: GatewayContext): void {
   app.get<{ Params: { id: string } }>("/api/runs/:id/context", async (request) => {
     const id = request.params.id as RunId;
-    ctx.runs.mustGet(id);
-    return runContextMetrics(ctx.events.list(id), ctx.modelRequests.list(id));
+    const run = ctx.runs.mustGet(id);
+    return runContextMetrics(ctx.events.list(id), ctx.modelRequests.list(id), run.config);
   });
 }

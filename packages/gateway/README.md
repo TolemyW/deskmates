@@ -39,6 +39,7 @@ a section to this README.
 - [Approvals](docs/approvals.md)
 - [Configuration](docs/configuration.md)
 - [Connectors (ADR-0012)](docs/connectors.md)
+- [Context and prompt-cache observability (ADR-0023 amendment 5)](docs/context-and-cache-observability.md): request shapes, CLI surface knobs
 - [Database and migrations (ADR-0031)](docs/database.md)
 - [Final-reply idempotency and recipient context](docs/final-reply-idempotency.md)
 - [Group routing and direct handoffs (M2 foundation)](docs/group-routing.md)
@@ -50,7 +51,7 @@ a section to this README.
 - [Interrupted usage receipts (issue #72)](docs/interrupted-usage-receipts.md)
 - [Look/OCR and speech operations (ADR-0040)](docs/look-and-speech-operations.md)
 - [M1/M2 feature closeout operator APIs](docs/feature-closeout-apis.md)
-- [Model jobs: vision probes and SOUL proposals (ADR-0023 amendment 1)](docs/model-jobs.md)
+- [Model jobs: vision probes, round triage and SOUL proposals (ADR-0023 amendment 1)](docs/model-jobs.md)
 - [Model transport observations](docs/model-transport-observations.md)
 - [Model upstreams (ADR-0039)](docs/model-upstreams.md): `MODEL_UPSTREAMS`, routing by model, local zero prices
 - [Name lookups and bounded chat approvals (#113)](docs/name-lookups.md)
@@ -62,6 +63,8 @@ a section to this README.
 - [Per-bot working directories (ADR-0038)](docs/per-bot-working-directory.md): soft write guard between bots
 - [Private-chat handoffs (ADR-0024)](docs/private-chat-handoffs.md)
 - [Reviewed knowledge and memory administration (B5)](docs/knowledge-and-memory-administration.md)
+- [Run audit and ledger retention (ADR-0042)](docs/run-audit.md): failure classes, marks, `RUN_EVENTS_RETENTION_DAYS`
+- [Run liveness: stall detection and live progress data (issue #9)](docs/run-liveness.md)
 - [Run startup timeline and reply preview (ADR-0037)](docs/run-startup-timeline.md)
 - [Run usage summaries for Costs (ADR-0032 amendment 1)](docs/run-usage-summaries.md)
 - [Snapshot delivery experiment](docs/snapshot-delivery-experiment.md)

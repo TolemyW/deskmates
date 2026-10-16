@@ -170,6 +170,7 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
 const DEMO_STATE: Readonly<Partial<Record<RunStatus, RoundMemberState>>> = {
   queued: "queued",
   running: "running",
+  stalled: "running",
   waiting_browser: "running",
   waiting_approval: "awaiting_approval",
   waiting_approval_live: "awaiting_approval",

@@ -1,6 +1,6 @@
 import type { BotId, IsoTimestamp, MessageId, RunId, ThreadId, WorkspaceId } from "./ids.js";
 import type { OffsetPageMeta } from "./pagination.js";
-import { PARKED_RUN_STATUSES, type RunStatus } from "./run.js";
+import { PARKED_RUN_STATUSES, type RunStatus, isExecuting } from "./run.js";
 
 export const TASK_STATUSES = [
   "planned",
@@ -223,7 +223,7 @@ export function taskExecutionState(
   if (dispatch === "missed") return "missed";
   if (runs.length === 0) return "not_started";
   const statuses = runs.map((r) => r.status);
-  if (statuses.some((s) => s === "running" || s === "waiting_approval_live")) return "running";
+  if (statuses.some(isExecuting)) return "running";
   if (statuses.some((s) => PARKED_RUN_STATUSES.has(s))) return "waiting";
   if (statuses.some((s) => s === "queued")) return "queued";
   if (statuses.some((s) => s === "failed")) return "failed";

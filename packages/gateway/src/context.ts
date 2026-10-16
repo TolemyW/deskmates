@@ -45,6 +45,7 @@ import { UsageStore } from "./ledger/usage.js";
 import { WorkspaceLimitStore } from "./limits/workspace-limits.js";
 import { LearnedMemory } from "./memory/learned-memory.js";
 import { ModelJobs } from "./model-jobs/model-jobs.js";
+import { roundRouting } from "./model-jobs/round-triage.js";
 import { HybridRetrieval } from "./retrieval/hybrid-retrieval.js";
 import { RunTokenStore } from "./secrets/run-tokens.js";
 import { SecretsStore } from "./secrets/secrets-store.js";
@@ -207,10 +208,12 @@ export function buildContext(
     {
       groupRouting: config.groupRouting ?? GROUP_ROUTING_DEFAULT,
       rounds: thread.rounds,
+      ...roundRouting({ db, runs, bots, runConfig, cheapModel: () => config.cheapModel }),
       limits,
       onThreadChanged: (threadId) => bus.publish({ type: "thread_members", threadId }),
       batch: (work) => bus.batch(work),
       onBotMessage: (run, message, blocked) => routePrivateMentions(context, run, message, blocked),
+      isPaused: (botId) => bots.isPaused(botId),
     },
   );
   // ADR-0015 decision 6: use is what the sidecar's hook recorded, read off the ledger as it lands.

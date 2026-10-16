@@ -8,6 +8,7 @@ import {
   type GatewayConfig,
   WORKSPACE_CPU_LIMIT_DEFAULT,
 } from "../config.js";
+import { cliSurfaceStamp } from "../config/cli-surface.js";
 import { operationStamps } from "../config/operations.js";
 import { retrievalKnobs } from "../retrieval/knobs.js";
 
@@ -53,6 +54,8 @@ export function createRunConfig(config: GatewayConfig): () => Record<string, unk
     webhookBodyMaxBytes: config.webhookBodyMaxBytes,
     webhookQueueMax: config.webhookQueueMax,
     maxTurns: config.maxTurns,
+    // ADR-0023 amendment 5: extra withheld CLI tools and inline settings; null is the default.
+    ...cliSurfaceStamp(config),
     connectorVersion: 1,
     connectorValidationTtlSeconds,
     // ADR-0013: recorded only where a runtime is configured, so older run rows stay comparable.

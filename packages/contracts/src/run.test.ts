@@ -9,6 +9,7 @@ import {
   type TurnUsagePayload,
   canTransition,
   deriveRunVisibility,
+  isExecuting,
   isTerminal,
   occupiesLane,
 } from "./run.js";
@@ -16,6 +17,7 @@ import {
 const ALL: RunStatus[] = [
   "queued",
   "running",
+  "stalled",
   "waiting_approval_live",
   "waiting_approval",
   "waiting_browser",
@@ -51,6 +53,19 @@ describe("run state machine (design v0.3 §4)", () => {
     expect(canTransition("waiting_continuation", "stopped")).toBe(true);
     expect(isTerminal("stopped")).toBe(true);
     expect(occupiesLane("waiting_continuation")).toBe(false);
+  });
+
+  it("marks a quiet run stalled and lets it come back or end like a running one (issue #9)", () => {
+    expect(canTransition("running", "stalled")).toBe(true);
+    expect(canTransition("stalled", "running")).toBe(true);
+    for (const to of ALL.filter((s) => s !== "stalled" && s !== "running"))
+      expect(canTransition("stalled", to)).toBe(canTransition("running", to));
+    expect(canTransition("queued", "stalled")).toBe(false);
+    expect(canTransition("waiting_approval_live", "stalled")).toBe(false);
+    expect(isTerminal("stalled")).toBe(false);
+    expect(occupiesLane("stalled")).toBe(true);
+    expect(isExecuting("stalled")).toBe(true);
+    expect(isExecuting("waiting_approval")).toBe(false);
   });
 
   it("never leaves a terminal state", () => {

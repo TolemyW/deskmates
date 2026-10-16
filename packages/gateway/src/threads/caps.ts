@@ -43,15 +43,18 @@ export function normalizeBody(body: string): string {
 /**
  * What one stored bot message breaches. `botCount` includes the message; `repeats` is how many
  * messages of its author since the latest human message have its normalized body, itself
- * included. At most one depth breach and one volume breach are returned.
+ * included. `budgetCount`, when given, is what the turn budget counts instead of `botCount`
+ * (ADR-0005 amendment 6, decision 49: a triaged round counts once); the loop breaker's volume
+ * rule always counts every message. At most one depth breach and one volume breach are returned.
  */
 export function evaluateCaps(
   caps: ThreadCaps,
-  counts: { relayCount: number; botCount: number; repeats: number },
+  counts: { relayCount: number; botCount: number; repeats: number; budgetCount?: number },
 ): CapBreach[] {
   const breaches: CapBreach[] = [];
   breaches.push(...depth(caps.relayCountMax, counts.relayCount));
-  if (caps.turnBudget.value !== null && counts.botCount >= caps.turnBudget.value) {
+  const budgetCount = counts.budgetCount ?? counts.botCount;
+  if (caps.turnBudget.value !== null && budgetCount >= caps.turnBudget.value) {
     breaches.push({
       cap: "turn_budget",
       pauses: true,

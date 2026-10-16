@@ -21,9 +21,12 @@ read and draft submission. The server assigns source-run provenance; no bot revi
 Raw FTS expressions are never accepted. Queries are capped at 500 characters, documents at 64 KiB.
 
 `GET /api/bots/:id/memory`, `PATCH {body, expectedVersion}` and `GET .../export` manage only that
-bot's `MEMORY.md`. The workspace must already exist. Writes hold a scheduler maintenance lease
-so new runs cannot start or resume until the helper exits; live runs or another edit cause 409.
-The helper compares a SHA-256 version, refuses symlinked files and oversized content, and uses an
-atomic rename. Empty content clears memory. This protects operator edits in the single-Gateway
+bot's `MEMORY.md`. The canonical body is a Gateway column (migration 0019), written with a SHA-256
+version check (another edit in between is 409); the sidecar writes it into the bot's home at the
+start of every attempt. A live or parked run of the bot does not refuse the write: the answer
+carries `appliesFromNextRun: true` and the run's next attempt gets the new body (ADR-0043 decision
+3). Every changed body is a numbered version in `bot_rule_versions` with a `bot.update` audit row
+holding the hashes and the version number, never the text; `GET /api/bots/:id/rule-versions/memory`
+lists them and a restore writes an older one as a new version. Empty content clears memory. This protects operator edits in the single-Gateway
 runtime, not against a bot or a manual process modifying the same shared workspace (ADR-0004).
 Run-summary memory suggestions remain suggestions; they are not automatically applied.

@@ -46,7 +46,7 @@ The long-horizon campaign of 2026-10-11 (issue #88) showed what the shared defau
 
 - The AGENTS.md rules "Do not build access control between bots", "Bots are separated by…" and the default grouping text change: directories are the one exception, as a soft guard. Everything else stays shared and unguarded.
 - Existing stable workspaces switch to per-bot at the next release; a bot's earlier files in the shared `/work` stay where they are and stay writable. Threads keep their SDK session through decision 9; unverified in a real container.
-- A bot rename gives the bot a new directory; the old one becomes read-only to every bot, the renamed one included, until a person moves it.
+- ~~A bot rename gives the bot a new directory; the old one becomes read-only to every bot, the renamed one included, until a person moves it.~~ Superseded by ADR-0043 decision 1 (2026-10-16): a rename moves `/work/bots/<name>` and `/home/<name>` with the name.
 - A team that wants a shared checkout everyone writes into chooses shared mode; per-bot teams integrate by branch, patch or message.
 - Strategy change shipped without the paired campaign, by owner decision. Every run still records `botWorkdir` and `botWorkdirSource` in `runs.config_json`, so a later `evals/compare.ts` campaign can attribute results to the mode.
 

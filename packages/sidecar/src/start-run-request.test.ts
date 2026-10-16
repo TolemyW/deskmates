@@ -82,6 +82,49 @@ describe("parseStartRunRequest accepts what the Gateway sends", () => {
     ).toBe(false);
   });
 
+  it("keeps a round's plan and last-reply facts through stdin (ADR-0005 amendment 6)", () => {
+    const trigger = {
+      ...VALID.trigger,
+      routing: {
+        version: 2,
+        recipientBotId: "bot-nova",
+        recipientName: "nova",
+        members: [{ name: "nova", role: "coordinator", you: true }],
+        round: {
+          messageSeq: 1,
+          phase: "close",
+          assignments: [{ name: "orion", task: "price of K" }],
+          closer: "nova",
+          youClose: true,
+          outcomes: [{ name: "orion", outcome: "replied", seqs: [2] }],
+        },
+        lastReply: { seq: 3, addressed: [], everyone: false, unknown: ["orin"], spaced: [] },
+      },
+    };
+    const result = parseStartRunRequest(json({ ...VALID, trigger, groupGuidance: "owner-v1" }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.trigger).toEqual(trigger);
+    expect(
+      parseStartRunRequest(
+        withField("trigger", {
+          ...trigger,
+          routing: { ...trigger.routing, round: { ...trigger.routing.round, phase: "vote" } },
+        }),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("accepts a round triage job with a bounded roster", () => {
+    const job = {
+      kind: "round_triage",
+      roster: [{ name: "nova", role: "coordinator", owner: true }],
+      everyone: false,
+      request: "What is K worth?",
+    };
+    expect(parseStartRunRequest(withField("modelJob", job)).ok).toBe(true);
+    expect(parseStartRunRequest(withField("modelJob", { ...job, roster: [] })).ok).toBe(false);
+  });
+
   it("keeps Gateway routing context and addressing through stdin", () => {
     const trigger = {
       ...VALID.trigger,

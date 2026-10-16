@@ -199,6 +199,42 @@ window, after the usual database backup:
 
 `GATEWAY_SECRETS_KEY` must never change: it encrypts stored refresh tokens.
 
+## Taking over an installation that ran under a former product name
+
+The first Deskmates release on a host that ran the product under an earlier name is not an
+upgrade: the naming runbook (`deskmates-naming-upgrade.md`) says runtime names have no
+compatibility aliases, so the new Gateway does not adopt the old containers, volumes, labels
+or environment prefix. The database schema is the same lineage, so the data carries over.
+`scripts/stable/import-legacy-instance.sh` does the hand-over; it takes the legacy root, unit
+and lower-case prefix from `LEGACY_ROOT`, `LEGACY_UNIT` and `LEGACY_PREFIX`, and `DRY_RUN=1`
+prints every change without touching anything.
+
+1. **Ship and prepare, while the legacy instance keeps running.** `ship.sh vX.Y.Z` to the new
+   root, then on the host `import-legacy-instance.sh prepare vX.Y.Z`: it copies the legacy
+   `shared/.env` into the new root with `<FORMER>_*` keys renamed to `DESKMATES_*` and the
+   release-owned keys dropped, keeping the secrets key, operator token and ports (so a TLS proxy
+   in front of the operator port and every client keep working), then runs `stable.sh init`.
+   The base image must be rebuilt (its inputs changed with the rename): `LOCAL_BASE=1
+   stable.sh install vX.Y.Z`, then `stable.sh verify vX.Y.Z` with the full T2 for a minor tag.
+   Neither step binds a port or touches the running instance.
+2. **Cut over in a quiet window.** `import-legacy-instance.sh cutover vX.Y.Z` refuses while the
+   legacy instance reports active runs, stops its unit, backs up its database under the legacy
+   `backups/`, copies the database into the new root, deletes `bot_sessions` (saved SDK sessions
+   name the old tool namespace and container targets and must not be resumed; threads, memory
+   and files are untouched), copies each workspace's `profile`, `work` and `home` volumes under
+   the new names with `cp -a` in a throwaway container, and runs `stable.sh activate`. The new
+   Gateway recreates each workspace container under the new names on its first run.
+3. **Verify, then retire.** Open the UI: workspaces, bots, thread history and old approval cards
+   (their attachment type carries the former vendor segment; the contract accepts it). Trigger
+   one run per workspace and check the browser login state and `/work` files survived. Then
+   `import-legacy-instance.sh retire` removes the legacy workspace containers and networks and
+   disables the legacy unit. Legacy volumes and root stay for rollback; remove them by hand later.
+   Repoint anything that read the legacy database path (collectors, dashboards).
+
+Rollback before `retire`: stop the new unit, start the legacy unit; nothing of the legacy
+instance was changed. After `retire`: restore the legacy root's hand-over backup and start its
+unit again; runs and messages written to the new instance since the cutover are lost.
+
 ## Upgrading
 
 `scripts/stable/ship.sh vX.Y.Z --run`. Activation waits up to

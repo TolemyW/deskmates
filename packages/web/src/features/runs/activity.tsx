@@ -20,6 +20,7 @@ import { useT } from "../../i18n/i18n-provider.js";
 import { runHref, threadHref } from "../../router.js";
 import { runStatusLabel } from "../../state/thread-view.js";
 import { ModelRetryLine } from "./model-retry.js";
+import { type RunMarkActions, RunMarkBadge, RunMarkControl } from "./run-mark.js";
 
 export type ActivityScope = "current" | "all";
 export type ActivityLane = "all" | "interactive" | "background";
@@ -38,6 +39,8 @@ export interface ActivityPanelProps {
   linkThreads?: boolean;
   /** Older finished runs exist (#113 slice R); the panel offers to load them. */
   older?: OlderRuns | undefined;
+  /** Mark a run wrong from its card (ADR-0042 decision 3); without it the card shows the mark only. */
+  markRun?: RunMarkActions | undefined;
 }
 
 /** A feed's Load older control: present only while older runs exist. */
@@ -178,6 +181,7 @@ export function ActivityPanel(props: ActivityPanelProps) {
                   onRetry={props.onRetry}
                   loadEvents={props.loadEvents}
                   linkThread={props.linkThreads === true}
+                  markRun={props.markRun}
                 />
               </li>
             ))}
@@ -243,8 +247,10 @@ export function ActivityCard({
   onRetry,
   loadEvents,
   linkThread = false,
+  markRun,
 }: {
   run: RunView;
+  markRun?: RunMarkActions | undefined;
   linkThread?: boolean;
   roundMessageId?: string | undefined;
   botName: (botId: string) => string;
@@ -256,6 +262,8 @@ export function ActivityCard({
   const [events, setEvents] = useState<RunEvent[]>();
   const [error, setError] = useState<string>();
   const [retrying, setRetrying] = useState(false);
+  // A mark changed from this card shows at once; the next list read carries it too.
+  const [mark, setMark] = useState(run.mark);
   const summary = run.activitySummary;
   const at = run.finishedAt ?? run.startedAt ?? run.createdAt;
   const waitingApproval =
@@ -308,6 +316,7 @@ export function ActivityCard({
         <time dateTime={at} title={formatDateTime(at)} className="muted small">
           {formatRelative(at)}
         </time>
+        <RunMarkBadge mark={mark} />
       </header>
       {body}
       <div className="activity-actions">
@@ -366,6 +375,14 @@ export function ActivityCard({
                 </li>
               ))}
             </ul>
+          ) : null}
+          {markRun ? (
+            <RunMarkControl
+              runId={run.id as RunId}
+              mark={mark}
+              actions={markRun}
+              onChange={setMark}
+            />
           ) : null}
           <p className="muted small">
             <a href={runHref(run.id)}>{t("activity.audit", { runId: run.id })}</a>

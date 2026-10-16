@@ -108,11 +108,15 @@ export function decidedByRule(ruleId: string): string {
  */
 export const APPROVAL_ATTACHMENT_MIME = "application/vnd.deskmates.approval+json";
 
-/** Read historical append-only messages without changing the format of new writes. */
+/**
+ * Read historical append-only messages without changing the format of new writes. The vendor
+ * segment of the type carried each former product name, so a message written under any of them
+ * is still an approval link; the shape `application/vnd.<vendor>.approval+json` is the contract.
+ */
+const LEGACY_APPROVAL_ATTACHMENT_MIME = /^application\/vnd\.[a-z0-9-]+\.approval\+json$/;
+
 export function isApprovalAttachmentMime(mimeType: string): boolean {
-  return (
-    mimeType === APPROVAL_ATTACHMENT_MIME || mimeType === "application/vnd.cogbot.approval+json"
-  );
+  return mimeType === APPROVAL_ATTACHMENT_MIME || LEGACY_APPROVAL_ATTACHMENT_MIME.test(mimeType);
 }
 
 /**

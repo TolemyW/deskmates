@@ -19,7 +19,8 @@ import {
   runtimeProtocol,
 } from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
-import type { BotPatch } from "../bots/bots.js";
+import { moveBotDirectories } from "../bots/bot-directories.js";
+import { type BotPatch, assertBotName } from "../bots/bots.js";
 import { hashWebhookToken, newWebhookToken } from "../bots/webhook-token.js";
 import { modelRegistryOf, upstreamSpeaks } from "../config/model-upstreams.js";
 import type { GatewayContext } from "../context.js";
@@ -34,6 +35,7 @@ import { requestTenant } from "./route-policy.js";
 import {
   asCronEntries,
   asRecord,
+  optionalBoolean,
   optionalEffort,
   optionalString,
   optionalStringArray,
@@ -134,12 +136,15 @@ export function registerRegistryRoutes(
         ...(cron ? { cron } : {}),
         webhookTokenHash: hashWebhookToken(webhookToken),
       });
-      // Issue #89: the welcome run below holds this bot's lane, which makes a SOUL PATCH right
-      // after create 409 lane_busy. Writing the initial SOUL here, through the canonical write,
-      // commits it with the bot and its welcome run, so the welcome already speaks in it.
+      // Issue #89: a SOUL PATCH right after create would only reach the welcome run's next
+      // attempt (ADR-0043 decision 3). Writing the initial SOUL here, through the canonical
+      // write, commits it with the bot and its welcome run, so the welcome already speaks in it.
       if (soul !== undefined) {
         const initial = ctx.bots.canonicalSoul(bot.id);
-        if (initial) ctx.bots.updateCanonicalSoul(bot.id, soul, initial.version);
+        if (initial)
+          ctx.bots.updateCanonicalSoul(bot.id, soul, initial.version, {
+            createdBy: decidedByHuman(requestActorId(request, body)),
+          });
       }
       ctx.audit.record({
         action: "bot.create",
@@ -194,17 +199,37 @@ export function registerRegistryRoutes(
   }));
 
   /**
-   * The editable fields: the cron entries, the two model overrides and the reasoning knob. A
-   * model is configuration, not a create-time property — a deployment that swaps models would
-   * otherwise have to delete and recreate every bot. Each key is independent: absent leaves the
-   * field alone and `null` clears an override, so the bot inherits `DEFAULT_MODEL` /
-   * `CHEAP_MODEL` (or the SDK's own reasoning default) again. Everything else stays create-time.
+   * Every field but the workspace is editable after create (ADR-0043 decision 1): name, role,
+   * connectors, message allowlist, the two model overrides, the reasoning knob, avatar, cron, and
+   * the pause flag (ADR-0026 amendment 1). Each key is independent: absent leaves the field alone
+   * and `null` clears an override, so the bot inherits `DEFAULT_MODEL` / `CHEAP_MODEL` (or the
+   * SDK's own reasoning default) again. A change reaches the bot from its next run: a live run
+   * keeps the configuration its row froze.
+   *
+   * A rename moves `/home/<name>` and `/work/bots/<name>` in the workspace container first and is
+   * refused while the bot has a live or parked run; the peers' allowlists, the private chat title
+   * and generated group titles follow it in the same transaction.
    */
   app.patch<{ Params: { id: string } }>("/api/bots/:id", async (request) => {
     const body = asRecord(request.body);
     const id = request.params.id as BotId;
-    ctx.bots.mustGet(id);
+    const current = ctx.bots.mustGet(id);
     const patch: BotPatch = {};
+    if (body.name !== undefined) {
+      const name = requireString(body, "name").trim();
+      assertBotName(name);
+      if (name !== current.name) {
+        ctx.bots.assertNameFree(current.workspaceId, name, id);
+        patch.name = name;
+      }
+    }
+    if (body.role !== undefined) patch.role = (optionalString(body, "role") ?? "").trim();
+    for (const key of ["connectors", "messageAllowlist"] as const) {
+      if (body[key] === undefined) continue;
+      patch[key] = [
+        ...new Set((optionalStringArray(body, key) ?? []).map((s) => s.trim()).filter(Boolean)),
+      ];
+    }
     if (body.cron !== undefined && body.cron !== null) patch.cron = asCronEntries(body.cron);
     for (const key of ["model", "cheapModel"] as const) {
       if (body[key] === undefined) continue;
@@ -226,10 +251,11 @@ export function registerRegistryRoutes(
     if (thinking !== undefined) patch.thinking = thinking;
     const avatar = optionalAvatar(body);
     if (avatar !== undefined) patch.avatar = avatar;
-    if (Object.keys(patch).length === 0) {
+    const paused = optionalBoolean(body, "paused");
+    if (Object.keys(patch).length === 0 && paused === undefined && body.name === undefined) {
       throw new DeskmatesError(
         "validation",
-        "nothing to update: send cron, model, cheapModel, runtime, effort, thinking or avatar",
+        "nothing to update: send name, role, connectors, messageAllowlist, cron, model, cheapModel, runtime, effort, thinking, avatar or paused",
       );
     }
     // ADR-0044 decision 7: judged on what the bot will run with after the patch.
@@ -252,27 +278,40 @@ export function registerRegistryRoutes(
       requireRuntimeModel(ctx, effectiveRuntime, effectiveCheap);
     }
     const actor = decidedByHuman(requestActorId(request, body));
-    const updated = {
-      bot: ctx.db.transaction(() => {
+    const commit = () =>
+      ctx.db.transaction(() => {
         const before = ctx.bots.mustGet(id);
-        const after = ctx.bots.update(id, patch);
-        ctx.audit.record({
-          action: "bot.update",
-          actor,
-          workspaceId: after.workspaceId,
-          targetKind: "bot",
-          targetId: id,
-          before: pick(botConfiguration(before), Object.keys(patch)),
-          after: pick(botConfiguration(after), Object.keys(patch)),
-        });
-        return after;
-      })(),
-    };
-    if (patch.model !== undefined) {
-      queueVisionProbe(ctx, updated.bot, "model_changed", actor);
-      scheduler.kick();
-    }
-    return updated;
+        let after = ctx.bots.update(id, patch);
+        const retitled =
+          patch.name === undefined
+            ? []
+            : ctx.threads.renameBotInTitles(id, before.name, patch.name);
+        if (paused !== undefined) after = ctx.bots.setPaused(id, paused, actor);
+        const keys = [...Object.keys(patch), ...(paused === undefined ? [] : ["paused"])];
+        if (keys.length > 0 && JSON.stringify(before) !== JSON.stringify(after))
+          ctx.audit.record({
+            action: "bot.update",
+            actor,
+            workspaceId: after.workspaceId,
+            targetKind: "bot",
+            targetId: id,
+            before: pick(botConfiguration(before), keys),
+            after: pick(botConfiguration(after), keys),
+          });
+        return { bot: after, retitled };
+      })();
+    const saved =
+      patch.name === undefined
+        ? commit()
+        : await scheduler.withIdleBot(id, async () => {
+            await moveBotDirectories(ctx, current, patch.name as string);
+            return commit();
+          });
+    for (const threadId of saved.retitled) ctx.bus.publish({ type: "thread_members", threadId });
+    if (patch.model !== undefined) queueVisionProbe(ctx, saved.bot, "model_changed", actor);
+    // Resuming lets the runs that waited out the pause start; a new model queues a probe.
+    if (patch.model !== undefined || paused === false) scheduler.kick();
+    return { bot: saved.bot };
   });
 }
 
@@ -341,6 +380,7 @@ function botConfiguration(bot: BotDefinition): Record<string, unknown> {
     connectors: bot.connectors,
     messageAllowlist: bot.messageAllowlist,
     cron: bot.cron,
+    paused: bot.pausedAt !== undefined,
   };
 }
 

@@ -11,6 +11,7 @@ import { currentI18n } from "../../i18n/intl.js";
 const RUN_STATUS_KEY: Readonly<Record<RunStatus, MessageKey>> = {
   queued: "pill.runStatus.queued",
   running: "pill.runStatus.running",
+  stalled: "pill.runStatus.stalled",
   waiting_approval_live: "pill.runStatus.waitingApproval",
   waiting_approval: "pill.runStatus.waitingApproval",
   waiting_browser: "pill.runStatus.waitingBrowser",
@@ -41,6 +42,7 @@ export const RUN_STATUS_LABEL: Readonly<Record<RunStatus, string>> = Object.defi
 const RUN_STATUS_TONE: Record<RunStatus, Tone> = {
   queued: "info",
   running: "info",
+  stalled: "warning",
   waiting_approval_live: "warning",
   waiting_approval: "warning",
   waiting_browser: "warning",

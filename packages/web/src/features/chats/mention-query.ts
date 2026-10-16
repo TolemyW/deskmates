@@ -4,7 +4,12 @@
 // which routes the message to whoever the Gateway picks. The picker inserts exact names so that
 // cannot happen.
 
-import { type BotId, type GroupRouting, parseMentions } from "@deskmates/contracts";
+import {
+  type BotId,
+  type GroupRouting,
+  type MentionOptions,
+  parseMentions,
+} from "@deskmates/contracts";
 import { currentI18n } from "../../i18n/intl.js";
 
 export interface MentionMember {
@@ -68,9 +73,16 @@ export interface MentionPreview {
 
 const ANY = /(^|[^\w@])@([\w-]+)/g;
 
-/** Who a message wakes, by the Gateway's own parser, plus the `@names` it will ignore. */
-export function previewMentions(body: string, members: readonly MentionMember[]): MentionPreview {
-  const parsed = parseMentions(body, members);
+/**
+ * Who a message wakes, by the Gateway's own parser, plus the `@names` it will ignore. Under
+ * `round-v1` the Gateway also reads `@ name` (ADR-0005 amendment 6), so the preview does too.
+ */
+export function previewMentions(
+  body: string,
+  members: readonly MentionMember[],
+  options: MentionOptions = {},
+): MentionPreview {
+  const parsed = parseMentions(body, members, undefined, options);
   const everyone = parsed.some((m) => m.kind === "everyone");
   const nameOf = new Map(members.map((m) => [m.botId, m.name]));
   const woken = everyone
@@ -106,6 +118,9 @@ export function unaddressedRoute(
   ownerBotId: BotId | undefined,
 ): UnaddressedRoute {
   const { t } = currentI18n();
+  // ADR-0005 amendment 6 (proposed): a quick plan picks who works and who answers.
+  if (routing === "round-v1" && members.length > 1)
+    return { line: t("mentionQuery.round.line"), warning: t("mentionQuery.round.warning") };
   if (routing !== "owner-v1" || members.length < 2) {
     return { line: t("mentionQuery.walk.line"), warning: t("mentionQuery.walk.warning") };
   }

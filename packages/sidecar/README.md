@@ -30,6 +30,7 @@ Responsibilities:
 - When a per-bot run resumes an SDK session stored only under the shared `/work` key (a thread that began before per-bot became the default), copy the transcript to the bot directory's key before the query (`src/session-carry.ts`, ADR-0038 decision 9). Best effort; not yet verified in a real container.
 - Persist SDK state under the bot's home directory: `CLAUDE_CONFIG_DIR=/home/<bot>/.claude`, `settingSources: []`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`.
 - Leave model retries and fallback to the SDK and record them (ADR-0023 decision 3): `StartRunRequest.fallbackModel`, when present, becomes `options.fallbackModel` verbatim; each `system` / `api_retry` message becomes a `model_retry` event and the `PostModelSwitch` hook a `model_switch` event `{from, to, source, requested?}`. The sidecar calls `query()` once per process and never retries a model call itself; usage goes to the Gateway per model in `modelUsage`. A model job (`src/model-job.ts`) bounds the SDK's retries with `CLAUDE_CODE_MAX_RETRIES=4`, since the default ten can never end inside its 55-second deadline, and when that deadline aborts the query the run error names the retries and the last HTTP status instead of the SDK's "aborted by user" (ADR-0023 amendment 4).
+- Measure and shape the context (ADR-0023 amendment 5). The system prompt goes to the SDK as a custom prompt with `snapshot: true`. SOUL.md and the guidance come before `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`, and the per-run withheld-image notice after it (`src/system-prompt.ts`). Joined, the blocks are the string earlier runs sent. `query.getContextUsage` is sampled once in full after init and as a summary after each response, each sample a `context_usage` log (`src/context-usage.ts`). The `SessionStart` hook's resume facts become a `session_start` log. The request's `cliSurface`, when present, adds built-in tools to `DISALLOWED_TOOLS` and becomes inline SDK `settings`; without it the options are unchanged. See `packages/gateway/docs/context-and-cache-observability.md`.
 
 ## Bot handoffs (M2 foundation)
 
@@ -296,6 +297,18 @@ feature availability is not evidence of quality improvement.
 `/home/<bot>/MEMORY.md`, returning `{body, version}`. The Gateway owns the maintenance lease;
 this helper does not leave a persistent edit lock after a crash. It rejects path traversal,
 symlinks, nonregular/oversized files and stale versions. It never invokes the SDK or a model.
+
+`deskmates-sidecar diary` (ADR-0043 decision 4, `diary-file.ts`) reads `{op, botName, ...}` from
+stdin: `list` answers the bot's `/home/<bot>/memory/YYYY-MM-DD.md` days newest first, `read` one
+day as `{day, lines, version}`, and `delete-line` removes one line only when the day's sha256 and
+the line's exact text still match, by an atomic rename. It opens nothing else, refuses a symlinked
+home, memory directory or day file, and never writes a line of its own.
+
+`deskmates-sidecar bot-rename` (ADR-0043 decision 1, `bot-rename.ts`) reads `{from, to}` and moves
+`/home/<from>` and `/work/bots/<from>` to the new name. Every check runs before the first move: a
+symlink, a non-directory or a target that holds files refuses the whole rename; an empty target is
+replaced; a failure on the second move puts the first back. The Gateway holds the bot's runs while
+it runs and commits the new name only after it succeeded.
 
 `deskmates-sidecar file-read` (ADR-0014, `file-read.ts`) reads `{path, botNames, maxBytes}` from
 stdin for the operator download route and prints `{base64, size}`, or `{error, message}` with

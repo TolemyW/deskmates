@@ -11,6 +11,17 @@ import zhTW from "./zh-TW.json";
 
 export const runsMessages = defineMessages({
   owner: "features/runs/messages",
-  prefixes: ["activity", "modelRetry", "run", "runContextPanel", "runEventRow", "runTimeline"],
+  prefixes: [
+    "activity",
+    "modelRetry",
+    "phaseTiming",
+    "run",
+    "runChanges",
+    "runContextPanel",
+    "runEventRow",
+    "runFailure",
+    "runMark",
+    "runTimeline",
+  ],
   locales: { en, "zh-CN": zhCN, "zh-TW": zhTW, ja, es },
 });

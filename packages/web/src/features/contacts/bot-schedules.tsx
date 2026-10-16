@@ -37,6 +37,7 @@ export function BotSchedules({
   const [notice, setNotice] = useState("");
   const [now, setNow] = useState(() => new Date());
   const locked = !useCan("bot.configure").allowed;
+  const canRunNow = useCan("bot.runCronNow").allowed;
   const t = useT();
   const locale = useLocale();
   useEffect(() => {
@@ -65,6 +66,21 @@ export function BotSchedules({
       return next;
     });
     setNotice("");
+  };
+
+  // ADR-0043 decision 6: a saved entry runs now as a `manual` background run.
+  const runNow = async (index: number) => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api.runCronNow(bot.id, index);
+      setNotice(t("botSchedules.runNowStarted", { number: index + 1 }));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const save = async () => {
@@ -151,7 +167,33 @@ export function BotSchedules({
                 }
               />
             </label>
-            <p>{next ? t("botSchedules.next", { at: next }) : t("botSchedules.nextUnavailable")}</p>
+            <p>
+              {bot.pausedAt
+                ? t("botSchedules.paused")
+                : next
+                  ? t("botSchedules.next", { at: next })
+                  : t("botSchedules.nextUnavailable")}
+            </p>
+            {canRunNow ? (
+              <Button
+                type="button"
+                disabled={
+                  busy ||
+                  bot.pausedAt !== undefined ||
+                  JSON.stringify(entry) !== JSON.stringify(bot.cron[index])
+                }
+                title={
+                  bot.pausedAt !== undefined
+                    ? t("botSchedules.runNowPaused")
+                    : JSON.stringify(entry) !== JSON.stringify(bot.cron[index])
+                      ? t("botSchedules.runNowUnsaved")
+                      : undefined
+                }
+                onClick={() => void runNow(index)}
+              >
+                {t("botSchedules.runNow", { number: index + 1 })}
+              </Button>
+            ) : null}
             <Button
               type="button"
               disabled={busy || locked}

@@ -106,6 +106,40 @@ const triggerSchema = z.discriminatedUnion("kind", [
             remaining: z.array(z.string()),
           })
           .optional(),
+        // ADR-0005 amendment 6, decisions 47, 48 and 50: named here for the same reason.
+        round: z
+          .object({
+            messageSeq: z.number().int().positive(),
+            phase: z.enum(["work", "close"]),
+            assignments: z.array(
+              z.object({
+                name: z.string().min(1),
+                task: z.string(),
+                you: z.literal(true).optional(),
+              }),
+            ),
+            closer: z.string().min(1),
+            youClose: z.literal(true).optional(),
+            outcomes: z
+              .array(
+                z.object({
+                  name: z.string().min(1),
+                  outcome: z.enum(["replied", "silent", "failed", "cancelled", "stopped"]),
+                  seqs: z.array(z.number().int().positive()),
+                }),
+              )
+              .optional(),
+          })
+          .optional(),
+        lastReply: z
+          .object({
+            seq: z.number().int().positive(),
+            addressed: z.array(z.string()),
+            everyone: z.boolean(),
+            unknown: z.array(z.string()),
+            spaced: z.array(z.string()),
+          })
+          .optional(),
       })
       .optional(),
     relayCount: z.number().int().nonnegative(),
@@ -198,6 +232,22 @@ export const startRunRequestSchema = z.object({
         kind: z.literal("approval_review"),
         reviewPackage: z.string().min(2).max(24_000),
       }),
+      // ADR-0005 amendment 6, decision 45: at most six members and a bounded request.
+      z.object({
+        kind: z.literal("round_triage"),
+        roster: z
+          .array(
+            z.object({
+              name: z.string().min(1),
+              role: z.string(),
+              owner: z.literal(true).optional(),
+            }),
+          )
+          .min(1)
+          .max(6),
+        everyone: z.boolean(),
+        request: z.string().max(16_000),
+      }),
       z.object({
         kind: z.literal("soul_proposal"),
         mode: z.enum(["create", "edit"]),
@@ -265,6 +315,19 @@ export const startRunRequestSchema = z.object({
   visionPolicy: z.literal("withhold").optional(),
   screenSlot: z.number().int().min(0).max(5).optional(),
   browserSnapshotMode: z.enum(["explicit-v1", "inline-v2"]).optional(),
+  // ADR-0023 amendment 5: extra built-in CLI tools to withhold and inline settings switches. A
+  // built-in name is PascalCase; an MCP name can never get here.
+  cliSurface: z
+    .object({
+      disallowedTools: z
+        .array(z.string().regex(/^[A-Z][A-Za-z0-9_]*$/))
+        .max(100)
+        .optional(),
+      disableBundledSkills: z.boolean().optional(),
+      includeGitInstructions: z.boolean().optional(),
+      skillListingMaxDescChars: z.number().int().positive().optional(),
+    })
+    .optional(),
   // The SDK's turn budget for this run. The Gateway owns the knob (`DESKMATES_MAX_TURNS`) and records
   // it in `runs.config_json`, so a stripped or absent value would silently run the bot on a
   // different budget than the one the experiment was attributed to. `null` is the workspace's

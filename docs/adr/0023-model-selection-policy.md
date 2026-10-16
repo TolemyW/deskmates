@@ -390,3 +390,106 @@ a model job a 60-second cap; ten retries can never finish inside it.
 |---|---|---|---|
 | 18 | A model job's `query()` environment carries `CLAUDE_CODE_MAX_RETRIES` equal to `MODEL_JOB_MAX_RETRIES`, which is below the SDK's default of ten, and the deadline is below the Gateway's 60-second cap; an agent run never sets the variable (by construction: `run-once.ts` builds its own environment and no test asserts the absence) | T1 `packages/sidecar/src/model-job.test.ts` ("bounds the SDK's retries") | `model_retry` events per failed model job (expected at most four) |
 | 19 | A job whose query reports two `api_retry` messages and then only ends on the deadline's abort fails with the deadline error naming two retries, `HTTP 500` and `server_error`, never "aborted by user"; the error for no retry and for a connection failure reads as specified | T1 `packages/sidecar/src/model-job.test.ts` ("names the retries when the deadline ends the job") | Failed model jobs whose error names no cause = 0 |
+
+## Amendment 5 (2026-10-16): measure the context, split the system prompt, trim the CLI surface
+
+Status: Proposed (issue #8). It is implemented behind defaults that change nothing and is pending
+owner acceptance. Decisions 1 to 19 stay in force. Decisions 20 to 23 are framework changes: they
+add records, and they reshape the system-prompt option without changing a byte the model reads.
+Decision 24 adds strategy knobs that are off by default. Turning one on is a strategy change
+(AGENTS.md: paired evaluation, one knob per experiment).
+
+### Context
+
+The Testbox ledger of 2026-10-13 to 10-15 covered 287 runs and 3,795 model requests. The average
+request carried 60k to 70k tokens. A run's first request was already about 57k, while the
+sidecar's own sections (SOUL, guidance, memory, diary, knowledge) were under 10k. The rest came from
+the CLI: its built-in prompt, 44 built-in tool schemas (the sidecar withholds 10 of 54), the MCP
+tool schemas, the bundled-skills listing and the git workflow text. `cache_creation` was 0 on every
+request, so any cache hit came from the upstream gateway's implicit prefix cache. Two workspaces
+hit 0% over 1,300 requests. The ledger could not say which part of a request was large or which
+part changed between requests, so no trimming and no prefix change could be judged.
+
+The sidecar already keeps the memory index, MEMORY.md, the diary and knowledge hits out of the
+system prompt and puts them in the first user turn (ADR-0011 decision 9). The volatile sections the
+issue names are therefore already outside the system prompt in this tree.
+
+### Decisions
+
+20. **The CLI's own view of the window is sampled into the ledger.** The sidecar calls
+    `query.getContextUsage` (SDK 0.3.278) once with `detail: "full"` after `system/init`, and once
+    with `detail: "summary"` after each model response, except the last. That response's usage
+    arrives with the result, and with a string prompt the CLI exits after the result. Each answer
+    is a `log` event `{source: "context", kind: "context_usage"}`. It carries the totals, every
+    category, the MCP tools per server and the built-in tools; a `full` sample also names each tool
+    with its tokens. A query without the method is not asked. A failed answer is logged once as a
+    warning and stops later samples. The run never fails because of a sample, and samples still
+    pending when the query ends get at most two seconds.
+21. **Session and switch cache facts are recorded.** The `SessionStart` hook becomes a `log` event
+    `{source: "sdk", kind: "session_start", sessionSource}`. On a resume it also carries
+    `contextTokens`, `promptCacheLikelyExpired` and `secondsSinceLastResponse`. A `model_switch`
+    event also carries the `PostModelSwitch` hook's `promptCacheWarm` and `contextTokens`.
+22. **The model proxy records each request's shape: counts and hashes, never text.** The shape is
+    the `cache_control` markers anywhere in `system`, `tools` and `messages`; the system block count
+    and characters; and a canonical sha256 of the static prefix and one of the dynamic rest. The
+    static prefix runs through the last system block that carries `cache_control`, which is what
+    the request marks cacheable. The shape also holds the first 16 hex digits of each system
+    block's hash, the tool count and JSON length, and the message count. These are new
+    `model_requests` columns, NULL when the body was unreadable. `GET /api/runs/:id/context` adds
+    `contextUsage`, `sessionStarts`, `requestShapes` (including `changedSystemBlocks`, the
+    positions whose hash varied) and the static and dynamic system-prompt hashes. They are optional
+    fields; every existing field is unchanged.
+23. **The system prompt is split at the SDK's dynamic boundary.** The sidecar passes
+    `{type: "custom", prompt: [static, SYSTEM_PROMPT_DYNAMIC_BOUNDARY, ...dynamic], snapshot: true}`.
+    The static part is SOUL.md and the workspace guidance (working directory, untrusted notice,
+    thread and group guidance, the extra-tool list, the summary instruction). It is identical for
+    every run of a bot in the same kind of thread. The dynamic part holds the sections chosen per
+    run, today only the withheld-image notice (amendment 2). Joined with one blank line, the parts
+    are the string earlier runs sent, so `systemPromptSha256` and every pinned prompt test are
+    unchanged. A new per-run section goes after the boundary or into the first user turn, never
+    into the static part. The `context_sections` event carries `systemPromptStaticSha256` and, when
+    there is a dynamic part, `systemPromptDynamicSha256`. `runs.config_json` records
+    `systemPromptStaticSha256`. `snapshot: true` is the SDK's documented default for a custom
+    prompt and is set explicitly, so a resumed session re-sends the prompt it recorded.
+24. **The CLI surface is a Gateway knob, recorded per run.** `DESKMATES_CLI_DISALLOWED_TOOLS`
+    names built-in CLI tools (PascalCase; an MCP name is refused) that are withheld on top of the
+    sidecar's fixed `DISALLOWED_TOOLS`. The Gateway can only add to that list.
+    `DESKMATES_CLI_DISABLE_BUNDLED_SKILLS`, `DESKMATES_CLI_INCLUDE_GIT_INSTRUCTIONS` and
+    `DESKMATES_CLI_SKILL_LISTING_MAX_DESC_CHARS` become the SDK's inline `settings`. Empty, the
+    default, changes nothing: the start request has no `cliSurface` and the SDK options are as
+    before. Every run row records `cliSurface` with `null` for a CLI default. Every process of the
+    run reads the values back from its row, so a resumed session keeps its tool set.
+
+### Alternatives considered
+
+- **Move the dynamic sections into the first user turn instead of after the boundary.** The
+  volatile sections already are there. Only the image notice remains in the system prompt, and
+  moving it would change what a withholding model reads, which is a behaviour change outside
+  this amendment.
+- **Offer `tools` as an explicit allowlist.** That allowlist would have to be checked against every
+  SDK upgrade before the first trimming result exists. Adding to the withheld list keeps the
+  sidecar's fixed safety withholds in force and is enough to measure the effect first.
+- **Split at the proxy by content.** The CLI drops the boundary marker before sending, so the proxy
+  cannot see the sidecar's split. The marker-based split and the per-block hashes are what the
+  upstream actually receives.
+
+### Open items
+
+- Whether cache hits rise, and whether average context drops by a third, needs a paired
+  before-and-after window on a real model (Testbox). No test here measures it.
+- In SDK 0.3.278 the CLI keeps the static part as a separate, globally scoped cache block only
+  where it enables global cache scope. Elsewhere it drops the marker and joins the blocks, which is
+  the expected behaviour through an Anthropic-protocol gateway. What reaches the upstream is
+  visible in the request shapes (decision 22), not assumed.
+- Mounting the browser MCP server only for runs that need it, and the reasoning knob for
+  script-running bots, are separate strategy experiments.
+
+### Verification (amendment 5)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 20 | A three-response run asks for `full` once and `summary` twice; the samples carry the CLI's totals and per-server MCP tokens; a CLI that throws costs one warning and no further calls, and the run completes; a query without the method is never asked | T1 `packages/sidecar/src/context-usage-run.test.ts`, T0 `packages/testkit/src/fake-sdk/fake-sdk.test.ts` ("session start and context usage") | Share of runs with a `full` `context_usage` sample; median first-sample `totalTokens` per workspace |
+| 21 | A fresh start logs `session_start` with `sessionSource: startup` and no resume fields; a resume logs `contextTokens`, `promptCacheLikelyExpired`, `secondsSinceLastResponse`; a `model_switch` carries `promptCacheWarm` and `contextTokens` | T1 `packages/sidecar/src/context-usage-run.test.ts`, T1 `packages/sidecar/src/model-events.test.ts` | Resumes with `promptCacheLikelyExpired = true` per workspace and day |
+| 22 | The shape splits after the last marked system block, keeps the static hash when only the dynamic part changes, counts markers in nested tool results, survives a store round trip, and is summarised by the run context API with the changed block positions | T0 `packages/gateway/src/model-proxy/request-facts.test.ts`, T1 `packages/gateway/src/ledger/model-requests.test.ts`, T0 `packages/gateway/src/ledger/run-context.test.ts`, T1 `packages/gateway/src/api/run-context-routes.test.ts` | Requests with `cache_control_blocks > 0`; distinct `system_static_sha256` per thread; cache hit % per hour by workspace |
+| 23 | The static hash is equal across two runs of a bot with a different diary, memory and index; a withholding run keeps the static hash and has a dynamic one; the option is a custom prompt with `snapshot: true` and the boundary as its own block; joined, it is byte-identical to `systemPrompt`; the static hash reaches `runs.config_json` | T0 `packages/sidecar/src/system-prompt.test.ts`, T1 `packages/sidecar/src/run-once.test.ts` ("ledgers the context section sizes"), T1 `packages/gateway/src/scheduler/run-lifecycle.test.ts` | Distinct `systemPromptStaticSha256` per bot per day (expected 1 per thread kind) |
+| 24 | Empty variables give no stamp values, no start-request field and the SDK options exactly as before; set values are validated, stamped on the run row, sent from the row even after the Gateway is reconfigured, merged after the fixed withheld list and passed as inline `settings`; an MCP name is refused at startup and on stdin | T0 `packages/gateway/src/config/cli-surface.test.ts`, T1 `packages/gateway/src/scheduler/cli-surface.test.ts`, T1 `packages/sidecar/src/cli-surface.test.ts` | Average input tokens per request in a paired window, knob on against off |

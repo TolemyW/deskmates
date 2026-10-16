@@ -23,6 +23,7 @@ import {
 } from "@deskmates/contracts";
 import { nowIso } from "../db/ids.js";
 import type { GatewayDb } from "../db/open.js";
+import { notMarkedWrong } from "../ledger/run-marks.js";
 import type { RunRecord, RunStore } from "../ledger/runs.js";
 import { modelsForJob } from "../scheduler/job-models.js";
 import {
@@ -177,7 +178,7 @@ export class ConsolidationService {
         .prepare(
           `SELECT
            MAX(created_at) AS attempted_at,
-           SUM(CASE WHEN status IN ('queued','running','waiting_approval_live','waiting_approval','waiting_browser','waiting_continuation') THEN 1 ELSE 0 END) AS pending
+           SUM(CASE WHEN status IN ('queued','running','stalled','waiting_approval_live','waiting_approval','waiting_browser','waiting_continuation') THEN 1 ELSE 0 END) AS pending
          FROM runs WHERE bot_id = ? AND run_type = ?`,
         )
         .get(bot.id, CONSOLIDATION_RUN_TYPE) as {
@@ -189,7 +190,7 @@ export class ConsolidationService {
         .prepare(
           `SELECT 1 FROM runs r JOIN bots b ON b.id = r.bot_id
          WHERE b.workspace_id = ? AND r.lane = 'interactive'
-           AND r.status IN ('running', 'waiting_approval_live') LIMIT 1`,
+           AND r.status IN ('running', 'stalled', 'waiting_approval_live') LIMIT 1`,
         )
         .get(bot.workspace_id);
       const recent = this.deps.db
@@ -220,6 +221,7 @@ export class ConsolidationService {
              AND e.tombstoned = 0 AND e.consolidated_by_run IS NULL
              AND r.status IN ('succeeded','silent')
              AND r.run_type IS NOT ?
+             AND ${notMarkedWrong("r.id")}
              AND NOT EXISTS (SELECT 1 FROM runs prior,
                json_each(prior.config_json, '$.consolidationSources') source
                WHERE prior.bot_id = e.bot_id AND prior.status IN ('succeeded','silent')
@@ -263,7 +265,7 @@ export class ConsolidationService {
         `SELECT 1 FROM runs r JOIN bots b ON b.id = r.bot_id
          WHERE b.workspace_id = ? AND r.id <> ?
            AND r.run_type = ?
-           AND r.status IN ('running', 'waiting_approval_live', 'waiting_approval', 'waiting_browser', 'waiting_continuation')
+           AND r.status IN ('running', 'stalled', 'waiting_approval_live', 'waiting_approval', 'waiting_browser', 'waiting_continuation')
          LIMIT 1`,
       )
       .get(workspaceId, exceptRunId, CONSOLIDATION_RUN_TYPE);

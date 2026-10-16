@@ -19,7 +19,9 @@ import { LearnedMemoryScreen } from "../knowledge/learned-memory.js";
 import { useRunFeed } from "../runs/run-feed.js";
 import { AvatarDialog } from "./avatar-picker.js";
 import { BotActivity } from "./bot-activity.js";
+import { BotDiary } from "./bot-diary.js";
 import { BotEditor } from "./management.js";
+import { RuleVersions } from "./rule-versions.js";
 
 type Tab = "activity" | "experience" | "notes" | "settings";
 
@@ -115,6 +117,11 @@ export function BotProfile({
             {workspace ? <> · {workspace.name}</> : null}
           </p>
           <p className="profile-status">
+            {bot.pausedAt ? (
+              <span className="pill warning" title={t("botProfile.pausedTitle")}>
+                {t("botProfile.paused")}
+              </span>
+            ) : null}
             {latest ? (
               <>
                 <RunStatusPill status={latest.status} />
@@ -222,9 +229,28 @@ export function BotProfile({
       ) : null}
 
       {tab === "notes" ? (
-        <section className="card">
-          <MemoryPanel api={api} botId={bot.id} />
-        </section>
+        <>
+          <section className="card">
+            <MemoryPanel
+              api={api}
+              botId={bot.id}
+              versions={(current) => (
+                <RuleVersions
+                  api={api}
+                  bot={bot}
+                  file="memory"
+                  currentVersion={current.version}
+                  refreshKey={current.version}
+                  disabled={current.dirty}
+                  onRestored={current.reload}
+                />
+              )}
+            />
+          </section>
+          <section className="card">
+            <BotDiary api={api} bot={bot} />
+          </section>
+        </>
       ) : null}
 
       {tab === "settings" && config ? (

@@ -19,6 +19,7 @@ import {
 } from "@deskmates/contracts";
 import { nowIso } from "../db/ids.js";
 import type { GatewayDb } from "../db/open.js";
+import { RoundPlanStore } from "./round-plans.js";
 
 interface RoundRow {
   message_id: string;
@@ -79,6 +80,15 @@ export class RoundStore {
       "INSERT OR IGNORE INTO thread_round_members (message_id, bot_id, ordinal) VALUES (?, ?, ?)",
     );
     input.botIds.forEach((botId, ordinal) => member.run(input.messageId, botId, ordinal));
+  }
+
+  /** Decision 34: whether the round was cancelled; a cancelled round takes no new work. */
+  isCancelled(messageId: MessageId): boolean {
+    return (
+      this.db
+        .prepare("SELECT 1 FROM thread_rounds WHERE message_id = ? AND cancelled_at IS NOT NULL")
+        .get(messageId) !== undefined
+    );
   }
 
   exists(messageId: MessageId): boolean {
@@ -223,6 +233,11 @@ export class RoundStore {
          AND seq > ? AND run_id IN (SELECT run_id FROM thread_round_runs WHERE message_id = ? AND bot_id = ?)
        ORDER BY seq`,
     );
+    // Amendment 6: a triaged round's plan; a member triage did not assign is skipped.
+    const plan = new RoundPlanStore(this.db).view(messageId, row.thread_id as ThreadId);
+    const dispatched =
+      plan !== undefined &&
+      (plan.phase === "working" || plan.phase === "closing" || plan.phase === "closed");
     const viewMembers: RoundMember[] = members.map((member) => {
       const mine = relations.filter((r) => r.bot_id === member.bot_id);
       const latest = mine.at(-1);
@@ -238,6 +253,8 @@ export class RoundStore {
         cancelled: row.cancelled_at !== null,
         walk,
         botId: member.bot_id,
+        unassigned:
+          dispatched && !plan.assignments.some((a) => (a.botId as string) === member.bot_id),
       });
       return {
         botId: member.bot_id as BotId,
@@ -263,6 +280,7 @@ export class RoundStore {
       members: viewMembers,
       completed: viewMembers.filter((m) => isRoundMemberDone(m.state)).length,
       total: viewMembers.length,
+      ...(plan ? { plan } : {}),
     };
   }
 }
@@ -275,11 +293,13 @@ function memberState(input: {
   cancelled: boolean;
   walk: { status: "pending" | "complete"; taker_bot_id: string | null } | undefined;
   botId: string;
+  unassigned?: boolean;
 }): RoundMemberState {
   const { latest } = input;
   if (!latest) {
     if (!input.isMember) return "removed";
     if (input.cancelled) return "cancelled";
+    if (input.unassigned) return "skipped";
     if (input.walk?.status === "complete")
       return input.walk.taker_bot_id && input.walk.taker_bot_id !== input.botId
         ? "skipped"
@@ -296,6 +316,7 @@ function runState(status: RunStatus, outputs: number): RoundMemberState {
     case "queued":
       return "queued";
     case "running":
+    case "stalled":
     case "waiting_browser":
       return "running";
     case "waiting_approval":

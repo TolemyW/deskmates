@@ -34,6 +34,7 @@ import {
   setTracingDisabled,
   tool,
 } from "@openai/agents";
+import { systemPromptText } from "../../system-prompt.js";
 import { builtinTools } from "./builtin-tools.js";
 import { FileSession, sessionDirOf } from "./file-session.js";
 import { connectMcpServers } from "./mcp-tools.js";
@@ -185,7 +186,8 @@ async function* runOpenAi(
   const session = await FileSession.open(sessionDirOf(params.botHomeDir), sessionId);
   const preToolUse = firstHook(options, "PreToolUse");
   const postToolUse = firstHook(options, "PostToolUse");
-  const systemPrompt = typeof options.systemPrompt === "string" ? options.systemPrompt : "";
+  // The same text the Claude path sends, static and dynamic parts joined (ADR-0023 amendment 5).
+  const systemPrompt = systemPromptText(options.systemPrompt);
 
   /** The gate's answer per call id, so `execute` and a resume never ask twice for one call. */
   const decisions = new Map<string, GateDecision>();

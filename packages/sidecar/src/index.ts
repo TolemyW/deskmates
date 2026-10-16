@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// @deskmates/sidecar CLI. Subcommands: run, mcp-proxy, memory, file-read, file-write.
+// @deskmates/sidecar CLI. Subcommands: run, mcp-proxy, memory, diary, bot-rename, file-read,
+// file-write.
 //
 // `deskmates-sidecar run` reads one `StartRunRequest` as JSON from stdin, loads `/run/deskmates/env`
 // (KEY=VALUE, injected by the sandbox provider) into the environment and runs the SDK loop once.
@@ -14,6 +15,12 @@
 // `deskmates-sidecar file-read` reads `{path, botNames, maxBytes}` as JSON from stdin and prints
 // `{base64, size}` for one workspace file, or `{error, message}` with exit 1 (ADR-0014,
 // `file-read.ts`). The Gateway's operator download route is its only caller.
+//
+// `deskmates-sidecar diary` reads `{op: list | read | delete-line, botName, ...}` and answers for
+// one bot's `/home/<bot>/memory/YYYY-MM-DD.md` files only (`diary-file.ts`, ADR-0043 decision 4).
+// `deskmates-sidecar bot-rename` reads `{from, to}` and moves `/home/<from>` and
+// `/work/bots/<from>` to the new name (`bot-rename.ts`, ADR-0043 decision 1). The Gateway's
+// operator routes are their only callers.
 //
 // `deskmates-sidecar file-write` reads one upload operation (begin, append, commit, abort, remove) as JSON
 // from stdin and writes only under /work/uploads/ (ADR-0014 amendment A5, `file-write.ts`). The
@@ -30,7 +37,9 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { egressAllows } from "@deskmates/contracts";
+import { BOT_RENAME_ROOTS, renameBotDirectories } from "./bot-rename.js";
 import { BROWSER_COORDINATION_ENV, type BrowserCoordinationConfig } from "./browser-state.js";
+import { manageDiary } from "./diary-file.js";
 import { RUNTIME_ENV_FILE, parseEnvFile } from "./env-file.js";
 import { fileReadCommand } from "./file-read.js";
 import { fileWriteCommand } from "./file-write.js";
@@ -72,6 +81,8 @@ function usage(): never {
     "usage: deskmates-sidecar run < start-run-request.json\n" +
       "       deskmates-sidecar mcp-proxy -- <command> [args...]\n" +
       "       deskmates-sidecar memory < memory-request.json\n" +
+      "       deskmates-sidecar diary < diary-request.json\n" +
+      "       deskmates-sidecar bot-rename < bot-rename-request.json\n" +
       "       deskmates-sidecar file-read < file-read-request.json\n" +
       "       deskmates-sidecar file-write < file-write-request.json\n",
   );
@@ -224,7 +235,23 @@ async function runProxy(argv: readonly string[]): Promise<number> {
   return pipes.failed() ? 1 : code;
 }
 
+/** A JSON-in, JSON-out maintenance subcommand; a thrown error is `{error}` with exit 1. */
+async function jsonCommand(name: string, operation: (input: unknown) => unknown): Promise<number> {
+  try {
+    process.stdout.write(`${JSON.stringify(operation(JSON.parse(await readStdin())))}\n`);
+    return 0;
+  } catch (error) {
+    process.stdout.write(
+      `${JSON.stringify({ error: error instanceof Error ? error.message : `${name} failed` })}\n`,
+    );
+    return 1;
+  }
+}
+
 export async function main(argv: readonly string[]): Promise<number> {
+  if (argv[0] === "bot-rename")
+    return jsonCommand("bot-rename", (input) => renameBotDirectories(BOT_RENAME_ROOTS, input));
+  if (argv[0] === "diary") return jsonCommand("diary", (input) => manageDiary("/home", input));
   if (argv[0] === "memory") {
     try {
       process.stdout.write(

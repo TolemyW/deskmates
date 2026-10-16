@@ -226,6 +226,79 @@
       "notified": 0
     }
   },
+  "getRunChanges": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/runs/run%2F1/changes",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": {
+        "alert": "<alert>",
+        "alerts": "<alerts>",
+        "approval": "<approval>",
+        "approvals": "<approvals>",
+        "bot": "<bot>",
+        "bots": "<bots>",
+        "connection": "<connection>",
+        "connections": "<connections>",
+        "connector": "<connector>",
+        "connectors": "<connectors>",
+        "document": "<document>",
+        "documents": "<documents>",
+        "entries": "<entries>",
+        "entry": "<entry>",
+        "events": "<events>",
+        "handoffs": "<handoffs>",
+        "memory": "<memory>",
+        "messages": "<messages>",
+        "pin": "<pin>",
+        "proposal": "<proposal>",
+        "proposals": "<proposals>",
+        "provider": "<provider>",
+        "rule": "<rule>",
+        "rules": "<rules>",
+        "runs": "<runs>",
+        "skill": "<skill>",
+        "soul": "<soul>",
+        "task": "<task>",
+        "tasks": "<tasks>",
+        "threads": "<threads>",
+        "versions": "<versions>",
+        "workspace": "<workspace>",
+        "workspaces": "<workspaces>"
+      }
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/runs/run%2F1/changes failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
   "getRunContext": {
     "requests": [
       {
@@ -354,6 +427,45 @@
         "error": "ApiError",
         "code": "unauthorized",
         "message": "GET /api/runs/run%2F1/timeline failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "latestRunScreenshot": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/runs/run%2F1/screenshot",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/runs/run%2F1/screenshot failed with 401",
         "status": 401,
         "details": {}
       },
@@ -523,10 +635,49 @@
       "notified": 0
     }
   },
+  "listRunMemoryVersions": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/runs/run%2F1/memory-versions",
+        "method": "GET",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<versions>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "GET /api/runs/run%2F1/memory-versions failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
   "listRuns": {
     "requests": [
       {
-        "url": "https://gw.test/api/runs?threadId=thr%2F1&phase=finished&cursor=c%2F1&limit=20",
+        "url": "https://gw.test/api/runs?threadId=thr%2F1&phase=finished&cursor=c%2F1&limit=20&status=failed%2Ccancelled&lane=background&since=2026-10-01T00%3A00%3A00.000Z&until=2026-10-08T00%3A00%3A00.000Z&failureClass=model_unavailable&q=no+worker",
         "method": "GET",
         "headers": {
           "accept": "application/json",
@@ -577,7 +728,51 @@
       "rejected": {
         "error": "ApiError",
         "code": "unauthorized",
-        "message": "GET /api/runs?threadId=thr%2F1&phase=finished&cursor=c%2F1&limit=20 failed with 401",
+        "message": "GET /api/runs?threadId=thr%2F1&phase=finished&cursor=c%2F1&limit=20&status=failed%2Ccancelled&lane=background&since=2026-10-01T00%3A00%3A00.000Z&until=2026-10-08T00%3A00%3A00.000Z&failureClass=model_unavailable&q=no+worker failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "markRun": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/runs/run%2F1/mark",
+        "method": "PUT",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "note": "wrong site"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "PUT /api/runs/run%2F1/mark failed with 401",
         "status": 401,
         "details": {}
       },
@@ -617,6 +812,46 @@
         "error": "ApiError",
         "code": "unauthorized",
         "message": "GET /api/runs/memory-index?workspaceId=ws%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "unmarkRun": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/runs/run%2F1/mark",
+        "method": "DELETE",
+        "headers": {
+          "accept": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "DELETE /api/runs/run%2F1/mark failed with 401",
         "status": 401,
         "details": {}
       },

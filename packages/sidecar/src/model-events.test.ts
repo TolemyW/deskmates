@@ -126,6 +126,9 @@ describe("model switches (FB-02, FAULT-01, FAULT-09)", () => {
         to: "fallback-under-test",
         source: "auto",
         requested: "fallback-under-test",
+        // ADR-0023 amendment 5: the hook's cache facts ride along.
+        promptCacheWarm: false,
+        contextTokens: 0,
       },
     ]);
     expect(ended.outcome).toBe("completed");
@@ -232,7 +235,14 @@ describe("model switches (FB-02, FAULT-01, FAULT-09)", () => {
       { type: "end", summary: summary("ok") },
     ]);
     expect(of("model_switch").map((e) => e.payload)).toEqual([
-      { from: "model-under-test", to: "restored-model", source: "resume", requested: null },
+      {
+        from: "model-under-test",
+        to: "restored-model",
+        source: "resume",
+        requested: null,
+        promptCacheWarm: false,
+        contextTokens: 0,
+      },
     ]);
   });
 });

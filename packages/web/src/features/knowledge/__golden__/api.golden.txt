@@ -2133,7 +2133,17 @@
       }
     ],
     "ok": {
-      "resolved": "<memory>"
+      "resolved": {
+        "0": "<",
+        "1": "m",
+        "2": "e",
+        "3": "m",
+        "4": "o",
+        "5": "r",
+        "6": "y",
+        "7": ">",
+        "appliesFromNextRun": false
+      }
     },
     "unauthorized": {
       "rejected": {

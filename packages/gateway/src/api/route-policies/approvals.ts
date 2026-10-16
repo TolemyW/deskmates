@@ -16,6 +16,7 @@ export const approvalsRoutePolicies: PolicyTable = {
   }),
   "GET /api/bots/:id/approval-rules": member({ params: { id: "bot" } }),
   "POST /api/bots/:id/approval-rules": admin({ params: { id: "bot" } }),
+  "PATCH /api/approval-rules/:id": admin({ params: { id: "approvalRule" } }),
   "DELETE /api/approval-rules/:id": admin({ params: { id: "approvalRule" } }),
   // ADR-0002 amendment 6, D1: an Owner or Admin changes the approval mode; members read it.
   "GET /api/workspaces/:id/auto-approval": member({ params: { id: "workspace" } }),

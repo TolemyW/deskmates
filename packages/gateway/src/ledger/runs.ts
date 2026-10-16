@@ -6,6 +6,7 @@ import {
   DeskmatesError,
   PARKED_RUN_STATUSES,
   type Run,
+  type RunFailureClass,
   type RunId,
   type RunLane,
   type RunResumePayload,
@@ -20,6 +21,7 @@ import {
 } from "@deskmates/contracts";
 import { newId, nowIso, parseJson } from "../db/ids.js";
 import type { GatewayDb } from "../db/open.js";
+import { failureClassSql } from "./failure-class.js";
 
 interface RunRow {
   id: string;
@@ -76,6 +78,17 @@ export interface RunPageFilter {
   phase?: "active" | "finished";
   /** The person reading; another person's private chat is left out. */
   viewerUserId?: string;
+  /** Only these statuses (issue #11). */
+  statuses?: readonly RunStatus[];
+  lane?: RunLane;
+  /** `created_at` at or after this canonical ISO time. */
+  since?: string;
+  /** `created_at` before this canonical ISO time. */
+  until?: string;
+  /** Only runs whose `error` classifies as this (`failure-class.ts`, ADR-0042 decision 1). */
+  failureClass?: RunFailureClass;
+  /** Case-insensitive substring of `error`. */
+  errorText?: string;
 }
 
 export interface CreateRunInput {
@@ -92,6 +105,7 @@ export interface CreateRunInput {
 const ALL_STATUSES: readonly RunStatus[] = [
   "queued",
   "running",
+  "stalled",
   "waiting_approval_live",
   "waiting_approval",
   "waiting_browser",
@@ -234,6 +248,30 @@ export class RunStore {
       );
       params.push(...terminal);
     }
+    if (filter.statuses !== undefined) {
+      clauses.push("r.status IN (SELECT value FROM json_each(?))");
+      params.push(JSON.stringify(filter.statuses));
+    }
+    if (filter.lane !== undefined) {
+      clauses.push("r.lane = ?");
+      params.push(filter.lane);
+    }
+    if (filter.since !== undefined) {
+      clauses.push("r.created_at >= ?");
+      params.push(filter.since);
+    }
+    if (filter.until !== undefined) {
+      clauses.push("r.created_at < ?");
+      params.push(filter.until);
+    }
+    if (filter.failureClass !== undefined) {
+      clauses.push(`${failureClassSql("r.error")} = ?`);
+      params.push(filter.failureClass);
+    }
+    if (filter.errorText !== undefined) {
+      clauses.push("instr(lower(r.error), lower(?)) > 0");
+      params.push(filter.errorText);
+    }
     clauses.push(notPrivateToOthers("r"));
     params.push(filter.viewerUserId ?? null);
     if (page.after) {
@@ -335,6 +373,20 @@ export class RunStore {
     return row ? toRun(row) : undefined;
   }
 
+  /**
+   * The bot's own newest runs that reached the sandbox, newest first: no Gateway job hosted on it
+   * (`run_type`), none still queued. "Last run used SOUL v N" reads the first (ADR-0043).
+   */
+  latestStartedOwnRuns(botId: BotId, limit: number): RunRecord[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM runs WHERE bot_id = ? AND run_type IS NULL AND started_at IS NOT NULL
+           ORDER BY created_at DESC, id DESC LIMIT ?`,
+      )
+      .all(botId, limit) as RunRow[];
+    return rows.map(toRun);
+  }
+
   /** The bot's newest run of this trigger kind, e.g. its latest welcome (ADR-0024 decision 9). */
   latestOfTrigger(botId: BotId, triggerKind: RunTriggerKind): RunRecord | undefined {
     const row = this.db
@@ -381,7 +433,7 @@ export class RunStore {
     const rows = this.db
       .prepare(
         `SELECT r.* FROM runs r JOIN bots b ON b.id = r.bot_id
-           WHERE b.workspace_id = ? AND r.status IN ('running', 'waiting_approval_live')
+           WHERE b.workspace_id = ? AND r.status IN ('running', 'stalled', 'waiting_approval_live')
            ORDER BY r.created_at, r.id`,
       )
       .all(workspaceId) as RunRow[];
@@ -506,6 +558,16 @@ export class RunStore {
     const rows = this.db
       .prepare(`SELECT * FROM runs WHERE status IN (${placeholders}) ORDER BY created_at`)
       .all(...LANE_HOLDING_STATUSES) as RunRow[];
+    return rows.map(toRun);
+  }
+
+  /** Runs in any of `statuses`, oldest first; the stall sweep reads `running` and `stalled`. */
+  listWithStatus(statuses: readonly RunStatus[]): RunRecord[] {
+    if (statuses.length === 0) return [];
+    const placeholders = statuses.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(`SELECT * FROM runs WHERE status IN (${placeholders}) ORDER BY created_at, id`)
+      .all(...statuses) as RunRow[];
     return rows.map(toRun);
   }
 

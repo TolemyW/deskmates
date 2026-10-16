@@ -141,7 +141,7 @@ export function TaskTriggerFields({
   );
 }
 
-const LIVE = new Set(["queued", "running", "waiting_approval_live"]);
+const LIVE = new Set(["queued", "running", "stalled", "waiting_approval_live"]);
 
 /** A time shown in a named zone, falling back to the browser's when the zone is unknown. */
 function inZone(iso: string, zone: string): string {

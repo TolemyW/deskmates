@@ -4,9 +4,11 @@
 // `exec` resolves the sidecar process is gone; if it never sent `run_ended`, the run is `failed`.
 
 import {
+  type BotId,
   DeskmatesError,
   type ExecRequest,
   type ExecResult,
+  PARKED_RUN_STATUSES,
   type RunEnded,
   type RunId,
   type RunTimelineMark,
@@ -15,6 +17,7 @@ import {
   type Workspace,
   type WorkspaceId,
   isDeskmatesError,
+  isExecuting,
   isPastDeadline,
   isTerminal,
 } from "@deskmates/contracts";
@@ -32,8 +35,11 @@ import { canonicalMemoryForBot } from "../memory/canonical-memory.js";
 import { isConsolidationRun } from "../memory/consolidation.js";
 import { queueMemoryMaintenance } from "../memory/maintenance-due.js";
 import { MODEL_JOB_RUN_TYPES } from "../model-jobs/model-jobs.js";
+import { isRoundTriageRun } from "../model-jobs/round-triage.js";
 import type { SandboxOrigin } from "../workspaces/sandboxes.js";
+import { ruleRevisionsOf } from "./rule-revisions.js";
 import type { RunLifecycle } from "./run-lifecycle.js";
+import { RunStallMonitor, STALL_SWEEP_INTERVAL_MS } from "./run-stall.js";
 import { markAttemptStarted, recordTimelineMark } from "./run-timeline-marks.js";
 
 export const SIDECAR_RUN_CMD: readonly string[] = ["deskmates-sidecar", "run"];
@@ -86,8 +92,14 @@ export class Scheduler {
   private scheduled = false;
   private stopped = false;
   private readonly maintenance = new Set<WorkspaceId>();
+  /** Bots whose directories the operator is moving; none of their runs starts meanwhile. */
+  private readonly heldBots = new Set<BotId>();
   private lastTokenPruneMs = Number.NEGATIVE_INFINITY;
   private readonly continuationSweep: ReturnType<typeof setInterval>;
+  private readonly stallSweep: ReturnType<typeof setInterval>;
+  private readonly unsubscribeStalls: () => void;
+  /** Issue #9: marks quiet running runs `stalled` and revives them on progress; never kills. */
+  readonly stalls: RunStallMonitor;
 
   constructor(
     private readonly ctx: GatewayContext,
@@ -96,6 +108,39 @@ export class Scheduler {
   ) {
     this.continuationSweep = setInterval(() => this.kick(), CONTINUATION_SWEEP_INTERVAL_MS);
     this.continuationSweep.unref();
+    this.stalls = new RunStallMonitor(
+      {
+        runs: ctx.runs,
+        appendEvent: (input) => ctx.events.append(input),
+        publish: (run) =>
+          ctx.bus.publish(
+            run.threadId
+              ? { type: "run_status", threadId: run.threadId, run }
+              : { type: "run_status", run },
+          ),
+      },
+      ctx.config.runStallSeconds,
+    );
+    // Every stored event reaches the bus once its transaction has committed.
+    this.unsubscribeStalls = ctx.bus.subscribe((event) => {
+      if (event.type === "run_event") this.stalls.observe(event.event);
+    });
+    this.stallSweep = setInterval(() => this.sweepStalls(), STALL_SWEEP_INTERVAL_MS);
+    this.stallSweep.unref();
+  }
+
+  /**
+   * Issue #9: mark running runs that went quiet `stalled`. An observation only: the run keeps its
+   * process, lane and token, and `RUN_TIMEOUT_SECONDS` stays the only kill.
+   */
+  sweepStalls(): void {
+    if (this.stopped) return;
+    try {
+      for (const run of this.stalls.sweep())
+        this.log("run stalled", { runId: run.id, stallSeconds: this.ctx.config.runStallSeconds });
+    } catch (err) {
+      this.log("stall sweep failed", { error: String(err) });
+    }
   }
 
   /** Ask for a scheduling pass soon. Safe to call from anywhere, any number of times. */
@@ -168,6 +213,12 @@ export class Scheduler {
       if (run.threadId && this.ctx.threads.mustGet(run.threadId).status === "paused") continue;
       // A deadline that passed after the cancellation above: never start it (issue #21).
       if (pastDeadline(run)) continue;
+      // ADR-0005 amendment 6, decision 45: a round's triage is one short tool-free call that
+      // never waits for its bot's lane, so a busy member does not hold up the round.
+      if (isRoundTriageRun(run)) {
+        this.launch(run);
+        continue;
+      }
       if (this.ctx.walks.blockedByEarlierWalk(run.id)) continue;
       // A parked run of the same (bot, thread) owns the SDK session this run would open, so it
       // waits until that run has resumed and ended (ADR-0002 amendment 2, "a parked run holds
@@ -224,6 +275,32 @@ export class Scheduler {
       } catch (err) {
         this.log("deadline cancellation failed", { runId: run.id, error: String(err) });
       }
+    }
+  }
+
+  /**
+   * Hold one bot's starts and resumes while the operator moves its directories (a rename,
+   * ADR-0043 decision 1). Refused while the bot has a live or parked run: a run's home and working
+   * directory are fixed when it starts, and a parked run resumes in the ones it started in.
+   */
+  async withIdleBot<T>(botId: BotId, operation: () => Promise<T>): Promise<T> {
+    const bot = this.ctx.bots.mustGet(botId);
+    if (
+      this.heldBots.has(botId) ||
+      this.ctx.runs.listLiveInWorkspace(bot.workspaceId).some((run) => run.botId === botId)
+    )
+      throw new DeskmatesError("lane_busy", "Wait for this bot's current run before renaming it");
+    if (this.ctx.runs.list({ botId }).some((run) => PARKED_RUN_STATUSES.has(run.status)))
+      throw new DeskmatesError(
+        "invalid_transition",
+        "Finish or cancel this bot's parked run before renaming it",
+      );
+    this.heldBots.add(botId);
+    try {
+      return await operation();
+    } finally {
+      this.heldBots.delete(botId);
+      this.kick();
     }
   }
 
@@ -352,6 +429,8 @@ export class Scheduler {
   stop(): void {
     this.stopped = true;
     clearInterval(this.continuationSweep);
+    clearInterval(this.stallSweep);
+    this.unsubscribeStalls();
   }
 
   /**
@@ -385,8 +464,16 @@ export class Scheduler {
   }
 
   private launch(run: RunRecord): void {
-    const workspaceId = this.ctx.bots.mustGet(run.botId).workspaceId;
-    if (this.maintenance.has(workspaceId)) return;
+    const bot = this.ctx.bots.mustGet(run.botId);
+    const workspaceId = bot.workspaceId;
+    if (this.maintenance.has(workspaceId) || this.heldBots.has(run.botId)) return;
+    // ADR-0026 amendment 1: a paused bot's own work waits, a queued run and an answered parked one
+    // alike, and starts when the bot is resumed. Gateway jobs hosted on the bot (a presentation
+    // summary, a probe, a SOUL draft) carry a `runType` and are not the bot's work.
+    if (bot.pausedAt !== undefined && run.config.runType === undefined) {
+      this.waitForCapacity(run.id, { waitReason: "bot_paused" });
+      return;
+    }
     // The tenant is read from the persisted workspace, never from a trigger payload (ADR-0022
     // JOB-01). A run whose workspace has no tenant is an orphan and never starts a sidecar; a
     // suspended tenant's runs stay queued until it is active again.
@@ -474,9 +561,12 @@ export class Scheduler {
       }
       const canonicalSoul = this.ctx.bots.canonicalSoul(run.botId);
       const canonicalMemory = canonicalMemoryForBot(this.ctx, run.botId);
+      // ADR-0043 decision 2: the numbered versions this attempt's files are, next to the hashes;
+      // "last run used v N" on the bot page reads them.
       this.ctx.runs.setConfig(run.id, {
         canonicalSoulVersion: canonicalSoul?.version ?? null,
         canonicalMemoryVersion: canonicalMemory.version,
+        ...ruleRevisionsOf(this.ctx, run.botId),
       });
       request = {
         ...request,
@@ -526,7 +616,7 @@ export class Scheduler {
       // `running` row it sees then belongs to that process, not this one. `attempt` is what tells
       // the two apart (ADR-0002 amendment 2, "resume keeps the ledger whole").
       const mine = (r: RunRecord): boolean => r.attempt === request.attempt;
-      if (mine(after) && (after.status === "running" || after.status === "waiting_approval_live")) {
+      if (mine(after) && isExecuting(after.status)) {
         // A sidecar that could not deliver its run_ended post prints it as the last stdout line
         // (exit code 3). Taking it here turns a lost post into a normal end of run.
         const recovered = runEndedFromStdout(run.id, result.stdout);
@@ -540,7 +630,7 @@ export class Scheduler {
           after = this.ctx.runs.mustGet(run.id);
         }
       }
-      if (mine(after) && (after.status === "running" || after.status === "waiting_approval_live")) {
+      if (mine(after) && isExecuting(after.status)) {
         // Keep the tail of stderr: without it a sidecar that died before its first event leaves
         // nothing to diagnose from.
         const tail = result.stderr.trim().split("\n").slice(-5).join(" | ").slice(-600);

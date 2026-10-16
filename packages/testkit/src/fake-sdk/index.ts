@@ -1,6 +1,8 @@
 export {
   createFakeSdk,
+  defaultContextUsage,
   type FakeDeferredCall,
+  type FakeQuery,
   type FakeSdk,
   type FakeSdkConfig,
   type FakeSession,

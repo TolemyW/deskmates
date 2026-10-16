@@ -12,12 +12,13 @@ import type {
 
 /**
  * `query()` as the sidecar uses it: a string prompt (or, for a model job that carries an image,
- * a stream of user messages), full options, an iterable of messages.
+ * a stream of user messages), full options, an iterable of messages. The real `Query` also
+ * answers `getContextUsage`, which the run samples when it is there (`context-usage.ts`).
  */
 export type QueryFn = (params: {
   prompt: string | AsyncIterable<SDKUserMessage>;
   options: Options;
-}) => AsyncIterable<SDKMessage>;
+}) => AsyncIterable<SDKMessage> & import("./context-usage.js").ContextUsageSource;
 
 export type ToolFn = typeof tool;
 

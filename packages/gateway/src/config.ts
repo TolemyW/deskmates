@@ -8,6 +8,7 @@ import { type AppSharesConfig, readAppSharesConfig } from "./config/app-shares.j
 import type { AuthSettings } from "./config/auth.js";
 import { authConfig } from "./config/auth.js";
 import { type BrowserConfig, readBrowserConfig } from "./config/browser.js";
+import { type CliSurfaceConfig, readCliSurfaceConfig } from "./config/cli-surface.js";
 import { type IntegrationsConfig, readIntegrationsConfig } from "./config/integrations.js";
 import { type ModelConfig, readModelConfig } from "./config/model.js";
 import { type OperationsConfig, readOperationsConfig } from "./config/operations.js";
@@ -24,6 +25,7 @@ export { MODEL_TOKEN_TTL_SECONDS_DEFAULT } from "./config/model.js";
 export {
   GROUP_ROUTING_DEFAULT,
   MAX_TURNS_DEFAULT,
+  RUN_STALL_SECONDS_DEFAULT,
   RUN_TIMEOUT_SECONDS_DEFAULT,
   THREAD_PAYLOAD_MAX_TOKENS_DEFAULT,
   WEBHOOK_BODY_MAX_BYTES_DEFAULT,
@@ -38,6 +40,7 @@ export interface GatewayConfig
   extends AppSharesConfig,
     AuthSettings,
     BrowserConfig,
+    CliSurfaceConfig,
     IntegrationsConfig,
     ModelConfig,
     OperationsConfig,
@@ -58,6 +61,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     ...readRunsConfig(env),
     ...readTenancyConfig(env),
     ...readBrowserConfig(env),
+    ...readCliSurfaceConfig(env),
     ...readIntegrationsConfig(env),
     ...readAppSharesConfig(env),
     ...readOperationsConfig(env),

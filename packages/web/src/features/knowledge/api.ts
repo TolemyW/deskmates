@@ -163,7 +163,12 @@ export interface KnowledgeApi {
   ): Promise<{ entries: LearnedMemoryEntry[]; nextCursor?: string }>;
   undoMemoryBatch(workspaceId: WorkspaceId, batchId: string): Promise<MemoryReviewBatch>;
   undoMemoryEntry(entryId: string): Promise<MemoryEntry>;
-  writeMemory(id: BotId, body: string, expectedVersion: string): Promise<MemoryView>;
+  /** `appliesFromNextRun`: a run of the bot was live or parked; it sees the edit next time. */
+  writeMemory(
+    id: BotId,
+    body: string,
+    expectedVersion: string,
+  ): Promise<MemoryView & { appliesFromNextRun: boolean }>;
   // ADR-0011 amendment 4: revalidation, drafts from observations and model organisation.
   /** "Needs revalidation" after a sweep (A26), newest first, with exact totals per reason. */
   listMemoryRevalidations(
@@ -366,16 +371,12 @@ export function createKnowledgeApi(t: HttpTransport): KnowledgeApi {
       return (await t.json<{ entry: MemoryEntry }>("POST", `${entry(entryId)}/undo`, {})).entry;
     },
     async writeMemory(id, body, expectedVersion) {
-      return (
-        await t.json<{ memory: MemoryView }>(
-          "PATCH",
-          `/api/bots/${encodeURIComponent(id)}/memory`,
-          {
-            body,
-            expectedVersion,
-          },
-        )
-      ).memory;
+      const r = await t.json<{ memory: MemoryView; appliesFromNextRun?: boolean }>(
+        "PATCH",
+        `/api/bots/${encodeURIComponent(id)}/memory`,
+        { body, expectedVersion },
+      );
+      return { ...r.memory, appliesFromNextRun: r.appliesFromNextRun === true };
     },
     listMemoryRevalidations(workspaceId, filters = {}) {
       return t.json("GET", `${memory(workspaceId, "revalidations")}${query({ ...filters })}`);

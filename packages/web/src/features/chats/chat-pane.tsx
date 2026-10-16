@@ -24,6 +24,7 @@ import {
 } from "./composer-attachments.js";
 import { IncomingHandoffs } from "./incoming-handoffs.js";
 import { PrivateChatActivity } from "./private-chat-activity.js";
+import { RoundCard, showsRoundCard } from "./round-card.js";
 import {
   RoundModeToggle,
   RoundStrip,
@@ -143,6 +144,7 @@ function membersSummary(
 }
 import { WorkspaceFilePreview } from "../files/workspace-file-preview.js";
 import { ReplyPreviews, replyPreviewReducer } from "./reply-preview.js";
+import { useRunActivity } from "./use-run-activity.js";
 import { type WorkspaceLockState, useWorkspaceLock } from "./use-workspace-lock.js";
 import { VisionNotice } from "./vision-notice.js";
 
@@ -167,6 +169,12 @@ export function ChatPane(props: ChatPaneProps) {
   const actorName = useActorLabel();
   const [state, dispatch] = useReducer(threadViewReducer, EMPTY_THREAD_VIEW);
   const [previews, applyPreview] = useReducer(replyPreviewReducer, {});
+  // Issue #9: what each live run is doing now, for the status row.
+  const { activity: runActivity, apply: applyRunActivity } = useRunActivity(
+    api,
+    threadId,
+    activeRuns(state),
+  );
   const [detail, setDetail] = useState<ThreadDetailView | undefined>();
   const members = detail?.members ?? [];
   // Only `owner-v1` offers an unaddressed message to the owner first; under the walk (or an older
@@ -328,6 +336,7 @@ export function ChatPane(props: ChatPaneProps) {
         if (event.type === "run_status") runRevisionRef.current += 1;
         dispatch(event);
         applyPreview(event);
+        applyRunActivity(event);
         // Messages can add a member or pause/reset the thread; run changes affect each member's
         // activity. Refresh the authoritative detail while the reducer applies the live frame.
         if (
@@ -375,7 +384,7 @@ export function ChatPane(props: ChatPaneProps) {
       if (lifecycleRevisionRef.current === lifecycleRevision) lifecycleRevisionRef.current += 1;
       stop();
     };
-  }, [threadId, api]);
+  }, [threadId, api, applyRunActivity]);
 
   useEffect(() => {
     if (!props.messageId || !state.messages.some((message) => message.id === props.messageId))
@@ -643,7 +652,14 @@ export function ChatPane(props: ChatPaneProps) {
             <span>{t("chatPane.paused")}</span>
           </output>
         ) : null}
-        {members.length > 1 ? (
+        {members.length > 1 && showsRoundCard(detail?.groupRouting, round) ? (
+          <RoundCard
+            round={round}
+            botName={botName}
+            actorName={actorName}
+            messageBody={(id) => state.messages.find((m) => m.id === id)?.body}
+          />
+        ) : members.length > 1 ? (
           <RoundStrip
             round={round}
             api={api}
@@ -763,7 +779,9 @@ export function ChatPane(props: ChatPaneProps) {
                             attachments={composerFiles}
                             disabled={!attachAllowed}
                           />
-                          {members.length > 1 && mentionsEveryone(draft.body) ? (
+                          {members.length > 1 &&
+                          detail?.groupRouting !== "round-v1" &&
+                          mentionsEveryone(draft.body) ? (
                             <RoundModeToggle value={roundMode} onChange={setRoundMode} />
                           ) : null}
                           <Button
@@ -906,6 +924,11 @@ export function ChatPane(props: ChatPaneProps) {
                     fallbackBody={m.body}
                     api={api}
                     botName={state.approvals[ref] ? botName(state.approvals[ref].botId) : undefined}
+                    runStatus={
+                      state.approvals[ref]
+                        ? state.runs[state.approvals[ref].runId]?.status
+                        : undefined
+                    }
                     onDecided={(approval) => dispatch({ type: "approval", threadId, approval })}
                     readOnlyNote={
                       channelName !== undefined
@@ -922,6 +945,7 @@ export function ChatPane(props: ChatPaneProps) {
               key={threadId}
               api={api}
               runs={pending}
+              activity={runActivity}
               botName={botName}
               messageBody={(id) => state.messages.find((m) => m.id === id)?.body}
               thread={detail?.thread}
@@ -962,6 +986,7 @@ export function ChatPane(props: ChatPaneProps) {
               botName={botName}
               actorName={actorName}
               loadEvents={(runId) => api.listRunEvents(runId)}
+              markRun={{ mark: api.markRun, unmark: api.unmarkRun }}
               older={
                 runsCursor
                   ? { loading: loadingOlderRuns, onLoad: () => void loadOlderRuns() }

@@ -34,7 +34,9 @@ const MODES: readonly BotWorkdirMode[] = ["shared", "per-bot"];
 const FIELDS = ["mode", "laneNotice"] as const;
 
 /** Statuses in which a run holds its lane with a live sidecar (not `queued`). */
-const LIVE_STATUSES = (["running", "waiting_approval_live"] as const).filter(occupiesLane);
+const LIVE_STATUSES = (["running", "stalled", "waiting_approval_live"] as const).filter(
+  occupiesLane,
+);
 
 function toSettings(row: SettingsRow | undefined): WorkdirSettings {
   if (!row) return {};

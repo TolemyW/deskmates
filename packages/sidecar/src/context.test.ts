@@ -431,6 +431,74 @@ describe("buildContext thread delivery guidance", () => {
     expect(resumed.systemPromptSha256).toBe(group.systemPromptSha256);
   });
 
+  it("puts a round's plan and rules in the first turn and leaves the system prompt unchanged (ADR-0005 amendment 6)", async () => {
+    const base: TriggerPayload = {
+      kind: "thread_message",
+      thread: { id: "thread-1" as ThreadId, title: "group", kind: "chat" },
+      relayCount: 0,
+      messages: [message({ authorKind: "human", authorName: "web" })],
+      routing: {
+        version: 2,
+        recipientBotId: "bot-nova" as BotId,
+        recipientName: "nova",
+        members: [
+          { name: "nova", role: "prices", you: true },
+          { name: "orion", role: "stock" },
+          { name: "lead", role: "coordinates", owner: true },
+        ],
+      },
+    };
+    const routing = base.kind === "thread_message" ? base.routing : undefined;
+    const work: TriggerPayload = {
+      ...base,
+      routing: {
+        ...(routing as NonNullable<typeof routing>),
+        round: {
+          messageSeq: 1,
+          phase: "work",
+          assignments: [
+            { name: "nova", task: "unit price of K", you: true },
+            { name: "orion", task: "units of K" },
+          ],
+          closer: "lead",
+        },
+        lastReply: { seq: 4, addressed: [], everyone: false, unknown: ["orin"], spaced: [] },
+      },
+    };
+    const close: TriggerPayload = {
+      ...base,
+      routing: {
+        ...(routing as NonNullable<typeof routing>),
+        round: {
+          messageSeq: 1,
+          phase: "close",
+          assignments: [{ name: "orion", task: "units of K" }],
+          closer: "nova",
+          youClose: true,
+          outcomes: [{ name: "orion", outcome: "replied", seqs: [2, 3] }],
+        },
+      },
+    };
+    const fs = createMemoryFs({ "/home/nova/SOUL.md": "You are nova." });
+    const group = (trigger: TriggerPayload) =>
+      buildContext({ ...request(trigger), groupGuidance: "owner-v1" }, fs, new Date(0));
+    const [plain, working, closing] = await Promise.all([group(base), group(work), group(close)]);
+    expect(working.systemPrompt).toBe(plain.systemPrompt);
+    expect(closing.systemPromptSha256).toBe(plain.systemPromptSha256);
+    expect(plain.prompt).not.toContain("triaged into a round");
+    expect(working.prompt).toContain("Message #1 was triaged into a round.");
+    expect(working.prompt).toContain("- nova (you): unit price of K");
+    expect(working.prompt).toContain("Closer: lead.");
+    expect(working.prompt).toContain("Do your part only.");
+    expect(working.prompt).toContain("lead answers the human once every part has ended");
+    expect(working.prompt).toContain("When you have nothing to add, end with an empty summary");
+    expect(working.prompt).toContain("No member of this thread is called @orin");
+    expect(closing.prompt).toContain("Closer: nova (you).");
+    expect(closing.prompt).toContain("- orion: replied (message #2, #3)");
+    expect(closing.prompt).toContain("you close it");
+    expect(closing.prompt).not.toContain("Do your part only.");
+  });
+
   it("keeps the same system prompt on thread approval and turn continuation resumes", async () => {
     const fs = createMemoryFs({ "/home/nova/SOUL.md": "An old physical rule." });
     const files = { soul: { body: "Canonical rule.", version: "v1" } };
