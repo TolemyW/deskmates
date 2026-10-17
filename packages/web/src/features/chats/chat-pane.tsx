@@ -853,13 +853,6 @@ export function ChatPane(props: ChatPaneProps) {
               </li>
             ) : null}
             <ElsewhereActivityOlder older={elsewhere.older} />
-            {elsewhere.error ? (
-              <li className="message system">
-                <p className="error" role="alert">
-                  {elsewhere.error}
-                </p>
-              </li>
-            ) : null}
             {transcriptTimeline(state, hasOlderMessages, elsewhere.runs).map(
               (item, index, items) => {
                 const previous = items[index - 1];
@@ -999,6 +992,11 @@ export function ChatPane(props: ChatPaneProps) {
               }}
             />
           </ol>
+          {elsewhere.error ? (
+            <p className="error elsewhere-error" role="alert">
+              {elsewhere.error}
+            </p>
+          ) : null}
         </ChatViewport>
         {dropTarget.overlay}
       </section>
