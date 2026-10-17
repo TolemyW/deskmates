@@ -23,7 +23,11 @@ import {
   useComposerAttachments,
 } from "./composer-attachments.js";
 import { IncomingHandoffs } from "./incoming-handoffs.js";
-import { PrivateChatActivity } from "./private-chat-activity.js";
+import {
+  ElsewhereActivityItem,
+  ElsewhereActivityOlder,
+  useElsewhereActivity,
+} from "./private-chat-activity.js";
 import { RoundCard, showsRoundCard } from "./round-card.js";
 import {
   RoundModeToggle,
@@ -204,7 +208,15 @@ export function ChatPane(props: ChatPaneProps) {
   const [error, setError] = useState<string | undefined>();
   const [retryingWelcome, setRetryingWelcome] = useState(false);
   const [handoffRuns, setHandoffRuns] = useState<readonly string[]>([]);
-  const [botRuns, setBotRuns] = useState<readonly RunView[]>([]);
+  // A one-member chat also shows its bot's work elsewhere (other conversations, background
+  // tasks); a handoff that already has its own card is not repeated. Groups and Guests read none.
+  const elsewhere = useElsewhereActivity(
+    api,
+    members.length === 1 && members[0] && !guest
+      ? { botId: members[0].botId, threadId }
+      : undefined,
+    handoffRuns,
+  );
   const [runsCursor, setRunsCursor] = useState<string>();
   // #113 slice CH: the transcript opens on its newest messages; older ones load on request.
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
@@ -535,12 +547,7 @@ export function ChatPane(props: ChatPaneProps) {
     }
   };
   const activityByBot = new Map<string, typeof pending>();
-  for (const run of [
-    ...pending,
-    ...botRuns.filter(
-      (run) => members.length === 1 && run.threadId !== threadId && !isTerminal(run.status),
-    ),
-  ]) {
+  for (const run of [...pending, ...elsewhere.runs.filter((run) => !isTerminal(run.status))]) {
     const current = activityByBot.get(run.botId) ?? [];
     activityByBot.set(run.botId, [...current, run]);
   }
@@ -845,115 +852,136 @@ export function ChatPane(props: ChatPaneProps) {
                 </Button>
               </li>
             ) : null}
-            {transcriptTimeline(state, hasOlderMessages).map((item, index, items) => {
-              const previous = items[index - 1];
-              const dayLabel =
-                item.kind === "message" &&
-                (previous === undefined ||
-                  previous.kind !== "message" ||
-                  formatDay(previous.message.ts) !== formatDay(item.message.ts))
-                  ? formatDay(item.message.ts)
-                  : undefined;
-              const continued =
-                item.kind === "message" &&
-                previous?.kind === "message" &&
-                previous.message.authorKind === item.message.authorKind &&
-                previous.message.authorId === item.message.authorId &&
-                item.message.authorKind !== "system" &&
-                approvalRefOf(previous.message.attachments) === undefined &&
-                new Date(item.message.ts).getTime() - new Date(previous.message.ts).getTime() <
-                  5 * 60 * 1000;
-              if (item.kind === "outcome") {
-                const run = item.run;
-                const when = formatTime(run.finishedAt ?? run.startedAt ?? run.createdAt);
+            <ElsewhereActivityOlder older={elsewhere.older} />
+            {elsewhere.error ? (
+              <li className="message system">
+                <p className="error" role="alert">
+                  {elsewhere.error}
+                </p>
+              </li>
+            ) : null}
+            {transcriptTimeline(state, hasOlderMessages, elsewhere.runs).map(
+              (item, index, items) => {
+                const previous = items[index - 1];
+                const dayLabel =
+                  item.kind === "message" &&
+                  (previous === undefined ||
+                    previous.kind !== "message" ||
+                    formatDay(previous.message.ts) !== formatDay(item.message.ts))
+                    ? formatDay(item.message.ts)
+                    : undefined;
+                const continued =
+                  item.kind === "message" &&
+                  previous?.kind === "message" &&
+                  previous.message.authorKind === item.message.authorKind &&
+                  previous.message.authorId === item.message.authorId &&
+                  item.message.authorKind !== "system" &&
+                  approvalRefOf(previous.message.attachments) === undefined &&
+                  new Date(item.message.ts).getTime() - new Date(previous.message.ts).getTime() <
+                    5 * 60 * 1000;
+                if (item.kind === "elsewhere")
+                  return (
+                    <ElsewhereActivityItem
+                      key={`elsewhere:${item.run.id}`}
+                      run={item.run}
+                      api={api}
+                      botName={botName}
+                    />
+                  );
+                if (item.kind === "outcome") {
+                  const run = item.run;
+                  const when = formatTime(run.finishedAt ?? run.startedAt ?? run.createdAt);
+                  return (
+                    <li
+                      key={`outcome:${run.id}`}
+                      className={`message system run-outcome ${run.status}`}
+                    >
+                      <div className="meta">
+                        <span className="author bot">{botName(run.botId)}</span>
+                        <span className={`status ${run.status}`}>{runStatusLabel(run.status)}</span>
+                        <span className="muted small">{when}</span>
+                        <a href={runHref(run.id)} className="small">
+                          {t("chatPane.outcome.viewRun")}
+                        </a>
+                      </div>
+                      <div className="body">
+                        {run.error ??
+                          (run.status === "cancelled"
+                            ? t("chatPane.outcome.cancelled")
+                            : run.status === "stopped"
+                              ? t("chatPane.outcome.stopped")
+                              : t("chatPane.outcome.failed"))}
+                      </div>
+                    </li>
+                  );
+                }
+                const m = item.message;
+                const ref = approvalRefOf(m.attachments);
+                if (ref === undefined)
+                  return (
+                    <MessageRow
+                      key={m.id}
+                      message={m}
+                      botName={botName}
+                      api={api}
+                      workspaceId={detail?.thread.workspaceId}
+                      continued={continued}
+                      dayLabel={dayLabel}
+                    />
+                  );
+                if (firstApprovalSeq.get(ref) !== m.seq) {
+                  return (
+                    <li
+                      key={m.id}
+                      id={`message-${m.id}`}
+                      className="message system approval-echo"
+                      data-testid="approval-echo"
+                    >
+                      <div className="approval-decision-text">
+                        {approvalEchoLabel(m.body, actorName).replace(
+                          /bot:(bot_[a-zA-Z0-9_]+)/g,
+                          (label, id) => botName(id) ?? label,
+                        )}
+                        {approvalEchoLabel(m.body, actorName) !== m.body ? (
+                          <details>
+                            <summary>{t("actor.audit")}</summary>
+                            <div>{m.body}</div>
+                          </details>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                }
                 return (
-                  <li
-                    key={`outcome:${run.id}`}
-                    className={`message system run-outcome ${run.status}`}
-                  >
+                  <li key={m.id} id={`message-${m.id}`} className="message system">
+                    <Avatar name="approval" kind="system" />
                     <div className="meta">
-                      <span className="author bot">{botName(run.botId)}</span>
-                      <span className={`status ${run.status}`}>{runStatusLabel(run.status)}</span>
-                      <span className="muted small">{when}</span>
-                      <a href={runHref(run.id)} className="small">
-                        {t("chatPane.outcome.viewRun")}
-                      </a>
+                      <span className="author system">{t("chatPane.author.approval")}</span>
+                      <span className="muted small">{formatTime(m.ts)}</span>
                     </div>
-                    <div className="body">
-                      {run.error ??
-                        (run.status === "cancelled"
-                          ? t("chatPane.outcome.cancelled")
-                          : run.status === "stopped"
-                            ? t("chatPane.outcome.stopped")
-                            : t("chatPane.outcome.failed"))}
-                    </div>
+                    <ApprovalCard
+                      approval={state.approvals[ref]}
+                      fallbackBody={m.body}
+                      api={api}
+                      botName={
+                        state.approvals[ref] ? botName(state.approvals[ref].botId) : undefined
+                      }
+                      runStatus={
+                        state.approvals[ref]
+                          ? state.runs[state.approvals[ref].runId]?.status
+                          : undefined
+                      }
+                      onDecided={(approval) => dispatch({ type: "approval", threadId, approval })}
+                      readOnlyNote={
+                        channelName !== undefined
+                          ? t("chatPane.channelMirror.approval", { channel: channelName })
+                          : undefined
+                      }
+                    />
                   </li>
                 );
-              }
-              const m = item.message;
-              const ref = approvalRefOf(m.attachments);
-              if (ref === undefined)
-                return (
-                  <MessageRow
-                    key={m.id}
-                    message={m}
-                    botName={botName}
-                    api={api}
-                    workspaceId={detail?.thread.workspaceId}
-                    continued={continued}
-                    dayLabel={dayLabel}
-                  />
-                );
-              if (firstApprovalSeq.get(ref) !== m.seq) {
-                return (
-                  <li
-                    key={m.id}
-                    id={`message-${m.id}`}
-                    className="message system approval-echo"
-                    data-testid="approval-echo"
-                  >
-                    <div className="approval-decision-text">
-                      {approvalEchoLabel(m.body, actorName).replace(
-                        /bot:(bot_[a-zA-Z0-9_]+)/g,
-                        (label, id) => botName(id) ?? label,
-                      )}
-                      {approvalEchoLabel(m.body, actorName) !== m.body ? (
-                        <details>
-                          <summary>{t("actor.audit")}</summary>
-                          <div>{m.body}</div>
-                        </details>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              }
-              return (
-                <li key={m.id} id={`message-${m.id}`} className="message system">
-                  <Avatar name="approval" kind="system" />
-                  <div className="meta">
-                    <span className="author system">{t("chatPane.author.approval")}</span>
-                    <span className="muted small">{formatTime(m.ts)}</span>
-                  </div>
-                  <ApprovalCard
-                    approval={state.approvals[ref]}
-                    fallbackBody={m.body}
-                    api={api}
-                    botName={state.approvals[ref] ? botName(state.approvals[ref].botId) : undefined}
-                    runStatus={
-                      state.approvals[ref]
-                        ? state.runs[state.approvals[ref].runId]?.status
-                        : undefined
-                    }
-                    onDecided={(approval) => dispatch({ type: "approval", threadId, approval })}
-                    readOnlyNote={
-                      channelName !== undefined
-                        ? t("chatPane.channelMirror.approval", { channel: channelName })
-                        : undefined
-                    }
-                  />
-                </li>
-              );
-            })}
+              },
+            )}
             <IncomingHandoffs api={api} threadId={threadId} onRuns={setHandoffRuns} />
             <ReplyPreviews previews={previews} runs={pending} botName={botName} />
             <ChatRunStatus
@@ -971,15 +999,6 @@ export function ChatPane(props: ChatPaneProps) {
               }}
             />
           </ol>
-          {members.length === 1 && members[0] && !guest ? (
-            <PrivateChatActivity
-              key={members[0].botId}
-              api={api}
-              botId={members[0].botId}
-              botName={members[0].name}
-              threadId={threadId}
-            />
-          ) : null}
         </ChatViewport>
         {dropTarget.overlay}
       </section>

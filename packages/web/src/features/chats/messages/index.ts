@@ -19,7 +19,6 @@ export const chatsMessages = defineMessages({
     "incomingHandoffs",
     "mentionQuery",
     "mentionTextarea",
-    "privateChatActivity",
     "roundCard",
     "roundMode",
     "roundStrip",

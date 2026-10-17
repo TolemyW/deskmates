@@ -448,36 +448,20 @@
 .composer-box:focus-within {
   border-color: var(--focus);
 }
-.private-chat-activity {
+/* The bot's work elsewhere, in the transcript at the time it ended (ADR-0033 card). */
+.message.elsewhere-activity {
   width: 100%;
-  max-width: 760px;
-  margin: 20px auto;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 4px;
 }
-.private-chat-activity summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  list-style: none;
-  cursor: pointer;
-  min-height: 44px;
+.elsewhere-activity-source {
+  margin: 0;
+  text-align: center;
 }
-.private-chat-activity summary::-webkit-details-marker {
-  display: none;
-}
-.private-chat-activity summary > svg {
-  flex-shrink: 0;
-  transform: rotate(-90deg);
-}
-.private-chat-activity details[open] > summary > svg {
-  transform: none;
-}
-.private-chat-activity summary:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: var(--app-radius-sm);
-}
-.private-chat-activity .incoming-handoff {
-  margin: 8px 0;
+.elsewhere-activity .activity-card {
+  width: 100%;
+  max-width: 70ch;
 }
 .incoming-handoff-heading strong {
   font-size: var(--app-text-sm);
@@ -975,7 +959,8 @@
     color: var(--info-text);
   }
   .message.approval-echo,
-  .message.run-outcome {
+  .message.run-outcome,
+  .message.elsewhere-activity {
     grid-template-columns: minmax(0, 1fr);
     max-width: 100%;
     justify-items: center;

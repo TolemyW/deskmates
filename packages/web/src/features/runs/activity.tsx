@@ -216,6 +216,12 @@ function GroupLabel({
   }
   const run = group.trigger ?? group.runs[0];
   if (!run) return null;
+  return <ActivityTriggerLabel run={run} />;
+}
+
+/** Where a run outside any known round came from: a message in another chat, or its trigger. */
+export function ActivityTriggerLabel({ run }: { run: RunView }) {
+  const t = useT();
   if (run.triggerKind === "thread_message")
     return <span className="activity-group-label">{t("activity.group.message")}</span>;
   return (
