@@ -2,7 +2,7 @@
 // (ADR-0004): one Chromium, one profile, one filesystem, one shell, shared by every bot in it.
 // Bots inside are not separated by anything here; isolation is a second container.
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { isIP } from "node:net";
 import {
   DeskmatesError,
@@ -16,6 +16,7 @@ import {
   type PrivateEgressTarget,
   type SandboxHandle,
   type SandboxImageDrift,
+  type SandboxNetworkSubnet,
   type SandboxProvider,
   type SandboxSnapshot,
   type SandboxSpec,
@@ -28,6 +29,7 @@ import { DockerClient, dockerApiError } from "./docker-client.js";
 import { type DockerEndpoint, resolveDockerEndpoint } from "./docker-endpoint.js";
 import { DockerStreamDemuxer } from "./docker-stream.js";
 import { ENV_FILE_PATH, renderEnvFile } from "./env-file.js";
+import { type NetworkSummary, networkSubnetsOf, topologyProblem } from "./network-topology.js";
 
 /** Label that ties a container to its workspace so `attach` can find it after a Gateway restart. */
 export const WORKSPACE_LABEL = "deskmates.workspace";
@@ -49,6 +51,9 @@ export const DEFAULT_EGRESS_PROXY_IMAGE = "deskmates/egress-proxy:dev";
 export const EGRESS_OUTBOUND_NETWORK = "deskmates-egress-outbound";
 export const DEFAULT_HOST_TARGET = "host.docker.internal";
 export const VNC_PASSWORD_ENV = "DESKMATES_VNC_PASSWORD";
+/** The egress proxy's app relay (ADR-0035 decision 4): container port and key variable. */
+export const APP_RELAY_PORT = 6090;
+export const APP_RELAY_KEY_ENV = "DESKMATES_APP_RELAY_KEY";
 /**
  * noVNC listens here inside the workspace image; published when the spec lists it. The number
  * belongs to contracts, where the Gateway reads it to build the spec; re-exported here so
@@ -132,7 +137,7 @@ interface ContainerInspect {
   HostConfig?: { ExtraHosts?: string[]; NetworkMode?: string };
   NetworkSettings: {
     Ports?: Record<string, { HostIp: string; HostPort: string }[] | null>;
-    Networks?: Record<string, { IPAddress?: string; Gateway?: string }>;
+    Networks?: Record<string, { IPAddress?: string; Gateway?: string; Aliases?: string[] }>;
   };
 }
 
@@ -588,9 +593,14 @@ export class DockerProvider implements SandboxProvider {
     await this.ensureWorkspaceNetwork(workspaceId);
     await this.assertWorkspaceNetwork(workspaceId, found.Id, inspect);
     const pinnedProxyIp = proxyIpFromExtraHosts(inspect.HostConfig?.ExtraHosts);
-    const attachedProxy = await this.findAndValidateProxy(workspaceId, true, pinnedProxyIp);
-    const attachedProxyIp =
+    let attachedProxy = await this.findAndValidateProxy(workspaceId, true, pinnedProxyIp);
+    let attachedProxyIp =
       attachedProxy.NetworkSettings.Networks?.[networkName(workspaceId)]?.IPAddress;
+    if (pinnedProxyIp !== undefined && attachedProxyIp !== pinnedProxyIp) {
+      attachedProxy = await this.repinProxy(workspaceId, inspect, attachedProxy, pinnedProxyIp);
+      attachedProxyIp =
+        attachedProxy.NetworkSettings.Networks?.[networkName(workspaceId)]?.IPAddress;
+    }
     if (pinnedProxyIp === undefined || attachedProxyIp !== pinnedProxyIp) {
       throw this.networkError(workspaceId, "workspace egress-proxy address is missing or stale");
     }
@@ -728,6 +738,34 @@ export class DockerProvider implements SandboxProvider {
         reason: "egress_probe_unavailable",
       });
     }
+  }
+
+  /** ADR-0027 amendment 2 decision 15: the IPv4 subnets of every network on this daemon. */
+  async networkSubnets(): Promise<SandboxNetworkSubnet[]> {
+    const { json } = await this.client.expect<NetworkSummary[]>("GET", "/networks");
+    return networkSubnetsOf(json);
+  }
+
+  /**
+   * Amendment 2 decision 16: attach's topology rules for a cached handle's workspace container.
+   * Read-only; the proxy half is checked by every `updateEgress`, which the registry runs next.
+   */
+  async verifyTopology(handle: SandboxHandle): Promise<void> {
+    const { workspaceId } = handle;
+    const res = await this.client.request("GET", `/containers/${handle.providerRef}/json`);
+    if (res.status === 404) throw this.networkError(workspaceId, "workspace container is gone");
+    if (res.status !== 200)
+      throw dockerApiError("GET", `/containers/${handle.providerRef}/json`, res);
+    const problem = topologyProblem(JSON.parse(res.body) as ContainerInspect, {
+      labels: {
+        [WORKSPACE_LABEL]: workspaceId,
+        [MANAGED_LABEL]: "true",
+        [ROLE_LABEL]: "workspace",
+      },
+      network: networkName(workspaceId),
+      hostAlias: DEFAULT_HOST_TARGET,
+    });
+    if (problem !== undefined) throw this.networkError(workspaceId, problem);
   }
 
   async snapshot(handle: SandboxHandle): Promise<SandboxSnapshot> {
@@ -938,6 +976,8 @@ export class DockerProvider implements SandboxProvider {
       // can start, and attach reapplies the Gateway's persisted policy.
       Env: [
         `DESKMATES_SCREEN_TARGET=${containerName(workspaceId)}`,
+        // Per proxy container; only the Gateway reads it back (ADR-0035 decision 4).
+        `${APP_RELAY_KEY_ENV}=${randomBytes(16).toString("hex")}`,
         `DESKMATES_HOST_TARGET=${this.hostTarget}`,
         `DESKMATES_HOST_FALLBACK_IP=${outboundGateway}`,
         // Where port-53 DNS is intercepted with fake IPs, the proxy resolves over DoH instead.
@@ -952,10 +992,9 @@ export class DockerProvider implements SandboxProvider {
         ...tenantLabels(tenantId),
       },
       ExposedPorts: Object.fromEntries(
-        [EGRESS_PROXY_PORT, ...Array.from({ length: 7 }, (_, i) => 6080 + i)].map((port) => [
-          `${port}/tcp`,
-          {},
-        ]),
+        [EGRESS_PROXY_PORT, ...Array.from({ length: 7 }, (_, i) => 6080 + i), APP_RELAY_PORT].map(
+          (port) => [`${port}/tcp`, {}],
+        ),
       ),
       // Only the workspace network at create time: API v1.41 (docker-client.ts) rejects a
       // create with several endpoints ("Container cannot be created with multiple network
@@ -971,8 +1010,8 @@ export class DockerProvider implements SandboxProvider {
       HostConfig: {
         NetworkMode: workspaceNetwork,
         PortBindings: Object.fromEntries(
-          Array.from({ length: 7 }, (_, i) => [
-            `${6080 + i}/tcp`,
+          [...Array.from({ length: 7 }, (_, i) => 6080 + i), APP_RELAY_PORT].map((port) => [
+            `${port}/tcp`,
             [{ HostIp: this.publishHost, HostPort: "" }],
           ]),
         ),
@@ -1014,10 +1053,60 @@ export class DockerProvider implements SandboxProvider {
     }
   }
 
-  private async connectNetwork(network: string, containerId: string): Promise<void> {
+  private async connectNetwork(
+    network: string,
+    containerId: string,
+    endpoint?: { Aliases?: string[]; IPAMConfig?: { IPv4Address: string } },
+  ): Promise<void> {
     const path = `/networks/${encodeURIComponent(network)}/connect`;
-    const res = await this.client.request("POST", path, { Container: containerId });
+    const res = await this.client.request("POST", path, {
+      Container: containerId,
+      ...(endpoint === undefined ? {} : { EndpointConfig: endpoint }),
+    });
     if (res.status !== 200) throw dockerApiError("POST", path, res);
+  }
+
+  private async disconnectNetwork(network: string, containerId: string): Promise<void> {
+    const path = `/networks/${encodeURIComponent(network)}/disconnect`;
+    const res = await this.client.request("POST", path, { Container: containerId, Force: false });
+    if (res.status !== 200) throw dockerApiError("POST", path, res);
+  }
+
+  /**
+   * A daemon restart without live-restore, or a host reboot, starts the workspace and its proxy
+   * in whatever order and Docker hands out the network's addresses in that order: the proxy
+   * that had `.2` comes back as `.3`, and the workspace container, whose `/etc/hosts` pins
+   * `egress-proxy` to `.2`, often sits on `.2` itself. The pin cannot change on a running
+   * container, so the proxy is moved back instead: the workspace is taken off the network while
+   * it holds the pinned address, the proxy is reattached at that address with its alias, and
+   * the workspace is reattached with its own aliases. Nothing is recreated, so the browser
+   * profile, the files and the open desktop stay as they were.
+   */
+  private async repinProxy(
+    workspaceId: WorkspaceId,
+    workspace: ContainerInspect,
+    proxy: ContainerInspect,
+    pinnedIp: string,
+  ): Promise<ContainerInspect> {
+    const network = networkName(workspaceId);
+    const endpoint = workspace.NetworkSettings.Networks?.[network];
+    const displaced = endpoint?.IPAddress === pinnedIp;
+    if (displaced) await this.disconnectNetwork(network, workspace.Id);
+    await this.disconnectNetwork(network, proxy.Id);
+    await this.connectNetwork(network, proxy.Id, {
+      Aliases: ["egress-proxy"],
+      IPAMConfig: { IPv4Address: pinnedIp },
+    });
+    if (displaced) {
+      // Docker lists the container's own short id among the aliases; it adds that one itself.
+      const aliases = (endpoint?.Aliases ?? []).filter((alias) => !workspace.Id.startsWith(alias));
+      await this.connectNetwork(
+        network,
+        workspace.Id,
+        aliases.length === 0 ? undefined : { Aliases: aliases },
+      );
+    }
+    return await this.inspect(proxy.Id);
   }
 
   private async findManagedContainer(
@@ -1258,7 +1347,8 @@ export class DockerProvider implements SandboxProvider {
       sidecarAddress: `docker-exec://${json.Id}`,
     };
     const proxy = await this.findManagedContainer(workspaceId, EGRESS_PROXY_ROLE);
-    const ports = proxy ? (await this.inspect(proxy.Id)).NetworkSettings.Ports : undefined;
+    const proxyInspect = proxy ? await this.inspect(proxy.Id) : undefined;
+    const ports = proxyInspect?.NetworkSettings.Ports;
     const address = (port: number): string | undefined => {
       const binding = ports?.[`${port}/tcp`]?.[0];
       if (!binding?.HostPort) return undefined;
@@ -1266,6 +1356,13 @@ export class DockerProvider implements SandboxProvider {
         throw this.networkError(workspaceId, "screen port must be published on loopback");
       return `${binding.HostIp === "::1" ? "[::1]" : binding.HostIp}:${binding.HostPort}`;
     };
+    // A proxy from before ADR-0035 has neither; its publications then report unavailable.
+    const appRelayAddress = address(APP_RELAY_PORT);
+    const appRelayKey = envValue(proxyInspect?.Config.Env, APP_RELAY_KEY_ENV);
+    if (appRelayAddress && appRelayKey && /^[0-9a-f]{32}$/.test(appRelayKey)) {
+      handle.appRelayAddress = appRelayAddress;
+      handle.appRelayKey = appRelayKey;
+    }
     const novncAddress = address(NOVNC_CONTAINER_PORT);
     if (novncAddress && envValue(json.Config.Env, VNC_PASSWORD_ENV))
       handle.novncAddress = novncAddress;

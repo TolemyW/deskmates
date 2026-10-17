@@ -3,19 +3,35 @@
 
 import { describe, expect, it } from "vitest";
 import { CONSOLIDATION_RUN_TYPE } from "../memory/consolidation.js";
+import { MEMORY_ORGANIZE } from "../memory/organize.js";
+import { MEMORY_RECHECK } from "../memory/recheck.js";
+import { ROUND_TRIAGE } from "../model-jobs/round-triage.js";
 import { SOUL_PROPOSAL } from "../model-jobs/soul-proposals.js";
 import { STATUS_INQUIRY } from "../model-jobs/status-inquiries.js";
 import { VISION_PROBE } from "../model-jobs/vision-probes.js";
 import { CHEAP_MODEL_JOB_KINDS, modelsForJob } from "./job-models.js";
 
 describe("cheap-model job kinds", () => {
-  it("lists Activity summaries, memory consolidation, SOUL proposals and Guest status answers and nothing else", () => {
+  it("lists Activity summaries, memory consolidation, organisation and recheck, round triage and SOUL proposals and nothing else", () => {
     expect(CHEAP_MODEL_JOB_KINDS).toEqual([
       "activity_summary",
       CONSOLIDATION_RUN_TYPE,
+      MEMORY_ORGANIZE,
+      MEMORY_RECHECK,
+      ROUND_TRIAGE,
       SOUL_PROPOSAL,
-      STATUS_INQUIRY,
     ]);
+  });
+
+  it("puts a round triage on the cheap model (ADR-0005 amendment 6, decision 45)", () => {
+    expect(modelsForJob(ROUND_TRIAGE, "test-model-cheap")).toEqual({
+      model: "test-model-cheap",
+      cheapModel: "test-model-cheap",
+    });
+  });
+
+  it("never puts a Guest status answer on the cheap model (ADR-0022 amendment 7 S1)", () => {
+    expect(modelsForJob(STATUS_INQUIRY, "test-model-cheap")).toEqual({});
   });
 
   it("never puts a vision probe on the cheap model: it runs on the model it probes", () => {

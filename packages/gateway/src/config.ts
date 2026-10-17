@@ -4,12 +4,17 @@
 // Each domain reads its own variables in `config/<domain>.ts` (issue #53); this file composes
 // them and is the one import path for the config type, its defaults and `loadConfig`.
 
+import { type AppSharesConfig, readAppSharesConfig } from "./config/app-shares.js";
 import type { AuthSettings } from "./config/auth.js";
 import { authConfig } from "./config/auth.js";
 import { type BrowserConfig, readBrowserConfig } from "./config/browser.js";
+import { type CliSurfaceConfig, readCliSurfaceConfig } from "./config/cli-surface.js";
 import { type IntegrationsConfig, readIntegrationsConfig } from "./config/integrations.js";
 import { type ModelConfig, readModelConfig } from "./config/model.js";
+import { type OperationsConfig, readOperationsConfig } from "./config/operations.js";
+import { type RetrievalConfig, readRetrievalConfig } from "./config/retrieval.js";
 import { type RunsConfig, readRunsConfig } from "./config/runs.js";
+import { type RuntimeConfig, readRuntimeConfig } from "./config/runtime.js";
 import { type SandboxConfig, readSandboxConfig, readSandboxProvider } from "./config/sandbox.js";
 import { type ServerConfig, readServerConfig } from "./config/server.js";
 import { type TenancyConfig, readTenancyConfig } from "./config/tenancy.js";
@@ -20,6 +25,7 @@ export { MODEL_TOKEN_TTL_SECONDS_DEFAULT } from "./config/model.js";
 export {
   GROUP_ROUTING_DEFAULT,
   MAX_TURNS_DEFAULT,
+  RUN_STALL_SECONDS_DEFAULT,
   RUN_TIMEOUT_SECONDS_DEFAULT,
   THREAD_PAYLOAD_MAX_TOKENS_DEFAULT,
   WEBHOOK_BODY_MAX_BYTES_DEFAULT,
@@ -31,11 +37,16 @@ export {
 } from "./config/sandbox.js";
 
 export interface GatewayConfig
-  extends AuthSettings,
+  extends AppSharesConfig,
+    AuthSettings,
     BrowserConfig,
+    CliSurfaceConfig,
     IntegrationsConfig,
     ModelConfig,
+    OperationsConfig,
+    RetrievalConfig,
     RunsConfig,
+    RuntimeConfig,
     SandboxConfig,
     ServerConfig,
     TenancyConfig {}
@@ -50,7 +61,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     ...readRunsConfig(env),
     ...readTenancyConfig(env),
     ...readBrowserConfig(env),
+    ...readCliSurfaceConfig(env),
     ...readIntegrationsConfig(env),
+    ...readAppSharesConfig(env),
+    ...readOperationsConfig(env),
+    ...readRetrievalConfig(env),
+    ...readRuntimeConfig(env),
     auth: authConfig(env),
   };
 }

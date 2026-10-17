@@ -267,6 +267,31 @@
   overflow-wrap: anywhere;
   cursor: pointer;
 }
+/* ADR-0011 amendment 4: maintenance under Observations. */
+.memory-maintenance {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.memory-draft-field {
+  display: grid;
+  gap: 4px;
+  max-width: 420px;
+  font-size: var(--app-text-sm);
+}
+.memory-draft-notes {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+.memory-split-parts {
+  margin: 4px 0 0;
+  padding-left: 20px;
+  overflow-wrap: anywhere;
+}
 .topic-tag[aria-pressed="true"] {
   border-color: var(--accent, currentColor);
   color: inherit;

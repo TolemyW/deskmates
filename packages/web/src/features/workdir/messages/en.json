@@ -1,0 +1,22 @@
+{
+  "workdir.cancel": "Cancel",
+  "workdir.convention": "With an own directory per bot, a bot may read a teammate's directory but not write into it, and /work/uploads is read-only to bots. This guards against mistakes; it is not a security boundary. Work that must stay apart belongs in another workspace.",
+  "workdir.edit": "Edit working directories",
+  "workdir.effective": "{value} · {source}",
+  "workdir.frozen": "Runs already started keep the settings they started with.",
+  "workdir.inherit": "Server default ({mode})",
+  "workdir.intro": "Where this workspace's bots start work: each in its own directory (the default) or all together in the shared /work.",
+  "workdir.laneNoticeLabel": "Tell a run when the same bot is already busy on its other lane",
+  "workdir.loading": "Loading working directories…",
+  "workdir.mode.per-bot": "Own directory per bot (/work/bots/…)",
+  "workdir.mode.shared": "Shared /work",
+  "workdir.modeLabel": "Start directory",
+  "workdir.off": "Off",
+  "workdir.on": "On",
+  "workdir.perBotHelp": "With an own directory per bot, each bot clones its own copy of any code it works on and keeps its deliverables there, readable by its teammates. With the shared /work every bot may write everywhere except /work/uploads.",
+  "workdir.roleNote": "change working directories",
+  "workdir.save": "Save working directories",
+  "workdir.source.gateway": "server default",
+  "workdir.source.workspace": "workspace setting",
+  "workdir.title": "Working directories"
+}

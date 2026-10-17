@@ -24,6 +24,7 @@ import {
 } from "@deskmates/contracts";
 import { newId, nowIso, parseJson } from "../db/ids.js";
 import type { GatewayDb } from "../db/open.js";
+import { notMarkedWrong } from "../ledger/run-marks.js";
 
 export type StoredScope = MemoryEntry["scope"];
 
@@ -56,6 +57,7 @@ interface EntryRow {
   created_at: string;
   topic: string | null;
   topic_label: string | null;
+  topic_source: "rule" | "model";
 }
 
 interface SourceRow {
@@ -132,6 +134,7 @@ function toEntry(row: EntryRow): StoredEntry {
     effectiveBasis: row.effective_basis,
     ingestedAt: row.created_at,
     ...(row.topic ? { topic: row.topic, topicLabel: row.topic_label ?? row.topic } : {}),
+    ...(row.topic && row.topic_source === "model" ? { topicSource: "model" as const } : {}),
   };
 }
 
@@ -524,7 +527,8 @@ export class MemoryEntryStore {
       .all(workspaceId) as { id: string; body: string }[];
     if (rows.length === 0) return;
     const update = this.db.prepare(
-      "UPDATE memory_entries SET topic = ?, topic_label = ?, topic_set = 1 WHERE id = ?",
+      `UPDATE memory_entries SET topic = ?, topic_label = ?, topic_set = 1, topic_source = 'rule',
+         topic_run_id = NULL WHERE id = ?`,
     );
     this.db.transaction(() => {
       for (const row of rows) {
@@ -651,7 +655,7 @@ export class MemoryEntryStore {
           `UPDATE memory_entries
            SET body = ?, normalized_body = ?, authority = ?, trust = ?, source_kind = ?,
                last_confirmed_at = COALESCE(?, last_confirmed_at), version = ?, updated_at = ?,
-               topic_set = 0,
+               topic_set = CASE WHEN body = ? THEN topic_set ELSE 0 END,
                kind = CASE WHEN ? = 1 AND kind = 'candidate' THEN 'note' ELSE kind END
            WHERE id = ?`,
         )
@@ -664,6 +668,8 @@ export class MemoryEntryStore {
           patch.lastConfirmedAt ?? null,
           version,
           now,
+          // A31: a version that keeps the body (a confirmation) keeps a model topic label.
+          next.body,
           patch.promoteCandidate ? 1 : 0,
           id,
         );
@@ -724,6 +730,22 @@ export class MemoryEntryStore {
       this.db
         .prepare("UPDATE memory_versions SET body = '', redacted = 1 WHERE entry_id = ?")
         .run(id);
+      // Amendment 4, A32: a split proposal holds the body and its parts; forget redacts them too
+      // and ends a pending one.
+      this.db
+        .prepare(
+          `UPDATE memory_split_parts SET body = '' WHERE proposal_id IN
+             (SELECT id FROM memory_split_proposals WHERE entry_id = ?)`,
+        )
+        .run(id);
+      this.db
+        .prepare(
+          `UPDATE memory_split_proposals SET body = '',
+             status = CASE status WHEN 'pending' THEN 'rejected' ELSE status END,
+             decided_by = COALESCE(decided_by, ?), decided_at = COALESCE(decided_at, ?)
+           WHERE entry_id = ?`,
+        )
+        .run(by, now, id);
       this.insertVersion(id, version, "forget", {
         body: "",
         authority: current.authority,
@@ -747,7 +769,10 @@ export class MemoryEntryStore {
     for (const id of ids) stmt.run(runId, id);
   }
 
-  /** Episodes and this bot's candidates not yet taken by a consolidation run. */
+  /**
+   * Episodes and this bot's candidates not yet taken by a consolidation run. A candidate of a run
+   * an operator marked wrong is do-not-learn while the mark stands (ADR-0042 decision 3).
+   */
   consolidationInput(workspaceId: WorkspaceId, botId: BotId): StoredEntry[] {
     const rows = this.db
       .prepare(
@@ -756,7 +781,8 @@ export class MemoryEntryStore {
            AND (e.kind = 'episode' OR (e.kind = 'candidate' AND e.bot_id = ?
              AND (e.source_run_id IS NULL OR EXISTS (SELECT 1 FROM runs r WHERE r.id = e.source_run_id
                AND r.status IN ('succeeded','silent')
-               AND r.run_type IS NOT 'memory_consolidation'))))
+               AND r.run_type IS NOT 'memory_consolidation'
+               AND ${notMarkedWrong("r.id")}))))
          ORDER BY e.observed_at, e.id`,
       )
       .all(workspaceId, botId) as EntryRow[];

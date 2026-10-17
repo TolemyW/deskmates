@@ -8,7 +8,7 @@ import type { GatewayContext } from "../context.js";
  * `GET /api/runtime` → `RuntimeStatus`. A release script polls it and stops the Gateway once
  * `activeRuns` is 0.
  *
- * Active means `running` or `waiting_approval_live`: a sidecar process is executing in the
+ * Active means `running`, `stalled` or `waiting_approval_live`: a sidecar process is executing in the
  * workspace (a live approval wait is the PreToolUse hook blocking inside that process), and a
  * Gateway restart fails exactly these runs in `Scheduler.reconcile`. `queued` has no process yet
  * and is started by the next Gateway; `waiting_approval` and `waiting_browser` are parked, their

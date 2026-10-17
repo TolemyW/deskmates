@@ -17,10 +17,13 @@ import {
   mentionDiagnostics,
 } from "@deskmates/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { registerAppShareInternalRoutes } from "../app-shares/app-share-routes.js";
+import { allowEgressForApproveAll } from "../approvals/approve-all.js";
 import { assertBotMayDecide } from "../approvals/bot-decision.js";
 import type { GatewayContext } from "../context.js";
 import { bearerToken } from "../model-proxy/model-proxy.js";
 import { networkProfiles } from "../network/network-policy.js";
+import { registerOperationInternalRoutes } from "../operations/operation-routes.js";
 import type { RunLifecycle } from "../scheduler/run-lifecycle.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
 import { postDirectMessage } from "../threads/direct-messages.js";
@@ -31,6 +34,7 @@ import { registerConnectorInternalRoutes } from "./connector-routes.js";
 import { registerIntegrationInternalRoutes } from "./integration-routes.js";
 import { registerKnowledgeInternalRoutes } from "./knowledge-routes.js";
 import { registerMemoryInternalRoutes } from "./learned-memory-routes.js";
+import { registerReplyPreviewRoutes } from "./reply-preview-routes.js";
 import { registerTaskInternalRoutes } from "./task-internal-routes.js";
 import {
   asApprovalDecision,
@@ -44,6 +48,8 @@ import {
 const EVENT_KINDS: ReadonlySet<string> = new Set<string>(RUN_EVENT_KINDS);
 
 type RunParams = { Params: { runId: string } };
+
+const EVENTS_ROUTE = "/internal/runs/:runId/events";
 type ApprovalParams = { Params: { runId: string; approvalId: string } };
 
 export function registerInternalRoutes(
@@ -64,15 +70,21 @@ export function registerInternalRoutes(
           runId: request.params.runId,
         });
       }
+      // Issue #9: a sidecar that calls the Gateway is moving, so a stalled run is running again.
+      // Event batches are judged per event instead: a heartbeat alone is not progress.
+      if (request.routeOptions.url !== EVENTS_ROUTE) scheduler.stalls.touch(verified.runId);
     });
 
+    registerAppShareInternalRoutes(scope, ctx);
     registerBrowserOriginRoutes(scope, ctx);
     registerBrowserRetentionRoutes(scope, ctx);
     registerKnowledgeInternalRoutes(scope, ctx);
     registerMemoryInternalRoutes(scope, ctx);
+    registerOperationInternalRoutes(scope, ctx);
+    registerReplyPreviewRoutes(scope, ctx);
     registerTaskInternalRoutes(scope, ctx);
 
-    scope.post<RunParams>("/internal/runs/:runId/events", async (request) => {
+    scope.post<RunParams>(EVENTS_ROUTE, async (request) => {
       const runId = request.params.runId as RunId;
       const run = ctx.runs.mustGet(runId);
       const raw = Array.isArray(request.body) ? request.body : [request.body];
@@ -222,7 +234,7 @@ export function registerInternalRoutes(
               mention.kind === "bot" ? [names.get(mention.botId) ?? mention.botId] : [],
             ),
             everyone: message.mentions.some((mention) => mention.kind === "everyone"),
-            ...mentionDiagnostics(messageBody, members, run.botId),
+            ...mentionDiagnostics(messageBody, members, run.botId, ctx.router.mentionOptions),
           };
           // A mention the Gateway did not deliver is said where it was written (issue #68); a
           // message that mentions nobody would have woken nobody anyway.
@@ -251,7 +263,10 @@ export function registerInternalRoutes(
     scope.post<RunParams>("/internal/runs/:runId/approvals", async (request, reply) => {
       const runId = request.params.runId as RunId;
       const run = ctx.runs.mustGet(runId);
-      const result = ctx.broker.request(run, asApprovalRequest(runId, request.body));
+      const req = asApprovalRequest(runId, request.body);
+      // ADR-0002 amendment 6, D4: in approve_all an egress host joins the allowlist first.
+      const egressHostAdded = await allowEgressForApproveAll(ctx, run, req);
+      const result = ctx.broker.request(run, req, { egressHostAdded });
       // Posting the request wakes the thread's other members; those runs are queued rows now.
       scheduler.kick();
       if (result === "pending") return reply.code(202).send();

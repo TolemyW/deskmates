@@ -1,5 +1,6 @@
-// T1: the workspace limits routes (ADR-0005 amendment 5 decisions 37, 39 and 41, ADR-0016
-// amendment 2 decision 13). Validation, `off` needing a budget, the audit row and the view.
+// T1: the workspace limits routes (ADR-0005 amendment 5 decisions 37, 39, 41 and 42, ADR-0016
+// amendment 2 decision 13). Validation, the switches, `off` needing a budget only when the
+// workspace asks for it, the audit row and the view.
 
 import type { WorkspaceLimitsView } from "@deskmates/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -23,7 +24,7 @@ const audits = () =>
     .all() as { actor: string; before_json: string; after_json: string }[];
 
 describe("workspace limits routes", () => {
-  it("shows today's defaults with their sources for a new workspace", async () => {
+  it("shows the owner's defaults with their sources for a new workspace", async () => {
     const { workspace } = await h.seed();
     const res = await h.api<{ limits: WorkspaceLimitsView }>(
       "GET",
@@ -35,12 +36,13 @@ describe("workspace limits routes", () => {
       settings: {},
       effective: {
         maxTurns: { value: 50, source: "gateway" },
-        turnBudget: { value: 8, source: "default" },
+        turnBudget: { value: null, source: "default" },
         relayCountMax: { value: 5, source: "default" },
         continuationLimit: { value: 2, source: "default" },
         continuationWindowHours: { value: 24, source: "default" },
       },
-      loopBreaker: { relayMax: 50, botMessages: 100, repeats: 3 },
+      switches: { requireBudgetForOff: false, volumeBreaker: false },
+      loopBreaker: { relayMax: 50, botMessages: 300, repeats: 3 },
       budgetBackstop: false,
     });
   });
@@ -53,7 +55,8 @@ describe("workspace limits routes", () => {
       { relayCountMax: 51 },
       { maxTurns: "lots" },
       { nope: 1 },
-      { turnBudget: "off" },
+      { turnBudget: 301 },
+      { volumeBreaker: "on" },
     ]) {
       const res = await h.api<{ code: string }>("PUT", path, body);
       expect(res.status, JSON.stringify(body)).toBe(400);
@@ -71,19 +74,32 @@ describe("workspace limits routes", () => {
     expect(row?.actor).toBe("web");
   });
 
-  it("accepts off only with a monetary limit, and falls back when the limit is cleared", async () => {
+  it("accepts off without a budget unless the workspace requires one, and sets the switches", async () => {
     const { workspace } = await h.seed();
     const path = `/api/workspaces/${workspace.id}/limits`;
-    await h.api("PUT", `/api/budgets/${workspace.id}`, { weeklyLimitUsd: 5 });
     const off = await h.api<{ limits: WorkspaceLimitsView }>("PUT", path, { relayCountMax: "off" });
     expect(off.status).toBe(200);
     expect(off.json.limits.effective.relayCountMax).toEqual({ value: null, source: "workspace" });
-    await h.api("PUT", `/api/budgets/${workspace.id}`, { weeklyLimitUsd: null });
-    const after = await h.api<{ limits: WorkspaceLimitsView }>("GET", path);
-    expect(after.json.limits.settings).toEqual({ relayCountMax: "off" });
-    expect(after.json.limits.effective.relayCountMax).toEqual({
+    const gated = await h.api<{ limits: WorkspaceLimitsView }>("PUT", path, {
+      requireBudgetForOff: true,
+      volumeBreaker: true,
+    });
+    expect(gated.status).toBe(200);
+    expect(gated.json.limits.switches).toEqual({ requireBudgetForOff: true, volumeBreaker: true });
+    expect(gated.json.limits.settings).toEqual({ relayCountMax: "off" });
+    expect(gated.json.limits.effective.relayCountMax).toEqual({
       value: 5,
       source: "default_no_backstop",
+    });
+    expect((await h.api("PUT", path, { maxTurns: "off" })).status).toBe(400);
+    await h.api("PUT", `/api/budgets/${workspace.id}`, { weeklyLimitUsd: 5 });
+    expect((await h.api("PUT", path, { maxTurns: "off" })).status).toBe(200);
+    const after = await h.api<{ limits: WorkspaceLimitsView }>("GET", path);
+    expect(after.json.limits.effective.relayCountMax).toEqual({ value: null, source: "workspace" });
+    expect(JSON.parse(audits().at(1)?.after_json ?? "")).toEqual({
+      relayCountMax: "off",
+      requireBudgetForOff: true,
+      volumeBreaker: true,
     });
   });
 

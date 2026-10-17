@@ -291,8 +291,10 @@ describe.skipIf(!available)("M3 canonical files across real SDK runs (T2)", () =
         ),
       ).toBe(true);
     }
+    // Only turns: the CLI's count_tokens requests carry the tools but no system prompt.
     const restoredRequests = upstream.requests
       .slice(offset)
+      .filter((r) => (r.url.split("?", 1)[0] ?? r.url) === "/v1/messages")
       .filter((r) => Array.isArray(r.body?.tools) && r.body.tools.length > 0);
     expect(
       restoredRequests.some((r) => JSON.stringify(r.body?.system).includes("M3_CANONICAL_RULE")),

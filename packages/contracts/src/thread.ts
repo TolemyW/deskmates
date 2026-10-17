@@ -33,10 +33,12 @@ export function isThreadLinkAttachmentMime(mimeType: string): boolean {
  * `walk-v1` is decision 4 as first written: every member is woken in turn, for every unaddressed
  * message. `owner-v1` offers an unaddressed human message to one member at a time until one takes
  * it, records the taker as the thread's owner, and does not walk unaddressed bot messages.
+ * `round-v1` (amendment 6, proposed) keeps `owner-v1` and triages a human request to the group:
+ * a cheap-model job assigns members, they work in parallel, and one closer answers.
  */
-export type GroupRouting = "walk-v1" | "owner-v1";
+export type GroupRouting = "walk-v1" | "owner-v1" | "round-v1";
 
-export const GROUP_ROUTINGS: readonly GroupRouting[] = ["walk-v1", "owner-v1"];
+export const GROUP_ROUTINGS: readonly GroupRouting[] = ["walk-v1", "owner-v1", "round-v1"];
 
 export function isGroupRouting(value: unknown): value is GroupRouting {
   return typeof value === "string" && (GROUP_ROUTINGS as readonly string[]).includes(value);
@@ -147,6 +149,10 @@ export interface Attachment {
   mimeType: string;
   /** Path inside the workspace filesystem or a Gateway artifact URL. */
   ref: string;
+  /** A person's attached upload (ADR-0014 A5 decision 42): its session id. */
+  uploadId?: string;
+  /** Size of an attached upload in bytes, when known. */
+  sizeBytes?: number;
 }
 
 /** A parsed mention. `everyone` wakes every member in turn; otherwise a specific member. */
@@ -234,6 +240,25 @@ export interface RosterMember {
   owner?: true;
 }
 
+/** How one assigned member's part of a triaged round ended (ADR-0005 amendment 6, decision 48). */
+export type RoundAssignmentOutcome = "replied" | "silent" | "failed" | "cancelled" | "stopped";
+
+/**
+ * The plan of a triaged round, as a wake of it is told (ADR-0005 amendment 6, decisions 47 and
+ * 48). `work`: the recipient is one of the assigned members. `close`: every assigned run has
+ * ended and the recipient is the closer. Gateway routing facts; they confer no authority.
+ */
+export interface ThreadRoundBrief {
+  messageSeq: number;
+  phase: "work" | "close";
+  assignments: readonly { name: string; task: string; you?: true }[];
+  closer: string;
+  /** The recipient closes the round. */
+  youClose?: true;
+  /** `close` only: how each assignment ended, with the seqs of the messages it posted. */
+  outcomes?: readonly { name: string; outcome: RoundAssignmentOutcome; seqs: readonly number[] }[];
+}
+
 /**
  * Present when the wake is the offer of an unaddressed human message (decision 14): who was
  * offered it before this member and ended without taking it, and who has not been offered yet.
@@ -259,6 +284,13 @@ export interface ThreadMessageTrigger {
     /** Every member in join order. Routing facts, like the recipient label. */
     members?: readonly RosterMember[];
     offer?: ThreadOffer;
+    /** The plan of the triaged round this wake works on or closes (amendment 6). */
+    round?: ThreadRoundBrief;
+    /**
+     * What the recipient's previous final reply in this thread addressed and missed (amendment 6,
+     * decision 50), present only when it wrote an `@name` no member has.
+     */
+    lastReply?: PostedMessageRouting;
   };
   relayCount: number;
 }
@@ -270,21 +302,29 @@ export function laneForThread(kind: ThreadKind): "interactive" | "background" {
 
 const MENTION_PATTERN = /(^|[^\w@])@([\w-]+)/g;
 
+/** Mention parsing options. `spaced`: read `@ name` as a mention of a member (amendment 6). */
+export interface MentionOptions {
+  spaced?: boolean;
+}
+
 /**
  * Parse `@name` mentions against a member list. Unknown names and self-mentions are ignored;
- * `@everyone` yields a single `everyone` mention and drops the rest (ADR-0005 item 3, 4).
+ * `@everyone` yields a single `everyone` mention and drops the rest (ADR-0005 item 3, 4). With
+ * `spaced`, a member name written `@ name` is a mention too (ADR-0005 amendment 6, decision 50).
  */
 export function parseMentions(
   body: string,
   members: ReadonlyArray<{ botId: BotId; name: string }>,
   authorBotId?: BotId,
+  options: MentionOptions = {},
 ): Mention[] {
   const byName = new Map<string, BotId>();
   for (const m of members) byName.set(m.name.toLowerCase(), m.botId);
+  const text = options.spaced ? closeSpacedMentions(body, byName) : body;
 
   const seen = new Set<BotId>();
   const out: Mention[] = [];
-  for (const match of body.matchAll(MENTION_PATTERN)) {
+  for (const match of text.matchAll(MENTION_PATTERN)) {
     const name = (match[2] ?? "").toLowerCase();
     if (name === "everyone") return [{ kind: "everyone" }];
     const botId = byName.get(name);
@@ -297,6 +337,27 @@ export function parseMentions(
 
 const SPACED_MENTION_PATTERN = /(^|[^\w@])@ +([\w-]+)/g;
 
+/** `@ name` written as `@name` where `name` is a member; anything else is left as it was. */
+function closeSpacedMentions(body: string, byName: ReadonlyMap<string, unknown>): string {
+  return body.replace(SPACED_MENTION_PATTERN, (all: string, before: string, name: string) =>
+    byName.has(name.toLowerCase()) ? `${before}@${name}` : all,
+  );
+}
+
+/**
+ * What a bot calls the person it is talking to. These address no member and are never an
+ * attempted handoff to another bot, so diagnostics and the private-chat router leave them alone
+ * (ADR-0024 amendment 3). A member of that name still matches as a member; a non-member bot of
+ * that name is not reached by it.
+ */
+export const HUMAN_ADDRESSES: ReadonlySet<string> = new Set([
+  "user",
+  "human",
+  "operator",
+  "owner",
+  "you",
+]);
+
 /**
  * What a message looks like it meant to address and did not (ADR-0005 amendment 2): `@names`
  * that match no member, and member names written as `@ name`, with a space, which the parser
@@ -307,16 +368,20 @@ export function mentionDiagnostics(
   body: string,
   members: ReadonlyArray<{ botId: BotId; name: string }>,
   authorBotId?: BotId,
+  options: MentionOptions = {},
 ): { unknown: string[]; spaced: string[] } {
   const byName = new Map<string, { botId: BotId; name: string }>();
   for (const m of members) byName.set(m.name.toLowerCase(), m);
   const unknown = new Set<string>();
   for (const match of body.matchAll(MENTION_PATTERN)) {
     const name = match[2] ?? "";
-    if (name.toLowerCase() === "everyone" || byName.has(name.toLowerCase())) continue;
+    const key = name.toLowerCase();
+    if (key === "everyone" || HUMAN_ADDRESSES.has(key) || byName.has(key)) continue;
     unknown.add(name);
   }
   const spaced = new Set<string>();
+  // With spaced mentions parsed, `@ name` is an address, so there is nothing to correct.
+  if (options.spaced) return { unknown: [...unknown], spaced: [] };
   for (const match of body.matchAll(SPACED_MENTION_PATTERN)) {
     const member = byName.get((match[2] ?? "").toLowerCase());
     if (member && member.botId !== authorBotId) spaced.add(member.name);

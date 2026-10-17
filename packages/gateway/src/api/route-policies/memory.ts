@@ -26,6 +26,29 @@ export const memoryRoutePolicies: PolicyTable = {
   "POST /api/workspaces/:id/memory-review/undo": admin({
     params: { id: "workspace" },
   }),
+  // ADR-0011 amendment 4: reading the maintenance queues is a Member's; deciding is curation.
+  "GET /api/workspaces/:id/memory/revalidations": member({ params: { id: "workspace" } }),
+  "POST /api/workspaces/:id/memory/revalidations/:itemId": admin({
+    params: { id: "workspace" },
+    handlerCheck: "the revalidation must belong to the workspace in the path",
+  }),
+  // A29: a draft makes the selected wording visible to the tenant's proposal reviewers.
+  "POST /api/workspaces/:id/memory/document-drafts": admin({
+    params: { id: "workspace" },
+    body: { entryIds: "memoryEntry[]", targetDocumentId: "knowledgeDoc" },
+  }),
+  // A28, A34 (owner ruling 2026-10-14): the latest recheck job and the settings are a Member's to
+  // read; changing the settings is an Owner's or Admin's.
+  "GET /api/workspaces/:id/memory/maintenance": member({ params: { id: "workspace" } }),
+  "PUT /api/workspaces/:id/memory/maintenance": admin({ params: { id: "workspace" } }),
+  "GET /api/workspaces/:id/memory/organize": member({ params: { id: "workspace" } }),
+  "POST /api/workspaces/:id/memory/organize": admin({ params: { id: "workspace" } }),
+  "POST /api/workspaces/:id/memory/organize/reset-labels": admin({ params: { id: "workspace" } }),
+  "GET /api/workspaces/:id/memory/splits": member({ params: { id: "workspace" } }),
+  "POST /api/workspaces/:id/memory/splits/:itemId": admin({
+    params: { id: "workspace" },
+    handlerCheck: "the split proposal must belong to the workspace in the path",
+  }),
   "GET /api/memory/entries/:id/versions": member({ params: { id: "memoryEntry" } }),
   "GET /api/memory/entries/:id/provenance": member({ params: { id: "memoryEntry" } }),
   "GET /api/memory/versions": member({ scopedList: true }),

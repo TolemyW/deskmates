@@ -752,8 +752,9 @@ W11. **The Web UI follows the role in the selected workspace.** `GET /auth/sessi
 Status: implements the open items the owner listed on issue #116 on 2026-10-13 (the Guest
 status-inquiry runtime, navigation a Guest cannot use, workspace creation checked against the
 selected workspace, a Member's click on a bot). S1 to S4 replace W6's "not built yet" sentence;
-the rest of W6 stands. S1's model choice (the cheap model) and S2's exact field list are
-proposed and wait for the owner. Real-model answer quality is not measured.
+the rest of W6 stands. Owner-decided (2026-10-14): S1's model is the default model, not the
+cheap one; the job runs on the bot's background lane; S2 adds task status and progress; S8 and
+S9 add the role badge and the role panel. Real-model answer quality is not measured.
 
 ### Context
 
@@ -770,11 +771,15 @@ the chat list, although W5 to W7 give them a private chat of their own.
 
 S1. **A Guest's post in their own inquiry is answered by a status job, never by a bot run.**
     The post is stored as the Guest's message and queues one run of the inquiry's bot on the
-    interactive lane, attached to the inquiry thread, with `runType: status_inquiry`, the
-    message as its trigger reference and the Guest as `requestedBy`. It is an ADR-0023
-    amendment 1 model job: one turn, no tools, MCP servers, plugins, skills, settings, SOUL,
-    memory or SDK session, the 60-second job deadline, the cheap model (proposed), usage and
-    price recorded like any run. The router is not called: no round, no mention routing, no
+    background lane (owner-decided 2026-10-14: a Guest's question never holds the lane a
+    person's chat with the bot uses), attached to the inquiry thread, with
+    `runType: status_inquiry`, the message as its trigger reference and the Guest as
+    `requestedBy`. It is an ADR-0023 amendment 1 model job: one turn, no tools, MCP servers,
+    plugins, skills, settings, SOUL, memory or SDK session, the 60-second job deadline, usage
+    and price recorded like any run. It runs on the default model (`DEFAULT_MODEL`, frozen on
+    the run at creation; owner-decided 2026-10-14), not the cheap model and not a per-bot
+    override: `status_inquiry` is not in the cheap-model job list (ADR-0023 decision 2), and
+    until the Gateway has a per-workspace default the installation default is the workspace's. The router is not called: no round, no mention routing, no
     wake of another bot, no learned-memory candidate, no outcome notice. The answer is appended
     to the inquiry as the bot's message carrying the job's run id; a job that returns nothing
     appends a `system` message saying no answer came and the question may be asked again.
@@ -783,12 +788,17 @@ S2. **The job reads a status projection, fixed by the Gateway, of what the Guest
     Built when the job starts: the workspace's name; its bots' names and roles; its shared
     `chat` threads that are no one's private chat (the eight most recently updated, each with
     title, bot members, last update and its last three messages, each cut to 400 characters);
-    the board's five newest visible posts (cut to 300); and the inquiry's own last six messages
-    (cut to 600). At most 12,000 characters, wrapped as untrusted data with entity escaping, with
-    the time it was built. Nothing else: no runs or their status, approvals, tasks, files,
-    memory, Knowledge, costs, desktops, SOUL, `bus` threads or another person's private chat. A
-    question about anything outside the projection is answered as unknown, never guessed (the
-    instruction says so).
+    the board's five newest visible posts (cut to 300); the workspace's tasks (owner-decided
+    2026-10-14: the ten most recently updated that are not deleted, each with its title, state,
+    owner bot, blocked reason and next action, and the summary of its latest checkpoint: the
+    units done with their outcomes, what is outstanding and the note, each cut; a checkpoint
+    recorded by a run in someone's private chat is left out, and no evidence path, description,
+    output, delivery, file or run detail is included); and the inquiry's own last six messages
+    (cut to 600). At most 14,000 characters, wrapped as untrusted data with entity escaping, with
+    the time it was built. Nothing else: no runs or their status, approvals, files or their
+    contents, memory, Knowledge, costs, desktops, SOUL, `bus` threads or another person's private
+    chat. A question about anything outside the projection is answered as unknown, never guessed
+    (the instruction says so).
 
 S3. **One open question per inquiry.** While a status job of the inquiry is queued or running,
     another post there is 409 `status_inquiry_busy` and stores nothing. A post repeated with
@@ -818,21 +828,41 @@ S7. **A click on a bot opens the clicker's own private chat below Admin.** In th
     Member may read and post in and a Guest may read, is listed under that entry's earlier chats.
     An Admin's or Owner's entry stays the canonical chat.
 
+S8. **Every signed-in person sees their role in the selected workspace** (owner-decided
+    2026-10-14). A badge at the top right of the shell names it: Owner, Admin, Member or Guest,
+    and the administrator account as such; a Guest's reads "Guest · read-only". It is a label in
+    the UI's language, never a permission.
+
+S9. **The badge opens what each role may do, generated from `ROLE_ACTIONS`** (owner-decided
+    2026-10-14). A panel lists every action of `ROLE_ACTIONS` that a workspace role takes, with a
+    column per role (Owner, Admin, Member, Guest) saying whether that role may take it, computed
+    by the same rank comparison as `mayTakeAction`; the person's own column is marked. Actions
+    only the administrator account or a platform maintainer takes are listed apart. The rows are
+    the table, not a hand-written list: an action added to `ROLE_ACTIONS` appears in the panel,
+    and a test fails until it has a label in every locale. Because `ROLE_ACTIONS` is checked
+    against the route policy (S6, W11), the panel says what the Gateway allows; where a handler
+    narrows a route (`handlerCheck`), the row says so.
+
 ### Verification
 
 | Item | Concrete meaning | Test | Metric |
 |---|---|---|---|
-| S1 | A Guest's post in their inquiry stores the message and queues exactly one `status_inquiry` run attached to the inquiry, with no round, wake or session; the fake SDK sees no tools, MCP, session or plugins, one turn and the cheap model; the answer is appended as the bot's message with the run id; an empty result appends the system notice | T1 `status-inquiries.test.ts`; T0 sidecar `model-job.test.ts` "a status inquiry has no tools and reads only its projection" | Tool calls in status jobs = 0 |
-| S2 | The projection holds the shared chat, its message, the bot's name and role and a visible board post, and leaves out another person's private chat, a bus thread, a hidden post, run status and SOUL | T1 `status-inquiries.test.ts` "the projection holds what a Guest may read and nothing else" | Projection fields outside S2 = 0 |
+| S1 | A Guest's post in their inquiry stores the message and queues exactly one `status_inquiry` run on the background lane attached to the inquiry, with no round, wake or session; the fake SDK sees no tools, MCP, session or plugins, one turn and the default model, also when the bot has its own model; the job is not a cheap-model kind; the answer is appended as the bot's message with the run id; an empty result appends the system notice | T1 `status-inquiries.test.ts`; T0 `job-models.test.ts`; T0 sidecar `model-job.test.ts` "a status inquiry has no tools and reads only its projection" | Tool calls in status jobs = 0 |
+| S2 | The projection holds the shared chat, its message, the bot's name and role, a visible board post, and a task's title, state, owner bot and latest checkpoint summary, and leaves out another person's private chat, a bus thread, a hidden post, run status, SOUL, a deleted task, checkpoint evidence paths, a task description and a checkpoint recorded in a private chat | T1 `status-inquiries.test.ts` "the projection holds what a Guest may read and nothing else", "the projection carries task status and progress"; T0 sidecar `model-job.test.ts` "tells the model to answer only from the projection" | Projection fields outside S2 = 0 |
 | S3 | A second post while the job is queued is 409 `status_inquiry_busy` with no message; the same `externalId` returns the first message | T1 `status-inquiries.test.ts` | Concurrent status jobs per inquiry = 0 |
 | S4 | The job's run and messages are 404 and absent from lists for an Admin, the Owner and the root; the Guest's run routes stay 403; the Guest's stream carries the answer | T1 `status-inquiries.test.ts` "the answer is the Guest's alone" | Inquiry bodies disclosed to anyone but their person = 0 |
 | S5 | Admin of A, Member of B, B selected: `workspace.create` is offered; a Member-only person is not | T0 gateway `role-actions.test.ts` "workspace creation follows the highest role (amendment 7 S5)" | Create offers the Gateway refuses (reported) |
 | S6 | Every link's read action matches the route policy; a Guest's navigation shows Chats, Contacts and Board only; a hidden screen's address shows Chats | T0 gateway `role-actions.test.ts`; T0 web `navigation.test.tsx` "a Guest sees only what they may read" | Links offered that the Gateway refuses (reported) |
 | S7 | With a canonical chat present, a Member's and a Guest's click on the bot opens or creates their own private chat; an Admin's opens the canonical chat | T0 web `guest-chat.test.tsx`, `thread-rail.test.tsx` "a Member's bot entry is their own private chat" | none |
+| S8 | Owner, Admin, Member and Guest each see their role in the selected workspace; a Guest's reads "Guest · read-only"; the administrator account is named as such; switching workspace changes it; the words come from the locale's catalog | T0 web `role-badge.test.tsx` | none |
+| S9 | Every `ROLE_ACTIONS` action appears once in the panel, in the workspace-role table or the administrator list; each cell equals `mayTakeAction` for a session holding that role; the person's own column is marked; every action has a label in every locale | T0 contracts `role-actions.test.ts` "the role matrix is the table"; T0 web `role-badge.test.tsx` | Panel cells that disagree with the route policy = 0 |
 
 ### Consequences
 
-- A Guest's question costs one cheap-model call per post; there is no backfill and no retry.
+- A Guest's question costs one default-model call per post; there is no backfill and no retry.
 - The answer can only restate what the projection holds. A Guest who needs more asks a Member
   or an Admin, on the board or outside Deskmates; widening the projection is a new amendment.
-- The interactive lane of the bot is held for at most the job deadline per inquiry post.
+- The job shares the bot's background lane with cron, webhook and other jobs, so a Guest's
+  answer can wait behind a long background run; a person's chat with the bot is never held.
+- A new `ROLE_ACTIONS` action needs a panel label in all five locales before the Web suite
+  passes.

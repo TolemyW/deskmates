@@ -177,3 +177,63 @@ describe("toToolAction: stable rule dimensions", () => {
     }
   });
 });
+
+// ADR-0002 amendment 5, C4 (issue #78).
+describe("toToolAction for browser code under effects-v1", () => {
+  const effectsV1 = { browserCode: "effects-v1" } as const;
+  const upload = "async (page) => { await page.setInputFiles('#f', '/work/a.txt'); }";
+
+  it("names the effects and binds the pattern to the exact code", () => {
+    const action = toToolAction(
+      "mcp__browser__browser_run_code_unsafe",
+      { code: upload },
+      { currentOrigin: SHOP, ...effectsV1 },
+    );
+    expect(action.targetOrigin).toBe(SHOP);
+    expect(action.argumentSummary).toMatch(/^page code: upload sha256:[0-9a-f]{64}$/);
+    expect(action.argumentPattern).toMatch(/^\* sha256:[0-9a-f]{64}$/);
+    const again = toToolAction(
+      "mcp__browser__browser_run_code_unsafe",
+      { code: upload },
+      effectsV1,
+    );
+    expect(again.argumentPattern).toBe(action.argumentPattern);
+    const other = toToolAction(
+      "mcp__browser__browser_run_code_unsafe",
+      { code: `${upload} ` },
+      effectsV1,
+    );
+    expect(other.argumentPattern).not.toBe(action.argumentPattern);
+  });
+
+  it("binds a playwright-cli shell line to its exact command, never to `playwright-cli eval*`", () => {
+    const command = "playwright-cli eval \"() => fetch('/x', {method:'POST'})\"";
+    const action = toToolAction("Bash", { command }, effectsV1);
+    expect(action.argumentSummary).toMatch(
+      /^playwright-cli eval .* \| page code: network sha256:[0-9a-f]{64}$/,
+    );
+    expect(action.argumentPattern).toMatch(/^\* sha256:[0-9a-f]{64}$/);
+    expect(action.argumentSummary?.length).toBeLessThanOrEqual(200);
+  });
+
+  it("is built as before under name-v1 and for other tools", () => {
+    expect(toToolAction("mcp__browser__browser_run_code_unsafe", { code: upload })).toEqual(
+      toToolAction(
+        "mcp__browser__browser_run_code_unsafe",
+        { code: upload },
+        {
+          browserCode: "name-v1",
+        },
+      ),
+    );
+    expect(
+      toToolAction("mcp__browser__browser_run_code_unsafe", { code: upload }).argumentPattern,
+    ).toBeUndefined();
+    expect(toToolAction("Bash", { command: "git push" }, effectsV1)).toEqual(
+      toToolAction("Bash", { command: "git push" }),
+    );
+    expect(toToolAction("Bash", { command: "playwright-cli snapshot" }, effectsV1)).toEqual(
+      toToolAction("Bash", { command: "playwright-cli snapshot" }),
+    );
+  });
+});

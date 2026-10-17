@@ -17,15 +17,16 @@ import {
   workspace,
   workspaceView,
 } from "../../test-support/fixtures.js";
+import { shownTurnBudget } from "./chat-info.js";
 import { ThreadScreen } from "./thread.js";
 
-function renderChat() {
+function renderChat(detailExtra: Record<string, unknown> = {}) {
   const { fetch } = fakeFetch({
     "GET /api/bots/bot_1/screen": { state: "stopped", humanHeld: false },
     "GET /api/workspaces": { workspaces: [workspace] },
     "GET /api/bots": { bots: [bot] },
     "GET /api/threads?workspaceId=ws_1&limit=50": { threads: [thread] },
-    "GET /api/threads/thr_1": { thread, members },
+    "GET /api/threads/thr_1": { thread, members, ...detailExtra },
     "GET /api/workspaces/ws_1": workspaceView(),
     "GET /api/threads/thr_1/messages": { messages: [message(1, "human", "check the console")] },
     "GET /api/runs?threadId=thr_1": { runs: [] },
@@ -80,5 +81,38 @@ describe("ChatInfo close (#111)", () => {
     await expectClosed();
     // The chat underneath is usable again.
     expect(screen.getByLabelText("Message")).toBeTruthy();
+  });
+});
+
+describe("ChatInfo turn budget (ADR-0005 amendment 5 decision 38)", () => {
+  beforeEach(() => {
+    localStorage.setItem("deskmates.showChatInfo", "1");
+    installFakeEventSource();
+  });
+  afterEach(() => {
+    cleanup();
+    localStorage.removeItem("deskmates.showChatInfo");
+    vi.restoreAllMocks();
+  });
+
+  it("shows the workspace's effective budget, not the thread row's", async () => {
+    renderChat({ effectiveTurnBudget: { value: 20, source: "workspace" } });
+    const dialog = await screen.findByRole("dialog", { name: "Chat info" });
+    expect(within(dialog).getByText(/Turn limit 20/)).toBeTruthy();
+    expect(within(dialog).queryByText(/Turn limit 8/)).toBeNull();
+  });
+
+  it("says off when the workspace turned the budget off, and falls back to the row", () => {
+    const detail = { thread, members };
+    expect(
+      shownTurnBudget(
+        { ...detail, effectiveTurnBudget: { value: null, source: "workspace" } },
+        "Off",
+      ),
+    ).toBe("Off");
+    expect(
+      shownTurnBudget({ ...detail, effectiveTurnBudget: { value: 8, source: "thread" } }, "Off"),
+    ).toBe(8);
+    expect(shownTurnBudget(detail, "Off")).toBe(thread.turnBudget);
   });
 });

@@ -23,6 +23,7 @@ import { join } from "node:path";
 import {
   WORKSPACE_FILE_UPLOAD_PART_BYTES,
   WORKSPACE_UPLOAD_DATE_DIR,
+  WORKSPACE_UPLOAD_FINAL_PATH,
   WORKSPACE_UPLOAD_ID,
   WORKSPACE_UPLOAD_NAME,
   WORKSPACE_UPLOAD_NAME_MAX,
@@ -106,6 +107,14 @@ function parseRequest(input: unknown): WorkspaceFileWriteRequest {
         dir: r.dir,
         name: r.name,
       };
+    case "remove":
+      if (
+        typeof r.path !== "string" ||
+        !WORKSPACE_UPLOAD_FINAL_PATH.test(r.path) ||
+        (r.path.split("/").pop() ?? "").length > WORKSPACE_UPLOAD_NAME_MAX
+      )
+        throw refused();
+      return { op: "remove", uploadId: r.uploadId, path: r.path };
     default:
       throw invalid();
   }
@@ -318,6 +327,39 @@ function abort(root: string, uploadId: string): WorkspaceFileWriteResult {
   }
 }
 
+/**
+ * Decision 43: delete a completed upload's file. Only `/work/uploads/<date>/<safe name>` is
+ * accepted; every directory on the way must be a real directory and the target a regular file,
+ * never a link. A file already gone is `removed: false`.
+ */
+function remove(root: string, path: string): WorkspaceFileWriteResult {
+  const [, dir, name] = WORKSPACE_UPLOAD_FINAL_PATH.exec(path) ?? [];
+  if (dir === undefined || name === undefined) throw refused();
+  try {
+    lstatSync(join(root, "work", ...UPLOADS, dir));
+  } catch (error) {
+    if (isErrno(error, "ENOENT")) return { op: "remove", removed: false };
+    throw refused();
+  }
+  const parent = realDirectory(root, [...UPLOADS, dir], false);
+  const target = join(parent, name);
+  let stat: ReturnType<typeof lstatSync>;
+  try {
+    stat = lstatSync(target);
+  } catch (error) {
+    if (isErrno(error, "ENOENT")) return { op: "remove", removed: false };
+    throw refused();
+  }
+  if (stat.isSymbolicLink() || !stat.isFile()) throw refused();
+  try {
+    unlinkSync(target);
+  } catch (error) {
+    if (isErrno(error, "ENOENT")) return { op: "remove", removed: false };
+    throw refused();
+  }
+  return { op: "remove", removed: true };
+}
+
 /** Apply the request; `root` stands for the container's `/`, tests pass a temporary directory. */
 export function writeWorkspaceFile(input: unknown, root = "/"): WorkspaceFileWriteResult {
   const request = parseRequest(input);
@@ -330,6 +372,8 @@ export function writeWorkspaceFile(input: unknown, root = "/"): WorkspaceFileWri
       return commit(root, request);
     case "abort":
       return abort(root, request.uploadId);
+    case "remove":
+      return remove(root, request.path);
   }
 }
 

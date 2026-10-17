@@ -25,13 +25,27 @@ RUN G="$(npm root -g)" \
  && ln -s "$G/node-pty" /opt/deskmates/node_modules/node-pty \
  && ln -s "$G/undici" /opt/deskmates/node_modules/undici \
  && ln -s "$G/playwright" /opt/deskmates/node_modules/playwright \
+ # The OpenAI Agents SDK runtime (ADR-0044) and the MCP client it attaches the sidecar's tools
+ # with; both are preinstalled in the base image like the Claude Agent SDK.
+ && mkdir -p /opt/deskmates/node_modules/@openai /opt/deskmates/node_modules/@modelcontextprotocol \
+ && ln -s "$G/@openai/agents" /opt/deskmates/node_modules/@openai/agents \
+ && ln -s "$G/@modelcontextprotocol/sdk" /opt/deskmates/node_modules/@modelcontextprotocol/sdk \
  # zod is a sidecar dependency (thread tools); npm nests it under the SDK's global install.
  && Z="$G/@anthropic-ai/claude-agent-sdk/node_modules/zod" && { [ -d "$Z" ] || Z="$G/zod"; } \
  && ln -s "$Z" /opt/deskmates/node_modules/zod \
+ # openai (the client the sidecar's OpenAI completion path imports directly) is nested the same
+ # way under the Agents SDK's global install; one copy serves the SDK and the sidecar.
+ && O="$G/@openai/agents/node_modules/openai" && { [ -d "$O" ] || O="$G/openai"; } \
+ && ln -s "$O" /opt/deskmates/node_modules/openai \
+ && test -f /opt/deskmates/node_modules/openai/package.json \
  && test -f /opt/deskmates/node_modules/zod/package.json \
+ && test -f /opt/deskmates/node_modules/@openai/agents/package.json \
+ && test -f /opt/deskmates/node_modules/@modelcontextprotocol/sdk/package.json \
  && test -f /opt/deskmates/node_modules/playwright/package.json \
  && test -f /opt/deskmates/node_modules/undici/package.json \
  && test -f /opt/deskmates/node_modules/@playwright/mcp/package.json \
+ && test -f /opt/deskmates/node_modules/node-pty/package.json \
+ && test -f /opt/deskmates/node_modules/@deskmates/contracts/package.json \
  && test -f /opt/deskmates/node_modules/@anthropic-ai/claude-agent-sdk/package.json
 
 COPY images/workspace/patch-mcp-tab-identity.mjs /opt/deskmates/patch-mcp-tab-identity.mjs

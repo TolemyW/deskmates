@@ -27,6 +27,8 @@ const STATUS_BY_CODE: Readonly<Record<DeskmatesErrorCode, number>> = {
   validation: 400,
   forbidden: 403,
   model_not_selected: 403,
+  // ADR-0039 decision 2: no upstream serves the request's model.
+  model_upstream_missing: 503,
   payload_too_large: 413,
   // The workspace disk is full while writing an upload (ADR-0014 amendment A5 decision 30).
   storage_exhausted: 507,
@@ -44,6 +46,8 @@ const STATUS_BY_CODE: Readonly<Record<DeskmatesErrorCode, number>> = {
   connector_validation_wrong_connector: 409,
   connector_validation_invalid: 409,
   connector_hash_mismatch: 409,
+  // The look/OCR or speech service is the Gateway's upstream (ADR-0040).
+  operation_unavailable: 502,
   // Integration runtime (ADR-0013); the table lives with the codes in contracts.
   ...INTEGRATION_ERROR_STATUS,
 };

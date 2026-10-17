@@ -5,6 +5,7 @@
 // deployment both work. A new endpoint goes in its feature's `api.ts`; a new feature domain adds
 // one sorted line to each of the three lists below (import, `ApiClient`, `createApiClient`).
 
+import { type AppSharesApi, createAppSharesApi } from "../features/app-shares/api.js";
 import { type ApprovalsApi, createApprovalsApi } from "../features/approvals/api.js";
 import { type BoardApi, createBoardApi } from "../features/board/api.js";
 import { type ChatsApi, createChatsApi } from "../features/chats/api.js";
@@ -20,6 +21,7 @@ import { type RunsApi, createRunsApi } from "../features/runs/api.js";
 import { type SkillsApi, createSkillsApi } from "../features/skills/api.js";
 import { type TasksApi, createTasksApi } from "../features/tasks/api.js";
 import { type TrashApi, createTrashApi } from "../features/trash/api.js";
+import { type WorkdirApi, createWorkdirApi } from "../features/workdir/api.js";
 import { type WorkspacesApi, createWorkspacesApi } from "../features/workspaces/api.js";
 import { type HttpTransportOptions, createHttpTransport } from "../platform/http-transport.js";
 import { type ConfigApi, createConfigApi } from "./config-api.js";
@@ -35,7 +37,8 @@ export type { CreateWorkspaceInput } from "../features/workspaces/api.js";
 export type { MemoryView } from "./types.js";
 
 /** Every Gateway operator endpoint the screens call: one intersection member per domain, sorted. */
-export type ApiClient = ApprovalsApi &
+export type ApiClient = AppSharesApi &
+  ApprovalsApi &
   BoardApi &
   ChatsApi &
   ComputerApi &
@@ -51,6 +54,7 @@ export type ApiClient = ApprovalsApi &
   SkillsApi &
   TasksApi &
   TrashApi &
+  WorkdirApi &
   WorkspacesApi;
 
 /**
@@ -64,6 +68,7 @@ export type ApiClientOptions = Omit<HttpTransportOptions, "cache">;
 export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   const t = createHttpTransport(options);
   return {
+    ...createAppSharesApi(t),
     ...createApprovalsApi(t),
     ...createBoardApi(t),
     ...createChatsApi(t),
@@ -80,6 +85,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     ...createSkillsApi(t),
     ...createTasksApi(t),
     ...createTrashApi(t),
+    ...createWorkdirApi(t),
     ...createWorkspacesApi(t),
   };
 }

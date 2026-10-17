@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-// T1 (in-process): issue #76. The chat offers one Stop per unfinished run of this chat, names the
-// bot and status of the run it targets, asks before cancelling and says what is and is not
-// stopped. It uses the existing `POST /api/runs/:id/cancel`; the Gateway decides permission.
+// T1 (in-process): issue #76, through the grouped status of issue #126. Each unfinished run of
+// this chat has its own Stop in its bot's expanded run list; Stop names the bot, status and
+// trigger of the run it targets, asks before cancelling and says what is and is not stopped. It
+// uses the existing `POST /api/runs/:id/cancel`; the Gateway decides permission. No bulk stop.
 
 import type { RunId, SessionRoles, Thread } from "@deskmates/contracts";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -11,7 +12,7 @@ import { createApiClient } from "../../api/client.js";
 import type { RunView } from "../../api/types.js";
 import { SessionRolesProvider } from "../../state/session-roles.js";
 import { type RouteTable, fakeFetch, run, thread } from "../../test-support/fixtures.js";
-import { ChatRunStop } from "./chat-run-stop.js";
+import { ChatRunStatus } from "./chat-run-status.js";
 
 afterEach(() => {
   cleanup();
@@ -20,6 +21,7 @@ afterEach(() => {
 
 const names: Record<string, string> = { bot_1: "ops", bot_2: "qa" };
 const botName = (id: string) => names[id] ?? id;
+const bodies: Record<string, string> = { msg_1: "check the deploy" };
 const MEMBER: SessionRoles = { tenantRole: "member", platformMaintainer: false };
 
 function json(status: number, body: unknown): Response {
@@ -27,6 +29,22 @@ function json(status: number, body: unknown): Response {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function view(fetch: typeof globalThis.fetch, list: RunView[], onRunUpdated = vi.fn()) {
+  return (
+    <ol>
+      <ChatRunStatus
+        api={createApiClient({ fetch })}
+        runs={list}
+        botName={botName}
+        messageBody={(id) => bodies[id]}
+        thread={thread}
+        memberCount={1}
+        onRunUpdated={onRunUpdated}
+      />
+    </ol>
+  );
 }
 
 function setup(
@@ -39,33 +57,50 @@ function setup(
   const api = createApiClient({ fetch });
   const ui = (list: RunView[]) => {
     const node = (
-      <ChatRunStop
-        api={api}
-        runs={list}
-        botName={botName}
-        thread={opts.thread ?? thread}
-        memberCount={opts.memberCount ?? 1}
-        onRunUpdated={onRunUpdated}
-      />
+      <ol>
+        <ChatRunStatus
+          api={api}
+          runs={list}
+          botName={botName}
+          messageBody={(id) => bodies[id]}
+          thread={opts.thread ?? thread}
+          memberCount={opts.memberCount ?? 1}
+          onRunUpdated={onRunUpdated}
+        />
+      </ol>
     );
     return opts.wrap ? opts.wrap(node) : node;
   };
-  const view = render(ui(runs));
+  const rendered = render(ui(runs));
   return {
     calls,
     onRunUpdated,
-    rerender: (list: RunView[]) => view.rerender(ui(list)),
+    rerender: (list: RunView[]) => rendered.rerender(ui(list)),
   };
+}
+
+/** Open a bot's run list, the only place Stop is offered. */
+function expand(name: string) {
+  fireEvent.click(screen.getByRole("button", { name: new RegExp(` of ${name}$`) }));
 }
 
 const cancelCalls = (calls: { method: string; path: string }[]) =>
   calls.filter((c) => c.method === "POST" && c.path.endsWith("/cancel"));
 
-describe("ChatRunStop (issue #76)", () => {
+describe("Stop in the grouped run status (issues #76, #126)", () => {
   it("renders nothing when the chat has no unfinished run", () => {
     setup([]);
-    expect(screen.queryByRole("group", { name: "Stop work in this chat" })).toBeNull();
+    expect(screen.queryByTestId("typing")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Stop/ })).toBeNull();
+  });
+
+  it("keeps Stop out of the collapsed summary", () => {
+    setup([run({ status: "running" })]);
+    expect(screen.queryByRole("button", { name: /^Stop/ })).toBeNull();
+    expand("ops");
+    expect(
+      screen.getByRole("button", { name: "Stop ops (running): Reply to “check the deploy”" }),
+    ).toBeTruthy();
   });
 
   it("asks first, explains the scope, then cancels exactly the named run", async () => {
@@ -74,7 +109,8 @@ describe("ChatRunStop (issue #76)", () => {
       "POST /api/runs/run_1/cancel": { run: { ...active, status: "cancelled" } },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Stop ops (running)" }));
+    expand("ops");
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("Stop this run of ops?")).toBeTruthy();
     expect(within(dialog).getByText("run_1")).toBeTruthy();
@@ -91,10 +127,33 @@ describe("ChatRunStop (issue #76)", () => {
 
   it("keeps the run when the operator declines", async () => {
     const { calls } = setup([run({ status: "running" })]);
-    fireEvent.click(screen.getByRole("button", { name: "Stop ops (running)" }));
+    expand("ops");
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Keep running" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(cancelCalls(calls)).toHaveLength(0);
+  });
+
+  it("cancels only the chosen run of the same bot, never the bot's other runs", async () => {
+    const a = run({ id: "run_a" as RunId, status: "running" });
+    const b = run({
+      id: "run_b" as RunId,
+      status: "queued",
+      triggerRef: "msg_9",
+      createdAt: "2026-09-21T10:00:01.000Z",
+    });
+    const { calls } = setup([a, b], {
+      "POST /api/runs/run_b/cancel": { run: { ...b, status: "cancelled" } },
+    });
+    expand("ops");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Stop ops (queued): Reply to an earlier message" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("run_b")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Stop run" }));
+    await screen.findByText("ops's run was cancelled. Other work in this chat keeps going.");
+    expect(cancelCalls(calls).map((c) => c.path)).toEqual(["/api/runs/run_b/cancel"]);
   });
 
   it("offers one Stop per run, so cancelling one bot's run leaves the other's", async () => {
@@ -103,8 +162,10 @@ describe("ChatRunStop (issue #76)", () => {
     const { calls } = setup([a, b], {
       "POST /api/runs/run_b/cancel": { run: { ...b, status: "cancelled" } },
     });
-    expect(screen.getByRole("button", { name: "Stop ops (running)" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Stop qa (queued)" }));
+    expand("ops");
+    expand("qa");
+    expect(screen.getByRole("button", { name: /^Stop ops \(running\)/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Stop qa \(queued\)/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
     await screen.findByText("qa's run was cancelled. Other work in this chat keeps going.");
     expect(cancelCalls(calls).map((c) => c.path)).toEqual(["/api/runs/run_b/cancel"]);
@@ -119,7 +180,8 @@ describe("ChatRunStop (issue #76)", () => {
           release = resolve;
         }),
     });
-    fireEvent.click(screen.getByRole("button", { name: "Stop ops (running)" }));
+    expand("ops");
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
     const pending = await screen.findByRole("button", { name: "Stopping ops…" });
     expect((pending as HTMLButtonElement).disabled).toBe(true);
@@ -140,17 +202,9 @@ describe("ChatRunStop (issue #76)", () => {
         ? json(409, { code: "invalid_transition", message: "run is terminal", details: {} })
         : base(input, init)) as typeof globalThis.fetch;
     const onRunUpdated = vi.fn();
-    render(
-      <ChatRunStop
-        api={createApiClient({ fetch })}
-        runs={[active]}
-        botName={botName}
-        thread={thread}
-        memberCount={1}
-        onRunUpdated={onRunUpdated}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Stop ops (running)" }));
+    render(view(fetch, [active], onRunUpdated));
+    expand("ops");
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
     await screen.findByText("ops's run had already finished; nothing was cancelled.");
     await waitFor(() =>
@@ -165,22 +219,14 @@ describe("ChatRunStop (issue #76)", () => {
     const active = run({ status: "running" });
     const fetch = (async () => json(status, body)) as typeof globalThis.fetch;
     const onRunUpdated = vi.fn();
-    render(
-      <ChatRunStop
-        api={createApiClient({ fetch })}
-        runs={[active]}
-        botName={botName}
-        thread={thread}
-        memberCount={1}
-        onRunUpdated={onRunUpdated}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Stop ops (running)" }));
+    render(view(fetch, [active], onRunUpdated));
+    expand("ops");
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(text);
     expect(onRunUpdated).not.toHaveBeenCalled();
     expect(
-      (screen.getByRole("button", { name: "Stop ops (running)" }) as HTMLButtonElement).disabled,
+      (screen.getByRole("button", { name: /^Stop ops \(running\)/ }) as HTMLButtonElement).disabled,
     ).toBe(false);
   });
 
@@ -188,17 +234,9 @@ describe("ChatRunStop (issue #76)", () => {
     const fetch = (async () => {
       throw new TypeError("Failed to fetch");
     }) as typeof globalThis.fetch;
-    render(
-      <ChatRunStop
-        api={createApiClient({ fetch })}
-        runs={[run({ status: "running" })]}
-        botName={botName}
-        thread={thread}
-        memberCount={1}
-        onRunUpdated={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Stop ops (running)" }));
+    render(view(fetch, [run({ status: "running" })]));
+    expand("ops");
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
     expect((await screen.findByRole("alert")).textContent).toContain(
       "ops's run may still be running",
@@ -208,7 +246,8 @@ describe("ChatRunStop (issue #76)", () => {
   it("turns the open confirmation into a notice when the run ends meanwhile", async () => {
     const active = run({ status: "running" });
     const { calls, rerender } = setup([active]);
-    fireEvent.click(screen.getByRole("button", { name: "Stop ops (running)" }));
+    expand("ops");
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
     await screen.findByRole("dialog");
     rerender([]);
     expect(
@@ -230,6 +269,8 @@ describe("ChatRunStop (issue #76)", () => {
         ),
       },
     );
+    expand("ops");
+    expect(screen.getByRole("link", { name: "Run details" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Stop/ })).toBeNull();
     expect(
       screen.getByText(/^Only .+ can cancel a run outside your own side chats\.$/),
@@ -250,6 +291,7 @@ describe("ChatRunStop (issue #76)", () => {
         ),
       },
     );
-    expect(screen.getByRole("button", { name: "Stop ops (running)" })).toBeTruthy();
+    expand("ops");
+    expect(screen.getByRole("button", { name: /^Stop ops \(running\)/ })).toBeTruthy();
   });
 });

@@ -422,7 +422,7 @@ export function registerFileUploadRoutes(
     const log = logOf(request);
     const { workspaceId, upload } = session(request, true);
     if (upload.state === "cancelled" || upload.state === "expired") return upload;
-    // A5 adds no deletion of a completed upload's file (decision 28).
+    // A completed upload's file is deleted by an Admin through `.../file` (decision 43).
     if (upload.state === "completed") throw stateRefusal(upload);
     return await withLock(upload.id, async () => {
       await fileWrite(ctx, workspaceId, { op: "abort", uploadId: upload.id });
@@ -435,5 +435,57 @@ export function registerFileUploadRoutes(
       });
       return uploads.get(workspaceId, upload.id) as WorkspaceUpload;
     });
+  });
+
+  // Decision 43: any Admin or Owner of the workspace deletes a completed upload's file. The
+  // container command accepts only `/work/uploads/<date>/<safe name>`; the row stays as provenance.
+  app.delete<UploadParams>("/api/workspaces/:id/uploads/:uploadId/file", async (request) => {
+    const log = logOf(request);
+    const workspace = ctx.workspaces.mustGet(request.params.id as WorkspaceId);
+    const upload = uploads.get(workspace.id, request.params.uploadId);
+    if (!upload) throw new DeskmatesError("not_found", "No such upload");
+    if (upload.deletedAt !== undefined) throw deletedRefusal();
+    if (upload.state !== "completed" || upload.path === undefined) throw stateRefusal(upload);
+    const path = upload.path;
+    const actor = actorLabel(request.principal);
+    return await withLock(upload.id, async () => {
+      const result = await fileWrite(ctx, workspace.id, {
+        op: "remove",
+        uploadId: upload.id,
+        path,
+      });
+      const deleted = ctx.db.transaction(() => {
+        if (!uploads.markDeleted(workspace.id, upload.id, actor)) throw deletedRefusal();
+        ctx.audit.record({
+          action: "file.delete",
+          actor,
+          workspaceId: workspace.id,
+          targetKind: "workspace_upload",
+          targetId: upload.id,
+          before: {
+            path,
+            sizeBytes: upload.sizeBytes,
+            sha256: upload.sha256,
+            label: upload.label,
+          },
+          after: { removed: result.removed },
+        });
+        return uploads.get(workspace.id, upload.id) as WorkspaceUpload;
+      })();
+      log("workspace upload deleted", {
+        workspaceId: workspace.id,
+        uploadId: upload.id,
+        path,
+        removed: result.removed,
+        actor,
+      });
+      return { upload: deleted, removed: result.removed };
+    });
+  });
+}
+
+function deletedRefusal(): DeskmatesError {
+  return new DeskmatesError("invalid_transition", "The upload's file was already deleted", {
+    reason: "upload_deleted",
   });
 }

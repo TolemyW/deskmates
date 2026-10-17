@@ -12,6 +12,7 @@ import { RoleNote } from "../../state/session-roles.js";
 const STATUS_TEXT: Record<RunStatus, MessageKey> = {
   queued: "runContextPanel.status.queued",
   running: "runContextPanel.status.running",
+  stalled: "runContextPanel.status.stalled",
   waiting_approval_live: "runContextPanel.status.waitingApprovalLive",
   waiting_approval: "runContextPanel.status.waitingApproval",
   waiting_browser: "runContextPanel.status.waitingBrowser",
@@ -28,6 +29,16 @@ function numberOrUnknown(value: unknown): string {
   return typeof value === "number" && Number.isFinite(value)
     ? value.toLocaleString(locale)
     : t("runContextPanel.unknown");
+}
+
+/**
+ * The continuation limit a run froze when it first started (ADR-0016 amendment 2 decisions 15 and
+ * 16): a number, or `null` for `off` (no limit). A run from before the limits were frozen
+ * (`limitsVersion` absent) kept the fixed default of 2, as the Gateway still reads it.
+ */
+export function frozenContinuationLimit(config: Record<string, unknown>): number | null {
+  if (config.limitsVersion !== 1) return 2;
+  return typeof config.continuationLimit === "number" ? config.continuationLimit : null;
 }
 
 export function RunContextPanel({
@@ -92,16 +103,22 @@ export function RunContextPanel({
   );
   const ruleChanges = events.filter((event) => event.kind === "rule_file_modified");
   const handoff = typeof run.config.handoffPath === "string" ? run.config.handoffPath : undefined;
+  const continuationLimit = frozenContinuationLimit(run.config);
   return (
     <section aria-label={t("runContextPanel.region")} className="management-subsection">
       <h3>{t("runContextPanel.heading")}</h3>
       <output>{t(STATUS_TEXT[run.status])}</output>
       <p>
-        {t("runContextPanel.attempt", {
-          attempt: run.attempt ?? 1,
-          used: numberOrUnknown(run.config.continuationCount ?? 0),
-          limit: numberOrUnknown(run.config.continuationLimit ?? 2),
-        })}
+        {continuationLimit === null
+          ? t("runContextPanel.attemptNoLimit", {
+              attempt: run.attempt ?? 1,
+              used: numberOrUnknown(run.config.continuationCount ?? 0),
+            })
+          : t("runContextPanel.attempt", {
+              attempt: run.attempt ?? 1,
+              used: numberOrUnknown(run.config.continuationCount ?? 0),
+              limit: numberOrUnknown(continuationLimit),
+            })}
       </p>
       {run.status === "waiting_continuation" ? (
         <div>
@@ -158,7 +175,37 @@ export function RunContextPanel({
         </dd>
         <dt>{t("runContextPanel.compactions")}</dt>
         <dd>{metrics ? metrics.compactions.length : t("runContextPanel.unknown")}</dd>
+        <dt>{t("runContextPanel.window")}</dt>
+        <dd>
+          {typeof metrics?.maxContextTokens === "number"
+            ? t("runContextPanel.tokens", { count: numberOrUnknown(metrics.maxContextTokens) })
+            : t("runContextPanel.windowUnknown")}
+        </dd>
+        <dt>{t("runContextPanel.promptHash")}</dt>
+        <dd>
+          {metrics?.systemPromptSha256 ? (
+            <code title={metrics.systemPromptSha256}>
+              {metrics.systemPromptSha256.slice(0, 12)}
+            </code>
+          ) : (
+            t("runContextPanel.unknown")
+          )}
+        </dd>
+        <dt>{t("runContextPanel.modelRequests")}</dt>
+        <dd>
+          {metrics
+            ? t("runContextPanel.modelRequestsValue", {
+                count: numberOrUnknown(metrics.modelRequests.count),
+                distinct: numberOrUnknown(metrics.modelRequests.distinctSystemHashes),
+              })
+            : t("runContextPanel.unknown")}
+        </dd>
       </dl>
+      {metrics?.modelRequests.changedWithinAttempt ? (
+        <p role="alert">{t("runContextPanel.promptChanged")}</p>
+      ) : null}
+      <WindowMeter metrics={metrics} />
+      <SectionSizes sections={metrics?.contextSections ?? null} />
       <p>{t("runContextPanel.missingMeaning")}</p>
       {memory ? (
         <p>
@@ -179,5 +226,60 @@ export function RunContextPanel({
         <p role="alert">{t("runContextPanel.ruleChanges", { count: ruleChanges.length })}</p>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * Issue #9: the largest input window the run reached against the window the CLI was given. With
+ * no window reported there is no denominator, and the panel says so instead of guessing one.
+ */
+function WindowMeter({ metrics }: { metrics: RunContextMetrics | undefined }) {
+  const t = useT();
+  const locale = useLocale();
+  const peak = metrics?.peakInputTokens;
+  const limit = metrics?.maxContextTokens;
+  if (typeof peak !== "number" || typeof limit !== "number" || limit <= 0) return null;
+  const share = peak / limit;
+  return (
+    <p className="context-meter">
+      <label>
+        {t("runContextPanel.meter")}{" "}
+        <meter min={0} max={limit} low={limit * 0.6} high={limit * 0.85} optimum={0} value={peak}>
+          {share.toLocaleString(locale, { style: "percent" })}
+        </meter>{" "}
+        <span className="muted small">
+          {t("runContextPanel.meterValue", {
+            percent: share.toLocaleString(locale, { style: "percent", maximumFractionDigits: 1 }),
+          })}
+        </span>
+      </label>
+    </p>
+  );
+}
+
+/** Issue #9: the system prompt's sections by size, largest first, as the sidecar measured them. */
+function SectionSizes({ sections }: { sections: Record<string, number> | null }) {
+  const t = useT();
+  if (!sections || Object.keys(sections).length === 0)
+    return <p>{t("runContextPanel.sectionsNone")}</p>;
+  const entries = Object.entries(sections).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const largest = Math.max(1, ...entries.map(([, size]) => size));
+  return (
+    <>
+      <h4>{t("runContextPanel.sectionsHeading")}</h4>
+      <ul className="context-sections" aria-label={t("runContextPanel.sectionsList")}>
+        {entries.map(([name, size]) => (
+          <li key={name}>
+            <code>{name}</code>
+            <span className="context-section-bar" aria-hidden="true">
+              <span style={{ width: `${(size / largest) * 100}%` }} />
+            </span>
+            <span className="muted small">
+              {t("runContextPanel.sectionSize", { count: numberOrUnknown(size) })}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

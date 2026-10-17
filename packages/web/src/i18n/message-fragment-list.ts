@@ -4,6 +4,7 @@
 
 export { appMessages } from "../app/messages/index.js";
 export { accountMessages } from "../features/account/messages/index.js";
+export { appSharesMessages } from "../features/app-shares/messages/index.js";
 export { approvalsMessages } from "../features/approvals/messages/index.js";
 export { boardMessages } from "../features/board/messages/index.js";
 export { chatsMessages } from "../features/chats/messages/index.js";
@@ -20,5 +21,6 @@ export { runsMessages } from "../features/runs/messages/index.js";
 export { skillsMessages } from "../features/skills/messages/index.js";
 export { tasksMessages } from "../features/tasks/messages/index.js";
 export { trashMessages } from "../features/trash/messages/index.js";
+export { workdirMessages } from "../features/workdir/messages/index.js";
 export { workspacesMessages } from "../features/workspaces/messages/index.js";
 export { commonMessages } from "./common/index.js";

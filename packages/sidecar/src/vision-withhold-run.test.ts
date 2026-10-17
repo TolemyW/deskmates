@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import type { SidecarDeps } from "./deps.js";
 import { BROWSER_MCP_SERVER } from "./risk-tier.js";
 import { runOnce } from "./run-once.js";
+import { systemPromptText } from "./system-prompt.js";
 import { createFakeGateway } from "./testing/fake-gateway.js";
 import { createMemoryFs } from "./testing/in-memory-fs.js";
 import { VISION_POLICY_ENV, VISION_WITHHELD_GUIDANCE } from "./vision-withhold.js";
@@ -68,6 +69,13 @@ const script: ScriptStep[] = [
     input: { file_path: "/work/notes.md" },
     result: "Slide notes",
   },
+  // ADR-0023 amendment 3, decision 15: a PDF's pages reach the model as images.
+  {
+    type: "tool_call",
+    name: "Read",
+    input: { file_path: "/work/deck.PDF" },
+    result: "[pdf pages the model would have been handed]",
+  },
   { type: "text", text: final },
   { type: "end", summary: final },
 ];
@@ -111,10 +119,17 @@ describe("a run whose model cannot see (visionPolicy: withhold)", () => {
     expect(JSON.stringify(results[0])).toContain("image_withheld: /work/slide-1.PNG");
     expect(JSON.stringify(results[0])).not.toContain("image bytes");
     expect(JSON.stringify(results[1])).toContain("Slide notes");
-    expect(withheld).toHaveLength(1);
+    expect(JSON.stringify(results[2])).toContain("image_withheld: /work/deck.PDF is a PDF");
+    expect(JSON.stringify(results[2])).not.toContain("pdf pages");
+    expect(withheld).toHaveLength(2);
     expect(withheld[0]?.payload).toMatchObject({ toolName: "Read", path: "/work/slide-1.PNG" });
     expect(withheld[0]?.payload.toolUseId).toEqual(expect.any(String));
-    expect(String(options.systemPrompt)).toContain(VISION_WITHHELD_GUIDANCE);
+    expect(withheld[1]?.payload).toMatchObject({
+      toolName: "Read",
+      path: "/work/deck.PDF",
+      media: "application/pdf",
+    });
+    expect(systemPromptText(options.systemPrompt)).toContain(VISION_WITHHELD_GUIDANCE);
     const browser = options.mcpServers?.[BROWSER_MCP_SERVER];
     expect(browser?.args).not.toContain("vision");
     expect(browser?.env?.[VISION_POLICY_ENV]).toBe("withhold");
@@ -125,8 +140,9 @@ describe("a run that delivers images (no policy key)", () => {
   it("is unchanged: the image Read runs, no notice, no prompt section, the browser can see", async () => {
     const { results, withheld, options } = await run(request());
     expect(JSON.stringify(results[0])).toContain("image bytes");
+    expect(JSON.stringify(results[2])).toContain("pdf pages");
     expect(withheld).toHaveLength(0);
-    expect(String(options.systemPrompt)).not.toContain("## Images");
+    expect(systemPromptText(options.systemPrompt)).not.toContain("## Images");
     const browser = options.mcpServers?.[BROWSER_MCP_SERVER];
     expect(browser?.args).toContain("vision");
     expect(browser?.env?.[VISION_POLICY_ENV]).toBeUndefined();

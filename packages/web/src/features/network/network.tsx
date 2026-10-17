@@ -1,70 +1,48 @@
-// Network profiles (ADR-0027 amendment 1): the administrator account defines named LAN grants and
-// selects them per workspace. Authorization is the Gateway's: a refused call shows its message.
+// Network profiles (ADR-0027 amendment 1, decisions 12 and 13 owner-decided 2026-10-14): the
+// administrator account and workspace Owners define named LAN grants; a workspace's Admins select
+// them. The screen leads with the workspace at hand (what it can reach, what it may select), then
+// lists every profile the caller may see in one table, with the editor above it when one is open.
+// Authorization is the Gateway's: a refused call shows its message.
 
 import type {
+  NetworkOverlap,
   NetworkProfile,
   NetworkPublication,
-  NetworkRule,
   Workspace,
   WorkspaceId,
-  WorkspaceNetworkView,
 } from "@deskmates/contracts";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@deskmates/ui";
 import { useCallback, useEffect, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { Button } from "../../components/ui/button.js";
-import { errorMessage, formatDateTime } from "../../format.js";
-import type { MessageKey } from "../../i18n/catalogs.js";
+import { errorMessage } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
+import { useWorkspaceForCalls } from "../../state/workspace-scope.js";
 import type { NetworkApi } from "./api.js";
+import { Expiry, Publications, isExpired, ruleSummary } from "./network-format.js";
+import { type ProfileDraft, ProfileForm, type ProfileInput, draftOf } from "./profile-form.js";
+import { WorkspaceNetworkPanel } from "./workspace-network-panel.js";
+
+export { ruleSummary } from "./network-format.js";
 
 type Api = Pick<ApiClient, "listWorkspaces"> & NetworkApi;
-
-const OUTCOME: Record<NetworkPublication["status"], MessageKey> = {
-  applied: "network.outcome.applied",
-  unchanged: "network.outcome.unchanged",
-  not_running: "network.outcome.not_running",
-  failed: "network.outcome.failed",
-};
-
-const EXAMPLE_RULES: NetworkRule[] = [
-  { kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [23001] },
-];
-
-/** `http 10.20.30.0/24 :23001` or `https console.example.lan→10.0.0.5 :443`. */
-export function ruleSummary(rule: NetworkRule): string {
-  const target = rule.kind === "subnet" ? rule.cidr : `${rule.hostname}→${rule.address}`;
-  return `${rule.schemes.join("/")} ${target} :${rule.ports.join(",")}`;
-}
-
-interface Draft {
-  id?: string;
-  revision?: number;
-  name: string;
-  description: string;
-  expiresAt: string;
-  rules: string;
-}
-
-const emptyDraft = (): Draft => ({
-  name: "",
-  description: "",
-  expiresAt: "",
-  rules: JSON.stringify(EXAMPLE_RULES, null, 2),
-});
 
 export function NetworkScreen({ api }: { api: Api }) {
   const t = useT();
   const [profiles, setProfiles] = useState<NetworkProfile[]>();
+  const [manageAll, setManageAll] = useState(false);
   const [note, setNote] = useState<string>();
   const [error, setError] = useState<string>();
-  const [draft, setDraft] = useState<Draft>();
+  const [draft, setDraft] = useState<ProfileDraft>();
   const [publications, setPublications] = useState<NetworkPublication[]>([]);
   const [busy, setBusy] = useState(false);
+  const [overlaps, setOverlaps] = useState<NetworkOverlap[]>([]);
 
   const reload = useCallback(async () => {
     try {
       const list = await api.listNetworkProfiles();
       setProfiles(list.profiles);
+      setManageAll(list.manageAll === true);
       setNote(list.note);
       setError(undefined);
     } catch (err) {
@@ -74,6 +52,25 @@ export function NetworkScreen({ api }: { api: Api }) {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // Amendment 2 decision 15: LAN targets the host routes into a Docker bridge. Advisory, root
+  // only, reread whenever the profile list changes; a failed read shows nothing.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `profiles` is the trigger to reread.
+  useEffect(() => {
+    if (!manageAll) return;
+    let active = true;
+    api.getNetworkOverlaps().then(
+      (report) => {
+        if (active) setOverlaps(report.overlaps);
+      },
+      () => {
+        if (active) setOverlaps([]);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [api, manageAll, profiles]);
 
   const run = async (action: () => Promise<NetworkPublication[] | undefined>) => {
     setBusy(true);
@@ -88,20 +85,8 @@ export function NetworkScreen({ api }: { api: Api }) {
     }
   };
 
-  const save = (d: Draft) =>
+  const save = (d: ProfileDraft, input: ProfileInput) =>
     run(async () => {
-      let rules: NetworkRule[];
-      try {
-        rules = JSON.parse(d.rules) as NetworkRule[];
-      } catch (err) {
-        throw new Error(t("network.rulesInvalid", { error: errorMessage(err) }));
-      }
-      const input = {
-        name: d.name,
-        description: d.description,
-        rules,
-        ...(d.expiresAt.trim() ? { expiresAt: d.expiresAt.trim() } : {}),
-      };
       let result: NetworkPublication[] | undefined;
       if (d.id === undefined) await api.createNetworkProfile(input);
       else result = (await api.replaceNetworkProfile(d.id, input, d.revision)).publications;
@@ -114,256 +99,189 @@ export function NetworkScreen({ api }: { api: Api }) {
     void run(async () => (await api.deleteNetworkProfile(profile.id)).publications);
   };
 
+  const overlapping = new Set(overlaps.filter((o) => o.source === "profile").map((o) => o.label));
+
   return (
     <section className="workspace-screen resource-page page-container network-page">
       <header className="resource-heading">
         <div className="resource-heading-text">
           <h1>{t("network.title")}</h1>
           <p>{t("network.intro")}</p>
-          {note ? <p className="network-note">{note}</p> : null}
         </div>
         <Button disabled={busy} onClick={() => void reload()}>
           {t("network.refresh")}
         </Button>
-        <Button disabled={busy} onClick={() => setDraft(emptyDraft())}>
+        <Button disabled={busy || draft !== undefined} onClick={() => setDraft(draftOf())}>
           {t("network.new")}
         </Button>
       </header>
-      {error ? <p role="alert">{error}</p> : null}
+      {error ? (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      ) : null}
       <Publications publications={publications} />
       {draft ? (
         <ProfileForm
           draft={draft}
           busy={busy}
           onChange={setDraft}
-          onSave={() => void save(draft)}
+          onSave={(input) => void save(draft, input)}
           onCancel={() => setDraft(undefined)}
         />
       ) : null}
-      {profiles === undefined ? (
-        <p>{t("network.loading")}</p>
-      ) : profiles.length === 0 ? (
-        <p>{t("network.empty")}</p>
-      ) : (
-        <ul className="network-profiles">
-          {profiles.map((profile) => (
-            <li key={profile.id}>
-              <strong>{profile.name}</strong>{" "}
-              <span>{t("network.revision", { revision: profile.revision })}</span>{" "}
-              <span>
-                {profile.expiresAt
-                  ? t("network.expires", { date: formatDateTime(profile.expiresAt) })
-                  : t("network.persistent")}
-              </span>
-              {profile.description ? <p>{profile.description}</p> : null}
-              <ul>
-                {profile.rules.map((rule) => (
-                  <li key={ruleSummary(rule)}>
-                    <code>{ruleSummary(rule)}</code>
-                  </li>
-                ))}
-              </ul>
-              <Button
-                disabled={busy}
-                onClick={() =>
-                  setDraft({
-                    id: profile.id,
-                    revision: profile.revision,
-                    name: profile.name,
-                    description: profile.description,
-                    expiresAt: profile.expiresAt ?? "",
-                    rules: JSON.stringify(profile.rules, null, 2),
-                  })
-                }
-              >
-                {t("network.edit")}
-              </Button>
-              <Button disabled={busy} onClick={() => remove(profile)}>
-                {t("network.delete")}
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <WorkspaceSelection api={api} profiles={profiles ?? []} note={note} />
+      <WorkspaceBlock api={api} extraProfiles={manageAll ? (profiles ?? []) : []} note={note} />
+      {overlaps.length > 0 ? (
+        <details className="network-overlaps">
+          <summary>{t("network.overlaps.summary", { count: overlaps.length })}</summary>
+          <p>{t("network.overlaps.intro")}</p>
+          <ul>
+            {overlaps.map((o) => (
+              <li key={`${o.source}:${o.label}:${o.cidr}:${o.network}:${o.networkCidr}`}>
+                {t("network.overlaps.item", {
+                  cidr: o.cidr,
+                  label: o.label,
+                  network: o.network,
+                  networkCidr: o.networkCidr,
+                })}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      <section className="card network-all" aria-labelledby="network-all-title">
+        <h2 id="network-all-title">{t("network.allProfiles")}</h2>
+        {profiles === undefined ? (
+          <p className="muted">{t("network.loading")}</p>
+        ) : profiles.length === 0 ? (
+          <p className="muted">{t("network.empty")}</p>
+        ) : (
+          <Table className="network-table" aria-label={t("network.allProfiles")}>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("network.col.name")}</TableHead>
+                <TableHead>{t("network.col.targets")}</TableHead>
+                <TableHead>{t("network.col.expires")}</TableHead>
+                <TableHead>{t("network.col.scope")}</TableHead>
+                <TableHead>{t("network.col.actions")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {profiles.map((profile) => (
+                <TableRow key={profile.id} data-expired={isExpired(profile.expiresAt)}>
+                  <TableCell>
+                    <strong>{profile.name}</strong>
+                    {overlapping.has(profile.name) ? (
+                      <span className="network-warn" title={t("network.overlaps.badge")}>
+                        {t("network.overlaps.badgeShort")}
+                      </span>
+                    ) : null}
+                    {profile.description ? (
+                      <p className="muted small">{profile.description}</p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>
+                    <ul className="network-rule-list">
+                      {profile.rules.map((rule) => (
+                        <li key={ruleSummary(rule)}>
+                          <code>{ruleSummary(rule)}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </TableCell>
+                  <TableCell>
+                    <Expiry expiresAt={profile.expiresAt} />
+                  </TableCell>
+                  <TableCell>
+                    <span className="network-scope">
+                      {profile.ownerUserId ? t("network.scopeOwner") : t("network.scopeAll")}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {profile.editable === false ? null : (
+                      <span className="network-actions">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => setDraft(draftOf(profile))}
+                        >
+                          {t("network.edit")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() => remove(profile)}
+                        >
+                          {t("network.delete")}
+                        </Button>
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </section>
     </section>
   );
 }
 
-function Publications({ publications }: { publications: NetworkPublication[] }) {
-  const t = useT();
-  if (publications.length === 0) return null;
-  return (
-    <ul className="network-publications" aria-live="polite">
-      {publications.map((p) => (
-        <li key={p.workspaceId} data-status={p.status}>
-          {t("network.publication", { workspace: p.workspaceId, status: t(OUTCOME[p.status]) })}
-          {p.policyHash ? <code> {p.policyHash.slice(0, 12)}</code> : null}
-          {p.error ? <span> {p.error}</span> : null}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ProfileForm(props: {
-  draft: Draft;
-  busy: boolean;
-  onChange: (draft: Draft) => void;
-  onSave: () => void;
-  onCancel: () => void;
-}) {
-  const t = useT();
-  const { draft, onChange } = props;
-  const field = (key: "name" | "description" | "expiresAt", label: MessageKey) => (
-    <label>
-      {t(label)}
-      <input value={draft[key]} onChange={(e) => onChange({ ...draft, [key]: e.target.value })} />
-    </label>
-  );
-  return (
-    <form
-      className="network-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        props.onSave();
-      }}
-    >
-      {field("name", "network.name")}
-      {field("description", "network.description")}
-      {field("expiresAt", "network.expiresAt")}
-      <label>
-        {t("network.rules")}
-        <textarea
-          rows={8}
-          value={draft.rules}
-          onChange={(e) => onChange({ ...draft, rules: e.target.value })}
-        />
-      </label>
-      <Button type="submit" disabled={props.busy}>
-        {t("network.save")}
-      </Button>
-      <Button disabled={props.busy} onClick={props.onCancel}>
-        {t("network.cancel")}
-      </Button>
-    </form>
-  );
-}
-
-function WorkspaceSelection(props: {
+/**
+ * The workspace at hand: the one selected in the sidebar, else the first the caller has; a
+ * picker appears only when there is more than one to choose from.
+ */
+function WorkspaceBlock(props: {
   api: Api;
-  profiles: NetworkProfile[];
+  extraProfiles: readonly NetworkProfile[];
   note?: string | undefined;
 }) {
-  const { api, profiles } = props;
+  const { api } = props;
   const t = useT();
+  const scope = useWorkspaceForCalls();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [workspaceId, setWorkspaceId] = useState<WorkspaceId>();
-  const [view, setView] = useState<WorkspaceNetworkView>();
-  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
+  const [picked, setPicked] = useState<WorkspaceId>();
   const [error, setError] = useState<string>();
-  const [outcome, setOutcome] = useState<NetworkPublication>();
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api.listWorkspaces().then(
-      (list) => {
-        setWorkspaces(list);
-        setWorkspaceId((current) => current ?? list[0]?.id);
-      },
+      (list) => setWorkspaces(list),
       (err) => setError(errorMessage(err)),
     );
   }, [api]);
-  useEffect(() => {
-    if (workspaceId === undefined) return;
-    setOutcome(undefined);
-    api.getWorkspaceNetwork(workspaceId).then(
-      (next) => {
-        setView(next);
-        setChosen(new Set(next.selections.map((s) => s.profileId)));
-        setError(undefined);
-      },
-      (err) => setError(errorMessage(err)),
-    );
-  }, [api, workspaceId]);
 
-  if (workspaces.length === 0)
-    return error ? <p role="alert">{error}</p> : <p>{t("network.noWorkspaces")}</p>;
-  const save = async () => {
-    if (workspaceId === undefined) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      const result = await api.setWorkspaceNetworkProfiles(
-        workspaceId,
-        [...chosen].map((profileId) => ({ profileId })),
-      );
-      setView(result.network);
-      setOutcome(result.publication);
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const workspaceId = picked ?? scope.workspaceId ?? workspaces[0]?.id;
+  const current = workspaces.find((w) => w.id === workspaceId);
+  if (error) return <p role="alert">{error}</p>;
+  if (workspaces.length === 0 || workspaceId === undefined)
+    return <p className="muted">{t("network.noWorkspaces")}</p>;
   return (
-    <section className="network-selection">
-      <label>
-        {t("network.workspace")}
-        <select
-          value={workspaceId ?? ""}
-          onChange={(e) => setWorkspaceId(e.target.value as WorkspaceId)}
-        >
-          {workspaces.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {view ? (
-        <div>
-          <p className="network-badge" data-trusted={view.trustedTest}>
-            {view.trustedTest ? t("network.trustedTest") : t("network.noGrants")}
-          </p>
-          {view.grants.length > 0 ? (
-            <>
-              <h2>{t("network.grants")}</h2>
-              <ul>
-                {view.grants.map((grant) => (
-                  <li key={ruleSummary(grant)}>
-                    <code>{ruleSummary(grant)}</code>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-          <fieldset>
-            <legend>{t("network.selection")}</legend>
-            {profiles.map((profile) => (
-              <label key={profile.id}>
-                <input
-                  type="checkbox"
-                  checked={chosen.has(profile.id)}
-                  onChange={(e) => {
-                    const next = new Set(chosen);
-                    if (e.target.checked) next.add(profile.id);
-                    else next.delete(profile.id);
-                    setChosen(next);
-                  }}
-                />
-                {profile.name}
-              </label>
-            ))}
-          </fieldset>
-          {props.note ? <p className="network-note">{props.note}</p> : null}
-          <Button disabled={busy} onClick={() => void save()}>
-            {t("network.saveSelection")}
-          </Button>
-        </div>
-      ) : null}
-      {error ? <p role="alert">{error}</p> : null}
-      {outcome ? <Publications publications={[outcome]} /> : null}
+    <section className="card network-workspace" aria-labelledby="network-workspace-title">
+      <div className="network-workspace-head">
+        <h2 id="network-workspace-title">
+          {t("network.thisWorkspace", { workspace: current?.name ?? workspaceId })}
+        </h2>
+        {workspaces.length > 1 ? (
+          <label className="network-picker">
+            {t("network.workspacePicker")}
+            <select value={workspaceId} onChange={(e) => setPicked(e.target.value as WorkspaceId)}>
+              {workspaces.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+      </div>
+      <WorkspaceNetworkPanel
+        api={api}
+        workspaceId={workspaceId}
+        extraProfiles={props.extraProfiles}
+        note={props.note}
+      />
     </section>
   );
 }

@@ -280,6 +280,33 @@ export class ThreadStore {
     return row?.id as BotId | undefined;
   }
 
+  /**
+   * ADR-0043 decision 1: after a rename, a thread title the Gateway made from member names (the
+   * private chat's is the bot's name) carries the new name. A title a person typed, any part of
+   * which is not a member's name, is left alone. Returns the threads whose title changed. The
+   * caller has already written the new name to the bot row.
+   */
+  renameBotInTitles(botId: BotId, oldName: string, newName: string): ThreadId[] {
+    const rows = this.db
+      .prepare(
+        `SELECT t.id, t.title FROM threads t JOIN thread_members m ON m.thread_id = t.id
+          WHERE m.bot_id = ?`,
+      )
+      .all(botId) as { id: ThreadId; title: string }[];
+    const changed: ThreadId[] = [];
+    for (const row of rows) {
+      const names = new Set(
+        this.members(row.id).map((member) => (member.botId === botId ? oldName : member.name)),
+      );
+      const parts = row.title.split(", ");
+      if (!parts.includes(oldName) || !parts.every((part) => names.has(part))) continue;
+      const title = parts.map((part) => (part === oldName ? newName : part)).join(", ");
+      this.db.prepare("UPDATE threads SET title = ? WHERE id = ?").run(title, row.id);
+      changed.push(row.id);
+    }
+    return changed;
+  }
+
   /** Human join-by-mention. Bot callers never call this path (ADR-0005 item 1). */
   addMember(threadId: ThreadId, botId: BotId): NamedMember {
     return this.db.transaction(() => {
@@ -363,7 +390,7 @@ export class ThreadStore {
       const liveRun = this.db
         .prepare(
           `SELECT id FROM runs WHERE thread_id = ? AND bot_id = ?
-         AND status IN ('queued', 'running', 'waiting_approval_live', 'waiting_approval', 'waiting_browser', 'waiting_continuation')
+         AND status IN ('queued', 'running', 'stalled', 'waiting_approval_live', 'waiting_approval', 'waiting_browser', 'waiting_continuation')
          LIMIT 1`,
         )
         .get(threadId, botId) as { id: string } | undefined;

@@ -1,0 +1,22 @@
+{
+  "workdir.cancel": "キャンセル",
+  "workdir.convention": "ボットごとの専用ディレクトリでは、ボットは仲間のディレクトリを読めますが書き込めません。また /work/uploads はボットには読み取り専用です。これはミスを防ぐためのもので、セキュリティ境界ではありません。分けておく必要がある作業は別のワークスペースに置いてください。",
+  "workdir.edit": "作業ディレクトリを編集",
+  "workdir.effective": "{value} · {source}",
+  "workdir.frozen": "開始済みの実行は、開始時の設定を保ちます。",
+  "workdir.inherit": "サーバーの既定値（{mode}）",
+  "workdir.intro": "このワークスペースのボットがどこで作業を始めるか：それぞれの専用ディレクトリ（既定）か、全員で共有の /work か。",
+  "workdir.laneNoticeLabel": "同じボットがもう一方のレーンで作業中のとき、実行に知らせる",
+  "workdir.loading": "作業ディレクトリを読み込み中…",
+  "workdir.mode.per-bot": "ボットごとの専用ディレクトリ（/work/bots/…）",
+  "workdir.mode.shared": "共有の /work",
+  "workdir.modeLabel": "開始ディレクトリ",
+  "workdir.off": "オフ",
+  "workdir.on": "オン",
+  "workdir.perBotHelp": "ボットごとの専用ディレクトリでは、各ボットが扱うコードを自分用に複製し、成果物もそこに置きます。仲間はそれを読めます。共有の /work では、どのボットも /work/uploads 以外のどこにでも書き込めます。",
+  "workdir.roleNote": "作業ディレクトリを変更",
+  "workdir.save": "作業ディレクトリを保存",
+  "workdir.source.gateway": "サーバーの既定値",
+  "workdir.source.workspace": "ワークスペースの設定",
+  "workdir.title": "作業ディレクトリ"
+}

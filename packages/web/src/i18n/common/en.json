@@ -23,6 +23,7 @@
   "pill.runStatus.queued": "queued",
   "pill.runStatus.running": "running",
   "pill.runStatus.silent": "stayed silent",
+  "pill.runStatus.stalled": "stalled",
   "pill.runStatus.stopped": "stopped",
   "pill.runStatus.succeeded": "succeeded",
   "pill.runStatus.waitingApproval": "waiting for approval",

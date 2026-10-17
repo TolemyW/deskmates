@@ -6,6 +6,7 @@ import { ACTIVITY_SUMMARY } from "../ledger/activity-summaries.js";
 // rows, the bot's reply message, `last_seen_seq` and the terminal status.
 
 import {
+  type AgentRuntime,
   type ApprovalId,
   type BotId,
   type DeferredAction,
@@ -28,7 +29,9 @@ import {
   type WorkspaceId,
   botHomeDir,
   canTransition,
+  isAgentRuntime,
   isEffortLevel,
+  isExecuting,
   isRecordedReasoning,
   isTerminal,
   isThinkingConfig,
@@ -38,10 +41,15 @@ import {
   resolveReasoning,
 } from "@deskmates/contracts";
 import { approvalAttachment } from "../approvals/broker.js";
+import { continuationPlan, settleContinuationByMode } from "../approvals/continuation-mode.js";
+import { APPROVAL_EXPIRY_ACTOR } from "../approvals/expiry.js";
+import { cliSurfaceStart } from "../config/cli-surface.js";
 import type { GatewayContext } from "../context.js";
 import { nowIso } from "../db/ids.js";
 import { newId } from "../db/ids.js";
 import type { GatewayEvent } from "../events/bus.js";
+import { MARKED_WRONG_REASON, RunMarkStore } from "../ledger/run-marks.js";
+import { refreshRunUsageSummary } from "../ledger/run-usage-summaries.js";
 import type { RunRecord } from "../ledger/runs.js";
 import { isConsolidationRun } from "../memory/consolidation.js";
 import { indexConfig } from "../memory/index.js";
@@ -52,12 +60,11 @@ import { recordAuthoredSkills } from "../skills/authoring.js";
 import { STARTER_SKILL_PACK } from "../skills/starter-catalog.js";
 import { announceDelegationOutcome } from "../threads/delegation-outcomes.js";
 import { type DeliveryGroup, buildDelivery } from "../threads/delivery.js";
-import {
-  continuationAllowed,
-  continuationPolicy,
-  freezeRunLimits,
-  runMaxTurns,
-} from "./run-limits.js";
+import { recordFinalReplyRouting, roundFacts } from "../threads/round-delivery.js";
+import { modelUpstreamsOf } from "./model-upstream-freeze.js";
+import { rulesChangedSince } from "./rule-revisions.js";
+import { continuationPolicy, freezeRunLimits, runMaxTurns } from "./run-limits.js";
+import { recordTimelineMark } from "./run-timeline-marks.js";
 import { sidecarToolsFor } from "./sidecar-tools.js";
 
 /**
@@ -94,8 +101,8 @@ export class RunLifecycle {
    */
   private effectiveModels(
     run: RunRecord,
-    bot: { model?: string; cheapModel?: string; workspaceId: WorkspaceId },
-  ): Pick<StartRunRequest, "model" | "cheapModel" | "fallbackModel" | "visionPolicy"> {
+    bot: { model?: string; cheapModel?: string; runtime?: AgentRuntime; workspaceId: WorkspaceId },
+  ): Pick<StartRunRequest, "model" | "cheapModel" | "fallbackModel" | "visionPolicy" | "runtime"> {
     const recordedModel = typeof run.config.model === "string" ? run.config.model : undefined;
     const recordedCheap =
       typeof run.config.cheapModel === "string" ? run.config.cheapModel : undefined;
@@ -103,6 +110,10 @@ export class RunLifecycle {
     // the bot was re-pointed while the run sat waiting for a human.
     const model = recordedModel ?? bot.model ?? this.ctx.config.defaultModel;
     const cheapModel = recordedCheap ?? bot.cheapModel ?? this.ctx.config.cheapModel;
+    // ADR-0044 decision 1: the agent loop is frozen the same way, so a run row attributes its
+    // runtime on its own and a resume keeps the loop that parked.
+    const recordedRuntime = isAgentRuntime(run.config.runtime) ? run.config.runtime : undefined;
+    const runtime = recordedRuntime ?? bot.runtime ?? this.ctx.config.defaultRuntime;
     // ADR-0023 decision 3: FALLBACK_MODEL is frozen the same way; `null` records "none", so a
     // run started without one does not gain one when the Gateway is reconfigured.
     const fallbackRecorded = "fallbackModel" in run.config;
@@ -117,13 +128,18 @@ export class RunLifecycle {
     const patch = {
       ...(recordedModel === undefined ? { model } : {}),
       ...(recordedCheap === undefined ? { cheapModel } : {}),
+      ...(recordedRuntime === undefined ? { runtime } : {}),
       ...(fallbackRecorded ? {} : { fallbackModel: fallbackModel ?? null }),
+      ...("modelUpstreams" in run.config
+        ? {}
+        : { modelUpstreams: modelUpstreamsOf(this.ctx, [model, cheapModel, fallbackModel]) }),
       ...vision.patch,
     };
     if (Object.keys(patch).length > 0) this.ctx.runs.setConfig(run.id, patch);
     return {
       model,
       cheapModel,
+      runtime,
       ...(fallbackModel === undefined ? {} : { fallbackModel }),
       ...vision.request,
     };
@@ -175,8 +191,15 @@ export class RunLifecycle {
 
   private browserSettings(
     run: RunRecord,
-  ): Pick<StartRunRequest, "browserCoordination" | "browserSnapshotMode" | "browserExecutionMode"> {
+  ): Pick<
+    StartRunRequest,
+    "browserCoordination" | "browserSnapshotMode" | "browserExecutionMode" | "browserCodeApproval"
+  > {
     return {
+      // ADR-0002 amendment 5: from the run row, so a resume keeps the tiers it started with.
+      ...(run.config.browserCodeApproval === "effects-v1"
+        ? { browserCodeApproval: "effects-v1" as const }
+        : {}),
       ...(run.config.browserExecutionMode === "vision-cli-v2"
         ? { browserExecutionMode: "vision-cli-v2" as const }
         : {}),
@@ -199,10 +222,15 @@ export class RunLifecycle {
   /**
    * Issue #88 (ADR-0004 amendment 1): the run row's working-directory mode, not the Gateway's
    * current one, so every process of a run starts where its first one did. `shared`, and a row
-   * from before the knob, send nothing and the sidecar keeps `/work`.
+   * from before the knob, send nothing and the sidecar keeps `/work`. ADR-0036: the workspace's
+   * stored settings win over the Gateway knob (default `per-bot`, ADR-0038) and are frozen on the
+   * first process, with, when the lane notice is on, the bot's other live lane.
    */
-  private workdirSettings(run: RunRecord): Pick<StartRunRequest, "workdirMode"> {
-    return run.config.botWorkdir === "per-bot" ? { workdirMode: "per-bot" } : {};
+  private workdirSettings(
+    run: RunRecord,
+    workspaceId: WorkspaceId,
+  ): Pick<StartRunRequest, "workdirMode" | "otherLaneRun"> {
+    return this.ctx.workdir.startFields(this.ctx.runs, run, workspaceId);
   }
 
   /**
@@ -326,8 +354,10 @@ export class RunLifecycle {
    */
   private deliveryGroup(run: RunRecord, thread: Thread): DeliveryGroup | undefined {
     const { ctx } = this;
-    // A run created before the knob existed has no value: it was routed by the walk.
-    if (run.config.groupRouting !== "owner-v1") return undefined;
+    // A run created before the knob existed has no value: it was routed by the walk. `round-v1`
+    // keeps the roster and adds its round facts (ADR-0005 amendment 6).
+    const routing = run.config.groupRouting;
+    if (routing !== "owner-v1" && routing !== "round-v1") return undefined;
     const members = ctx.threads.members(thread.id);
     if (members.length < 2 || thread.kind !== "chat") return undefined;
     const bots = ctx.bots.list(thread.workspaceId);
@@ -354,6 +384,7 @@ export class RunLifecycle {
             },
           }
         : {}),
+      ...(routing === "round-v1" ? roundFacts(ctx, run, name) : {}),
     };
   }
 
@@ -364,6 +395,7 @@ export class RunLifecycle {
       return this.resume(run);
     if (
       run.triggerKind === "cron" ||
+      run.triggerKind === "manual" ||
       run.triggerKind === "webhook" ||
       run.triggerKind === "welcome"
     )
@@ -434,7 +466,8 @@ export class RunLifecycle {
       shortWaitSeconds: ctx.config.shortWaitSeconds,
       maxTurns: freezeRunLimits(ctx, run, bot.workspaceId),
       ...this.browserSettings(run),
-      ...this.workdirSettings(run),
+      ...cliSurfaceStart(run.config),
+      ...this.workdirSettings(run, bot.workspaceId),
       egressAllowlist: ctx.workspaces.mustGet(bot.workspaceId).egressAllowlist,
       connectors: bot.connectors,
       ...this.integrationSettings(bot.workspaceId),
@@ -447,7 +480,8 @@ export class RunLifecycle {
       ),
       ...tasks,
     };
-    const sdkSessionId = ctx.sessions.get(run.botId, thread.id);
+    // ADR-0044 decision 6: only a session the run's own runtime wrote is resumed.
+    const sdkSessionId = ctx.sessions.get(run.botId, thread.id, models.runtime);
     if (sdkSessionId !== undefined) {
       request.sdkSessionId = sdkSessionId;
       ctx.runs.setConfig(run.id, {
@@ -475,8 +509,10 @@ export class RunLifecycle {
   private startTrigger(run: RunRecord): PreparedStart {
     const { ctx } = this;
     const payload = run.triggerPayload ?? {};
+    // A manual run is its cron entry run now (ADR-0043 decision 6): the bot gets the entry's
+    // prompt as a scheduled task; the run row keeps the `manual` trigger and who asked.
     const trigger: TriggerPayload =
-      run.triggerKind === "cron"
+      run.triggerKind === "cron" || run.triggerKind === "manual"
         ? { kind: "cron", prompt: typeof payload.prompt === "string" ? payload.prompt : "" }
         : run.triggerKind === "webhook"
           ? { kind: "webhook", body: typeof payload.body === "string" ? payload.body : "" }
@@ -515,7 +551,8 @@ export class RunLifecycle {
       shortWaitSeconds: ctx.config.shortWaitSeconds,
       maxTurns: freezeRunLimits(ctx, run, bot.workspaceId),
       ...this.browserSettings(run),
-      ...this.workdirSettings(run),
+      ...cliSurfaceStart(run.config),
+      ...this.workdirSettings(run, bot.workspaceId),
       egressAllowlist: ctx.workspaces.mustGet(bot.workspaceId).egressAllowlist,
       connectors: bot.connectors,
       ...this.integrationSettings(bot.workspaceId),
@@ -585,7 +622,8 @@ export class RunLifecycle {
       shortWaitSeconds: ctx.config.shortWaitSeconds,
       maxTurns: runMaxTurns(run.config, ctx.config.maxTurns),
       ...this.browserSettings(run),
-      ...this.workdirSettings(run),
+      ...cliSurfaceStart(run.config),
+      ...this.workdirSettings(run, bot.workspaceId),
       egressAllowlist: ctx.workspaces.mustGet(bot.workspaceId).egressAllowlist,
       connectors: bot.connectors,
       ...this.integrationSettings(bot.workspaceId),
@@ -653,6 +691,11 @@ export class RunLifecycle {
           approvalId: approval.id,
           decision: approval.decision,
           ...(payload.toolUseId ? { toolUseId: payload.toolUseId } : {}),
+          // ADR-0002 amendment 3, A7: an expiry tells the model nobody approved it, and not to work
+          // around it; other decisions resume exactly as before.
+          ...(approval.decidedBy === APPROVAL_EXPIRY_ACTOR && approval.reason
+            ? { reason: approval.reason }
+            : {}),
           ...(payload.currentOrigin ? { currentOrigin: payload.currentOrigin } : {}),
           deferredAction: deferredActionOf(approval.action),
         };
@@ -667,7 +710,8 @@ export class RunLifecycle {
   ended(runId: RunId, ended: RunEnded): RunRecord {
     const { ctx } = this;
     const run = ctx.runs.mustGet(runId);
-    if (run.status !== "running" && run.status !== "waiting_approval_live") {
+    // A `stalled` run may end like a running one (issue #9); its route revives it first anyway.
+    if (!isExecuting(run.status)) {
       throw new DeskmatesError("invalid_transition", `run ${runId} is ${run.status}, not running`, {
         runId,
         from: run.status,
@@ -702,6 +746,14 @@ export class RunLifecycle {
             payload: { source: "budget", phase: "charge_failed", error: String(err) },
           });
         }
+        // ADR-0032 amendment 1 decision 12: the attempt's usage summary is stored once, here; a
+        // later usage write invalidates it and the next Costs reader recomputes it. Reporting
+        // only: a fault here leaves the summary missing for the reader, not the run unended.
+        try {
+          refreshRunUsageSummary(ctx.db, runId);
+        } catch {
+          // The Costs reader computes a missing summary.
+        }
         // ADR-0018 decision 2: rules are read against the window this usage is filed under (the
         // run's creation day, as the cost report does), inside the same transaction, and the
         // frames go out with the rest after the commit.
@@ -716,6 +768,8 @@ export class RunLifecycle {
         // `context_sections` event.
         const configPatch: Record<string, unknown> = {};
         if (ended.systemPromptSha256) configPatch.systemPromptSha256 = ended.systemPromptSha256;
+        if (ended.systemPromptStaticSha256)
+          configPatch.systemPromptStaticSha256 = ended.systemPromptStaticSha256;
         if (ended.maxContextTokens) configPatch.claudeCodeMaxContextTokens = ended.maxContextTokens;
         // ADR-0011 decision 3: taint is sticky across the attempts of one run and the runs of one
         // SDK session, so a resume starts where the parked process left off.
@@ -734,8 +788,17 @@ export class RunLifecycle {
         }
         if (tainted) configPatch.memoryTainted = true;
         if (Object.keys(configPatch).length > 0) ctx.runs.setConfig(runId, configPatch);
-        if (ended.sdkSessionId && run.threadId) {
-          ctx.sessions.set(run.botId, run.threadId, ended.sdkSessionId, tainted);
+        // A SOUL or MEMORY save during this run cleared the bot's sessions; the next run starts a
+        // fresh one under the new rules instead of resuming this one (ADR-0043 decision 3).
+        // The session belongs to the runtime that wrote it (ADR-0044 decision 6).
+        if (ended.sdkSessionId && run.threadId && !rulesChangedSince(ctx, run.botId, run.config)) {
+          ctx.sessions.set(
+            run.botId,
+            run.threadId,
+            ended.sdkSessionId,
+            tainted,
+            isAgentRuntime(run.config.runtime) ? run.config.runtime : undefined,
+          );
         }
         const sessionPatch = ended.sdkSessionId ? { sdkSessionId: ended.sdkSessionId } : {};
 
@@ -846,6 +909,7 @@ export class RunLifecycle {
           } else {
             const message = ctx.router.postFromRun(run, reply);
             published.push({ type: "thread_message", threadId: run.threadId, message });
+            recordFinalReplyRouting(ctx, run, message);
           }
         }
         const silent = run.threadId !== undefined && !reply;
@@ -872,6 +936,14 @@ export class RunLifecycle {
       return committed;
     });
     this.release(runId);
+    // ADR-0037: the sidecar's end was taken; a non-empty reply is in the thread from now on.
+    recordTimelineMark(ctx, runId, run.attempt, "run_ended", {
+      outcome: ended.outcome,
+      replyPosted:
+        ended.outcome === "completed" &&
+        run.threadId !== undefined &&
+        (ended.summary?.reply.trim() ?? "") !== "",
+    });
     ctx.router.runEnded(result);
     return result;
   }
@@ -941,24 +1013,29 @@ export class RunLifecycle {
         ? ctx.messages.get(run.triggerRef as MessageId)
         : undefined;
     const delegatorBot = source?.authorKind === "bot" ? source.authorId : undefined;
+    // ADR-0002 amendment 3, A9: a threadless run's notices go to its bot's private chat.
+    const noticeThreadId = ctx.broker.noticeThread(run).threadId;
     const notify = (body: string, attachmentId?: ApprovalId): void => {
-      if (!run.threadId) return;
+      if (!noticeThreadId) return;
       const posted = ctx.router.postSystem(
-        run.threadId,
+        noticeThreadId,
         body,
         attachmentId ? [approvalAttachment(attachmentId)] : [],
         delegatorBot
           ? { wakeOnly: delegatorBot as RunRecord["botId"] }
           : { wakeExcept: run.botId, wakeOnly: run.botId },
       );
-      published.push({ type: "thread_message", threadId: run.threadId, message: posted.message });
+      published.push({ type: "thread_message", threadId: noticeThreadId, message: posted.message });
       if (attachmentId) ctx.approvals.setMessage(attachmentId, posted.message.id);
       for (const wake of posted.runs)
-        published.push({ type: "run_status", threadId: run.threadId, run: wake });
+        published.push({ type: "run_status", threadId: noticeThreadId, run: wake });
     };
     // ADR-0016 amendment 2: the limit and window the run froze at its first start.
     const policy = continuationPolicy(run.config);
-    if (!ended.sdkSessionId || !continuationAllowed(run.config, continuationCount)) {
+    // ADR-0002 amendment 6, D6: in approve_all the mode continues within the limit, and past it
+    // the reviewer decides instead of the run failing.
+    const plan = continuationPlan(ctx, run, continuationCount, Boolean(ended.sdkSessionId));
+    if (plan === "fail" || !ended.sdkSessionId) {
       notify(
         `${ctx.bots.mustGet(run.botId).name} exhausted its turn budget and cannot continue. Handoff: ${handoffPath ?? "unavailable"}.`,
       );
@@ -976,6 +1053,7 @@ export class RunLifecycle {
       continuationLimit: policy.limit,
       continuationExpiresAt: expiresAt,
       handoffPath: handoffPath ?? null,
+      continuationBeyondLimit: plan === "review",
     });
     const left =
       policy.limit === null
@@ -989,7 +1067,7 @@ export class RunLifecycle {
       id: approvalId,
       runId: run.id,
       botId: run.botId,
-      ...(run.threadId ? { threadId: run.threadId } : {}),
+      ...(noticeThreadId ? { threadId: noticeThreadId } : {}),
       action: {
         toolName: "__run_continuation__",
         input: {},
@@ -1012,14 +1090,16 @@ export class RunLifecycle {
     const observedTurns = ctx.events
       .list(run.id)
       .filter((event) => event.kind === "turn_usage").length;
-    notify(
-      `${ctx.bots.mustGet(run.botId).name} reached the ${String(run.config.maxTurns ?? ctx.config.maxTurns)}-turn attempt limit (${capSource}). ${observedTurns} model turns observed across ${run.attempt} attempt(s); ${usage.length ? `${tokens} recorded tokens` : "token usage unavailable"}. Delegating message: ${source?.id ?? run.triggerRef}. Handoff: ${handoffPath ?? "unavailable"}. ${left}. Continue or stop by ${expiresAt}. A bot member can decide with approval_decide(${approvalId}, allow_once) to continue or approval_decide(${approvalId}, deny) to stop.`,
-      approvalId,
-    );
+    const askPeople = (): void =>
+      notify(
+        `${ctx.bots.mustGet(run.botId).name} reached the ${String(run.config.maxTurns ?? ctx.config.maxTurns)}-turn attempt limit (${capSource}). ${observedTurns} model turns observed across ${run.attempt} attempt(s); ${usage.length ? `${tokens} recorded tokens` : "token usage unavailable"}. Delegating message: ${source?.id ?? run.triggerRef}. Handoff: ${handoffPath ?? "unavailable"}. ${left}. Continue or stop by ${expiresAt}. A bot member can decide with approval_decide(${approvalId}, allow_once) to continue or approval_decide(${approvalId}, deny) to stop.`,
+        approvalId,
+      );
+    if (plan === "ask") askPeople();
     const approval = ctx.approvals.mustGet(approvalId);
     published.push(
-      run.threadId
-        ? { type: "approval", threadId: run.threadId, approval }
+      noticeThreadId
+        ? { type: "approval", threadId: noticeThreadId, approval }
         : { type: "approval", approval },
     );
     ctx.events.append({
@@ -1034,10 +1114,13 @@ export class RunLifecycle {
         continuationWindowHours: policy.windowHours,
       },
     });
-    return this.applyStatus(published, run.id, "waiting_continuation", {
+    const parked = this.applyStatus(published, run.id, "waiting_continuation", {
       ...sessionPatch,
       resumePayload: { sdkSessionId: ended.sdkSessionId, approvalId, continuation: true },
     });
+    if (plan === "ask") return parked;
+    if (!settleContinuationByMode(ctx, published, parked, approvalId, plan)) askPeople();
+    return ctx.runs.mustGet(run.id);
   }
 
   /**
@@ -1049,6 +1132,11 @@ export class RunLifecycle {
     const { ctx } = this;
     const summary = ended.summary;
     if (!summary) return;
+    // ADR-0042 decision 3: a run an operator marked wrong before it ended learns nothing.
+    if (new RunMarkStore(ctx.db).isWrong(run.id)) {
+      this.recordSkippedLearned(run, ended, MARKED_WRONG_REASON);
+      return;
+    }
     const learned =
       summary.learned && summary.learned.length > 0
         ? summary.learned

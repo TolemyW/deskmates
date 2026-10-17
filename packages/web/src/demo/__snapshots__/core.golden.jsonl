@@ -1,4 +1,4 @@
-{"section":"seed","request":"GET /api/config","status":200,"json":{"defaultModel":"demo-large","cheapModel":"demo-small","release":"demo","cronTimeZone":"UTC"}}
+{"section":"seed","request":"GET /api/config","status":200,"json":{"defaultModel":"demo-large","cheapModel":"demo-small","release":"demo","cronTimeZone":"UTC","models":[{"model":"demo-large","upstream":"default"},{"model":"demo-local","upstream":"local"},{"model":"demo-small","upstream":"default"}]}}
 {"section":"seed","request":"GET /api/nothing-here","status":404,"json":{"code":"not_found","message":"The demo Gateway has no route for GET /api/nothing-here.","details":{}}}
 {"section":"seed","request":"PUT /api/bots","status":404,"body":{},"json":{"code":"not_found","message":"The demo Gateway has no route for PUT /api/bots.","details":{}}}
 {"section":"seed","request":"GET /api/bots/bot_0002","status":404,"json":{"code":"not_found","message":"The demo Gateway has no route for GET /api/bots/bot_0002.","details":{}}}
@@ -7,4 +7,4 @@
 {"section":"seed","request":"GET /api/approval-rules/rul_missing","status":404,"json":{"code":"not_found","message":"The demo Gateway has no route for GET /api/approval-rules/rul_missing.","details":{}}}
 {"section":"seed","request":"GET /api/integrations/providers/github","status":404,"json":{"code":"not_found","message":"The demo Gateway has no route for GET /api/integrations/providers/github.","details":{}}}
 {"section":"seed","request":"POST /api/threads/thr_missing/activity","status":404,"body":{},"json":{"code":"not_found","message":"The demo Gateway has no route for POST /api/threads/thr_missing/activity.","details":{}}}
-{"section":"after session","request":"GET /api/config","status":200,"json":{"defaultModel":"demo-large","cheapModel":"demo-small","release":"demo","cronTimeZone":"UTC"}}
+{"section":"after session","request":"GET /api/config","status":200,"json":{"defaultModel":"demo-large","cheapModel":"demo-small","release":"demo","cronTimeZone":"UTC","models":[{"model":"demo-large","upstream":"default"},{"model":"demo-local","upstream":"local"},{"model":"demo-small","upstream":"default"}]}}

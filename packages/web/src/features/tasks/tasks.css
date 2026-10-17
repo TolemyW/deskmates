@@ -375,4 +375,9 @@
   .task-execution-state.skipped {
     color: var(--warning, #b7791f);
   }
+  .task-delivery-publication {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
 }

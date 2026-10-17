@@ -493,3 +493,74 @@ describe("tty_session: a complete shell line is tiered by the shell rules (ADR-0
     expect(riskTier(tty, { action: "close", sessionId: "s1" })).toBe("L1");
   });
 });
+
+// ADR-0002 amendment 5 (issue #78): the issue's four string-only inputs, under both policies.
+describe("browser code is tiered by its effects under effects-v1 (C1, C3, C5)", () => {
+  const effectsV1 = { browserCode: "effects-v1" } as const;
+  const issueInputs = [
+    ["mcp__browser__browser_file_upload", { paths: ["/work/synthetic.txt"] }, "L2", "L2"],
+    [
+      "mcp__browser__browser_run_code_unsafe",
+      { code: "async (page) => { await page.setInputFiles('#f', '/work/synthetic.txt'); }" },
+      "L1",
+      "L2",
+    ],
+    [
+      "mcp__browser__browser_evaluate",
+      { function: "() => fetch('/api/synthetic', { method: 'POST', body: '{}' })" },
+      "L1",
+      "L2",
+    ],
+    [
+      "mcp__browser__browser_run_code_unsafe",
+      { code: "async (page) => { await page.getByRole('button', { name: 'Delete' }).click(); }" },
+      "L1",
+      "L2",
+    ],
+    // Passive inspection keeps L1 under both.
+    ["mcp__browser__browser_evaluate", { function: "() => document.title" }, "L1", "L1"],
+    [
+      "mcp__browser__browser_run_code_unsafe",
+      { code: "async (page) => page.locator('h1').innerText()" },
+      "L1",
+      "L1",
+    ],
+    // Unreadable code fails closed under effects-v1.
+    ["mcp__browser__browser_run_code_unsafe", {}, "L1", "L2"],
+    [
+      "mcp__browser__browser_evaluate",
+      { function: "() => window['fe' + 'tch']('/x')" },
+      "L1",
+      "L2",
+    ],
+  ] as const;
+
+  it.each(issueInputs)("%s %j: name-v1 %s, effects-v1 %s", (name, input, nameV1, effects) => {
+    const record = input as Record<string, unknown>;
+    expect(riskTier(name, record)).toBe(nameV1);
+    expect(riskTier(name, record, { browserCode: "name-v1" })).toBe(nameV1);
+    expect(riskTier(name, record, effectsV1)).toBe(effects);
+    expect(classifyTool(name, record, effectsV1).unclassified).toBeUndefined();
+  });
+
+  it.each([
+    ["playwright-cli upload /work/a.txt", "L1", "L2"],
+    ["playwright-cli -s=bot cookie-set sid x", "L1", "L2"],
+    ["npx playwright-cli state-load /work/s.json", "L1", "L2"],
+    ["timeout 30 playwright-cli eval \"() => fetch('/x', {method:'POST'})\"", "L1", "L2"],
+    ["playwright-cli run-code --filename=/work/p.js", "L1", "L2"],
+    ["cd /work && playwright-cli route '**/*'", "L1", "L2"],
+    ["playwright-cli snapshot", "L1", "L1"],
+    ["playwright-cli eval '() => document.title'", "L1", "L1"],
+    ["echo 'playwright-cli upload /work/a'", "L1", "L1"],
+  ] as const)("Bash %s: name-v1 %s, effects-v1 %s", (command, nameV1, effects) => {
+    expect(riskTier("Bash", { command })).toBe(nameV1);
+    expect(riskTier("Bash", { command }, effectsV1)).toBe(effects);
+  });
+
+  it("judges a complete tty_session line by the same rules", () => {
+    const input = { action: "write", sessionId: "s1", data: "playwright-cli upload /work/a\n" };
+    expect(riskTier("mcp__deskmates__tty_session", input)).toBe("L1");
+    expect(riskTier("mcp__deskmates__tty_session", input, effectsV1)).toBe("L2");
+  });
+});

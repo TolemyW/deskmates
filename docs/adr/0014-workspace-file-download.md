@@ -3,7 +3,7 @@
 Date: 2026-09-29
 Status: Accepted (product owner, 2026-10-11; download, the Files collection and the rich-preview policy are accepted). Originally proposed from the owner's 2026-09-29 note "先做下载器"; A1 specifies the original bounded text preview, A2 the collection and A3 supersedes the original transfer and preview limits.
 Builds on: ADR-0004 (the workspace is the trust boundary), ADR-0006 (operator routes on the operator listener)
-Amendment A2 (workspace Files collection, issue #27 phase B): accepted by the owner on 2026-10-11. Amendment A3 (issues #44 and #45) is accepted design. Amendment A5 (issue #52, authenticated uploads) is proposed; its upload roles and its absence of a per-file size cap are the owner's 2026-10-13 decisions, the rest is engineering design awaiting review.
+Amendment A2 (workspace Files collection, issue #27 phase B): accepted by the owner on 2026-10-11. Amendment A3 (issues #44 and #45) is accepted design. Amendment A5 (issue #52, authenticated uploads) is owner-decided: its upload roles and its absence of a per-file size cap are the owner's 2026-10-13 decisions; the chat composer as the primary upload path with drag-and-drop and paste, structured attachments shown as cards, deletion by any Admin, no server-side scanning and the 24-hour resumable-session expiry are the owner's 2026-10-14 decisions (decisions 31, 32, 34 and 41 to 43). Who may cancel a receiving session and the optional workspace quota remain engineering design. Amendment A6 (issue #45, preview viewing controls and entry points) is proposed engineering design within A3's accepted policy.
 
 ## Context
 
@@ -157,7 +157,7 @@ delivery kind. A non-file delivery publishes nothing and adds no placeholder ite
 | 26 (amendment A4) | Items carry `verified`, `unverified` or `input`; legacy rows stay unverified | T1 `file-collection-routes.test.ts` ("legacy stays unverified"); T0 Web `features/files/files.test.tsx` | Share of unverified items (reported) |
 | 27 (amendment A4) | A partial delivery's artifacts are listed with the delivery kind and the task stays undelivered; a non-file delivery lists nothing | T1 `api/task-deliver-routes.test.ts` | none |
 
-### Amendment A5: authenticated workspace uploads (2026-10-14, proposed; issue #52)
+### Amendment A5: authenticated workspace uploads (2026-10-14, owner-decided 2026-10-14; issue #52)
 
 The owner decided on 2026-10-13 that Owners, Admins and Members of a workspace may upload and
 Guests may not, and that there is no fixed product per-file size limit. Uploads must still stream
@@ -175,9 +175,9 @@ Signed in again, a person demoted to Guest gets 403, and a removed person cannot
 way, no further byte is written. A caller without a role in the workspace, or from another
 tenant, gets the uniform 404. Run tokens get 401. An upload session belongs to its
 uploader's actor label. Another caller cannot send its parts or complete it and gets 404. The
-uploader, an Admin or an Owner may cancel it. A5 adds no route that deletes a completed upload:
-the file is an ordinary `/work` file that any bot or person of the workspace can change or remove
-(ADR-0004). A delete action is a follow-up, not part of A5.
+uploader, an Admin or an Owner may cancel it. The file of a completed upload is an ordinary
+`/work` file that any bot of the workspace can change or remove (ADR-0004); in the product, any
+Admin or Owner of the workspace may delete it from Files (decision 43, owner 2026-10-14).
 
 29. **Destination and naming.** Every upload lands in `/work/uploads/<UTC date YYYY-MM-DD>/`.
 The client names only the file, never a directory, a bot home or `/profile`. The Gateway reduces
@@ -238,7 +238,7 @@ nor sniffed bytes decide anything. The part route accepts only `application/octe
 the session stores no MIME type. Files classifies an upload by its extension, as for any path
 (decision 13). Preview stays under amendment A3 and decision 18, and an accepted upload may be
 download-only. No upload is executable, unpacked or interpreted. Archives stay single files. The
-server runs no malware scan in A5. A scanning hook is a proposed follow-up. Bytes a person
+server runs no malware scan; the owner decided on 2026-10-14 that none is added. Bytes a person
 uploaded are input data. A bot that reads them treats them as untrusted content, like a page.
 
 33. **Records, provenance and audit.** `workspace_uploads` records the workspace, the uploader's
@@ -254,16 +254,60 @@ label, and never content. Creation, cancellation and every refusal write one inf
 
 34. **An upload is never an instruction.** An upload starts no run, posts no message, writes no
 Knowledge or learned memory, and attaches to no task or delivery. A chat reference is an explicit
-second act. The composer's attach control uploads the file, then inserts the final workspace path
-into the person's draft. The path reaches the bot only when the person sends that message, as
-ordinary human text that decision 5 turns into a link. Attaching a path to a task stays the task
-submission's own `attachments` field.
+second act: the composer shows completed uploads as pending attachments, and they reach the bot
+only when the person sends the message, as structured attachments (decisions 41 and 42; the
+2026-10-14 owner decision replaces the earlier insertion of the path into the draft). Attaching a
+path to a task stays the task submission's own `attachments` field.
 
 35. **Cleanup.** Deleting a workspace removes its upload rows by cascade, and a permanent delete
 removes its volumes. Removing an uploader keeps their rows and audit events as provenance under
 the stored actor label. Completed files stay in `/work` until someone removes them. Files then
 still lists the record, and download reports the file missing (decision 15). Cancel and expiry
-remove partial files. The Gateway never deletes a completed upload's file.
+remove partial files. The Gateway deletes a completed upload's file only when an Admin asks
+(decision 43).
+
+41. **The chat composer is the primary upload path (owner, 2026-10-14).** Besides the paperclip,
+a person may drop files anywhere on the chat pane or paste files, including a screenshot, into
+the composer. Each file starts its own upload at once through decisions 28 to 31 and shows as a
+pending chip above the text: type icon, name, size, a progress bar, and Cancel while sending,
+Retry (the same session) after a failure, Remove once done. A pasted image without a file name is
+named `pasted-<UTC date and time>.<extension of its type>`. Pasting text stays ordinary text
+input. Send is enabled when the text is not blank or at least one chip is complete, and no chip
+is still sending or failed. A chip removed before sending leaves its completed file in
+`/work/uploads` and in Files, where an Admin may delete it. Leaving the chat cancels uploads still
+in flight. A Guest has no composer, and the Gateway refuses a Guest's upload whatever the screen
+offers (decision 28).
+
+42. **Structured message attachments (owner, 2026-10-14).** `POST /api/threads/:id/messages`
+accepts `attachments: [{ uploadId }]`, at most 20. Each entry must name a completed, not deleted
+upload of the thread's workspace whose uploader is the poster's actor label. Anything else, a
+Guest's post with attachments included, is a `validation` error with
+`reason: "attachment_not_attachable"` and the offending id, and nothing is stored or woken.
+Repeated ids collapse to one. The body may be blank when at least one attachment is present. The
+message stores each attachment as `{ name, mimeType, ref, uploadId, sizeBytes }`: the upload's
+provenance label, a type from the file extension through one table in `contracts` (otherwise
+`application/octet-stream`; the declared browser type is never trusted, decision 32), the final
+workspace path, the upload id and its size. The message routes and wakes like any human message.
+The wake text lists each attachment's name, type and path, so the bot reads the file from the
+path, as untrusted input. Under the message the Web shows one attachment card per workspace-path
+attachment, from a person or a bot: type icon, name, size when known, Preview (the A6 drawer,
+decision 40) and Download. Files lists the path once, with the upload and the message as two
+references.
+
+43. **Any Admin deletes an uploaded file (owner, 2026-10-14).** `DELETE
+/api/workspaces/:id/uploads/:uploadId/file` is for an Admin or Owner of the workspace, whoever
+uploaded it; a Member or Guest gets 403 and a run token 401. The upload must be completed and not
+yet deleted; otherwise the answer is `invalid_transition` with `reason: "upload_<state>"` or
+`"upload_deleted"`. A stopped workspace answers `workspace_not_running` and nothing changes. The
+Gateway runs `file-write` with `{ op: "remove", uploadId, path }`. The command accepts only a path
+of the form `/work/uploads/<date>/<safe name>`, refuses a symbolic link at `/work`, `uploads` or the
+date directory, and refuses a link or anything but a regular file at the path (`forbidden`). A file
+already gone answers `removed: false`. The row then records `deleted_at` and `deleted_by`, and one
+`file.delete` audit event with the path, size, digest, label and whether bytes were removed is
+written in the same transaction. Files no longer lists the upload or a message attachment naming
+it, and the quota no longer counts it. The chat card stays as the message's history, and its
+Download reports the file missing. Bots are unaffected: a bot may still change or remove `/work`
+files (ADR-0004).
 
 ### Verification (amendment A5)
 
@@ -275,10 +319,71 @@ remove partial files. The Gateway never deletes a completed upload's file.
 | 31 (amendment A5) | Wrong offset and concurrent parts give 409 with the received count. Idempotent create and complete work. Cancel removes the partial file, and later parts are refused. A stale session expires. A stopped workspace is refused without `ensure`. The browser driver retries and cancels | T1 `file-upload-routes.test.ts`; T0 Web `features/files/upload-driver.test.ts` | cancelled and expired uploads (log) |
 | 32 (amendment A5) | A part with another content type gets 415. The session stores no MIME type. The partial file and final file have no execute bits | T1 `file-upload-routes.test.ts`; T0 `file-write.test.ts` | none |
 | 33 (amendment A5) | A completed upload appears once in Files as `uploaded`/`input` with uploader, size and digest. One `file.upload` audit event without content is written | T1 `file-upload-routes.test.ts` ("lists and audits"); T1 `file-collection-routes.test.ts` | uploads per workspace (reported) |
-| 34 (amendment A5) | An upload creates no run, message, Knowledge document, memory item or task delivery. The composer button inserts the path into the draft without sending | T1 `file-upload-routes.test.ts` ("no side effects"); T0 Web `features/files/upload-attach-button.test.tsx` | none |
-| 28 to 31 (amendment A5), UI | Files shows Upload with a scope note, progress, failure with Retry (resuming the same session), Cancel and completion; a Guest sees no control | T0 Web `features/files/upload-attach-button.test.tsx`, `features/files/files.test.tsx`; desktop and 390 px visual check | Visual check pending |
+| 34 (amendment A5) | An upload creates no run, message, Knowledge document, memory item or task delivery. A completed upload in the composer is a pending chip and posts nothing until Send | T1 `file-upload-routes.test.ts` ("no side effects"); T0 Web `features/chats/composer-attachments.test.tsx` ("uploads dropped and pasted files as chips") | none |
+| 28 to 31 (amendment A5), UI | Files shows Upload with a scope note, progress, failure with Retry (resuming the same session), Cancel and completion; a Guest sees no control | T0 Web `features/files/files-upload.test.tsx`, `features/files/files.test.tsx`; desktop and 390 px visual check | Visual check pending |
 | 35 (amendment A5) | Deleting the workspace removes upload rows. Cancel and expiry remove partial files | T1 `packages/gateway/src/db/schema-conventions.test.ts` (every `workspace_id` cascades); T1 `file-upload-routes.test.ts`; T0 `file-write.test.ts` | none |
+| 41 (amendment A5) | Dropping files on the chat pane and pasting a file or a nameless screenshot start uploads shown as chips with progress; pasted text stays text; Send waits for every chip, a failed chip retries the same session, Remove drops a chip without deleting the file; Send posts the upload ids and clears the chips | T0 Web `features/chats/composer-attachments.test.tsx` | uploads started from chat (log) |
+| 42 (amendment A5) | A Member posts own completed uploads with a blank body; the stored message carries name, extension type, path, upload id and size; another person's, another workspace's, a receiving, a deleted or an unknown upload is 400 with nothing stored; a Guest's attachments are refused; the wake text lists the paths; cards render with Preview and Download | T1 `packages/gateway/src/api/message-attachments.test.ts`; T0 `packages/sidecar/src/context.test.ts` ("lists attachment paths"); T0 Web `features/chats/attachment-cards.test.tsx` | messages with attachments (reported) |
+| 43 (amendment A5) | An Admin deletes another person's upload: the command gets `remove` with the path, the row is deleted, one `file.delete` event, Files drops it; a Member gets 403; a second delete, a receiving upload and a stopped workspace are refused; the command refuses paths outside `/work/uploads/<date>/`, links and directories on a real filesystem | T1 `file-upload-routes.test.ts` ("Admin deletes"); T0 sidecar `file-write.test.ts` ("remove"); T0 Web `features/files/files.test.tsx` ("Admin deletes an upload") | deleted uploads (audit) |
 | 28 to 32 end to end | A file uploaded through the routes into a real workspace image downloads byte-identical. A planted `uploads` symbolic link into `/profile` is refused | T2 `acceptance/m4-file-upload.container.test.ts` (needs a workspace image with this sidecar) | none |
+
+### Amendment A6: preview viewing controls and every file-link entry point (2026-10-14, proposed; issue #45)
+
+Amendment A3 settled what may be rendered and how many bytes a preview may read. Issue #45 also
+asks for a paged PDF viewer with zoom, images that fit the panel with zoom, a Markdown source
+toggle, a bounded CSV table, and the same preview wherever a file is linked from a chat or a task.
+The owner's reopening comment requires that a chat-linked preview opens in a separate drawer that
+leaves the conversation in place. A6 specifies these viewing controls. It changes no route, no
+byte budget, no path rule and no isolation rule: decisions 17 to 21 apply unchanged to every view
+below. The decisions are engineering design that follows the issue text and awaits owner review.
+
+36. **Rendered and Source views.** A Markdown, HTML, JSON, CSV, TSV or SVG preview offers two
+views: Rendered (the A3 renderer) and Source. Source shows the decoded bytes already read for that
+preview as a React text node in a `<pre>`. It reads nothing more and renders nothing. It is how
+decision 19 and 21's "source remains available" is offered without a download. Source is the only
+view for a truncated JSON prefix (decision 18). An SVG source view decodes the same complete bytes
+under the text rules (UTF-8, no control bytes). The view choice is per open preview and resets to
+Rendered when the drawer closes, like decision 20's remote-image choice.
+
+37. **CSV and TSV are a bounded table.** The decoded prefix is parsed by RFC 4180 rules: quoted
+fields, doubled quotes and delimiters or line breaks inside quotes. The first record is the header
+row (`<th scope="col">`). The table shows at most 200 data rows and 50 columns. A note states the
+number of rows and columns shown and says when more rows, more columns or more bytes exist. When
+the prefix is truncated, the last record, which may be cut, is dropped. Cells are text only: no
+formula is evaluated, no link is made and no cell is interpreted as HTML. XLSX and other Office
+files stay download-only (decision 18).
+
+38. **Zoom and page navigation.** An image opens fitted to the panel and offers zoom out, zoom
+in and Fit, from 25% to 400% of its natural size. A PDF opens fitted to the panel width and
+offers previous and next page, a page number field and zoom from 50% to 300% of the fitted width.
+A rendered PDF canvas is capped at 16 million device pixels; a larger zoom renders at the cap
+instead of growing memory. Zoom never changes how many bytes are read, and decision 19's
+decoded-pixel limit applies before any zoom.
+
+39. **More inert text types and browser image types.** Source and configuration files
+(`.yaml`, `.yml`, `.toml`, `.ini`, `.cfg`, `.conf`, `.xml`, `.py`, `.js`, `.mjs`, `.cjs`, `.ts`,
+`.tsx`, `.jsx`, `.sh`, `.sql`, `.css`, `.go`, `.rs`, `.java`, `.c`, `.h`, `.cpp`, `.rb`, `.diff`,
+`.patch`) preview as inert text under the text budget and its truncation marker. XML is never
+parsed or rendered. AVIF and BMP images preview under decision 19. Any other type, including
+Office files, archives and executables, offers only Download with the explicit "Preview
+unavailable for this file type" state.
+
+40. **One drawer at every entry point.** Every place the web app shows a workspace file path
+offers the same preview and download controls: a path token in a chat message, the chat's
+Files section, a task's saved artifact, a published file in a task's delivery history and the
+Files detail panel. Preview opens the separate detail drawer of decision 15. The message, task or
+list never expands inline. Closing the drawer returns focus to the control that opened it and
+discards the read bytes, the view choice and any Blob URL.
+
+### Verification (amendment A6)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 36 (amendment A6) | Markdown, HTML, JSON, CSV and SVG show a Source view of the same bytes with no further range read; HTML source holds the script as text and mounts no script; truncated JSON offers no Rendered view; closing resets the view to Rendered | T0 Web `features/files/workspace-file-preview.test.tsx` ("source view") | none |
+| 37 (amendment A6) | Quoted delimiters, doubled quotes and quoted line breaks parse as one cell; the header uses column headers; a file with more than 200 rows or 50 columns states what is shown; a truncated prefix drops its cut last record; a formula cell stays text | T0 Web `features/files/csv-table.test.ts`; `workspace-file-preview.test.tsx` ("bounded table") | none |
+| 38 (amendment A6) | Image zoom steps stay within 25% to 400% and Fit restores the fitted view; PDF zoom stays within 50% to 300%, the page field rejects out-of-range pages, and the canvas never exceeds 16 million device pixels | T0 Web `features/files/preview-zoom.test.ts`; `workspace-file-preview.test.tsx` ("zoom") | none |
+| 39 (amendment A6) | YAML, Python and XML preview as text; XML is not parsed; AVIF previews as a Blob image; DOCX, XLSX, ZIP and EXE stay download-only | T0 Web `features/files/workspace-file-preview.test.tsx` ("preview type policy") | preview failures by type (reported) |
+| 40 (amendment A6) | A published file in a task's delivery history offers Preview and Download, which open the drawer; a chat path opens the drawer without expanding the message, and closing returns focus to the opener | T0 Web `features/tasks/tasks.test.tsx` ("delivery preview"); `features/files/workspace-file-preview.test.tsx` ("returns focus"); desktop and 390 px visual check | Manual Testbox acceptance pending |
 
 ## Alternatives
 

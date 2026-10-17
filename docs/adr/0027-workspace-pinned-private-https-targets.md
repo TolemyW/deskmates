@@ -3,10 +3,16 @@
 Date: 2026-10-11
 Status: Accepted by the owner in the VendorDB knowledge-base campaign chat; focused container verification passed, release/live campaign verification pending.
 Amends: ADR-0009 decision 4 and ADR-0020 decision 3 only for the explicit mechanism below.
-Amendment 1 (2026-10-14, proposed, issue #124): online, durable, named network profiles admit
-explicitly configured LAN origins (HTTP or HTTPS, custom ports, RFC1918 IP literals); decisions 6
-to 14 below. It supersedes decision 4's startup-only rule and decision 1's HTTPS:443 and
-no-IP-literal limits for profile grants only; `EGRESS_PRIVATE_TARGETS` keeps its exact meaning.
+Amendment 1 (2026-10-14, owner-decided 2026-10-14, issue #124): online, durable, named network
+profiles admit explicitly configured LAN origins (HTTP or HTTPS, custom ports, RFC1918 IP
+literals); decisions 6 to 14 below. It supersedes decision 4's startup-only rule and decision 1's
+HTTPS:443 and no-IP-literal limits for profile grants only; `EGRESS_PRIVATE_TARGETS` keeps its
+exact meaning. The owner's rulings of 2026-10-14 rewrote decisions 12 (Owners create, Admins
+select) and 13 (open-internet workspaces may use profiles behind a switch) and kept decision 9's
+RFC1918-IPv4-only rule.
+Amendment 2 (2026-10-14, owner-decided 2026-10-14, issue #124): Docker/LAN subnet overlap
+detection and a `route` preflight layer (decision 15, advisory only, as the owner kept it); a
+cached sandbox handle is revalidated with attach's topology rules before reuse (decision 16).
 
 ## Context
 
@@ -80,15 +86,16 @@ An NSS database mounted read-only failed even the positive control; the
 successful test used a writable, disposable workspace-local database.
 Scripts and receipts are in `spikes/vendordb-kb-campaign-20261011/`.
 
-## Amendment 1 (2026-10-14, proposed): online LAN network profiles
+## Amendment 1 (2026-10-14, owner-decided 2026-10-14): online LAN network profiles
 
 Issue #124. Functional testing against a LAN service such as `http://10.20.30.24:23001`
 needed host forwarding, a synthetic HTTPS wrapper, temporary certificate trust, a deployment
 environment edit and a global Gateway restart. Decisions 1 to 4 explain why: grants were a
 startup-only environment setting limited to exact DNS names, HTTPS on port 443 and mandatory
 expiration. The owner asked for supported LAN test connectivity and for this ADR (and the
-ADR-0006/0009/0010/0020 decisions it touches) to be amended before implementation. Everything
-below is proposed until the owner accepts it; the owner choices it had to make are marked.
+ADR-0006/0009/0010/0020 decisions it touches) to be amended before implementation. The owner
+ruled on the open choices on 2026-10-14 (minimal human intervention, "现在都是测试"): decisions 12
+and 13 below are the decided text; decision 9's RFC1918-IPv4-only rule stands as written.
 
 6. **Network profiles are durable configuration, changed online.** A network profile is a named,
    reusable set of grants stored in the Gateway database (`network_profiles`,
@@ -147,20 +154,38 @@ below is proposed until the owner accepts it; the owner choices it had to make a
     workspace network and the outbound bridge, whose gateway is the host) or equals the reserved
     host target, so a profile cannot reach the Gateway, another workspace's proxy or the Docker
     host; the reserved host keeps ADR-0009's path only.
-12. **Who owns profiles (owner choice, proposed).** A profile reaches into the deployment's
-    private networks, an installation-level fact, as the environment setting was. Defining,
-    replacing and deleting a profile, and selecting profiles for a workspace, is the root's alone
-    (the operator credential or the protected account, ADR-0022 amendment 6). Workspace Owners
-    and Admins read which profiles their workspace selects. Bots and run tokens have no route
-    that creates, selects or broadens a grant, and an approval never adds one. Letting a
-    workspace Owner choose among root-published profiles is a later owner decision.
-13. **A workspace with a profile is a trusted-test workspace (owner choice, proposed).** It is
-    labelled as such in its settings and its network response. Reuse across workspaces is
-    explicit, one selection per workspace, and grants connectivity only, never cookies or files.
-    Selecting a profile for an open-internet (`*`) workspace, or setting `*` on a workspace that
-    selects one, is refused: an untrusted-browsing workspace never holds LAN reach (ADR-0010
-    decision 5). Functional tests run in a workspace with an explicitly selected profile; their
-    success is not evidence that the default network policy or isolation gates pass.
+12. **Owners create profiles, Admins select them (owner-decided 2026-10-14).** The root (the
+    operator credential or the protected account, ADR-0022 amendment 6) creates, replaces and
+    deletes any profile; a profile it creates has no owner and is available to every workspace.
+    A person who is Owner of at least one workspace also creates profiles: such a profile
+    records its creator (`ownerUserId`) and is available in exactly the workspaces where that
+    person holds the Owner role now, so a co-Owner sees and selects it there. Only its creator
+    and the root replace or delete it. An Admin or Owner of a workspace selects, deselects and
+    sets the expiry of that workspace's selections among its available profiles; a selection
+    that is already in place may be kept even if its profile is no longer available there (its
+    creator lost the Owner role), and the root may select any profile. The profile list shows
+    the root every profile and an Owner the profiles available in the workspaces they own; the
+    workspace network view shows its Admins and Owners the profiles they may select. The overlap
+    report stays the root's. Bots and run tokens have no route that creates, selects or broadens
+    a grant, and an approval never adds one. Superseded proposal: root-only definition and
+    selection.
+13. **A workspace with a profile is a trusted-test workspace; open-internet workspaces may use
+    profiles behind a switch (owner-decided 2026-10-14).** It is labelled as such in its
+    settings and its network response. Reuse across workspaces is explicit, one selection per
+    workspace, and grants connectivity only, never cookies or files. An open-internet (`*`)
+    workspace may select profiles while its switch `profilesOnOpenInternet` is on, which is the
+    default; an Admin or Owner sets it (`PUT /api/workspaces/:id/network-settings`, audited as
+    `workspace.network_settings_set`). With the switch off, selecting a profile on a `*`
+    workspace or setting `*` on a workspace that selects one is refused (`reason:
+    open_internet_with_network_profiles`), and turning the switch off on a `*` workspace that
+    selects a profile is refused the same way. This relaxes ADR-0010 decision 5 for the
+    workspaces that use it: page content an open-internet bot reads can steer it toward the
+    granted LAN origins, so such a workspace must not hold production credentials and its LAN
+    targets must be test services; the switch exists to restore the stricter rule per
+    workspace. `*` itself still never implies LAN access (decision 11). Functional tests run in
+    a workspace with an explicitly selected profile; their success is not evidence that the
+    default network policy or isolation gates pass. Superseded proposal: profiles always refused
+    on `*` workspaces.
 14. **Diagnostics name the failing layer.** A preflight for one URL reports policy denial, DNS,
     TCP, TLS or the HTTP response as the failing layer, executed from the workspace's proxy (the
     real network vantage point) with no model call and nothing persisted. Detection of
@@ -178,6 +203,51 @@ below is proposed until the owner accepts it; the owner choices it had to make a
 | 9 | Malformed, broad and special-address rules rejected; schemes, ports and expiry bounded | `contracts/src/network-profile.test.ts`; `sandbox-docker/src/lan-egress.test.ts` | invalid grants admitted zero |
 | 10 | Hook and proxy admit exactly the granted scheme, host and port, deny expired grants and close expired tunnels | `contracts/src/network-profile.test.ts`; `sidecar/src/hooks/pre-tool-use-lan.test.ts`; `sandbox-docker/src/lan-egress.test.ts`; `acceptance/lan-egress.container.test.ts` (T2) | forbidden LAN connections zero |
 | 11 | `*` and patterns never admit a private target; the proxy refuses grants inside its own networks or at the host target | `contracts/src/network-profile.test.ts`; `sandbox-docker/src/lan-egress.test.ts` | infrastructure targets reached through a grant zero |
-| 12 | Only the root defines and selects; Owners and Admins read; run tokens have no route | `gateway/src/api/network-routes.test.ts` | grants created or selected by non-root principals zero |
-| 13 | Selection refused on a `*` workspace and `*` refused on a selecting workspace; trusted-test label returned | `gateway/src/api/network-routes.test.ts` | open-internet workspaces with LAN grants zero |
+| 12 | Root manages every profile; an Owner creates profiles available only where they are Owner and edits only their own; an Admin selects available profiles and is refused others; Members and run tokens have no route | `gateway/src/api/network-routes.test.ts`; `gateway/src/api/network-ownership.test.ts`; `gateway/src/api/role-actions.test.ts` | grants selected outside a profile's availability zero |
+| 13 | With the switch on (default) a `*` workspace selects profiles; with it off selection on `*` and `*` on a selecting workspace are refused, and the switch cannot turn off under an active selection on `*`; the switch change is audited; trusted-test label returned | `gateway/src/api/network-routes.test.ts`; `gateway/src/api/network-ownership.test.ts` | open-internet workspaces with LAN grants and the switch off zero |
 | 14 | Preflight reports policy, DNS, TCP, TLS or HTTP as the failing layer without a model call | `gateway/src/network/network-preflight.test.ts`; `acceptance/lan-egress.container.test.ts` | preflights with an unattributed failure zero |
+
+## Amendment 2 (2026-10-14, owner-decided 2026-10-14): overlap detection and cached-handle revalidation
+
+Issue #124, the follow-ups decision 14 named. The owner accepted both decisions on 2026-10-14 and
+kept overlap detection advisory.
+
+Correction to the amendment 1 evidence: the T2 `acceptance/lan-egress.container.test.ts` failure
+on Testbox (`502` for the granted LAN origin) was two defects in the test, not in the proxy or
+in decision 11. The fixture script was bind-mounted from the test user's `0700` temporary
+directory, which the image's `node` user (uid 1000) cannot read when the test user has another
+uid (Testbox: 1001), so nothing listened and the proxy's upstream connection was refused; and
+the helper that holds a slow request returned a bare promise from an async function, which
+adopted it, so revocation always arrived after the response had finished. With both fixed the
+test passed three times in a row there against the v0.6.7 proxy image. Decision 11 stands: the
+Docker host's LAN address is outside the proxy's own networks and is reachable through a grant.
+
+15. **Docker/LAN subnet overlap is detected, reported and never repaired silently.** A LAN target
+    whose address lies inside the subnet of a Docker network on the same daemon is routed by the
+    host into that bridge, not onto the LAN, and no grant can change that. The Gateway compares
+    every LAN target it knows (profile subnet rules, profile host-rule addresses,
+    `EGRESS_PRIVATE_TARGETS` addresses and the operator-declared `NETWORK_LAN_CIDRS`) with the
+    IPv4 subnets of every network the sandbox provider reports. Each overlap is logged as a
+    warning at Gateway startup, listed for the root at `GET /api/network-overlaps`, and shown on
+    the network screen. The per-URL preflight adds a `route` layer after `policy`: a target
+    address inside a Docker network fails there, naming the network, before any probe runs.
+    Detection is advisory: a profile or selection is not refused for an overlap, because Docker
+    networks come and go independently of profiles. The Gateway never creates, removes or
+    renumbers a Docker network; choosing non-conflicting `default-address-pools` and migrating
+    existing networks remain an operator procedure.
+16. **A cached sandbox handle is revalidated before reuse, with attach's rules.** Before the
+    registry reuses a cached handle it asks the provider to verify the sandbox's topology with
+    the same rules a fresh attach applies: the workspace container exists, carries the
+    workspace's labels, is attached to exactly its own workspace network and has no direct host
+    alias; the egress proxy keeps its two networks and host target (the existing policy push
+    already checks the proxy). A mismatch drops the cached handle and reopens through attach,
+    whose refusal then stands; a network added to a running workspace by hand therefore stops
+    working at its next use instead of after the next Gateway restart. Fresh-attach validation
+    is never relaxed to make a topology work.
+
+## Verification (amendment 2)
+
+| Decision | Concrete meaning | Test | Metric |
+| --- | --- | --- | --- |
+| 15 | IPv4 overlap between LAN targets and provider networks found exactly; reported at startup, at the root route and as a failed `route` preflight layer; nothing refused or changed | `contracts/src/network-overlap.test.ts`; `gateway/src/network/network-overlaps.test.ts`; `gateway/src/network/network-preflight.test.ts`; `sandbox-docker/src/network-topology.test.ts`; `sandbox-docker/src/docker-provider.container.test.ts` (T2) | overlapping LAN targets left unreported zero |
+| 16 | A cached handle whose workspace container gained a network, lost its own or gained a host alias is dropped and reattached, and attach refuses it | `sandbox-docker/src/network-topology.test.ts`; `gateway/src/workspaces/sandbox-revalidation.test.ts`; `sandbox-docker/src/docker-provider.container.test.ts` (T2) | runs on a tampered topology through a cached handle zero |

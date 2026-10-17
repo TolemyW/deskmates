@@ -12,8 +12,15 @@ import type {
   MemoryConfirmation,
   MemoryEntry,
   MemoryEntrySource,
+  MemoryFreshnessReason,
+  MemoryMaintenanceSettings,
+  MemoryOrganizeJob,
+  MemoryRecheckJob,
+  MemoryRevalidation,
+  MemoryRevalidationDecision,
   MemoryReviewBatch,
   MemoryReviewGroup,
+  MemorySplitProposal,
   MemorySuggestionStatus,
   MemorySupersession,
   MemoryVersion,
@@ -156,13 +163,72 @@ export interface KnowledgeApi {
   ): Promise<{ entries: LearnedMemoryEntry[]; nextCursor?: string }>;
   undoMemoryBatch(workspaceId: WorkspaceId, batchId: string): Promise<MemoryReviewBatch>;
   undoMemoryEntry(entryId: string): Promise<MemoryEntry>;
-  writeMemory(id: BotId, body: string, expectedVersion: string): Promise<MemoryView>;
+  /** `appliesFromNextRun`: a run of the bot was live or parked; it sees the edit next time. */
+  writeMemory(
+    id: BotId,
+    body: string,
+    expectedVersion: string,
+  ): Promise<MemoryView & { appliesFromNextRun: boolean }>;
+  // ADR-0011 amendment 4: revalidation, drafts from observations and model organisation.
+  /** "Needs revalidation" after a sweep (A26), newest first, with exact totals per reason. */
+  listMemoryRevalidations(
+    workspaceId: WorkspaceId,
+    filters?: { cursor?: string; limit?: number; view?: "all" | "needs_human" },
+  ): Promise<MemoryRevalidationsPage>;
+  /** The maintenance settings, the latest recheck job and today's recheck count (A28, A34). */
+  getMemoryMaintenance(workspaceId: WorkspaceId): Promise<MemoryMaintenanceView>;
+  updateMemoryMaintenanceSettings(
+    workspaceId: WorkspaceId,
+    patch: Partial<MemoryMaintenanceSettings>,
+  ): Promise<MemoryMaintenanceSettings>;
+  decideMemoryRevalidation(
+    workspaceId: WorkspaceId,
+    id: string,
+    decision: MemoryRevalidationDecision,
+  ): Promise<MemoryRevalidation>;
+  /** A pending Knowledge proposal citing the notes (A29); it publishes nothing. */
+  draftKnowledgeFromObservations(
+    workspaceId: WorkspaceId,
+    input: { entryIds: string[]; title?: string; targetDocumentId?: string },
+  ): Promise<KnowledgeProposal>;
+  getMemoryOrganizeJob(workspaceId: WorkspaceId): Promise<MemoryOrganizeJob | undefined>;
+  requestMemoryOrganize(workspaceId: WorkspaceId): Promise<MemoryOrganizeJob>;
+  resetMemoryTopicLabels(workspaceId: WorkspaceId): Promise<number>;
+  listMemorySplits(
+    workspaceId: WorkspaceId,
+    filters?: { cursor?: string; limit?: number },
+  ): Promise<{ splits: MemorySplitProposal[]; nextCursor?: string; total: number }>;
+  decideMemorySplit(
+    workspaceId: WorkspaceId,
+    id: string,
+    decision: "accept" | "reject" | "undo",
+  ): Promise<MemorySplitProposal>;
+}
+
+/** One page of "Needs revalidation" (ADR-0011 amendment 4, A26). */
+export interface MemoryRevalidationsPage {
+  revalidations: MemoryRevalidation[];
+  nextCursor?: string;
+  total: number;
+  /** Open flags a person must answer (A26, A28). */
+  needsHuman: number;
+  byReason: Partial<Record<MemoryFreshnessReason, number>>;
+}
+
+/** Memory maintenance of one workspace (ADR-0011 amendment 4, A28, A34). */
+export interface MemoryMaintenanceView {
+  settings: MemoryMaintenanceSettings;
+  /** Notes sent to recheck jobs in the last 24 hours. */
+  recheckedToday: number;
+  recheck?: MemoryRecheckJob;
 }
 
 export function createKnowledgeApi(t: HttpTransport): KnowledgeApi {
   const entry = (entryId: string) => `/api/memory/entries/${encodeURIComponent(entryId)}`;
   const review = (workspaceId: WorkspaceId, path: string) =>
     `/api/workspaces/${encodeURIComponent(workspaceId)}/memory-review/${path}`;
+  const memory = (workspaceId: WorkspaceId, path: string) =>
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/memory/${path}`;
   return {
     async commitMemoryBatch(workspaceId, input) {
       return (
@@ -305,16 +371,70 @@ export function createKnowledgeApi(t: HttpTransport): KnowledgeApi {
       return (await t.json<{ entry: MemoryEntry }>("POST", `${entry(entryId)}/undo`, {})).entry;
     },
     async writeMemory(id, body, expectedVersion) {
+      const r = await t.json<{ memory: MemoryView; appliesFromNextRun?: boolean }>(
+        "PATCH",
+        `/api/bots/${encodeURIComponent(id)}/memory`,
+        { body, expectedVersion },
+      );
+      return { ...r.memory, appliesFromNextRun: r.appliesFromNextRun === true };
+    },
+    listMemoryRevalidations(workspaceId, filters = {}) {
+      return t.json("GET", `${memory(workspaceId, "revalidations")}${query({ ...filters })}`);
+    },
+    getMemoryMaintenance(workspaceId) {
+      return t.json("GET", memory(workspaceId, "maintenance"));
+    },
+    async updateMemoryMaintenanceSettings(workspaceId, patch) {
       return (
-        await t.json<{ memory: MemoryView }>(
-          "PATCH",
-          `/api/bots/${encodeURIComponent(id)}/memory`,
-          {
-            body,
-            expectedVersion,
-          },
+        await t.json<{ settings: MemoryMaintenanceSettings }>(
+          "PUT",
+          memory(workspaceId, "maintenance"),
+          stripUndefined({ ...patch }),
         )
-      ).memory;
+      ).settings;
+    },
+    async decideMemoryRevalidation(workspaceId, id, decision) {
+      return (
+        await t.json<{ revalidation: MemoryRevalidation }>(
+          "POST",
+          `${memory(workspaceId, "revalidations")}/${encodeURIComponent(id)}`,
+          { decision },
+        )
+      ).revalidation;
+    },
+    async draftKnowledgeFromObservations(workspaceId, input) {
+      return (
+        await t.json<{ proposal: KnowledgeProposal }>(
+          "POST",
+          memory(workspaceId, "document-drafts"),
+          stripUndefined({ ...input }),
+        )
+      ).proposal;
+    },
+    async getMemoryOrganizeJob(workspaceId) {
+      return (await t.json<{ job?: MemoryOrganizeJob }>("GET", memory(workspaceId, "organize")))
+        .job;
+    },
+    async requestMemoryOrganize(workspaceId) {
+      return (await t.json<{ job: MemoryOrganizeJob }>("POST", memory(workspaceId, "organize"), {}))
+        .job;
+    },
+    async resetMemoryTopicLabels(workspaceId) {
+      return (
+        await t.json<{ reset: number }>("POST", memory(workspaceId, "organize/reset-labels"), {})
+      ).reset;
+    },
+    listMemorySplits(workspaceId, filters = {}) {
+      return t.json("GET", `${memory(workspaceId, "splits")}${query({ ...filters })}`);
+    },
+    async decideMemorySplit(workspaceId, id, decision) {
+      return (
+        await t.json<{ split: MemorySplitProposal }>(
+          "POST",
+          `${memory(workspaceId, "splits")}/${encodeURIComponent(id)}`,
+          { decision },
+        )
+      ).split;
     },
   };
 }

@@ -2,6 +2,7 @@
 
 import type { OperatorConfig } from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
+import { modelRegistryOf } from "../config/model-upstreams.js";
 import type { GatewayContext } from "../context.js";
 
 /**
@@ -21,6 +22,8 @@ export function registerConfigRoutes(app: FastifyInstance, ctx: GatewayContext):
       cheapModel: ctx.config.cheapModel,
       release: ctx.config.release ?? null,
       cronTimeZone: ctx.config.cronTimeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      // Model ids with their upstream ids (ADR-0039 decision 8); never a URL or a token.
+      models: modelRegistryOf(ctx.config).registered(),
     }),
   );
 }

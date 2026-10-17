@@ -110,4 +110,6 @@ a section to this README.
 - [Reload drafts and authorized receipt identities (#73/#75)](docs/reload-drafts-and-receipt-identities.md)
 - [Responsive detail panes](docs/responsive-detail-panes.md)
 - [Roadmap](docs/roadmap.md): bot management
+- [Run progress: chat activity, run screen, approval waits (issue #9)](docs/run-progress.md)
+- [Run audit (ADR-0042)](docs/run-index.md): the run drawer's story, what a run changed, marks
 - [Web interaction closeout: management and screen recovery](docs/management-and-screen-recovery.md)

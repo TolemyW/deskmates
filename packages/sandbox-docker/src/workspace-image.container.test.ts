@@ -274,6 +274,26 @@ describe.skipIf(!available)("workspace image (T2, slow: real Chromium, MCP, noVN
       timeoutMs: 60_000,
     });
     expect(link.stdout.trim(), link.stderr).toBe("function");
+    // Every runtime dependency of the sidecar must resolve the same way, from the sidecar's own
+    // directory (v0.7.0 shipped without `openai`, and no sidecar could start).
+    const sidecarDeps = Object.keys(
+      (
+        JSON.parse(
+          readFileSync(new URL("../../sidecar/package.json", import.meta.url), "utf8"),
+        ) as { dependencies: Record<string, string> }
+      ).dependencies,
+    );
+    const resolved = await provider.exec(handle as SandboxHandle, {
+      cmd: [
+        "node",
+        "-e",
+        "const {existsSync}=require('node:fs');const missing=process.argv.slice(1).filter(n=>!existsSync('/opt/deskmates/node_modules/'+n+'/package.json'));console.log(JSON.stringify(missing))",
+        ...sidecarDeps,
+      ],
+      cwd: "/opt/deskmates/sidecar",
+      timeoutMs: 60_000,
+    });
+    expect(JSON.parse(resolved.stdout), resolved.stderr).toEqual([]);
     // MCP 0.0.82 / CLI 0.1.21 each ship their own alpha driver. The global 1.58.2
     // package launches Chromium; its version alone does not identify the tool runtime.
     const runtime = await provider.exec(handle as SandboxHandle, {

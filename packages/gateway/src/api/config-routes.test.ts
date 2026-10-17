@@ -28,6 +28,10 @@ describe("GET /api/config", () => {
       cheapModel: testConfig().cheapModel,
       release: null,
       cronTimeZone: "UTC",
+      models: [
+        { model: testConfig().cheapModel, upstream: "default" },
+        { model: testConfig().defaultModel, upstream: "default" },
+      ],
     });
   });
 
@@ -39,6 +43,7 @@ describe("GET /api/config", () => {
       cheapModel: testConfig().cheapModel,
       release: "v0.2.0",
       cronTimeZone: "UTC",
+      models: expect.any(Array),
     });
   });
 
@@ -47,5 +52,35 @@ describe("GET /api/config", () => {
     const raw = await (await fetch(`${h.baseUrl}/api/config`)).text();
     expect(raw).not.toContain(testConfig().modelBaseUrl);
     expect(raw).not.toContain(TEST_UPSTREAM_TOKEN);
+  });
+
+  it("lists registered models with upstream ids, never a URL or token (ADR-0039)", async () => {
+    h = await startHarness({
+      cheapModel: "local-27b",
+      modelUpstreams: [
+        {
+          id: "local",
+          baseUrl: "http://10.20.50.16:8004",
+          models: ["local-27b"],
+          protocol: "anthropic",
+        },
+        {
+          id: "vl",
+          baseUrl: "http://10.20.50.16:8005",
+          authToken: "vl-token-never-in-a-response",
+          models: ["local-vl"],
+          protocol: "anthropic",
+        },
+      ],
+    });
+    const res = await h.api<OperatorConfig>("GET", "/api/config");
+    expect(res.json.models).toEqual([
+      { model: "local-27b", upstream: "local" },
+      { model: "local-vl", upstream: "vl" },
+      { model: testConfig().defaultModel, upstream: "default" },
+    ]);
+    const raw = await (await fetch(`${h.baseUrl}/api/config`)).text();
+    for (const secret of ["10.20.50.16", "vl-token-never-in-a-response", TEST_UPSTREAM_TOKEN])
+      expect(raw).not.toContain(secret);
   });
 });

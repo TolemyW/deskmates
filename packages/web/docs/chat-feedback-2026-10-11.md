@@ -17,6 +17,13 @@ and does not write messages or wake a bot. Incoming handoff cards retain their o
 identity/read state and are excluded from the additional feed. The header reflects active work
 elsewhere too. This activity projection is not an additional unread-notification system.
 
+Update (2026-10-17). The projection is no longer a block pinned under the newest message, where
+a task finished the day before read as the answer to the question just asked. A finished run from
+elsewhere now sits in the transcript at the time it ended, between the messages before and after
+it, with a line above its card saying where it came from; a run still in progress sits below the
+newest message. Older finished runs load from a control above the transcript, next to the
+transcript's own. The header line still reflects active work elsewhere.
+
 File references use compact filename/path cards and open the existing bounded rich renderer in
 a focus-managed drawer. Markdown headings, lists, tables and code render there; the existing
 untrusted-content, remote-image opt-in, range-budget and download policies still apply.

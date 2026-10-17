@@ -1,22 +1,41 @@
 // Operator-facing registry routes: bots (packages/gateway/docs/http-api.md). Workspace routes
 // are in `workspace-routes.ts`.
 
-import type { BotAvatar, BotDefinition, BotId, Thread, WorkspaceId } from "@deskmates/contracts";
-import { DeskmatesError, canRetryWelcome, decidedByHuman, isBotAvatar } from "@deskmates/contracts";
+import type {
+  AgentRuntime,
+  BotAvatar,
+  BotDefinition,
+  BotId,
+  Thread,
+  WorkspaceId,
+} from "@deskmates/contracts";
+import {
+  AGENT_RUNTIMES,
+  DeskmatesError,
+  canRetryWelcome,
+  decidedByHuman,
+  isAgentRuntime,
+  isBotAvatar,
+  runtimeProtocol,
+} from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
-import type { BotPatch } from "../bots/bots.js";
+import { moveBotDirectories } from "../bots/bot-directories.js";
+import { type BotPatch, assertBotName } from "../bots/bots.js";
 import { hashWebhookToken, newWebhookToken } from "../bots/webhook-token.js";
+import { modelRegistryOf, upstreamSpeaks } from "../config/model-upstreams.js";
 import type { GatewayContext } from "../context.js";
 import { newId } from "../db/ids.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
 import { welcomeDeliveryOf } from "../threads/welcome-delivery.js";
 import { requestActorId } from "./actor.js";
 import { SOUL_BODY_MAX_BYTES } from "./memory-routes.js";
+import { botsByIds } from "./name-lookup.js";
 import { parseOffsetQuery } from "./pagination.js";
 import { requestTenant } from "./route-policy.js";
 import {
   asCronEntries,
   asRecord,
+  optionalBoolean,
   optionalEffort,
   optionalString,
   optionalStringArray,
@@ -34,8 +53,17 @@ export function registerRegistryRoutes(
   scheduler: Scheduler,
 ): void {
   app.get<{
-    Querystring: { workspaceId?: string; offset?: string; limit?: string; q?: string };
+    Querystring: {
+      workspaceId?: string;
+      offset?: string;
+      limit?: string;
+      q?: string;
+      ids?: string;
+    };
   }>("/api/bots", async (request) => {
+    // A name lookup asks for the bots it labels, at most 100 (#113 §3.2).
+    if (request.query.ids !== undefined)
+      return { bots: botsByIds(ctx, request, request.query.ids, request.query.workspaceId) };
     const readable = readableWorkspaceIds(ctx, request, "guest");
     // #113 slice B: the Contacts and Computer rails read one workspace's bots a page at a time
     // (`name, id`, 50 by default, at most 100) with server search. Without paging parameters the
@@ -69,6 +97,13 @@ export function registerRegistryRoutes(
     const cheapModel = optionalString(body, "cheapModel");
     if (model !== undefined) requirePricedModel(ctx, "model", model);
     if (cheapModel !== undefined) requirePricedModel(ctx, "cheapModel", cheapModel);
+    // ADR-0044 decision 7: the loop and the model it will drive must speak the same protocol.
+    const runtime = optionalRuntime(body) ?? undefined;
+    requireRuntimeModel(
+      ctx,
+      runtime ?? ctx.config.defaultRuntime,
+      model ?? ctx.config.defaultModel,
+    );
     // The reasoning knob (contracts `reasoning.ts`); `null` at create means the same as absent.
     const effort = optionalEffort(body) ?? undefined;
     const thinking = optionalThinking(body) ?? undefined;
@@ -92,6 +127,7 @@ export function registerRegistryRoutes(
         workspaceId: requireString(body, "workspaceId") as WorkspaceId,
         ...(model !== undefined ? { model } : {}),
         ...(cheapModel !== undefined ? { cheapModel } : {}),
+        ...(runtime !== undefined ? { runtime } : {}),
         ...(effort ? { effort } : {}),
         ...(thinking ? { thinking } : {}),
         ...(avatar ? { avatar } : {}),
@@ -100,12 +136,15 @@ export function registerRegistryRoutes(
         ...(cron ? { cron } : {}),
         webhookTokenHash: hashWebhookToken(webhookToken),
       });
-      // Issue #89: the welcome run below holds this bot's lane, which makes a SOUL PATCH right
-      // after create 409 lane_busy. Writing the initial SOUL here, through the canonical write,
-      // commits it with the bot and its welcome run, so the welcome already speaks in it.
+      // Issue #89: a SOUL PATCH right after create would only reach the welcome run's next
+      // attempt (ADR-0043 decision 3). Writing the initial SOUL here, through the canonical
+      // write, commits it with the bot and its welcome run, so the welcome already speaks in it.
       if (soul !== undefined) {
         const initial = ctx.bots.canonicalSoul(bot.id);
-        if (initial) ctx.bots.updateCanonicalSoul(bot.id, soul, initial.version);
+        if (initial)
+          ctx.bots.updateCanonicalSoul(bot.id, soul, initial.version, {
+            createdBy: decidedByHuman(requestActorId(request, body)),
+          });
       }
       ctx.audit.record({
         action: "bot.create",
@@ -160,17 +199,37 @@ export function registerRegistryRoutes(
   }));
 
   /**
-   * The editable fields: the cron entries, the two model overrides and the reasoning knob. A
-   * model is configuration, not a create-time property — a deployment that swaps models would
-   * otherwise have to delete and recreate every bot. Each key is independent: absent leaves the
-   * field alone and `null` clears an override, so the bot inherits `DEFAULT_MODEL` /
-   * `CHEAP_MODEL` (or the SDK's own reasoning default) again. Everything else stays create-time.
+   * Every field but the workspace is editable after create (ADR-0043 decision 1): name, role,
+   * connectors, message allowlist, the two model overrides, the reasoning knob, avatar, cron, and
+   * the pause flag (ADR-0026 amendment 1). Each key is independent: absent leaves the field alone
+   * and `null` clears an override, so the bot inherits `DEFAULT_MODEL` / `CHEAP_MODEL` (or the
+   * SDK's own reasoning default) again. A change reaches the bot from its next run: a live run
+   * keeps the configuration its row froze.
+   *
+   * A rename moves `/home/<name>` and `/work/bots/<name>` in the workspace container first and is
+   * refused while the bot has a live or parked run; the peers' allowlists, the private chat title
+   * and generated group titles follow it in the same transaction.
    */
   app.patch<{ Params: { id: string } }>("/api/bots/:id", async (request) => {
     const body = asRecord(request.body);
     const id = request.params.id as BotId;
-    ctx.bots.mustGet(id);
+    const current = ctx.bots.mustGet(id);
     const patch: BotPatch = {};
+    if (body.name !== undefined) {
+      const name = requireString(body, "name").trim();
+      assertBotName(name);
+      if (name !== current.name) {
+        ctx.bots.assertNameFree(current.workspaceId, name, id);
+        patch.name = name;
+      }
+    }
+    if (body.role !== undefined) patch.role = (optionalString(body, "role") ?? "").trim();
+    for (const key of ["connectors", "messageAllowlist"] as const) {
+      if (body[key] === undefined) continue;
+      patch[key] = [
+        ...new Set((optionalStringArray(body, key) ?? []).map((s) => s.trim()).filter(Boolean)),
+      ];
+    }
     if (body.cron !== undefined && body.cron !== null) patch.cron = asCronEntries(body.cron);
     for (const key of ["model", "cheapModel"] as const) {
       if (body[key] === undefined) continue;
@@ -184,40 +243,75 @@ export function registerRegistryRoutes(
       requirePricedModel(ctx, key, value);
       patch[key] = value;
     }
+    const runtime = optionalRuntime(body);
+    if (runtime !== undefined) patch.runtime = runtime;
     const effort = optionalEffort(body);
     if (effort !== undefined) patch.effort = effort;
     const thinking = optionalThinking(body);
     if (thinking !== undefined) patch.thinking = thinking;
     const avatar = optionalAvatar(body);
     if (avatar !== undefined) patch.avatar = avatar;
-    if (Object.keys(patch).length === 0) {
+    const paused = optionalBoolean(body, "paused");
+    if (Object.keys(patch).length === 0 && paused === undefined && body.name === undefined) {
       throw new DeskmatesError(
         "validation",
-        "nothing to update: send cron, model, cheapModel, effort, thinking or avatar",
+        "nothing to update: send name, role, connectors, messageAllowlist, cron, model, cheapModel, runtime, effort, thinking, avatar or paused",
       );
     }
-    const actor = decidedByHuman(requestActorId(request, body));
-    const updated = {
-      bot: ctx.db.transaction(() => {
-        const before = ctx.bots.mustGet(id);
-        const after = ctx.bots.update(id, patch);
-        ctx.audit.record({
-          action: "bot.update",
-          actor,
-          workspaceId: after.workspaceId,
-          targetKind: "bot",
-          targetId: id,
-          before: pick(botConfiguration(before), Object.keys(patch)),
-          after: pick(botConfiguration(after), Object.keys(patch)),
-        });
-        return after;
-      })(),
-    };
-    if (patch.model !== undefined) {
-      queueVisionProbe(ctx, updated.bot, "model_changed", actor);
-      scheduler.kick();
+    // ADR-0044 decision 7: judged on what the bot will run with after the patch.
+    if (
+      patch.runtime !== undefined ||
+      patch.model !== undefined ||
+      patch.cheapModel !== undefined
+    ) {
+      const current = ctx.bots.mustGet(id);
+      const effectiveRuntime =
+        (patch.runtime === undefined ? current.runtime : (patch.runtime ?? undefined)) ??
+        ctx.config.defaultRuntime;
+      const effectiveModel =
+        (patch.model === undefined ? current.model : (patch.model ?? undefined)) ??
+        ctx.config.defaultModel;
+      const effectiveCheap =
+        (patch.cheapModel === undefined ? current.cheapModel : (patch.cheapModel ?? undefined)) ??
+        ctx.config.cheapModel;
+      requireRuntimeModel(ctx, effectiveRuntime, effectiveModel);
+      requireRuntimeModel(ctx, effectiveRuntime, effectiveCheap);
     }
-    return updated;
+    const actor = decidedByHuman(requestActorId(request, body));
+    const commit = () =>
+      ctx.db.transaction(() => {
+        const before = ctx.bots.mustGet(id);
+        let after = ctx.bots.update(id, patch);
+        const retitled =
+          patch.name === undefined
+            ? []
+            : ctx.threads.renameBotInTitles(id, before.name, patch.name);
+        if (paused !== undefined) after = ctx.bots.setPaused(id, paused, actor);
+        const keys = [...Object.keys(patch), ...(paused === undefined ? [] : ["paused"])];
+        if (keys.length > 0 && JSON.stringify(before) !== JSON.stringify(after))
+          ctx.audit.record({
+            action: "bot.update",
+            actor,
+            workspaceId: after.workspaceId,
+            targetKind: "bot",
+            targetId: id,
+            before: pick(botConfiguration(before), keys),
+            after: pick(botConfiguration(after), keys),
+          });
+        return { bot: after, retitled };
+      })();
+    const saved =
+      patch.name === undefined
+        ? commit()
+        : await scheduler.withIdleBot(id, async () => {
+            await moveBotDirectories(ctx, current, patch.name as string);
+            return commit();
+          });
+    for (const threadId of saved.retitled) ctx.bus.publish({ type: "thread_members", threadId });
+    if (patch.model !== undefined) queueVisionProbe(ctx, saved.bot, "model_changed", actor);
+    // Resuming lets the runs that waited out the pause start; a new model queues a probe.
+    if (patch.model !== undefined || paused === false) scheduler.kick();
+    return { bot: saved.bot };
   });
 }
 
@@ -246,18 +340,47 @@ function optionalWelcome(body: Record<string, unknown>): boolean {
 }
 
 /** The configuration a bot's audit rows record: never its webhook token or SOUL text. */
+/** `runtime` in a body: absent → undefined, `null` → null (clear), else a known runtime. */
+function optionalRuntime(body: Record<string, unknown>): AgentRuntime | null | undefined {
+  const value = body.runtime;
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (isAgentRuntime(value)) return value;
+  throw new DeskmatesError("validation", `runtime must be one of ${AGENT_RUNTIMES.join(", ")}`, {
+    field: "runtime",
+  });
+}
+
+/**
+ * ADR-0044 decision 7: a bot's loop and the upstream serving its effective model must speak the
+ * same protocol, since the proxy never translates. A model with no upstream is refused too.
+ */
+function requireRuntimeModel(ctx: GatewayContext, runtime: AgentRuntime, model: string): void {
+  const upstream = modelRegistryOf(ctx.config).resolve(model);
+  const expected = runtimeProtocol(runtime);
+  if (upstream === undefined || !upstreamSpeaks(upstream, expected)) {
+    throw new DeskmatesError(
+      "validation",
+      `runtime ${runtime} needs model ${model} on a ${expected}-protocol upstream`,
+      { field: "runtime", runtime, model, upstreamProtocol: upstream?.protocol ?? null },
+    );
+  }
+}
+
 function botConfiguration(bot: BotDefinition): Record<string, unknown> {
   return {
     name: bot.name,
     role: bot.role,
     model: bot.model ?? null,
     cheapModel: bot.cheapModel ?? null,
+    runtime: bot.runtime ?? null,
     effort: bot.effort ?? null,
     thinking: bot.thinking ?? null,
     avatar: bot.avatar ?? null,
     connectors: bot.connectors,
     messageAllowlist: bot.messageAllowlist,
     cron: bot.cron,
+    paused: bot.pausedAt !== undefined,
   };
 }
 
@@ -283,11 +406,19 @@ function createWelcomeRun(ctx: GatewayContext, bot: BotDefinition, thread: Threa
 /**
  * A bot's model override must have a row in the price table (ADR-0023 decision 1), so every model
  * a run can be frozen on is one the Gateway can price; an unpriced override is refused at write
- * time rather than discovered as `pricing_missing` after the money is spent.
+ * time rather than discovered as `pricing_missing` after the money is spent. It must also have an
+ * upstream (ADR-0039 decision 4), so it is not discovered as `model_upstream_missing` at run time.
  */
 function requirePricedModel(ctx: GatewayContext, key: string, model: string): void {
   if (model === "") {
     throw new DeskmatesError("validation", `${key} must be a model id, not empty`, { key });
+  }
+  if (modelRegistryOf(ctx.config).resolve(model) === undefined) {
+    throw new DeskmatesError(
+      "validation",
+      `${key} "${model}" is served by no model upstream; list it in MODEL_UPSTREAMS first`,
+      { key, model },
+    );
   }
   if (ctx.prices.listForModel(model).length === 0) {
     throw new DeskmatesError(

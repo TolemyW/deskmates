@@ -16,11 +16,15 @@ import {
   registerSandboxRoutes,
 } from "./api/routes.js";
 import { registerStaticUi, resolveWebDistDir } from "./api/static-ui.js";
+import { createAppIngress } from "./app-shares/app-share-ingress.js";
+import { PausedCronNotices } from "./bots/paused-cron-notices.js";
 import { loadReleaseChannelPlugins } from "./channels/plugin-loader.js";
 import { type GatewayConfig, loadConfig } from "./config.js";
 import { type GatewayContext, buildContext } from "./context.js";
 import { openDatabase } from "./db/open.js";
 import { invokedDirectly } from "./invoked-directly.js";
+import { RunRetention } from "./ledger/run-retention.js";
+import { reportNetworkOverlaps } from "./network/network-overlaps.js";
 import { resolveProvider } from "./provider.js";
 import { RunLifecycle } from "./scheduler/run-lifecycle.js";
 import { Scheduler } from "./scheduler/scheduler.js";
@@ -128,6 +132,7 @@ export function buildGateway(
   const lifecycle = new RunLifecycle(ctx);
   const scheduler = new Scheduler(ctx, lifecycle, (msg, data) => app.log.warn(data ?? {}, msg));
   ctx.channels.setKick(() => scheduler.kick());
+  const pausedCron = new PausedCronNotices(ctx);
   const cron = new CronRunner({
     bots: ctx.bots,
     runs: ctx.runs,
@@ -137,11 +142,16 @@ export function buildGateway(
     kick: () => scheduler.kick(),
     bus: ctx.bus,
     log: (msg, data) => app.log.info(data ?? {}, msg),
+    onPausedSkip: (bot, entry, schedule) => pausedCron.skipped(bot, entry, schedule),
   });
   const taskSchedules = new TaskScheduleRunner(
     new TaskDispatcher(ctx, () => scheduler.kick()),
     undefined,
     (msg, data) => app.log.info(data ?? {}, msg),
+  );
+  // ADR-0042 decision 6: off unless RUN_EVENTS_RETENTION_DAYS is set.
+  const retention = new RunRetention(db, config.runEventsRetentionDays, (msg, data) =>
+    app.log.info(data ?? {}, msg),
   );
   app.decorate("deskmates", { ctx, scheduler, lifecycle, cron, taskSchedules });
   if (opts.surface === "combined-test") registerRoutes(app, ctx, lifecycle, scheduler, opts);
@@ -163,13 +173,18 @@ export function buildGateway(
     if (opts.startCron !== false) {
       cron.start();
       taskSchedules.start();
+      // ADR-0041 decision 4: the backfill, then a pass every interval; absent when unconfigured.
+      ctx.retrieval.indexer?.start();
+      retention.start();
     }
   });
   app.addHook("onClose", async () => {
     await ctx.channels.stop();
     cron.stop();
     taskSchedules.stop();
+    retention.stop();
     scheduler.stop();
+    await ctx.retrieval.indexer?.stop();
     db.close();
   });
   return app;
@@ -222,11 +237,27 @@ export async function main(): Promise<void> {
     await app.close();
     throw err;
   }
+  // ADR-0035 decision 2: published workspace apps on a listener of their own, when configured.
+  const appIngress = config.appShares ? createAppIngress(app.deskmates.ctx) : undefined;
+  if (appIngress && config.appShares) {
+    const { port, bind } = config.appShares;
+    await new Promise<void>((resolve, reject) => {
+      appIngress.server.once("error", reject);
+      appIngress.server.listen(port, bind, () => resolve());
+    }).catch(async (err) => {
+      await Promise.allSettled([operatorApp.close(), app.close()]);
+      throw err;
+    });
+  }
+  // ADR-0027 amendment 2 decision 15: warn about LAN targets inside a Docker network.
+  void reportNetworkOverlaps(app.deskmates.ctx, (message) => operatorApp.log.warn(message));
   // ADR-0023 amendment 1, decision 6: models in use without a result for this configuration.
   if (config.visionProbe === "auto" && app.deskmates.ctx.modelJobs.vision.sweep().length > 0)
     app.deskmates.scheduler.kick();
   const shutdown = (): void => {
-    Promise.allSettled([operatorApp.close(), app.close()]).finally(() => process.exit(0));
+    Promise.allSettled([appIngress?.close(), operatorApp.close(), app.close()]).finally(() =>
+      process.exit(0),
+    );
   };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);

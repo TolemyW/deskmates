@@ -1,0 +1,22 @@
+{
+  "workdir.cancel": "取消",
+  "workdir.convention": "使用每個機器人獨立目錄時，機器人可以讀取隊友的目錄，但不能寫入；/work/uploads 對機器人唯讀。這是為了防止失誤，不是安全邊界。必須彼此隔離的工作應放在另一個工作區。",
+  "workdir.edit": "編輯工作目錄",
+  "workdir.effective": "{value} · {source}",
+  "workdir.frozen": "已開始的執行會保留開始時的設定。",
+  "workdir.inherit": "伺服器預設（{mode}）",
+  "workdir.intro": "此工作區的機器人從哪裡開始工作：各自在自己的目錄中（預設），或全部在共用的 /work 中。",
+  "workdir.laneNoticeLabel": "同一機器人已在另一條通道上工作時，提醒本次執行",
+  "workdir.loading": "正在載入工作目錄…",
+  "workdir.mode.per-bot": "每個機器人獨立目錄（/work/bots/…）",
+  "workdir.mode.shared": "共用 /work",
+  "workdir.modeLabel": "起始目錄",
+  "workdir.off": "關閉",
+  "workdir.on": "開啟",
+  "workdir.perBotHelp": "使用每個機器人獨立目錄時，每個機器人複製自己的一份程式碼，並把交付物放在自己的目錄中，隊友可以讀取。使用共用 /work 時，所有機器人都可以寫入 /work/uploads 以外的任何位置。",
+  "workdir.roleNote": "變更工作目錄",
+  "workdir.save": "儲存工作目錄",
+  "workdir.source.gateway": "伺服器預設",
+  "workdir.source.workspace": "工作區設定",
+  "workdir.title": "工作目錄"
+}

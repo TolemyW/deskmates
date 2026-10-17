@@ -1,17 +1,35 @@
-// The upstream model endpoint, the model ids, run token lifetime and the price table. The model
+// The upstream model endpoints, the model ids, run token lifetime and the price table. The model
 // is configuration: DEFAULT_MODEL and CHEAP_MODEL are required and never defaulted here.
+// `MODEL_BASE_URL` is the `default` upstream; `MODEL_UPSTREAMS` adds more (ADR-0039).
 
 import { DeskmatesError, type ModelPrice } from "@deskmates/contracts";
 import { parseModelPrices } from "../ledger/model-price.js";
 import { type Env, optionalInt, optionalValue, required } from "./env.js";
+import {
+  MODEL_UPSTREAM_PROTOCOLS,
+  ModelRegistry,
+  type ModelUpstream,
+  type ModelUpstreamProtocol,
+  isUpstreamProtocol,
+  parseModelUpstreams,
+} from "./model-upstreams.js";
 
 /** ADR-0002 definitions: short-lived token TTL default 4 h. */
 export const MODEL_TOKEN_TTL_SECONDS_DEFAULT = 14400;
 
 export interface ModelConfig {
-  /** Upstream model endpoint and its Bearer token. Held in memory only; never written to the DB. */
+  /**
+   * The `default` upstream and its Bearer token (ADR-0039 decision 1): serves every model no
+   * other upstream lists. Held in memory only; never written to the DB. Both are empty strings
+   * only when `MODEL_BASE_URL` is unset and `modelUpstreams` lists at least one upstream: then
+   * there is no `default` upstream.
+   */
   modelBaseUrl: string;
   modelAuthToken: string;
+  /** `MODEL_UPSTREAMS`: further upstreams, each serving the model ids it lists (ADR-0039). */
+  modelUpstreams?: ModelUpstream[];
+  /** `MODEL_PROTOCOL`: what the default upstream speaks (ADR-0044); absent means anthropic. */
+  modelProtocol?: ModelUpstreamProtocol;
   defaultModel: string;
   cheapModel: string;
   /**
@@ -42,9 +60,8 @@ export interface ModelConfig {
 }
 
 export function readModelConfig(env: Env): ModelConfig {
-  return {
-    modelBaseUrl: required(env, "MODEL_BASE_URL").replace(/\/+$/, ""),
-    modelAuthToken: required(env, "MODEL_AUTH_TOKEN"),
+  const config: ModelConfig = {
+    ...upstreams(env),
     defaultModel: required(env, "DEFAULT_MODEL"),
     cheapModel: required(env, "CHEAP_MODEL"),
     ...optionalValue(env, "CLI_SMALL_FAST_MODEL", "cliSmallFastModel"),
@@ -56,6 +73,37 @@ export function readModelConfig(env: Env): ModelConfig {
     ),
     modelPrices: modelPrices(env),
     visionProbe: visionProbe(env),
+  };
+  new ModelRegistry(config).assertConfiguredModelsRoutable();
+  return config;
+}
+
+/**
+ * `MODEL_BASE_URL` / `MODEL_AUTH_TOKEN` (the `default` upstream) and `MODEL_UPSTREAMS`. The
+ * default upstream stays required unless `MODEL_UPSTREAMS` names at least one other.
+ */
+function upstreams(
+  env: Env,
+): Pick<ModelConfig, "modelBaseUrl" | "modelAuthToken" | "modelUpstreams" | "modelProtocol"> {
+  const modelUpstreams = parseModelUpstreams(env.MODEL_UPSTREAMS);
+  const protocolRaw = env.MODEL_PROTOCOL?.trim() ?? "";
+  if (protocolRaw !== "" && !isUpstreamProtocol(protocolRaw)) {
+    throw new DeskmatesError(
+      "validation",
+      `MODEL_PROTOCOL must be one of ${MODEL_UPSTREAM_PROTOCOLS.join(", ")}`,
+      { key: "MODEL_PROTOCOL", raw: protocolRaw },
+    );
+  }
+  const modelProtocol = protocolRaw === "" ? undefined : protocolRaw;
+  const base = env.MODEL_BASE_URL?.trim() ?? "";
+  if (base === "" && modelUpstreams.length > 0) {
+    return { modelBaseUrl: "", modelAuthToken: "", modelUpstreams };
+  }
+  return {
+    modelBaseUrl: required(env, "MODEL_BASE_URL").replace(/\/+$/, ""),
+    modelAuthToken: required(env, "MODEL_AUTH_TOKEN"),
+    ...(modelUpstreams.length > 0 ? { modelUpstreams } : {}),
+    ...(modelProtocol === undefined ? {} : { modelProtocol }),
   };
 }
 

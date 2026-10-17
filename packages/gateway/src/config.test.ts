@@ -6,6 +6,7 @@ import {
   GROUP_ROUTING_DEFAULT,
   MAX_TURNS_DEFAULT,
   MODEL_TOKEN_TTL_SECONDS_DEFAULT,
+  RUN_STALL_SECONDS_DEFAULT,
   RUN_TIMEOUT_SECONDS_DEFAULT,
   WEBHOOK_BODY_MAX_BYTES_DEFAULT,
   WEBHOOK_QUEUE_MAX_DEFAULT,
@@ -129,6 +130,13 @@ describe("config", () => {
     expect(() => loadConfig({ ...BASE_ENV, RUN_TIMEOUT_SECONDS: "0" })).toThrow(
       /RUN_TIMEOUT_SECONDS/,
     );
+  });
+
+  it("reads RUN_STALL_SECONDS, where 0 turns stall detection off (issue #9)", () => {
+    expect(loadConfig(BASE_ENV).runStallSeconds).toBe(RUN_STALL_SECONDS_DEFAULT);
+    expect(loadConfig({ ...BASE_ENV, RUN_STALL_SECONDS: "45" }).runStallSeconds).toBe(45);
+    expect(loadConfig({ ...BASE_ENV, RUN_STALL_SECONDS: "0" }).runStallSeconds).toBe(0);
+    expect(() => loadConfig({ ...BASE_ENV, RUN_STALL_SECONDS: "-1" })).toThrow(/RUN_STALL_SECONDS/);
   });
 
   it("reads EGRESS_PROXY_DNS as a list of IP addresses and fails startup on a bad one (ADR-0010)", () => {
@@ -275,12 +283,10 @@ describe("config", () => {
     );
   });
 
-  it("keeps the per-bot working directory opt-in and rejects unknown modes (issue #88)", () => {
-    expect(loadConfig(BASE_ENV).botWorkdir).toBe("shared");
-    expect(loadConfig({ ...BASE_ENV, DESKMATES_BOT_WORKDIR: "" }).botWorkdir).toBe("shared");
-    expect(loadConfig({ ...BASE_ENV, DESKMATES_BOT_WORKDIR: "per-bot" }).botWorkdir).toBe(
-      "per-bot",
-    );
+  it("defaults the working directory to per-bot and rejects unknown modes (ADR-0038)", () => {
+    expect(loadConfig(BASE_ENV).botWorkdir).toBe("per-bot");
+    expect(loadConfig({ ...BASE_ENV, DESKMATES_BOT_WORKDIR: "" }).botWorkdir).toBe("per-bot");
+    expect(loadConfig({ ...BASE_ENV, DESKMATES_BOT_WORKDIR: "shared" }).botWorkdir).toBe("shared");
     expect(() => loadConfig({ ...BASE_ENV, DESKMATES_BOT_WORKDIR: "worktree" })).toThrow(
       /DESKMATES_BOT_WORKDIR/,
     );
@@ -310,6 +316,11 @@ describe("config", () => {
     expect(loadConfig({ ...BASE_ENV, DESKMATES_GROUP_ROUTING: "owner-v1" }).groupRouting).toBe(
       "owner-v1",
     );
+    // ADR-0005 amendment 6: proposed, never the default.
+    expect(loadConfig({ ...BASE_ENV, DESKMATES_GROUP_ROUTING: "round-v1" }).groupRouting).toBe(
+      "round-v1",
+    );
+    expect(GROUP_ROUTING_DEFAULT).toBe("owner-v1");
     expect(() => loadConfig({ ...BASE_ENV, DESKMATES_GROUP_ROUTING: "owner" })).toThrow(
       /DESKMATES_GROUP_ROUTING/,
     );
@@ -494,11 +505,14 @@ describe("no model name literal under packages/*/src (ADR-0002 item 7, AGENTS.md
       ["cla|ude-", "gp|t-", "gl|m-", "deep|seek"].map(unfragment).join("|"),
       "i",
     );
-    // The SDK's own package name contains a matching fragment and is imported by the sidecar and
-    // the testkit; it names a dependency, not a model, so it is removed before the pattern runs.
-    const sdkPackage = ["@anthropic-ai/cla|ude-agent-sdk"].map(unfragment)[0] as string;
+    // The SDK.s own package name contains a matching fragment and is imported by the sidecar and
+    // the testkit, and the runtime id of ADR-0044 is that name without its scope; both name a
+    // dependency, not a model, so they are removed before the pattern runs.
+    const notModels = ["@anthropic-ai/cla|ude-agent-sdk", "cla|ude-agent-sdk"].map(unfragment);
     const offenders = walkPackageSources().filter((f) =>
-      pattern.test(readFileSync(f, "utf8").split(sdkPackage).join("")),
+      pattern.test(
+        notModels.reduce((text, name) => text.split(name).join(""), readFileSync(f, "utf8")),
+      ),
     );
     expect(offenders).toEqual([]);
   });

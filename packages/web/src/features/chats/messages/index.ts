@@ -14,11 +14,12 @@ export const chatsMessages = defineMessages({
   prefixes: [
     "chatInfo",
     "chatPane",
+    "chatRunStatus",
     "chatRunStop",
     "incomingHandoffs",
     "mentionQuery",
     "mentionTextarea",
-    "privateChatActivity",
+    "roundCard",
     "roundMode",
     "roundStrip",
     "thread",

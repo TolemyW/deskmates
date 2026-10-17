@@ -25,6 +25,8 @@ import type { GatewayContext } from "../context.js";
 import { isOwnInquiry } from "../model-jobs/status-inquiries.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
 import { requestActorId } from "./actor.js";
+import { parseMessageUploadIds, resolveMessageAttachments } from "./message-attachments.js";
+import { threadsByIds } from "./name-lookup.js";
 import { keysetPage, parseCursorQuery } from "./pagination.js";
 import { requestTenant } from "./route-policy.js";
 import { limitOf, seqParam } from "./seq-slices.js";
@@ -98,11 +100,17 @@ export function registerThreadRoutes(
 ): void {
   // `groupRouting` is how this Gateway routes a message with no explicit recipient (ADR-0005
   // amendment 2), so the composer can say what an unaddressed message will do before it is sent.
-  const detail = (id: ThreadId) => ({
-    thread: ctx.threads.mustGet(id),
-    members: ctx.threads.members(id),
-    groupRouting: ctx.config.groupRouting ?? GROUP_ROUTING_DEFAULT,
-  });
+  // `effectiveTurnBudget` is the turn budget the router enforces (ADR-0005 amendment 5 decision
+  // 38): the workspace setting, else the thread row's; `null` when the workspace turned it off.
+  const detail = (id: ThreadId) => {
+    const thread = ctx.threads.mustGet(id);
+    return {
+      thread,
+      members: ctx.threads.members(id),
+      groupRouting: ctx.config.groupRouting ?? GROUP_ROUTING_DEFAULT,
+      effectiveTurnBudget: ctx.limits.threadCaps(thread.workspaceId, thread.turnBudget).turnBudget,
+    };
+  };
   const summarize = (thread: Thread): ThreadSummary => {
     const latest = ctx.messages.latest(thread.id);
     const lastHandoff = ctx.privateChats.latest(thread.id);
@@ -135,8 +143,21 @@ export function registerThreadRoutes(
       cursor?: string;
       limit?: string;
       q?: string;
+      ids?: string;
     };
   }>("/api/threads", async (request) => {
+    // A name lookup asks for the threads it labels, at most 100 (#113 §3.2).
+    if (request.query.ids !== undefined) {
+      const actor = actorLabel(request.principal);
+      return {
+        threads: threadsByIds(ctx, request, request.query.ids, request.query.workspaceId).map(
+          (thread) => ({
+            ...summarize(thread),
+            unreadHandoffs: ctx.privateChats.unread(thread.id, actor),
+          }),
+        ),
+      };
+    }
     const { channel, externalKey } = request.query;
     const { cursor, limit, q } = request.query;
     // #113 slice CH (plan row 24): with `cursor`, `limit` or `q`, one page of a workspace's
@@ -420,6 +441,29 @@ export function registerThreadRoutes(
         { channel: thread.channel, threadId },
       );
     const role = workspaceRole(ctx, request, thread.workspaceId);
+    // ADR-0014 A5 decision 42: a person's own completed uploads, resolved in this workspace; a
+    // Guest attaches nothing. With an attachment the text may be blank.
+    const uploadIds = parseMessageUploadIds(body.attachments);
+    const attachments =
+      uploadIds.length === 0 || role === "guest"
+        ? []
+        : resolveMessageAttachments(
+            ctx.db,
+            thread.workspaceId,
+            actorLabel(request.principal),
+            uploadIds,
+          );
+    if (role === "guest" && uploadIds.length > 0)
+      throw new DeskmatesError("validation", "a Guest attaches no files", {
+        field: "attachments",
+        reason: "attachment_not_attachable",
+      });
+    const text =
+      attachments.length === 0
+        ? requireString(body, "body")
+        : typeof body.body === "string"
+          ? body.body
+          : "";
     if (role === "guest") {
       // A Guest reads the shared chats and posts in none; a post in their own private inquiry
       // is answered by a tool-free status job, never by a bot run (ADR-0022 amendment 7 S1).
@@ -448,7 +492,7 @@ export function registerThreadRoutes(
       // chat is already the guard's 404.
       if (thread.kind !== "chat")
         throw sideChatOnly("only an Admin posts in a conversation between bots");
-      if (ctx.router.mentionsThatJoin(threadId, requireString(body, "body")).length > 0)
+      if (ctx.router.mentionsThatJoin(threadId, text).length > 0)
         throw sideChatOnly("only an Admin adds a bot to a chat");
     }
     ctx.quotas.assertQueueRoom(requestTenant(request));
@@ -458,8 +502,9 @@ export function registerThreadRoutes(
     const previousMembers = ctx.threads.members(threadId).length;
     const result = ctx.router.postHuman({
       threadId,
-      body: requireString(body, "body"),
+      body: text,
       authorId,
+      ...(attachments.length > 0 ? { attachments } : {}),
       ...(externalId !== undefined ? { externalId } : {}),
       ...(mustReply ? { mustReply } : {}),
       ...(roundMode !== undefined ? { roundMode } : {}),

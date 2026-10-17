@@ -12,16 +12,22 @@ import type {
 
 /**
  * `query()` as the sidecar uses it: a string prompt (or, for a model job that carries an image,
- * a stream of user messages), full options, an iterable of messages.
+ * a stream of user messages), full options, an iterable of messages. The real `Query` also
+ * answers `getContextUsage`, which the run samples when it is there (`context-usage.ts`).
  */
 export type QueryFn = (params: {
   prompt: string | AsyncIterable<SDKUserMessage>;
   options: Options;
-}) => AsyncIterable<SDKMessage>;
+}) => AsyncIterable<SDKMessage> & import("./context-usage.js").ContextUsageSource;
 
 export type ToolFn = typeof tool;
 
 export type CreateSdkMcpServerFn = typeof createSdkMcpServer;
+
+/** The OpenAI Agents SDK loop (ADR-0044), yielding the same message shapes as `query()`. */
+export type OpenAiQueryFn = import("./runtime/openai/types.js").OpenAiQueryFn;
+/** One tool-free Chat Completions turn, for model jobs on the `openai-agents` runtime. */
+export type OpenAiCompletionFn = import("./runtime/openai/types.js").OpenAiCompletionFn;
 
 /**
  * The few filesystem operations context assembly, the diary and the screenshot directory need.
@@ -45,12 +51,19 @@ export interface SidecarDeps {
   saveToolEvidence?: import("./tool-evidence.js").SaveToolEvidence;
   spawnPty?: import("./tty-session.js").PtyFactory;
   observeResources?: () => Promise<import("./resource-observation.js").ResourceObservation>;
+  /** Files for the look/OCR and speech tools (ADR-0040); absent means the container itself. */
+  operationFiles?: import("./operation-input.js").OperationFiles;
   query: QueryFn;
+  /** Present when the sidecar can host the `openai-agents` runtime; a run asking for it without one fails. */
+  queryOpenAi?: OpenAiQueryFn;
+  completeOpenAi?: OpenAiCompletionFn;
   tool: ToolFn;
   createSdkMcpServer: CreateSdkMcpServerFn;
   fetch: typeof globalThis.fetch;
   fs: SidecarFs;
   now: () => Date;
+  /** Seconds since this OS process started (`process.uptime`); absent in tests that do not care. */
+  uptimeSeconds?: () => number;
   /** Process environment as seen by the sidecar; forwarded to the SDK subprocess with overrides. */
   env: Readonly<Record<string, string | undefined>>;
   sleep: (ms: number) => Promise<void>;

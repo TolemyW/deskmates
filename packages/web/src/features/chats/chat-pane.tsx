@@ -12,10 +12,23 @@ import { Markdown, looksLikeMarkdown } from "../../lib/markdown.js";
 import { approvalEchoLabel } from "../../state/actor-label.js";
 import { useActorLabel } from "../../state/session-roles.js";
 import { DesktopView } from "../computer/desktop-view.js";
+import { AttachmentCards } from "./attachment-cards.js";
 import { ChatInfo } from "./chat-info.js";
-import { ChatRunStop } from "./chat-run-stop.js";
+import { ChatRunStatus } from "./chat-run-status.js";
+import {
+  ComposerAttachButton,
+  ComposerAttachmentChips,
+  onComposerPaste,
+  useChatDropTarget,
+  useComposerAttachments,
+} from "./composer-attachments.js";
 import { IncomingHandoffs } from "./incoming-handoffs.js";
-import { PrivateChatActivity } from "./private-chat-activity.js";
+import {
+  ElsewhereActivityItem,
+  ElsewhereActivityOlder,
+  useElsewhereActivity,
+} from "./private-chat-activity.js";
+import { RoundCard, showsRoundCard } from "./round-card.js";
 import {
   RoundModeToggle,
   RoundStrip,
@@ -79,6 +92,7 @@ import {
   transcriptTimeline,
 } from "../../state/thread-view.js";
 import { ApprovalCard, approvalRefOf } from "../approvals/approval-card.js";
+import { ApproveAllBadge } from "../approvals/approval-mode.js";
 import { splitWorkspacePaths } from "../files/path-links.js";
 import { ActivityPanel } from "../runs/activity.js";
 import { firstRunPages } from "../runs/run-feed.js";
@@ -90,6 +104,22 @@ const CONNECTION_LABELS: Readonly<Record<ConnectionStatus, MessageKey>> = {
   connecting: "chatPane.connection.connecting",
   reconnecting: "chatPane.connection.reconnecting",
 };
+
+/** The Gateway's cap on approval ids per request (#113 surface 26). */
+const APPROVAL_IDS_PER_REQUEST = 100;
+
+/** The approval ids the messages name, distinct, in batches the Gateway accepts. */
+function approvalIdBatches(messages: readonly ThreadMessage[]): string[][] {
+  const ids = [
+    ...new Set(
+      messages.map((m) => approvalRefOf(m.attachments)).filter((ref) => ref !== undefined),
+    ),
+  ];
+  const batches: string[][] = [];
+  for (let i = 0; i < ids.length; i += APPROVAL_IDS_PER_REQUEST)
+    batches.push(ids.slice(i, i + APPROVAL_IDS_PER_REQUEST));
+  return batches;
+}
 
 /** One line for the header: who is in the chat and what is happening right now. */
 function membersSummary(
@@ -116,10 +146,11 @@ function membersSummary(
       .join(", "),
   });
 }
-import { UploadAttachButton, draftWithPath } from "../files/upload-attach-button.js";
 import { WorkspaceFilePreview } from "../files/workspace-file-preview.js";
+import { ReplyPreviews, replyPreviewReducer } from "./reply-preview.js";
+import { useRunActivity } from "./use-run-activity.js";
 import { type WorkspaceLockState, useWorkspaceLock } from "./use-workspace-lock.js";
-import { VisionNotice } from "./vision-notice.js";
+import { VisionNotice, useBlindMembers } from "./vision-notice.js";
 
 export interface ChatPaneProps {
   threadId: ThreadId;
@@ -141,6 +172,13 @@ export function ChatPane(props: ChatPaneProps) {
   const t = useT();
   const actorName = useActorLabel();
   const [state, dispatch] = useReducer(threadViewReducer, EMPTY_THREAD_VIEW);
+  const [previews, applyPreview] = useReducer(replyPreviewReducer, {});
+  // Issue #9: what each live run is doing now, for the status row.
+  const { activity: runActivity, apply: applyRunActivity } = useRunActivity(
+    api,
+    threadId,
+    activeRuns(state),
+  );
   const [detail, setDetail] = useState<ThreadDetailView | undefined>();
   const members = detail?.members ?? [];
   // Only `owner-v1` offers an unaddressed message to the owner first; under the walk (or an older
@@ -170,7 +208,15 @@ export function ChatPane(props: ChatPaneProps) {
   const [error, setError] = useState<string | undefined>();
   const [retryingWelcome, setRetryingWelcome] = useState(false);
   const [handoffRuns, setHandoffRuns] = useState<readonly string[]>([]);
-  const [botRuns, setBotRuns] = useState<readonly RunView[]>([]);
+  // A one-member chat also shows its bot's work elsewhere (other conversations, background
+  // tasks); a handoff that already has its own card is not repeated. Groups and Guests read none.
+  const elsewhere = useElsewhereActivity(
+    api,
+    members.length === 1 && members[0] && !guest
+      ? { botId: members[0].botId, threadId }
+      : undefined,
+    handoffRuns,
+  );
   const [runsCursor, setRunsCursor] = useState<string>();
   // #113 slice CH: the transcript opens on its newest messages; older ones load on request.
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
@@ -188,6 +234,17 @@ export function ChatPane(props: ChatPaneProps) {
   const composer = useSyncExternalStore(subscribeComposer, readComposer, readComposer);
   const draft = composer.draft;
   const sendBlocked = composer.pending !== undefined || composer.failed !== undefined;
+  // ADR-0014 A5 decisions 41 and 42: files attached by paperclip, drop or paste wait as chips.
+  const composerFiles = useComposerAttachments(api, detail?.thread.workspaceId, threadId);
+  // A Guest never uploads, and a channel mirror takes no Web post (the Gateway refuses both).
+  const attachAllowed =
+    canPost.allowed &&
+    !guest &&
+    mirrorChannel === undefined &&
+    detail?.thread.workspaceId !== undefined;
+  const dropTarget = useChatDropTarget(composerFiles, attachAllowed);
+  // ADR-0023 amendment 2 decision 14: members whose model cannot see what gets attached.
+  const blindNames = useBlindMembers(api, detail?.thread.workspaceId, members);
   // The subscription callbacks outlive a render, so the refetch reads the transcript from a ref.
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -198,6 +255,9 @@ export function ChatPane(props: ChatPaneProps) {
   const onThreadUpdatedRef = useRef(props.onThreadUpdated);
   onThreadUpdatedRef.current = props.onThreadUpdated;
   const refreshDetailRef = useRef<() => Promise<void>>(async () => {});
+  const approvalsForRef = useRef<(messages: readonly ThreadMessage[]) => Promise<Approval[]>>(
+    async () => [],
+  );
   const lifecycleRevisionRef = useRef(0);
 
   useEffect(() => {
@@ -207,6 +267,7 @@ export function ChatPane(props: ChatPaneProps) {
     let detailRequest = 0;
     setError(undefined);
     dispatch({ type: "reset" });
+    applyPreview({ type: "reset" });
     setRunsCursor(undefined);
     setHasOlderMessages(false);
     runRevisionRef.current = 0;
@@ -224,16 +285,17 @@ export function ChatPane(props: ChatPaneProps) {
     refreshDetailRef.current = refreshDetail;
 
     /** Ask for what the stream may not have delivered; the reducer merges it in. */
-    // The Gateway defaults `/api/approvals` to pending, so ask twice: a card only renders its
-    // finished state once the decided approval is loaded too.
-    const listApprovals = async (): Promise<Approval[]> => {
+    // #113 surface 26: the thread's pending approvals (bounded by its parked runs) plus the ones
+    // the loaded messages name, never the thread's whole decided history.
+    const listApprovals = async (messages: readonly ThreadMessage[]): Promise<Approval[]> => {
       if (guestRef.current) return [];
-      const [pending, decided] = await Promise.all([
+      const [pending, ...named] = await Promise.all([
         api.listApprovals({ threadId, status: "pending" }),
-        api.listApprovals({ threadId, status: "decided" }),
+        ...approvalIdBatches(messages).map((ids) => api.listApprovals({ threadId, ids })),
       ]);
-      return [...pending, ...decided];
+      return [...pending, ...named.flat()];
     };
+    approvalsForRef.current = listApprovals;
 
     // #113 slice R: every unfinished run plus the newest finished page; older pages on request.
     const listRuns = async (): Promise<RunView[]> => {
@@ -266,10 +328,14 @@ export function ChatPane(props: ChatPaneProps) {
     const refetch = async (): Promise<void> => {
       const afterSeq = stateRef.current.messages.at(-1)?.seq;
       const runSnapshotRevision = runRevisionRef.current;
-      const [messages, runs, approvals] = await Promise.all([
-        afterSeq === undefined ? newestMessages() : tailAfter(afterSeq),
+      const [{ messages, approvals }, runs] = await Promise.all([
+        (afterSeq === undefined ? newestMessages() : tailAfter(afterSeq)).then(
+          async (messages) => ({
+            messages,
+            approvals: await listApprovals([...stateRef.current.messages, ...messages]),
+          }),
+        ),
         listRuns(),
-        listApprovals(),
         refreshDetail(),
       ]);
       if (!cancelled) {
@@ -283,6 +349,8 @@ export function ChatPane(props: ChatPaneProps) {
         if (cancelled) return;
         if (event.type === "run_status") runRevisionRef.current += 1;
         dispatch(event);
+        applyPreview(event);
+        applyRunActivity(event);
         // Messages can add a member or pause/reset the thread; run changes affect each member's
         // activity. Refresh the authoritative detail while the reducer applies the live frame.
         if (
@@ -307,8 +375,12 @@ export function ChatPane(props: ChatPaneProps) {
     });
 
     const initialRunSnapshotRevision = runRevisionRef.current;
-    Promise.all([refreshDetail(), newestMessages(), listRuns(), listApprovals()])
-      .then(([, messages, runs, approvals]) => {
+    const newestWithApprovals = async () => {
+      const messages = await newestMessages();
+      return { messages, approvals: await listApprovals(messages) };
+    };
+    Promise.all([refreshDetail(), newestWithApprovals(), listRuns()])
+      .then(([, { messages, approvals }, runs]) => {
         if (cancelled) return;
         dispatch({
           type: "loaded",
@@ -326,7 +398,7 @@ export function ChatPane(props: ChatPaneProps) {
       if (lifecycleRevisionRef.current === lifecycleRevision) lifecycleRevisionRef.current += 1;
       stop();
     };
-  }, [threadId, api]);
+  }, [threadId, api, applyRunActivity]);
 
   useEffect(() => {
     if (!props.messageId || !state.messages.some((message) => message.id === props.messageId))
@@ -347,7 +419,14 @@ export function ChatPane(props: ChatPaneProps) {
   const send = async (e?: FormEvent) => {
     e?.preventDefault();
     const body = draft.body.trim();
-    if (!body || sendBlocked || mirrorChannel !== undefined) return;
+    const attached = composerFiles.ready;
+    if (
+      (!body && attached.length === 0) ||
+      composerFiles.blocked ||
+      sendBlocked ||
+      mirrorChannel !== undefined
+    )
+      return;
     const started = beginConversationSubmission(api, threadId, draft.revision);
     const submission = started.pending;
     if (!submission) return;
@@ -361,7 +440,9 @@ export function ChatPane(props: ChatPaneProps) {
         body,
         undefined,
         sequential ? "sequential" : undefined,
+        attached,
       );
+      composerFiles.sent(attached);
       setRoundMode("parallel");
       completeConversationSubmission(api, threadId, submission.id);
       if (lifecycleRevisionRef.current !== lifecycleRevision) return;
@@ -407,7 +488,17 @@ export function ChatPane(props: ChatPaneProps) {
           state.messages.some((message) => isWelcomeGreeting(latestWelcome, message)),
       )
     : undefined;
-  const canRetryWelcome = welcomeState === "undelivered";
+  // Once the conversation has moved on (a human or bot message after the welcome, other than
+  // the welcome's own), its banner would only sit above every later exchange.
+  const conversationMovedOn =
+    latestWelcome !== undefined &&
+    state.messages.some(
+      (message) =>
+        message.authorKind !== "system" &&
+        message.runId !== latestWelcome.id &&
+        message.ts > latestWelcome.createdAt,
+    );
+  const canRetryWelcome = welcomeState === "undelivered" && !conversationMovedOn;
 
   const retryWelcome = async () => {
     if (!latestWelcome || retryingWelcome) return;
@@ -429,8 +520,9 @@ export function ChatPane(props: ChatPaneProps) {
     setLoadingOlderMessages(true);
     try {
       const slice = await api.listMessageSlice(threadId, { beforeSeq: first });
+      const approvals = await approvalsForRef.current(slice.messages);
       if (lifecycleRevisionRef.current !== lifecycleRevision) return;
-      dispatch({ type: "loaded", messages: slice.messages, runs: [] });
+      dispatch({ type: "loaded", messages: slice.messages, runs: [], approvals });
       setHasOlderMessages(slice.hasOlder === true);
     } catch (err) {
       setError(errorMessage(err));
@@ -455,12 +547,7 @@ export function ChatPane(props: ChatPaneProps) {
     }
   };
   const activityByBot = new Map<string, typeof pending>();
-  for (const run of [
-    ...pending,
-    ...botRuns.filter(
-      (run) => members.length === 1 && run.threadId !== threadId && !isTerminal(run.status),
-    ),
-  ]) {
+  for (const run of [...pending, ...elsewhere.runs.filter((run) => !isTerminal(run.status))]) {
     const current = activityByBot.get(run.botId) ?? [];
     activityByBot.set(run.botId, [...current, run]);
   }
@@ -472,9 +559,18 @@ export function ChatPane(props: ChatPaneProps) {
       latest?.status === "failed" || latest?.status === "cancelled" || latest?.status === "stopped"
         ? runStatusLabel(latest.status)
         : t("chatPane.activity.ready");
+    // One entry per status with its count ("queued ×3"), so several runs of one bot never read as
+    // a list of repeated states (#126); the run list under the composer has the per-run detail.
+    const byStatus = new Map<string, number>();
+    for (const run of runs) {
+      const label = runStatusLabel(run.status);
+      byStatus.set(label, (byStatus.get(label) ?? 0) + 1);
+    }
     memberActivity.set(
       member.botId,
-      runs.length > 0 ? runs.map((run) => runStatusLabel(run.status)).join(", ") : idleLabel,
+      runs.length > 0
+        ? [...byStatus].map(([label, n]) => (n > 1 ? `${label} ×${n}` : label)).join(", ")
+        : idleLabel,
     );
   }
 
@@ -489,7 +585,10 @@ export function ChatPane(props: ChatPaneProps) {
 
   return (
     <>
-      <section className="chat">
+      <section
+        className={`chat${dropTarget.active ? " chat-drop-active" : ""}`}
+        {...dropTarget.handlers}
+      >
         <header className="chat-header">
           <div className="chat-header-row">
             <div className="thread-heading">
@@ -505,6 +604,7 @@ export function ChatPane(props: ChatPaneProps) {
                 <span className="status-dot" />
                 {t(CONNECTION_LABELS[connection])}
               </span>
+              <ApproveAllBadge api={api} workspaceId={detail?.thread.workspaceId} />
               {channelName !== undefined ? (
                 <span className="thread-channel small muted" data-testid="thread-channel">
                   {t("chatPane.channelMirror.badge", { channel: channelName })}
@@ -571,7 +671,14 @@ export function ChatPane(props: ChatPaneProps) {
             <span>{t("chatPane.paused")}</span>
           </output>
         ) : null}
-        {members.length > 1 ? (
+        {members.length > 1 && showsRoundCard(detail?.groupRouting, round) ? (
+          <RoundCard
+            round={round}
+            botName={botName}
+            actorName={actorName}
+            messageBody={(id) => state.messages.find((m) => m.id === id)?.body}
+          />
+        ) : members.length > 1 ? (
           <RoundStrip
             round={round}
             api={api}
@@ -587,19 +694,6 @@ export function ChatPane(props: ChatPaneProps) {
           scrollTargetId={props.messageId ? `message-${props.messageId}` : undefined}
           composer={
             <div className="chat-composer-region">
-              {" "}
-              <ChatRunStop
-                key={threadId}
-                api={api}
-                runs={pending}
-                botName={botName}
-                thread={detail?.thread}
-                memberCount={members.length}
-                onRunUpdated={(run) => {
-                  runRevisionRef.current += 1;
-                  dispatch({ type: "run_status", threadId, run });
-                }}
-              />
               {pending.some((run) => run.status === "queued") ? (
                 <p className="chat-notice">{t("chatPane.queueNotice")}</p>
               ) : null}
@@ -614,7 +708,7 @@ export function ChatPane(props: ChatPaneProps) {
                     {retryingWelcome ? t("chatPane.welcome.retrying") : t("chatPane.welcome.retry")}
                   </Button>
                 </aside>
-              ) : welcomeState === "partial" && latestWelcome ? (
+              ) : welcomeState === "partial" && latestWelcome && !conversationMovedOn ? (
                 <output className="chat-notice">
                   {t("chatPane.welcome.partial", { status: runStatusLabel(latestWelcome.status) })}
                 </output>
@@ -673,9 +767,17 @@ export function ChatPane(props: ChatPaneProps) {
                   <p className="muted small">{t("chatPane.composer.sideChatHint")}</p>
                 </div>
               )}
-              <VisionNotice api={api} workspaceId={detail?.thread.workspaceId} members={members} />
               {mirrorChannel !== undefined ? null : (
-                <form className="composer" onSubmit={send} hidden={!canPost.allowed}>
+                <form
+                  className="composer"
+                  onSubmit={send}
+                  hidden={!canPost.allowed}
+                  onPaste={onComposerPaste(composerFiles, attachAllowed)}
+                >
+                  {composerFiles.uploads.jobs.length > 0 ? (
+                    <VisionNotice names={blindNames} />
+                  ) : null}
+                  <ComposerAttachmentChips attachments={composerFiles} />
                   <div className="composer-box">
                     <MentionTextarea
                       aria-label={t("chatPane.composer.label")}
@@ -694,21 +796,14 @@ export function ChatPane(props: ChatPaneProps) {
                       }
                       footer={
                         <>
-                          <UploadAttachButton
-                            api={api}
-                            workspaceId={detail?.thread.workspaceId}
-                            onUploaded={(path) =>
-                              writeConversationDraft(
-                                api,
-                                threadId,
-                                draftWithPath(
-                                  readConversationComposer(api, threadId).draft.body,
-                                  path,
-                                ),
-                              )
-                            }
+                          <ComposerAttachButton
+                            attachments={composerFiles}
+                            disabled={!attachAllowed}
+                            blindNames={blindNames}
                           />
-                          {members.length > 1 && mentionsEveryone(draft.body) ? (
+                          {members.length > 1 &&
+                          detail?.groupRouting !== "round-v1" &&
+                          mentionsEveryone(draft.body) ? (
                             <RoundModeToggle value={roundMode} onChange={setRoundMode} />
                           ) : null}
                           <Button
@@ -716,7 +811,11 @@ export function ChatPane(props: ChatPaneProps) {
                             size="icon"
                             aria-label={t("chatPane.composer.send")}
                             type="submit"
-                            disabled={sendBlocked || draft.body.trim().length === 0}
+                            disabled={
+                              sendBlocked ||
+                              composerFiles.blocked ||
+                              (draft.body.trim().length === 0 && composerFiles.ready.length === 0)
+                            }
                           >
                             <ArrowUp size={20} />
                           </Button>
@@ -753,144 +852,153 @@ export function ChatPane(props: ChatPaneProps) {
                 </Button>
               </li>
             ) : null}
-            {transcriptTimeline(state, hasOlderMessages).map((item, index, items) => {
-              const previous = items[index - 1];
-              const dayLabel =
-                item.kind === "message" &&
-                (previous === undefined ||
-                  previous.kind !== "message" ||
-                  formatDay(previous.message.ts) !== formatDay(item.message.ts))
-                  ? formatDay(item.message.ts)
-                  : undefined;
-              const continued =
-                item.kind === "message" &&
-                previous?.kind === "message" &&
-                previous.message.authorKind === item.message.authorKind &&
-                previous.message.authorId === item.message.authorId &&
-                item.message.authorKind !== "system" &&
-                approvalRefOf(previous.message.attachments) === undefined &&
-                new Date(item.message.ts).getTime() - new Date(previous.message.ts).getTime() <
-                  5 * 60 * 1000;
-              if (item.kind === "outcome") {
-                const run = item.run;
-                const when = formatTime(run.finishedAt ?? run.startedAt ?? run.createdAt);
+            <ElsewhereActivityOlder older={elsewhere.older} />
+            {transcriptTimeline(state, hasOlderMessages, elsewhere.runs).map(
+              (item, index, items) => {
+                const previous = items[index - 1];
+                const dayLabel =
+                  item.kind === "message" &&
+                  (previous === undefined ||
+                    previous.kind !== "message" ||
+                    formatDay(previous.message.ts) !== formatDay(item.message.ts))
+                    ? formatDay(item.message.ts)
+                    : undefined;
+                const continued =
+                  item.kind === "message" &&
+                  previous?.kind === "message" &&
+                  previous.message.authorKind === item.message.authorKind &&
+                  previous.message.authorId === item.message.authorId &&
+                  item.message.authorKind !== "system" &&
+                  approvalRefOf(previous.message.attachments) === undefined &&
+                  new Date(item.message.ts).getTime() - new Date(previous.message.ts).getTime() <
+                    5 * 60 * 1000;
+                if (item.kind === "elsewhere")
+                  return (
+                    <ElsewhereActivityItem
+                      key={`elsewhere:${item.run.id}`}
+                      run={item.run}
+                      api={api}
+                      botName={botName}
+                    />
+                  );
+                if (item.kind === "outcome") {
+                  const run = item.run;
+                  const when = formatTime(run.finishedAt ?? run.startedAt ?? run.createdAt);
+                  return (
+                    <li
+                      key={`outcome:${run.id}`}
+                      className={`message system run-outcome ${run.status}`}
+                    >
+                      <div className="meta">
+                        <span className="author bot">{botName(run.botId)}</span>
+                        <span className={`status ${run.status}`}>{runStatusLabel(run.status)}</span>
+                        <span className="muted small">{when}</span>
+                        <a href={runHref(run.id)} className="small">
+                          {t("chatPane.outcome.viewRun")}
+                        </a>
+                      </div>
+                      <div className="body">
+                        {run.error ??
+                          (run.status === "cancelled"
+                            ? t("chatPane.outcome.cancelled")
+                            : run.status === "stopped"
+                              ? t("chatPane.outcome.stopped")
+                              : t("chatPane.outcome.failed"))}
+                      </div>
+                    </li>
+                  );
+                }
+                const m = item.message;
+                const ref = approvalRefOf(m.attachments);
+                if (ref === undefined)
+                  return (
+                    <MessageRow
+                      key={m.id}
+                      message={m}
+                      botName={botName}
+                      api={api}
+                      workspaceId={detail?.thread.workspaceId}
+                      continued={continued}
+                      dayLabel={dayLabel}
+                    />
+                  );
+                if (firstApprovalSeq.get(ref) !== m.seq) {
+                  return (
+                    <li
+                      key={m.id}
+                      id={`message-${m.id}`}
+                      className="message system approval-echo"
+                      data-testid="approval-echo"
+                    >
+                      <div className="approval-decision-text">
+                        {approvalEchoLabel(m.body, actorName).replace(
+                          /bot:(bot_[a-zA-Z0-9_]+)/g,
+                          (label, id) => botName(id) ?? label,
+                        )}
+                        {approvalEchoLabel(m.body, actorName) !== m.body ? (
+                          <details>
+                            <summary>{t("actor.audit")}</summary>
+                            <div>{m.body}</div>
+                          </details>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                }
                 return (
-                  <li
-                    key={`outcome:${run.id}`}
-                    className={`message system run-outcome ${run.status}`}
-                  >
+                  <li key={m.id} id={`message-${m.id}`} className="message system">
+                    <Avatar name="approval" kind="system" />
                     <div className="meta">
-                      <span className="author bot">{botName(run.botId)}</span>
-                      <span className={`status ${run.status}`}>{runStatusLabel(run.status)}</span>
-                      <span className="muted small">{when}</span>
-                      <a href={runHref(run.id)} className="small">
-                        {t("chatPane.outcome.viewRun")}
-                      </a>
+                      <span className="author system">{t("chatPane.author.approval")}</span>
+                      <span className="muted small">{formatTime(m.ts)}</span>
                     </div>
-                    <div className="body">
-                      {run.error ??
-                        (run.status === "cancelled"
-                          ? t("chatPane.outcome.cancelled")
-                          : run.status === "stopped"
-                            ? t("chatPane.outcome.stopped")
-                            : t("chatPane.outcome.failed"))}
-                    </div>
+                    <ApprovalCard
+                      approval={state.approvals[ref]}
+                      fallbackBody={m.body}
+                      api={api}
+                      botName={
+                        state.approvals[ref] ? botName(state.approvals[ref].botId) : undefined
+                      }
+                      runStatus={
+                        state.approvals[ref]
+                          ? state.runs[state.approvals[ref].runId]?.status
+                          : undefined
+                      }
+                      onDecided={(approval) => dispatch({ type: "approval", threadId, approval })}
+                      readOnlyNote={
+                        channelName !== undefined
+                          ? t("chatPane.channelMirror.approval", { channel: channelName })
+                          : undefined
+                      }
+                    />
                   </li>
                 );
-              }
-              const m = item.message;
-              const ref = approvalRefOf(m.attachments);
-              if (ref === undefined)
-                return (
-                  <MessageRow
-                    key={m.id}
-                    message={m}
-                    botName={botName}
-                    api={api}
-                    workspaceId={detail?.thread.workspaceId}
-                    continued={continued}
-                    dayLabel={dayLabel}
-                  />
-                );
-              if (firstApprovalSeq.get(ref) !== m.seq) {
-                return (
-                  <li
-                    key={m.id}
-                    id={`message-${m.id}`}
-                    className="message system approval-echo"
-                    data-testid="approval-echo"
-                  >
-                    <div className="approval-decision-text">
-                      {approvalEchoLabel(m.body, actorName).replace(
-                        /bot:(bot_[a-zA-Z0-9_]+)/g,
-                        (label, id) => botName(id) ?? label,
-                      )}
-                      {approvalEchoLabel(m.body, actorName) !== m.body ? (
-                        <details>
-                          <summary>{t("actor.audit")}</summary>
-                          <div>{m.body}</div>
-                        </details>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              }
-              return (
-                <li key={m.id} id={`message-${m.id}`} className="message system">
-                  <Avatar name="approval" kind="system" />
-                  <div className="meta">
-                    <span className="author system">{t("chatPane.author.approval")}</span>
-                    <span className="muted small">{formatTime(m.ts)}</span>
-                  </div>
-                  <ApprovalCard
-                    approval={state.approvals[ref]}
-                    fallbackBody={m.body}
-                    api={api}
-                    botName={state.approvals[ref] ? botName(state.approvals[ref].botId) : undefined}
-                    onDecided={(approval) => dispatch({ type: "approval", threadId, approval })}
-                    readOnlyNote={
-                      channelName !== undefined
-                        ? t("chatPane.channelMirror.approval", { channel: channelName })
-                        : undefined
-                    }
-                  />
-                </li>
-              );
-            })}
+              },
+            )}
             <IncomingHandoffs api={api} threadId={threadId} onRuns={setHandoffRuns} />
-            {pending.map((run) => (
-              <li key={run.id} className="typing" data-testid="typing">
-                <Avatar name={botName(run.botId)} />
-                <span className="typing-dots" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-                <span className="muted">
-                  {t.rich("chatPane.typing", {
-                    name: botName(run.botId),
-                    status: runStatusLabel(run.status),
-                    author: (text) => <span className="author bot">{text}</span>,
-                    link: (text) => (
-                      <a href={runHref(run.id)} className="small">
-                        {text}
-                      </a>
-                    ),
-                  })}
-                </span>
-              </li>
-            ))}
-          </ol>
-          {members.length === 1 && members[0] && !guest ? (
-            <PrivateChatActivity
-              key={members[0].botId}
+            <ReplyPreviews previews={previews} runs={pending} botName={botName} />
+            <ChatRunStatus
+              key={threadId}
               api={api}
-              botId={members[0].botId}
-              botName={members[0].name}
-              threadId={threadId}
+              runs={pending}
+              activity={runActivity}
+              botName={botName}
+              messageBody={(id) => state.messages.find((m) => m.id === id)?.body}
+              thread={detail?.thread}
+              memberCount={members.length}
+              onRunUpdated={(run) => {
+                runRevisionRef.current += 1;
+                dispatch({ type: "run_status", threadId, run });
+              }}
             />
+          </ol>
+          {elsewhere.error ? (
+            <p className="error elsewhere-error" role="alert">
+              {elsewhere.error}
+            </p>
           ) : null}
         </ChatViewport>
+        {dropTarget.overlay}
       </section>
       {detail ? (
         <ChatInfo
@@ -910,6 +1018,7 @@ export function ChatPane(props: ChatPaneProps) {
               botName={botName}
               actorName={actorName}
               loadEvents={(runId) => api.listRunEvents(runId)}
+              markRun={{ mark: api.markRun, unmark: api.unmarkRun }}
               older={
                 runsCursor
                   ? { loading: loadingOlderRuns, onLoad: () => void loadOlderRuns() }
@@ -1084,15 +1193,7 @@ function MessageRow({
             {handoff.name}
           </a>
         ) : null}
-        {otherAttachments.length > 0 ? (
-          <ul className="attachments small">
-            {otherAttachments.map((a) => (
-              <li key={`${a.name}:${a.ref}`}>
-                {a.name} <span className="muted">({a.mimeType})</span> {a.ref}
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <AttachmentCards attachments={otherAttachments} api={api} workspaceId={workspaceId} />
       </li>
     </>
   );

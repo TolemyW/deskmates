@@ -12,7 +12,8 @@ import { errorMessage, formatDateTime } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { useWorkspaceScope } from "../../state/workspace-scope.js";
 import { type WorkspaceListState, workspacesHref } from "../account/route.js";
-import { WORKSPACE_DETAIL_SECTIONS } from "./detail-sections.js";
+import { ApproveAllBadge } from "../approvals/approval-mode.js";
+import { type DetailShell, WORKSPACE_DETAIL_SECTIONS } from "./detail-sections.js";
 import { backToList } from "./list-return.js";
 
 /** Find one workspace by exact ID among the caller's active, then archived, workspaces. */
@@ -30,10 +31,12 @@ export function WorkspaceDetail({
   api,
   workspaceId,
   list,
+  shell,
 }: {
   api: ApiClient;
   workspaceId: string;
   list: WorkspaceListState;
+  shell?: DetailShell | undefined;
 }) {
   const t = useT();
   const scope = useWorkspaceScope(api);
@@ -103,6 +106,7 @@ export function WorkspaceDetail({
         <h2 id="workspace-detail-title" ref={heading} tabIndex={-1} title={entry.name}>
           {entry.name}
         </h2>
+        <ApproveAllBadge api={api} workspaceId={entry.id} />
         <dl className="workspace-detail-facts">
           <div>
             <dt>{t("workspaceManage.detail.id")}</dt>
@@ -132,7 +136,7 @@ export function WorkspaceDetail({
         )}
       </header>
       {WORKSPACE_DETAIL_SECTIONS.map(({ key, Section }) => (
-        <Section key={key} api={api} entry={entry} onChanged={setEntry} />
+        <Section key={key} api={api} entry={entry} onChanged={setEntry} shell={shell} />
       ))}
     </section>
   );

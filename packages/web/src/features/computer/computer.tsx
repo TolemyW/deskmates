@@ -21,7 +21,6 @@ import { contactHref } from "../../router.js";
 import { useRememberBots } from "../../state/bot-avatars.js";
 import { useWorkspaceScope } from "../../state/workspace-scope.js";
 import { EgressEditor } from "../contacts/management.js";
-import { LimitsSection } from "../limits/limits-section.js";
 import { WorkspaceArchive } from "./workspace-archive.js";
 
 /** Bots per page on the Computer page (#113 slice D, plan row 41). */
@@ -102,7 +101,6 @@ export function ComputerScreen({ api }: { api: ApiClient }) {
               onSaved={scope.update}
             />
           </section>
-          <LimitsSection key={`limits-${workspace.id}`} api={api} workspaceId={workspace.id} />
           <section className="card" aria-label={t("computer.desktops.title")}>
             <h2>{t("computer.desktops.title")}</h2>
             <p className="muted small">{t("computer.desktops.intro")}</p>

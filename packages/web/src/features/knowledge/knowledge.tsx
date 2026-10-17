@@ -7,7 +7,7 @@ import type {
 } from "@deskmates/contracts";
 import { Select } from "@deskmates/ui";
 import { FileText, Plus, Search, X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type { ApiClient, MemoryView } from "../../api/client.js";
 import { ApiError } from "../../api/types.js";
 import { Button } from "../../components/ui/button.js";
@@ -433,6 +433,19 @@ export function KnowledgePanel({ api }: { api: ApiClient }) {
                 {t("knowledge.pending.sourceRun")}
               </a>
             )}
+            {proposal.citations?.length ? (
+              <p className="muted small">
+                {t("knowledge.pending.citations", {
+                  count: proposal.citations.length,
+                  changed: proposal.citations.filter((c) => c.changed).length,
+                })}
+              </p>
+            ) : null}
+            {proposal.targetDocumentId ? (
+              <p className="muted small">
+                {t("knowledge.pending.updates", { version: proposal.targetVersion ?? 1 })}
+              </p>
+            ) : null}
             <pre>{proposal.body}</pre>
             <div className="knowledge-editor-actions">
               {(["approve", "reject"] as const).map((decision) => (
@@ -467,7 +480,19 @@ export function KnowledgePanel({ api }: { api: ApiClient }) {
   );
 }
 
-export function MemoryPanel({ api, botId: fixedBotId }: { api: ApiClient; botId?: BotId }) {
+export function MemoryPanel({
+  api,
+  botId: fixedBotId,
+  versions,
+}: {
+  api: ApiClient;
+  botId?: BotId;
+  /**
+   * Rendered under the editor with the loaded version, whether the draft is unsaved, and a reload
+   * for after a restore; the bot profile shows MEMORY.md's saved versions here (ADR-0043).
+   */
+  versions?: (current: { version: string; dirty: boolean; reload: () => void }) => ReactNode;
+}) {
   const t = useT();
   // MEMORY.md is configuration: an Admin edits it, a Member reads (ADR-0022 amendment 1, C2).
   const canEditMemory = useCan("memory.editFile").allowed;
@@ -602,9 +627,18 @@ export function MemoryPanel({ api, botId: fixedBotId }: { api: ApiClient; botId?
             setError("");
             setNotice("");
             try {
-              const saved = await api.writeMemory(bot.id, draft.body, draft.loaded.version);
+              const { appliesFromNextRun, ...saved } = await api.writeMemory(
+                bot.id,
+                draft.body,
+                draft.loaded.version,
+              );
               show(bot.id, { body: saved.body, loaded: saved, dirty: false });
-              setNotice(t("knowledge.notice.memorySaved"));
+              // ADR-0043 decision 3: a live or parked run keeps what it started with.
+              setNotice(
+                appliesFromNextRun
+                  ? t("knowledge.notice.memorySavedNextRun")
+                  : t("knowledge.notice.memorySaved"),
+              );
             } catch (err) {
               if (err instanceof ApiError && err.status === 409) {
                 try {
@@ -645,6 +679,13 @@ export function MemoryPanel({ api, botId: fixedBotId }: { api: ApiClient; botId?
           </fieldset>
         </form>
       )}
+      {draft && botId && versions
+        ? versions({
+            version: draft.loaded.version,
+            dirty: draft.dirty,
+            reload: () => void loadMemory(botId, true),
+          })
+        : null}
       {draft?.latest && (
         <aside className="draft-latest" aria-label={t("knowledge.memoryLatest.label")}>
           <h3>{t("knowledge.memoryLatest.title")}</h3>

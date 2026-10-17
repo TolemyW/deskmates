@@ -83,7 +83,82 @@ describe("GET /api/runs/:id/context", () => {
       compactions: [{ attempt: 1, seq: 3, trigger: "auto", preTokens: 150000 }],
       contextSections: { soul: 12, memory: 0, diary: 40, knowledge: 0, guidance: 900 },
       systemPromptSha256: "c".repeat(64),
+      maxContextTokens: null,
+      systemPromptStaticSha256: null,
+      systemPromptDynamicSha256: null,
       modelRequests: { count: 1, distinctSystemHashes: 1, changedWithinAttempt: false },
+      contextUsage: { samples: 0, first: null, latest: null },
+      sessionStarts: [],
+      requestShapes: null,
+    });
+  });
+
+  // ADR-0023 amendment 5: the CLI's context samples and the proxy's request shapes.
+  it("adds the context samples, session starts and request shapes", async () => {
+    const { bot } = await h.seed();
+    const ctx = h.app.deskmates.ctx;
+    const run = ctx.runs.create({
+      botId: bot.id,
+      lane: "background",
+      triggerKind: "webhook",
+      triggerRef: "ctx-shape",
+      triggerPayload: { body: "x" },
+      config: ctx.runConfig(),
+    });
+    ctx.events.appendMany([
+      {
+        runId: run.id,
+        kind: "log",
+        attempt: 1,
+        seq: 1,
+        payload: { source: "sdk", kind: "session_start", sessionSource: "startup" },
+      },
+      {
+        runId: run.id,
+        kind: "log",
+        attempt: 1,
+        seq: 2,
+        payload: {
+          source: "context",
+          kind: "context_usage",
+          detail: "full",
+          turn: 0,
+          totalTokens: 57000,
+          maxTokens: 200000,
+          percentage: 29,
+          categories: [{ name: "System tools", kind: "used", tokens: 21000 }],
+        },
+      },
+    ]);
+    ctx.modelRequests.insert({
+      runId: run.id,
+      attempt: 1,
+      ts: "t",
+      requestKind: "messages",
+      stream: true,
+      shape: {
+        cacheControlBlocks: 2,
+        systemBlocks: 2,
+        systemChars: 9000,
+        systemStaticSha256: "e".repeat(64),
+        systemBlockHashes: ["0123456789abcdef", "fedcba9876543210"],
+        toolsCount: 54,
+        toolsChars: 160000,
+        messagesCount: 1,
+      },
+    });
+
+    const res = await h.api<RunContextMetrics>("GET", `/api/runs/${run.id}/context`);
+    expect(res.status).toBe(200);
+    expect(res.json.sessionStarts).toEqual([
+      { attempt: 1, source: "startup", contextTokens: null, promptCacheLikelyExpired: null },
+    ]);
+    expect(res.json.contextUsage?.first?.totalTokens).toBe(57000);
+    expect(res.json.requestShapes).toMatchObject({
+      measured: 1,
+      withCacheControl: 1,
+      distinctStaticHashes: 1,
+      maxToolsCount: 54,
     });
   });
 

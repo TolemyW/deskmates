@@ -82,6 +82,49 @@ describe("parseStartRunRequest accepts what the Gateway sends", () => {
     ).toBe(false);
   });
 
+  it("keeps a round's plan and last-reply facts through stdin (ADR-0005 amendment 6)", () => {
+    const trigger = {
+      ...VALID.trigger,
+      routing: {
+        version: 2,
+        recipientBotId: "bot-nova",
+        recipientName: "nova",
+        members: [{ name: "nova", role: "coordinator", you: true }],
+        round: {
+          messageSeq: 1,
+          phase: "close",
+          assignments: [{ name: "orion", task: "price of K" }],
+          closer: "nova",
+          youClose: true,
+          outcomes: [{ name: "orion", outcome: "replied", seqs: [2] }],
+        },
+        lastReply: { seq: 3, addressed: [], everyone: false, unknown: ["orin"], spaced: [] },
+      },
+    };
+    const result = parseStartRunRequest(json({ ...VALID, trigger, groupGuidance: "owner-v1" }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.trigger).toEqual(trigger);
+    expect(
+      parseStartRunRequest(
+        withField("trigger", {
+          ...trigger,
+          routing: { ...trigger.routing, round: { ...trigger.routing.round, phase: "vote" } },
+        }),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("accepts a round triage job with a bounded roster", () => {
+    const job = {
+      kind: "round_triage",
+      roster: [{ name: "nova", role: "coordinator", owner: true }],
+      everyone: false,
+      request: "What is K worth?",
+    };
+    expect(parseStartRunRequest(withField("modelJob", job)).ok).toBe(true);
+    expect(parseStartRunRequest(withField("modelJob", { ...job, roster: [] })).ok).toBe(false);
+  });
+
   it("keeps Gateway routing context and addressing through stdin", () => {
     const trigger = {
       ...VALID.trigger,
@@ -148,11 +191,27 @@ describe("parseStartRunRequest accepts what the Gateway sends", () => {
         targetOrigin: "http://shop.example.test:8080",
         argumentPattern: "*submit*",
       },
+      reason: "Nobody approved this within 15 minutes.",
       currentOrigin: "http://shop.example.test:8080",
     };
     const result = parseStartRunRequest(withField("trigger", trigger));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.trigger).toEqual(trigger);
+  });
+
+  it("accepts every tool a configured Gateway offers (app links, look/OCR, ASR)", () => {
+    // v0.6.9 regression: these were offered once APP_SHARE_* and the operation services were set
+    // on the stable host, and every run's sidecar exited on the unknown names.
+    const tools = [
+      "thread_post",
+      "task_deliver",
+      "app_publish",
+      "image_describe",
+      "audio_transcribe",
+    ];
+    const result = parseStartRunRequest(json({ ...VALID, tools }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.tools).toEqual(tools);
   });
 
   it("accepts the optional fields being absent", () => {
@@ -164,6 +223,27 @@ describe("parseStartRunRequest accepts what the Gateway sends", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.workdirMode).toBe("per-bot");
     expect(parseStartRunRequest(json({ ...VALID, workdirMode: "shared" })).ok).toBe(false);
+  });
+
+  it("keeps the other lane's run and drops a stale worktree repository (ADR-0036, ADR-0038)", () => {
+    const otherLaneRun = {
+      runId: "run_other",
+      lane: "background",
+      triggerKind: "cron",
+      startedAt: "2026-10-14T08:00:00.000Z",
+    } as const;
+    const result = parseStartRunRequest(
+      json({ ...VALID, workdirMode: "per-bot", worktreeRepo: "/work/app", otherLaneRun }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // ADR-0038 decision 7: the platform prepares no worktree, so the field is not read.
+      expect("worktreeRepo" in result.value).toBe(false);
+      expect(result.value.otherLaneRun).toEqual(otherLaneRun);
+    }
+    expect(
+      parseStartRunRequest(json({ ...VALID, otherLaneRun: { ...otherLaneRun, lane: "other" } })).ok,
+    ).toBe(false);
   });
 
   it("keeps the opt-in origin coordination deadline through stdin", () => {

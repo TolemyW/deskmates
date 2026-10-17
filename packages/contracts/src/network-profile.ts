@@ -44,6 +44,13 @@ export interface NetworkProfile {
   createdAt: string;
   updatedAt: string;
   updatedBy: string;
+  /**
+   * The workspace Owner who created it (decision 12, owner-decided 2026-10-14): available only
+   * where that person is Owner. Absent: a root profile, available to every workspace.
+   */
+  ownerUserId?: string;
+  /** In a list: whether the caller may replace or delete it (the root, or its creator). */
+  editable?: boolean;
 }
 
 export interface WorkspaceNetworkSelection {
@@ -71,6 +78,17 @@ export interface WorkspaceNetworkView {
   selections: WorkspaceNetworkSelection[];
   /** The unexpired grants the workspace's hook and proxy enforce now. */
   grants: NetworkGrant[];
+  /** Whether the workspace browses the open internet (`*`). */
+  openInternet: boolean;
+  /** Decision 13's switch: whether a `*` workspace may select profiles (default true). */
+  profilesOnOpenInternet: boolean;
+  /** Profiles this workspace's Admins and Owners may select (decision 12). */
+  available: NetworkProfile[];
+}
+
+/** `PUT /api/workspaces/:id/network-settings` (decision 13). */
+export interface WorkspaceNetworkSettings {
+  profilesOnOpenInternet: boolean;
 }
 
 export const NETWORK_PROFILE_MAX_RULES = 64;
@@ -256,7 +274,8 @@ export function networkGrantAllowsUrl(
 }
 
 /** The layers a connectivity preflight tells apart (ADR-0027 amendment 1 decision 14). */
-export type NetworkLayer = "policy" | "dns" | "tcp" | "tls" | "http";
+/** `route`: the target lies inside a Docker network of the daemon (amendment 2 decision 15). */
+export type NetworkLayer = "policy" | "route" | "dns" | "tcp" | "tls" | "http";
 
 export interface NetworkLayerResult {
   layer: NetworkLayer;

@@ -1,6 +1,9 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@deskmates/ui";
-// Run replay screen (M0): header with status, lane, trigger, timestamps and priced usage, then
-// the ledger events in `seq` order, appended live over SSE while the run is still going.
+// Run replay screen (M0): the status, who started the run and how long it took, then the story
+// of what the bot did (`run-story-panel.tsx`), with the facts, usage, progress panel, timelines and
+// changes behind "Details" and the raw ledger behind "Technical log", appended live over SSE
+// while the run is still going. Issue #9: a tool call and its result are one row, phase timing
+// is its own timeline, and diagnostic log rows are collapsed until asked for (`ledger-rows.ts`).
 
 import {
   type RunEvent,
@@ -31,13 +34,20 @@ import { Markdown } from "../../lib/markdown.js";
 import { threadHref } from "../../router.js";
 import { initialRunView, runViewReducer } from "../../state/run-view.js";
 import { RoleNote, useCan, useCanInOwnSideChat } from "../../state/session-roles.js";
+import { eventsShown, isDiagnosticEvent, ledgerRows } from "./ledger-rows.js";
+import { PhaseTimingTimeline, phaseSpans } from "./phase-timing.js";
+import { RunChangesSection } from "./run-changes.js";
 import { RunContextPanel } from "./run-context-panel.js";
 import { RunEventRow } from "./run-event-row.js";
+import { RunStory } from "./run-story-panel.js";
+import { RunTimelinePanel } from "./run-timeline.js";
+import { ToolCallRow } from "./tool-call-row.js";
 
 /** A run's status as the pill shows it; the English is the status code itself. */
 const RUN_STATUS_LABEL: Readonly<Record<RunStatus, MessageKey>> = {
   queued: "run.status.queued",
   running: "run.status.running",
+  stalled: "run.status.stalled",
   waiting_approval_live: "run.status.waitingApprovalLive",
   waiting_approval: "run.status.waitingApproval",
   waiting_browser: "run.status.waitingBrowser",
@@ -60,6 +70,17 @@ const TRIGGER_LABEL: Readonly<Record<RunTriggerKind, MessageKey>> = {
   webhook: "run.trigger.webhook",
   approval: "run.trigger.approval",
   welcome: "run.trigger.welcome",
+  manual: "run.trigger.manual",
+};
+
+/** The trigger as the lede reads it: "started by a message in the chat". */
+const TRIGGER_STORY: Readonly<Record<RunTriggerKind, MessageKey>> = {
+  thread_message: "runStory.trigger.threadMessage",
+  cron: "runStory.trigger.cron",
+  webhook: "runStory.trigger.webhook",
+  approval: "runStory.trigger.approval",
+  welcome: "runStory.trigger.welcome",
+  manual: "runStory.trigger.manual",
 };
 
 export interface RunScreenProps {
@@ -83,7 +104,7 @@ function RunScreenContent(props: RunScreenProps) {
   // #113 slice R: the replay opens on the newest events; older ones load on request.
   const [hasOlder, setHasOlder] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const [showTimingDiagnostics, setShowTimingDiagnostics] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   // The subscription callbacks outlive a render, so the refetch reads the event list from a ref.
   const stateRef = useRef(state);
@@ -219,26 +240,26 @@ function RunScreenContent(props: RunScreenProps) {
   };
 
   const run = state.run;
-  const [evidenceWorkspace, setEvidenceWorkspace] = useState<WorkspaceId>();
-  const evidenceBotId = run?.botId;
-  const hasEvidence = state.events.some(
-    (event) => event.kind === "tool_result" && event.payload.evidence,
-  );
+  // #113 §3.2: the one bot this run names, not the whole roster; its name heads the screen and
+  // its workspace serves the evidence files. A failed read leaves the id in the facts.
+  const [bot, setBot] = useState<{ name: string; workspaceId: WorkspaceId }>();
+  const botId = run?.botId;
   useEffect(() => {
     let cancelled = false;
-    if (hasEvidence && evidenceBotId) {
+    if (botId) {
       void api
-        .listBots()
+        .listBotsByIds([botId])
         .then((bots) => {
-          if (!cancelled)
-            setEvidenceWorkspace(bots.find((bot) => bot.id === evidenceBotId)?.workspaceId);
+          const found = bots.find((b) => b.id === botId);
+          if (!cancelled && found) setBot({ name: found.name, workspaceId: found.workspaceId });
         })
         .catch(() => {});
     }
     return () => {
       cancelled = true;
     };
-  }, [api, evidenceBotId, hasEvidence]);
+  }, [api, botId]);
+  const evidenceWorkspace = bot?.workspaceId;
   // A Member stops or continues only the runs of their own side chat (ADR-0022 amendment 1
   // A11/A12); the thread is fetched only for a role that needs the answer. The Gateway decides.
   const managesRuns = useCan("run.cancel").allowed;
@@ -279,13 +300,20 @@ function RunScreenContent(props: RunScreenProps) {
       setCancelling(false);
     }
   };
-  const timingCount = state.events.filter(isTimingDiagnostic).length;
-  const visibleEvents = showTimingDiagnostics
-    ? state.events
-    : state.events.filter((event) => !isTimingDiagnostic(event));
+  const diagnosticCount = state.events.filter(isDiagnosticEvent).length;
+  const rows = ledgerRows(state.events, { diagnostics: showDiagnostics });
+  const shown = eventsShown(rows);
+  const spanCount = phaseSpans(state.events).length;
+  const evidenceUrl = evidenceWorkspace
+    ? (path: string) => api.workspaceFileDownloadUrl(evidenceWorkspace, path)
+    : undefined;
+
+  const live = run !== undefined && !isTerminal(run.status);
+  const waitingContinuation = run?.status === "waiting_continuation";
+  const trigger = run ? TRIGGER_STORY[run.triggerKind] : undefined;
 
   return (
-    <section className="run-screen">
+    <section className="run-screen" data-run-id={runId}>
       <header className="run-header">
         <div className="run-title">
           <h2>
@@ -295,7 +323,6 @@ function RunScreenContent(props: RunScreenProps) {
                 {RUN_STATUS_LABEL[run.status] ? t(RUN_STATUS_LABEL[run.status]) : run.status}
               </span>
             ) : null}
-            <code>{runId}</code>
           </h2>
           {run?.threadId ? (
             <a href={threadHref(run.threadId)} className="small">
@@ -313,6 +340,13 @@ function RunScreenContent(props: RunScreenProps) {
             </Button>
           ) : null}
         </div>
+        {run ? (
+          <p className="run-lede muted small">
+            {bot ? <strong>{bot.name}</strong> : null}
+            {trigger ? <span>{t("runStory.startedBy", { trigger: t(trigger) })}</span> : null}
+            {run.startedAt ? <span>{formatDuration(run.startedAt, run.finishedAt)}</span> : null}
+          </p>
+        ) : null}
         {run && !isTerminal(run.status) ? (
           <RoleNote
             action="run.cancel"
@@ -324,105 +358,21 @@ function RunScreenContent(props: RunScreenProps) {
         {run?.error ? (
           <output className="notice danger">{describeRunError(run.error)}</output>
         ) : null}
-        <details className="run-metadata">
-          <summary>{t("run.details")}</summary>
-          {run ? (
-            <dl className="run-facts">
-              <dt>{t("run.fact.bot")}</dt>
-              <dd>
-                <code>{run.botId}</code>
-              </dd>
-              <dt>{t("run.fact.lane")}</dt>
-              <dd>{LANE_LABEL[run.lane] ? t(LANE_LABEL[run.lane]) : run.lane}</dd>
-              <dt>{t("run.fact.trigger")}</dt>
-              <dd>
-                {TRIGGER_LABEL[run.triggerKind]
-                  ? t(TRIGGER_LABEL[run.triggerKind])
-                  : run.triggerKind}{" "}
-                <code className="muted">{run.triggerRef}</code>
-              </dd>
-              {run.threadId ? (
-                <>
-                  <dt>{t("run.fact.thread")}</dt>
-                  <dd>
-                    <a href={threadHref(run.threadId)}>{run.threadId}</a>
-                  </dd>
-                </>
-              ) : null}
-              <dt>{t("run.fact.created")}</dt>
-              <dd>{formatDateTime(run.createdAt)}</dd>
-              <dt>{t("run.fact.started")}</dt>
-              <dd>{formatDateTime(run.startedAt)}</dd>
-              <dt>{t("run.fact.finished")}</dt>
-              <dd>
-                {formatDateTime(run.finishedAt)}
-                {run.startedAt ? (
-                  <span className="muted small">
-                    {" "}
-                    ({formatDuration(run.startedAt, run.finishedAt)})
-                  </span>
-                ) : null}
-              </dd>
-              {run.summary ? (
-                <>
-                  <dt>{t("run.fact.summary")}</dt>
-                  <dd>
-                    <p>{run.summary.done}</p>
-                    {run.summary.reply ? (
-                      <blockquote className="md">
-                        <Markdown text={run.summary.reply} />
-                      </blockquote>
-                    ) : null}
-                  </dd>
-                </>
-              ) : null}
-            </dl>
-          ) : (
-            <p className="muted">{t("run.loading")}</p>
-          )}
-          <h3>{t("run.usage.heading")}</h3>
-          {state.usageCoverage ? <p>{t(`run.usage.${state.usageCoverage}`)}</p> : null}
-          {state.usage.length === 0 ? (
-            <p className="muted small">
-              {run && !isTerminal(run.status) ? t("run.usage.noneYet") : t("run.usage.none")}
-            </p>
-          ) : (
-            <Table className="usage" aria-label={t("run.usage.heading")}>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("run.usage.model")}</TableHead>
-                  <TableHead>{t("run.usage.input")}</TableHead>
-                  <TableHead>{t("run.usage.output")}</TableHead>
-                  <TableHead>{t("run.usage.cacheRead")}</TableHead>
-                  <TableHead>{t("run.usage.cacheCreate")}</TableHead>
-                  <TableHead>{t("run.usage.cost")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {state.usage.map((u) => (
-                  <TableRow key={u.model}>
-                    <TableCell>
-                      <code>{u.model}</code>
-                      {u.coverage === "partial" ? ` (${t("run.usage.partial")})` : ""}
-                    </TableCell>
-                    <TableCell>{u.inputTokens ?? "—"}</TableCell>
-                    <TableCell>{u.outputTokens ?? "—"}</TableCell>
-                    <TableCell>{u.cacheReadTokens ?? "—"}</TableCell>
-                    <TableCell>{u.cacheCreateTokens ?? "—"}</TableCell>
-                    <TableCell>
-                      {formatCost(u.costUsd)}
-                      {u.attributionUncertain ? <p>{t("run.usage.attributionUncertain")}</p> : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </details>
       </header>
       {run ? (
-        <details className="run-metadata" open={run.status === "waiting_continuation"}>
-          <summary>{t("runContextPanel.heading")}</summary>
+        <RunStory
+          events={state.events}
+          live={live}
+          hasOlder={hasOlder}
+          loadingOlder={loadingOlder}
+          onLoadOlder={() => void loadOlder()}
+        />
+      ) : (
+        <p className="muted">{t("run.loading")}</p>
+      )}
+      <details className="run-metadata" open={waitingContinuation}>
+        <summary>{t("runStory.details")}</summary>
+        {run && waitingContinuation ? (
           <RunContextPanel
             api={api}
             run={run}
@@ -430,54 +380,165 @@ function RunScreenContent(props: RunScreenProps) {
             canContinue={canContinue.allowed}
             onRunChanged={(updated) => dispatch({ type: "run_status", run: updated })}
           />
-        </details>
-      ) : null}
-      <h3>
-        {t("run.events.heading")}{" "}
-        <span className="muted small">
-          {timingCount > 0
-            ? t("run.events.visibleOfTotal", {
-                visible: visibleEvents.length,
-                total: state.events.length,
-              })
-            : `(${state.events.length})`}
-        </span>
-      </h3>
-      {hasOlder ? (
-        <Button size="sm" disabled={loadingOlder} onClick={() => void loadOlder()}>
-          {loadingOlder ? t("run.events.loadingOlder") : t("run.events.loadOlder")}
-        </Button>
-      ) : null}
-      <Button size="sm" onClick={() => setOldestFirst((value) => !value)}>
-        {oldestFirst ? t("run.events.newestFirst") : t("run.events.oldestFirst")}
-      </Button>
-      {timingCount > 0 ? (
-        <label className="small">
-          <input
-            type="checkbox"
-            checked={showTimingDiagnostics}
-            onChange={(event) => setShowTimingDiagnostics(event.currentTarget.checked)}
-          />{" "}
-          {t("run.events.showTiming", { count: timingCount })}
-        </label>
-      ) : null}
-      <ol className="events" aria-label={t("run.events.list")}>
-        {(oldestFirst ? visibleEvents : [...visibleEvents].reverse()).map((e) => (
-          <RunEventRow
-            key={e.seq}
-            event={e}
-            evidenceUrl={
-              evidenceWorkspace
-                ? (path) => api.workspaceFileDownloadUrl(evidenceWorkspace, path)
-                : undefined
-            }
+        ) : null}
+        {run ? (
+          <dl className="run-facts">
+            <dt>{t("run.fact.bot")}</dt>
+            <dd>
+              {bot ? `${bot.name} ` : null}
+              <code>{run.botId}</code>
+            </dd>
+            <dt>{t("runStory.runId")}</dt>
+            <dd>
+              <code>{run.id}</code>
+            </dd>
+            <dt>{t("run.fact.lane")}</dt>
+            <dd>{LANE_LABEL[run.lane] ? t(LANE_LABEL[run.lane]) : run.lane}</dd>
+            <dt>{t("run.fact.trigger")}</dt>
+            <dd>
+              {TRIGGER_LABEL[run.triggerKind] ? t(TRIGGER_LABEL[run.triggerKind]) : run.triggerKind}{" "}
+              <code className="muted">{run.triggerRef}</code>
+            </dd>
+            {run.threadId ? (
+              <>
+                <dt>{t("run.fact.thread")}</dt>
+                <dd>
+                  <a href={threadHref(run.threadId)}>{run.threadId}</a>
+                </dd>
+              </>
+            ) : null}
+            <dt>{t("run.fact.created")}</dt>
+            <dd>{formatDateTime(run.createdAt)}</dd>
+            <dt>{t("run.fact.started")}</dt>
+            <dd>{formatDateTime(run.startedAt)}</dd>
+            <dt>{t("run.fact.finished")}</dt>
+            <dd>
+              {formatDateTime(run.finishedAt)}
+              {run.startedAt ? (
+                <span className="muted small">
+                  {" "}
+                  ({formatDuration(run.startedAt, run.finishedAt)})
+                </span>
+              ) : null}
+            </dd>
+            {run.summary ? (
+              <>
+                <dt>{t("run.fact.summary")}</dt>
+                <dd>
+                  <p>{run.summary.done}</p>
+                  {run.summary.reply ? (
+                    <blockquote className="md">
+                      <Markdown text={run.summary.reply} />
+                    </blockquote>
+                  ) : null}
+                </dd>
+              </>
+            ) : null}
+          </dl>
+        ) : (
+          <p className="muted">{t("run.loading")}</p>
+        )}
+        <h3>{t("run.usage.heading")}</h3>
+        {state.usageCoverage ? <p>{t(`run.usage.${state.usageCoverage}`)}</p> : null}
+        {state.usage.length === 0 ? (
+          <p className="muted small">
+            {run && !isTerminal(run.status) ? t("run.usage.noneYet") : t("run.usage.none")}
+          </p>
+        ) : (
+          <Table className="usage" aria-label={t("run.usage.heading")}>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("run.usage.model")}</TableHead>
+                <TableHead>{t("run.usage.input")}</TableHead>
+                <TableHead>{t("run.usage.output")}</TableHead>
+                <TableHead>{t("run.usage.cacheRead")}</TableHead>
+                <TableHead>{t("run.usage.cacheCreate")}</TableHead>
+                <TableHead>{t("run.usage.cost")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {state.usage.map((u) => (
+                <TableRow key={u.model}>
+                  <TableCell>
+                    <code>{u.model}</code>
+                    {u.coverage === "partial" ? ` (${t("run.usage.partial")})` : ""}
+                  </TableCell>
+                  <TableCell>{u.inputTokens ?? "—"}</TableCell>
+                  <TableCell>{u.outputTokens ?? "—"}</TableCell>
+                  <TableCell>{u.cacheReadTokens ?? "—"}</TableCell>
+                  <TableCell>{u.cacheCreateTokens ?? "—"}</TableCell>
+                  <TableCell>
+                    {formatCost(u.costUsd)}
+                    {u.attributionUncertain ? <p>{t("run.usage.attributionUncertain")}</p> : null}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        {run && !waitingContinuation ? (
+          <RunContextPanel
+            api={api}
+            run={run}
+            events={state.events}
+            canContinue={canContinue.allowed}
+            onRunChanged={(updated) => dispatch({ type: "run_status", run: updated })}
           />
-        ))}
-      </ol>
+        ) : null}
+        {run ? (
+          <section className="management-subsection">
+            <h3>{t("runTimeline.heading")}</h3>
+            <RunTimelinePanel api={api} run={run} />
+          </section>
+        ) : null}
+        {spanCount > 0 ? (
+          <section className="management-subsection">
+            <h3>{t("phaseTiming.heading", { count: spanCount })}</h3>
+            <PhaseTimingTimeline events={state.events} />
+          </section>
+        ) : null}
+        {run ? <RunChangesSection api={api} run={run} /> : null}
+      </details>
+      <details className="run-metadata run-log">
+        <summary>{t("runStory.technicalLog", { count: state.events.length })}</summary>
+        <div className="events-toolbar">
+          <span className="muted small">
+            {shown !== state.events.length
+              ? t("run.events.visibleOfTotal", {
+                  visible: shown,
+                  total: state.events.length,
+                })
+              : `(${state.events.length})`}
+          </span>
+          {hasOlder ? (
+            <Button size="sm" disabled={loadingOlder} onClick={() => void loadOlder()}>
+              {loadingOlder ? t("run.events.loadingOlder") : t("run.events.loadOlder")}
+            </Button>
+          ) : null}
+          <Button size="sm" onClick={() => setOldestFirst((value) => !value)}>
+            {oldestFirst ? t("run.events.newestFirst") : t("run.events.oldestFirst")}
+          </Button>
+          {diagnosticCount > 0 ? (
+            <label className="small">
+              <input
+                type="checkbox"
+                checked={showDiagnostics}
+                onChange={(event) => setShowDiagnostics(event.currentTarget.checked)}
+              />{" "}
+              {t("run.events.showDiagnostics", { count: diagnosticCount })}
+            </label>
+          ) : null}
+        </div>
+        <ol className="events" aria-label={t("run.events.list")}>
+          {(oldestFirst ? rows : [...rows].reverse()).map((row) =>
+            row.kind === "tool" ? (
+              <ToolCallRow key={row.call.seq} row={row} evidenceUrl={evidenceUrl} />
+            ) : (
+              <RunEventRow key={row.event.seq} event={row.event} evidenceUrl={evidenceUrl} />
+            ),
+          )}
+        </ol>
+      </details>
     </section>
   );
-}
-
-function isTimingDiagnostic(event: RunEvent): boolean {
-  return event.kind === "log" && event.payload.source === "phase_timing";
 }

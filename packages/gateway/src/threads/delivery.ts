@@ -4,11 +4,13 @@
 
 import type {
   BotId,
+  PostedMessageRouting,
   Thread,
   ThreadMessage,
   ThreadMessageDelivery,
   ThreadMessageTrigger,
   ThreadOffer,
+  ThreadRoundBrief,
 } from "@deskmates/contracts";
 
 export interface Delivery {
@@ -26,6 +28,10 @@ export interface DeliveryGroup {
   members: ReadonlyArray<{ botId: BotId; name: string; role: string }>;
   ownerBotId?: BotId;
   offer?: ThreadOffer;
+  /** Amendment 6 (`round-v1`): the plan of the round this wake works on or closes. */
+  round?: ThreadRoundBrief;
+  /** Amendment 6, decision 50: whom the recipient's previous final reply missed. */
+  lastReply?: PostedMessageRouting;
 }
 
 /** Rough token estimate; the sidecar does the exact count, this only bounds the payload. */
@@ -102,6 +108,8 @@ export function buildDelivery(
                 ...(member.botId === group.ownerBotId ? { owner: true as const } : {}),
               })),
               ...(group.offer ? { offer: group.offer } : {}),
+              ...(group.round ? { round: group.round } : {}),
+              ...(group.lastReply ? { lastReply: group.lastReply } : {}),
             }
           : {}),
       },

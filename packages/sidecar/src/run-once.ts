@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { runModelJob } from "./model-job.js";
 import { presentationSummary } from "./presentation-summary.js";
 // One run, start to finish (design v0.3 §5 steps 3 to 7): assemble context, register MCP
@@ -41,6 +40,7 @@ import {
   prepareCanonicalFiles,
   snapshotPeerRuleFiles,
 } from "./canonical-files.js";
+import { ContextUsageProbe, type ContextUsageSource } from "./context-usage.js";
 import { buildContext, diaryPath, knowledgeQuery } from "./context.js";
 import type { SidecarDeps } from "./deps.js";
 import { GatewayClient } from "./gateway-client.js";
@@ -50,7 +50,9 @@ import { EventSink } from "./ledger.js";
 import { managedProxyEnvironment } from "./managed-proxy.js";
 import { TaintTracker } from "./memory-taint.js";
 import { ModelSwitchRecorder, fallbackSwitch, isModelFallbackMessage } from "./model-switch.js";
+import { PendingCaptures } from "./pending-captures.js";
 import { redactText, redactValue } from "./redact.js";
+import { ReplyPreviewer } from "./reply-preview.js";
 import {
   BROWSER_MCP_SERVER,
   DESKMATES_MCP_SERVER,
@@ -59,6 +61,7 @@ import {
   splitMcpToolName,
 } from "./risk-tier.js";
 import { createRunState } from "./run-state.js";
+import { SidecarTimeline, processStartedAt } from "./run-timeline.js";
 import { screenshotRecorder } from "./screenshot-budget.js";
 import {
   SCREENSHOT_MAX_PER_RUN,
@@ -68,8 +71,11 @@ import {
   parseScreenshotFile,
   screenshotFileName,
 } from "./screenshots.js";
+import { sdkInitLog } from "./sdk-init-log.js";
+import { carrySessionIntoBotDir } from "./session-carry.js";
 import { materializeSkillPlugin, skillPluginDir } from "./skill-plugin.js";
 import { parseRunSummary } from "./summary.js";
+import { sdkSystemPrompt } from "./system-prompt.js";
 import { createThreadTools } from "./thread-tools.js";
 import { ledgerToolResult } from "./tool-evidence.js";
 import { toolResultText } from "./tool-result-text.js";
@@ -108,6 +114,33 @@ export const DISALLOWED_TOOLS: readonly string[] = [
   "CronList",
   "ScheduleWakeup",
 ];
+
+/**
+ * The fixed list plus the Gateway's extra names (ADR-0023 amendment 5), in that order, each once.
+ * The Gateway can only add to the list: a name it sends never brings back a fixed one.
+ */
+export function disallowedToolsFor(request: Pick<StartRunRequest, "cliSurface">): string[] {
+  return [...new Set([...DISALLOWED_TOOLS, ...(request.cliSurface?.disallowedTools ?? [])])];
+}
+
+/** The SDK's inline `settings`, holding only the switches the Gateway sent; none, no key. */
+export function cliSettingsFor(
+  request: Pick<StartRunRequest, "cliSurface">,
+): Pick<Options, "settings"> {
+  const s = request.cliSurface;
+  const settings: NonNullable<Exclude<Options["settings"], string>> = {
+    ...(s?.disableBundledSkills === undefined
+      ? {}
+      : { disableBundledSkills: s.disableBundledSkills }),
+    ...(s?.includeGitInstructions === undefined
+      ? {}
+      : { includeGitInstructions: s.includeGitInstructions }),
+    ...(s?.skillListingMaxDescChars === undefined
+      ? {}
+      : { skillListingMaxDescChars: s.skillListingMaxDescChars }),
+  };
+  return Object.keys(settings).length > 0 ? { settings } : {};
+}
 
 /** How often the run process looks for the capture file of an action it has the result of. */
 const SCREENSHOT_POLL_MS = 50;
@@ -198,8 +231,9 @@ export function resolveAllowlist(
  */
 export function maxContextTokensOf(
   env: Readonly<Record<string, string | undefined>>,
+  key = "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
 ): number | undefined {
-  const raw = env.CLAUDE_CODE_MAX_CONTEXT_TOKENS?.trim();
+  const raw = env[key]?.trim();
   if (raw === undefined || !/^\d+$/.test(raw)) return undefined;
   const n = Number(raw);
   return Number.isSafeInteger(n) && n > 0 ? n : undefined;
@@ -322,6 +356,14 @@ export async function runOnce(
     sleep: deps.sleep,
     onError: (err) => process.stderr.write(`ledger post failed: ${describeError(err)}\n`),
   });
+  // ADR-0037: this process's half of the startup timeline.
+  const timeline = new SidecarTimeline((payload) => sink.emit("log", payload), deps.now);
+  timeline.mark(
+    "sidecar_started",
+    deps.uptimeSeconds
+      ? { processStartedAt: processStartedAt(deps.now(), deps.uptimeSeconds()).toISOString() }
+      : {},
+  );
   if (request.presentationSummary || request.modelJob) {
     const jobEnv = { ...inheritedEnv(deps.env), ...managedProxyEnvironment(deps.env) };
     const ended = request.modelJob
@@ -336,9 +378,33 @@ export async function runOnce(
     }
     return ended;
   }
+  // ADR-0037 decision 7: a thread run streams its reply as it is written; the final message
+  // stays authoritative. Runs without a thread have nowhere to show it.
+  const preview =
+    request.threadId === undefined
+      ? undefined
+      : new ReplyPreviewer({
+          runId: request.runId,
+          attempt: request.attempt,
+          post: (frame) => client.postReplyPreview(frame),
+          redact: (text) => redactText(text, secrets),
+        });
   const recordScreenshot = screenshotRecorder(sink);
+  const captures = new PendingCaptures((err) =>
+    sink.emit("log", {
+      source: "screenshot",
+      level: "warn",
+      reason: redactText(err instanceof Error ? err.message : String(err), secrets),
+    }),
+  );
+  // What the CLI puts in the window, per category: once after init, then after every response
+  // (ADR-0023 amendment 5, `context-usage.ts`).
+  const contextUsage = new ContextUsageProbe((payload) => sink.emit("log", payload), deps.sleep);
   // One `turn_usage` per model response (M3 context plan, Phase 1; `turn-usage.ts`).
-  const turnUsage = new TurnUsageTracker((payload) => sink.emit("turn_usage", { ...payload }));
+  const turnUsage = new TurnUsageTracker((payload) => {
+    sink.emit("turn_usage", { ...payload });
+    contextUsage.sample("summary", payload.turn);
+  });
   const turnWarning = new TurnWarning(request.maxTurns);
   // ADR-0023 decision 3: the hook and SDK 0.3.278's overload-fallback message both feed it.
   const modelSwitches = new ModelSwitchRecorder((payload) =>
@@ -387,6 +453,7 @@ export async function runOnce(
           decision: trigger.decision,
           toolUseId: trigger.toolUseId,
           deferredAction: trigger.deferredAction,
+          reason: trigger.reason,
         }
       : undefined,
     // The browser is still on the page the parked process left it on, so a click in this process
@@ -448,27 +515,9 @@ export async function runOnce(
         });
       }
     }
-    const context = await buildContext(request, deps.fs, deps.now(), knowledge);
-    // What each part of the system prompt costs and which prompt this was, without the text
-    // (M3 context plan, Phase 1). The hash also goes to `runs.config_json` through RunEnded.
-    sink.emit("log", {
-      source: "context",
-      kind: "context_sections",
-      sections: { ...context.sections },
-      systemPromptSha256: context.systemPromptSha256,
-    });
-    ended.systemPromptSha256 = context.systemPromptSha256;
-
-    // The run's skill set from the Gateway, written as this attempt's local plugin (ADR-0015
-    // decision 1). The ledger names what was enabled; the Gateway already recorded it in
-    // `runs.config_json`.
-    const skillPlugin = await materializeSkillPlugin(request.skills ?? [], deps.fs, skillDir);
-    if (skillPlugin.set.length > 0)
-      sink.emit("log", { source: "skills", op: "enabled", set: skillPlugin.set });
-
-    // Issue #88: under the opt-in per-bot mode the run starts in the bot's own directory under the
-    // shared /work. It is a convention the prompt states, not a boundary: no hook or callback
-    // looks at it. A directory that cannot be created leaves the run in /work, not failed.
+    // ADR-0038 decision 1: a per-bot run (the default) starts in the bot's own directory, which
+    // other bots may read but not write (the hook's soft guard, decision 2). A directory that
+    // cannot be created leaves the run in /work, not failed.
     let cwd = WORK_DIR;
     if (request.workdirMode === "per-bot") {
       const own = botWorkDir(request.botName);
@@ -482,7 +531,33 @@ export async function runOnce(
           reason: `bot working directory unavailable, starting in ${WORK_DIR}: ${String(err)}`,
         });
       }
+      if (cwd !== WORK_DIR && request.sdkSessionId !== undefined)
+        await carrySessionIntoBotDir(request, cwd, deps.fs, sink);
     }
+
+    const context = await buildContext(request, deps.fs, deps.now(), knowledge);
+    // What each part of the system prompt costs and which prompt this was, without the text
+    // (M3 context plan, Phase 1). The hash also goes to `runs.config_json` through RunEnded.
+    sink.emit("log", {
+      source: "context",
+      kind: "context_sections",
+      sections: { ...context.sections },
+      systemPromptSha256: context.systemPromptSha256,
+      // ADR-0023 amendment 5: the part before the SDK's dynamic boundary, and the rest.
+      systemPromptStaticSha256: context.systemPromptStaticSha256,
+      ...(context.systemPromptDynamicSha256 === undefined
+        ? {}
+        : { systemPromptDynamicSha256: context.systemPromptDynamicSha256 }),
+    });
+    ended.systemPromptSha256 = context.systemPromptSha256;
+    ended.systemPromptStaticSha256 = context.systemPromptStaticSha256;
+
+    // The run's skill set from the Gateway, written as this attempt's local plugin (ADR-0015
+    // decision 1). The ledger names what was enabled; the Gateway already recorded it in
+    // `runs.config_json`.
+    const skillPlugin = await materializeSkillPlugin(request.skills ?? [], deps.fs, skillDir);
+    if (skillPlugin.set.length > 0)
+      sink.emit("log", { source: "skills", op: "enabled", set: skillPlugin.set });
 
     // Before the query: the proxy starts with the browser MCP server and captures from the first
     // action on, so the directory has to exist already. A failure here costs the run its
@@ -504,6 +579,7 @@ export async function runOnce(
       state,
       readBrowserState,
       egressAllowlist: resolveAllowlist(request.egressAllowlist, deps.env),
+      cwd,
       redact: (value) => redactValue(value, secrets),
       protectToolInput,
       now: deps.now,
@@ -552,6 +628,7 @@ export async function runOnce(
         request,
         client,
         sink,
+        ...(deps.operationFiles ? { operationFiles: deps.operationFiles } : {}),
         ...(tty ? { tty, redactTerminal: (text: string) => redactText(text, secrets) } : {}),
         browserCli: {
           context: {
@@ -616,7 +693,11 @@ export async function runOnce(
     };
     // Recorded from what the CLI actually receives, not from the container environment: a value
     // the passthrough drops has no effect on compaction and must not be attributed to the run.
-    const maxContextTokens = maxContextTokensOf(env);
+    // ADR-0044: the OpenAI runtime has its own knob, read from the same passthrough environment.
+    const maxContextTokens =
+      request.runtime === "openai-agents"
+        ? maxContextTokensOf(env, "DESKMATES_OPENAI_MAX_CONTEXT_TOKENS")
+        : maxContextTokensOf(env);
     if (maxContextTokens !== undefined) ended.maxContextTokens = maxContextTokens;
     // ADR-0023 decision 3: one `model_switch` per switch the SDK makes, whatever asked for it.
     // An overload fallback does not come through here in SDK 0.3.278 (see `model-switch.ts`).
@@ -627,8 +708,33 @@ export async function runOnce(
         to: input.to_model,
         source: input.source,
         ...(input.requested_model === undefined ? {} : { requested: input.requested_model }),
+        // ADR-0023 amendment 5: what the switch cost the prompt cache.
+        ...(typeof input.prompt_cache_warm === "boolean"
+          ? { promptCacheWarm: input.prompt_cache_warm }
+          : {}),
+        ...(typeof input.context_tokens === "number"
+          ? { contextTokens: input.context_tokens }
+          : {}),
       };
       modelSwitches.record(payload);
+      return {};
+    };
+    // ADR-0023 amendment 5: on a resume, how large the re-sent context is and whether the CLI
+    // expects the prompt cache to have expired; on a fresh start, only that the session started.
+    const sessionStart: HookCallback = async (input) => {
+      if (input.hook_event_name !== "SessionStart") return {};
+      sink.emit("log", {
+        source: "sdk",
+        kind: "session_start",
+        sessionSource: input.source,
+        ...(input.context_tokens === undefined ? {} : { contextTokens: input.context_tokens }),
+        ...(input.prompt_cache_likely_expired === undefined
+          ? {}
+          : { promptCacheLikelyExpired: input.prompt_cache_likely_expired }),
+        ...(input.seconds_since_last_response === undefined
+          ? {}
+          : { secondsSinceLastResponse: input.seconds_since_last_response }),
+      });
       return {};
     };
     const options: Options = {
@@ -646,7 +752,9 @@ export async function runOnce(
       plugins: [skillPlugin.plugin],
       skills: skillPlugin.skills,
       permissionMode: "default",
-      systemPrompt: context.systemPrompt,
+      // ADR-0023 amendment 5: the static part before the SDK's dynamic boundary, recorded once
+      // per session (`system-prompt.ts`).
+      systemPrompt: sdkSystemPrompt(context.systemPromptParts),
       env,
       // The turn budget is a Gateway knob recorded in `runs.config_json`, not a container setting:
       // the environment belongs to the whole workspace and a value left there would silently run
@@ -655,7 +763,10 @@ export async function runOnce(
       ...(request.maxTurns === null ? {} : { maxTurns: request.maxTurns }),
       // Final response usage arrives in message_delta after assistant content blocks.
       includePartialMessages: true,
-      disallowedTools: [...DISALLOWED_TOOLS],
+      disallowedTools: disallowedToolsFor(request),
+      // ADR-0023 amendment 5: present only when the Gateway sent a switch, so a run without one
+      // passes the CLI exactly the options it always had.
+      ...cliSettingsFor(request),
       mcpServers,
       hooks: {
         PreToolUse: [
@@ -698,17 +809,53 @@ export async function runOnce(
           },
         ],
         PostModelSwitch: [{ hooks: [postModelSwitch] }],
+        SessionStart: [{ hooks: [sessionStart] }],
       },
-      canUseTool: createCanUseTool(sink, state),
+      canUseTool: createCanUseTool(sink, state, { browserCode: request.browserCodeApproval }),
       ...(request.sdkSessionId === undefined ? {} : { resume: request.sdkSessionId }),
     };
 
-    for await (const msg of deps.query({ prompt: context.prompt, options })) {
+    timeline.mark("query_started", { resume: request.sdkSessionId !== undefined });
+    // ADR-0044 decision 1: the run row froze which loop runs; both consume the same options and
+    // yield the same message shapes, so everything below this line is runtime-neutral.
+    const runtime = request.runtime ?? "claude-agent-sdk";
+    let stream: AsyncIterable<SDKMessage> & ContextUsageSource;
+    if (runtime === "openai-agents") {
+      if (deps.queryOpenAi === undefined)
+        throw new Error("this sidecar cannot host the openai-agents runtime (ADR-0044)");
+      // The OpenAI loop has no `getContextUsage`; the probe then samples nothing (issue #8).
+      stream = deps.queryOpenAi({
+        prompt: context.prompt,
+        options,
+        modelBaseUrl: request.modelBaseUrl,
+        modelAuthToken: request.modelAuthToken,
+        botHomeDir: request.botHomeDir,
+        botName: request.botName,
+        runId: request.runId,
+        cwd,
+        skills: {
+          dir: skillDir,
+          names: skillPlugin.set.map((s) => s.name),
+          readFile: (path) => deps.fs.readFile(path),
+        },
+        ...(maxContextTokens === undefined ? {} : { maxContextTokens }),
+      }) as AsyncIterable<SDKMessage> & ContextUsageSource;
+    } else {
+      stream = deps.query({ prompt: context.prompt, options });
+    }
+    contextUsage.attach(stream);
+    for await (const msg of stream) {
+      timeline.observe(msg);
+      preview?.observe(msg);
       await handleMessage(msg);
     }
+    contextUsage.detach();
     turnUsage.flush();
+    await contextUsage.settle();
   } catch (err) {
+    contextUsage.detach();
     turnUsage.flush();
+    await contextUsage.settle();
     const error = redactText(
       err instanceof Error ? (err.stack ?? err.message) : String(err),
       secrets,
@@ -739,6 +886,8 @@ export async function runOnce(
     sink.emit("rule_file_modified", payload);
   }
 
+  // Every capture still waiting lands before the directory goes and before the last flush.
+  await captures.settle();
   tty?.dispose();
   if (resourceTimer) clearInterval(resourceTimer);
   await sampleResources();
@@ -774,6 +923,7 @@ export async function runOnce(
       approvalId: consumed.approvalId,
       decision: consumed.decision,
       deferredAction: consumed.deferredAction,
+      reason: consumed.reason,
       replayedToolUseId: toolUseId,
     };
   }
@@ -886,14 +1036,8 @@ export async function runOnce(
     }
     if (msg.type === "system" && msg.subtype === "init") {
       state.sdkSessionId = msg.session_id;
-      // The CLI build and the model id the SDK resolved for this attempt: a CLI-side failure such
-      // as `unrecognized_model` is only explainable when they sit next to the error (issue #68).
-      sink.emit("log", {
-        source: "sdk",
-        usageSessionFingerprint: createHash("sha256").update(msg.session_id).digest("hex"),
-        ...(msg.claude_code_version === undefined ? {} : { cliVersion: msg.claude_code_version }),
-        ...(msg.model === undefined ? {} : { model: msg.model }),
-      });
+      sink.emit("log", sdkInitLog(msg, ended.maxContextTokens));
+      contextUsage.sample("full", 0);
       return;
     }
     if (msg.type === "system" && msg.subtype === "api_retry") {
@@ -958,7 +1102,7 @@ export async function runOnce(
             toolUseId: block.id,
             toolName: block.name,
             input,
-            riskLevel: riskTier(block.name, input),
+            riskLevel: riskTier(block.name, input, { browserCode: request.browserCodeApproval }),
           });
           // Remembered here, numbered when its result arrives (`emitScreenshot`): the proxy
           // counts the calls that reach it, so action n is the nth page-changing call the hook
@@ -997,11 +1141,15 @@ export async function runOnce(
           isError,
         });
         settleConsumedDecision(block.tool_use_id, isError);
-        await emitScreenshot(block.tool_use_id);
+        // Issue #9: the capture wait (up to SCREENSHOT_WAIT_MS) runs beside the message loop, so
+        // it no longer holds back every SDK message after this one. The action is numbered
+        // before the first await, so captures stay aligned; the run awaits them before it ends.
+        captures.add(emitScreenshot(block.tool_use_id));
       }
       return;
     }
     if (msg.type === "result") {
+      contextUsage.detach();
       turnUsage.flush();
       state.sdkSessionId = msg.session_id;
       resultSubtype = msg.subtype;
@@ -1076,6 +1224,8 @@ export async function runOnce(
 
   ended.taint = taint.snapshot();
   await appendDiary(request, deps, ended, summary);
+  // A preview must not arrive after the final reply it is replaced by.
+  await preview?.flush();
   await sink.flush();
   if (!(await postEndedWithRetry(client, ended, deps))) {
     // Last resort. Without this line a lost post turns a completed run into `failed` on the

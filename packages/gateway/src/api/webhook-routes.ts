@@ -61,6 +61,14 @@ export function registerWebhookDeliveryRoute(
         }
         const tenantId = ctx.ownership.tenantOf("bot", bot.id);
         if (tenantId === undefined) throw hookNotFound();
+        // ADR-0026 amendment 1: a paused bot takes no delivery. The sender is told, so it can
+        // retry later; nothing is queued behind the pause. Only a holder of the token gets here.
+        if (bot.pausedAt !== undefined) {
+          throw new DeskmatesError("invalid_transition", "the bot is paused; retry later", {
+            botId: bot.id,
+            reason: "bot_paused",
+          });
+        }
         ctx.quotas.assertQueueRoom(tenantId);
         const queued = ctx.runs.countQueued(bot.id, "webhook");
         if (queued >= ctx.config.webhookQueueMax) {

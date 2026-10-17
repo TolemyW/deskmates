@@ -128,6 +128,14 @@ export class EventStore {
     return { events: rows.slice(0, limit).reverse().map(toEvent), more: rows.length > limit };
   }
 
+  /** The run's newest event of one kind, e.g. its latest screenshot (issue #9). */
+  latestOfKind(runId: RunId, kind: RunEventKind): RunEvent | undefined {
+    const row = this.db
+      .prepare("SELECT * FROM run_events WHERE run_id = ? AND kind = ? ORDER BY seq DESC LIMIT 1")
+      .get(runId, kind) as EventRow | undefined;
+    return row ? toEvent(row) : undefined;
+  }
+
   /** The run's current sidecar process number; 1 when the run row has gone or never existed. */
   private currentAttempt(runId: RunId): number {
     const row = this.db.prepare("SELECT attempt FROM runs WHERE id = ?").get(runId) as

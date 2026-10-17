@@ -1,10 +1,11 @@
 // Approvals (ADR-0002 amendment 2): the inbox, one approval, and a human's decision; the
-// workspace automatic-approval setting (ADR-0002 amendment 4).
+// workspace approval mode (ADR-0002 amendment 6).
 
 import type {
   Approval,
   ApprovalDecision,
   ApprovalId,
+  ApprovalMode,
   ApprovalRule,
   BotId,
   ThreadId,
@@ -17,6 +18,11 @@ export interface ApprovalFilter {
   status?: "pending" | "decided";
   threadId?: ThreadId;
   botId?: BotId;
+  /**
+   * Only these approvals of `threadId`, pending and decided unless `status` is set; at most 100
+   * (#113 surface 26). Unknown ids are omitted.
+   */
+  ids?: readonly string[];
 }
 
 /** One page of the Attention inbox (#113 surface 23): oldest first, with the visible total. */
@@ -39,7 +45,10 @@ export interface ApprovalsApi {
     cursor?: string;
     limit?: number;
   }): Promise<PendingApprovalsPage>;
-  setAutoApproval(workspaceId: string, enabled: boolean): Promise<WorkspaceAutoApproval>;
+  /** ADR-0002 amendment 3, A7: minutes an undecided request waits before it expires. */
+  setApprovalExpiry(workspaceId: string, expiryMinutes: number): Promise<WorkspaceAutoApproval>;
+  /** ADR-0002 amendment 6, D1: manual, automatic review or approve all. */
+  setApprovalMode(workspaceId: string, mode: ApprovalMode): Promise<WorkspaceAutoApproval>;
 }
 
 export function createApprovalsApi(t: HttpTransport): ApprovalsApi {
@@ -72,6 +81,7 @@ export function createApprovalsApi(t: HttpTransport): ApprovalsApi {
           status: filter.status,
           threadId: filter.threadId,
           botId: filter.botId,
+          ids: filter.ids?.join(","),
         })}`,
       );
       return r.approvals;
@@ -89,11 +99,19 @@ export function createApprovalsApi(t: HttpTransport): ApprovalsApi {
         ...(typeof r.total === "number" ? { total: r.total } : {}),
       };
     },
-    async setAutoApproval(workspaceId, enabled) {
+    async setApprovalExpiry(workspaceId, expiryMinutes) {
       const r = await t.json<{ autoApproval: WorkspaceAutoApproval }>(
         "PUT",
         `/api/workspaces/${encodeURIComponent(workspaceId)}/auto-approval`,
-        { enabled },
+        { expiryMinutes },
+      );
+      return r.autoApproval;
+    },
+    async setApprovalMode(workspaceId, mode) {
+      const r = await t.json<{ autoApproval: WorkspaceAutoApproval }>(
+        "PUT",
+        `/api/workspaces/${encodeURIComponent(workspaceId)}/auto-approval`,
+        { mode },
       );
       return r.autoApproval;
     },

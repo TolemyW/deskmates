@@ -1,9 +1,13 @@
-// Operator cost reporting uses the same receipt projection as the run API. Observed costs
-// are lower bounds; unknown runs remain visible even without a final SDK aggregate.
+// Operator cost reporting. Observed costs are lower bounds; unknown runs remain visible even
+// without a final SDK aggregate.
 //
 // ADR-0032: unpriced usage also carries an estimate at the average configured unit price per
 // token category, reported apart from known cost. Totals, days and rankings are grouped here, on
 // the server, over the whole filtered range; a ranking page never recomputes a total.
+//
+// ADR-0032 amendment 1 (#113): every figure comes from the stored per-run, per-model usage
+// summaries (`run-usage-summaries.ts`) grouped with SQL; a run without a summary is computed once
+// and stored before the query. Whether a run is in flight is read at query time from its status.
 import {
   COST_RANKING_PAGE_SIZE,
   type CostDay,
@@ -17,102 +21,95 @@ import {
   type CostTotals,
   PRICE_ESTIMATE_VERSION,
   type RunId,
-  type RunStatus,
+  TERMINAL_RUN_STATUSES,
   type UsageCoverage,
   type WorkspaceId,
-  isTerminal,
 } from "@deskmates/contracts";
 import type { GatewayDb } from "../db/open.js";
 import { EstimateCache, estimateCost, measured } from "./price-estimate.js";
 import { PriceStore } from "./prices.js";
-import { type AttemptReceipt, combineCoverage, usageReceiptsForRuns } from "./usage-receipts.js";
-
-function empty(): CostTotals {
-  return {
-    runCount: 0,
-    usageCount: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheCreateTokens: 0,
-    pricedUsageCount: 0,
-    unpricedUsageCount: 0,
-    knownCostUsd: null,
-    costStatus: "unpriced",
-    estimatedCostUsd: null,
-    estimatedUsageCount: 0,
-    unestimatedUsageCount: 0,
-  };
-}
+import { RunUsageSummaryStore } from "./run-usage-summaries.js";
+import { combineCoverage, usageReceiptsForRuns } from "./usage-receipts.js";
 
 const micro = (usd: number) => Math.round(usd * 1e6) / 1e6;
 
-interface RunMeta {
-  id: RunId;
-  bot_id: CostRow["botId"];
-  status: RunStatus;
-  name: string;
-  day: string;
-  workspace_id: WorkspaceId;
-  workspace_name: string;
-  priced_at: string;
+/** The grouped sums of one group of summary rows. */
+interface SumRow {
+  run_count: number;
+  usage_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_create_tokens: number;
+  priced_usage_count: number;
+  unpriced_usage_count: number;
+  known_cost_usd: number | null;
+  estimated_cost_usd: number | null;
+  estimated_usage_count: number;
+  unestimated_usage_count: number;
+  attribution_uncertain: number;
+  coverages: string | null;
 }
 
-interface UsageFact {
-  run: RunMeta;
-  usage: AttemptReceipt;
-  coverage: UsageCoverage;
-  inFlight: boolean;
-  /** Estimate for an unpriced row with measured tokens; null otherwise. */
-  estimate: number | null;
-}
+const TERMINAL = [...TERMINAL_RUN_STATUSES].map((s) => `'${s}'`).join(", ");
 
-interface Collected {
-  facts: UsageFact[];
-  /** Coverage of every selected run with a receipt, usage rows or not. */
-  coverage: UsageCoverage[];
-}
+/** The aggregate columns every grouping selects; `m` is a summary model row, `r` its run. */
+const SUMS = `count(DISTINCT m.run_id) AS run_count,
+  sum(m.usage_count) AS usage_count,
+  sum(m.input_tokens) AS input_tokens,
+  sum(m.output_tokens) AS output_tokens,
+  sum(m.cache_read_tokens) AS cache_read_tokens,
+  sum(m.cache_create_tokens) AS cache_create_tokens,
+  sum(m.priced_usage_count) AS priced_usage_count,
+  sum(m.unpriced_usage_count -
+      CASE WHEN r.status IN (${TERMINAL}) THEN 0 ELSE m.observed_unpriced_count END)
+    AS unpriced_usage_count,
+  sum(m.known_cost_usd) AS known_cost_usd,
+  sum(m.estimated_cost_usd) AS estimated_cost_usd,
+  sum(m.estimated_usage_count) AS estimated_usage_count,
+  sum(m.unestimated_usage_count) AS unestimated_usage_count,
+  max(m.attribution_uncertain) AS attribution_uncertain,
+  group_concat(DISTINCT s.coverage) AS coverages`;
 
-class Group<T extends CostTotals> {
-  readonly runs = new Set<string>();
-  readonly coverage: UsageCoverage[] = [];
-  constructor(readonly row: T) {}
+const coveragesOf = (list: string | null): UsageCoverage[] =>
+  list ? (list.split(",") as UsageCoverage[]) : [];
 
-  add(f: UsageFact): void {
-    const t = this.row;
-    const u = f.usage;
-    this.runs.add(f.run.id);
-    this.coverage.push(f.coverage);
-    if (u.attributionUncertain) t.attributionUncertain = true;
-    t.usageCount++;
-    for (const k of [
-      "inputTokens",
-      "outputTokens",
-      "cacheReadTokens",
-      "cacheCreateTokens",
-    ] as const)
-      t[k] += u[k] ?? 0;
-    if (u.costUsd === null) {
-      if (!(f.inFlight && u.coverage !== undefined)) t.unpricedUsageCount++;
-      if (f.estimate !== null) {
-        t.estimatedCostUsd = micro((t.estimatedCostUsd ?? 0) + f.estimate);
-        t.estimatedUsageCount = (t.estimatedUsageCount ?? 0) + 1;
-      } else if (measured(u)) t.unestimatedUsageCount = (t.unestimatedUsageCount ?? 0) + 1;
-    } else {
-      t.pricedUsageCount++;
-      t.knownCostUsd = micro((t.knownCostUsd ?? 0) + u.costUsd);
-    }
-  }
-
-  finish(): T {
-    finish(this.row, this.runs.size, this.coverage);
-    return this.row;
-  }
-}
-
-function finish(t: CostTotals, count: number, states: UsageCoverage[]): void {
-  t.runCount = count;
-  const c = combineCoverage(states);
+/**
+ * The totals of one group, shaped and finished exactly as the per-request computation did: the
+ * counters, then the group's own fields (`extra`), then the uncertainty flag and the coverage.
+ */
+function totalsOf<E extends object>(
+  row: SumRow | undefined,
+  extra: E,
+  coverage?: UsageCoverage[],
+): CostTotals & E {
+  const pricedUsageCount = row?.priced_usage_count ?? 0;
+  const unpricedUsageCount = row?.unpriced_usage_count ?? 0;
+  const estimatedUsageCount = row?.estimated_usage_count ?? 0;
+  const base: CostTotals = {
+    runCount: row?.run_count ?? 0,
+    usageCount: row?.usage_count ?? 0,
+    inputTokens: row?.input_tokens ?? 0,
+    outputTokens: row?.output_tokens ?? 0,
+    cacheReadTokens: row?.cache_read_tokens ?? 0,
+    cacheCreateTokens: row?.cache_create_tokens ?? 0,
+    pricedUsageCount,
+    unpricedUsageCount,
+    knownCostUsd:
+      pricedUsageCount && typeof row?.known_cost_usd === "number"
+        ? micro(row.known_cost_usd)
+        : null,
+    costStatus: "unpriced",
+    estimatedCostUsd:
+      estimatedUsageCount && typeof row?.estimated_cost_usd === "number"
+        ? micro(row.estimated_cost_usd)
+        : null,
+    estimatedUsageCount,
+    unestimatedUsageCount: row?.unestimated_usage_count ?? 0,
+  };
+  const t = Object.assign(base, extra) as CostTotals & E;
+  if (row?.attribution_uncertain) t.attributionUncertain = true;
+  const c = combineCoverage(coverage ?? coveragesOf(row?.coverages ?? null));
   // No runs, no coverage: an empty report is not "not started".
   if (c !== undefined) t.usageCoverage = c;
   t.costStatus =
@@ -121,6 +118,7 @@ function finish(t: CostTotals, count: number, states: UsageCoverage[]): void {
       : t.unpricedUsageCount || (c !== undefined && c !== "complete")
         ? "partial"
         : "priced";
+  return t;
 }
 
 /** Activity order: newest day first, then bot name, bot id and model; unique per row. */
@@ -145,108 +143,138 @@ export function moneyOf(t: CostTotals): number | null {
   return micro((t.knownCostUsd ?? 0) + (t.estimatedCostUsd ?? 0));
 }
 
-export class CostQueryStore {
-  constructor(private readonly db: GatewayDb) {}
-
-  private collect(tenantId: string, query: CostQuery): Collected {
-    const clauses = ["w.tenant_id = ?"];
-    const params: string[] = [tenantId];
-    if (query.from) {
-      clauses.push("substr(r.created_at, 1, 10) >= ?");
-      params.push(query.from);
-    }
-    if (query.to) {
-      clauses.push("substr(r.created_at, 1, 10) <= ?");
-      params.push(query.to);
-    }
-    if (query.workspaceId) {
-      clauses.push("r.workspace_id = ?");
-      params.push(query.workspaceId);
-    }
-    if (query.botId) {
-      clauses.push("r.bot_id = ?");
-      params.push(query.botId);
-    }
-    const runs = this.db
-      .prepare(
-        `SELECT r.id, r.bot_id, r.status, b.name, substr(r.created_at, 1, 10) AS day,
-                r.workspace_id, w.name AS workspace_name,
-                coalesce(r.started_at, r.created_at) AS priced_at
-           FROM runs r JOIN bots b ON b.id = r.bot_id JOIN workspaces w ON w.id = r.workspace_id
+/** The run filter of a query: `FROM runs r JOIN bots b JOIN workspaces w WHERE ...`. */
+function runFilter(tenantId: string, query: CostQuery): { sql: string; params: string[] } {
+  const clauses = ["w.tenant_id = ?"];
+  const params: string[] = [tenantId];
+  if (query.from) {
+    clauses.push("substr(r.created_at, 1, 10) >= ?");
+    params.push(query.from);
+  }
+  if (query.to) {
+    clauses.push("substr(r.created_at, 1, 10) <= ?");
+    params.push(query.to);
+  }
+  if (query.workspaceId) {
+    clauses.push("r.workspace_id = ?");
+    params.push(query.workspaceId);
+  }
+  if (query.botId) {
+    clauses.push("r.bot_id = ?");
+    params.push(query.botId);
+  }
+  return {
+    sql: `FROM runs r JOIN bots b ON b.id = r.bot_id JOIN workspaces w ON w.id = r.workspace_id
           WHERE ${clauses.join(" AND ")}`,
+    params,
+  };
+}
+
+export class CostQueryStore {
+  private readonly summaries: RunUsageSummaryStore;
+
+  constructor(private readonly db: GatewayDb) {
+    this.summaries = new RunUsageSummaryStore(db);
+  }
+
+  /**
+   * The grouped sums over the stored summaries of the selected runs, after computing the missing
+   * ones. `select` names the group columns, `group` the GROUP BY list (empty for one total).
+   */
+  private grouped<T extends object>(
+    tenantId: string,
+    query: CostQuery,
+    select: string,
+    group: string,
+  ): (SumRow & T)[] {
+    const filter = runFilter(tenantId, query);
+    this.summaries.ensure(filter.sql, filter.params);
+    const model = query.model ? " AND m.model = ?" : "";
+    const params = query.model ? [...filter.params, query.model] : filter.params;
+    return this.db
+      .prepare(
+        `SELECT ${select ? `${select}, ` : ""}${SUMS}
+           ${filter.sql.replace(
+             "WHERE",
+             `JOIN run_usage_summaries s ON s.run_id = r.id
+              JOIN run_usage_summary_models m ON m.run_id = r.id
+              WHERE`,
+           )}${model}
+           ${group ? `GROUP BY ${group}` : ""}`,
       )
-      .all(...params) as RunMeta[];
-    // One batched projection over the selected runs: a bounded number of statements however
-    // many runs the range holds (the alert evaluator calls this per rule at every run end).
-    const receipts = usageReceiptsForRuns(
-      this.db,
-      runs.map((r) => r.id),
+      .all(...params) as (SumRow & T)[];
+  }
+
+  /**
+   * Coverage of every selected run with a summary, usage rows or not; with a model filter only
+   * the runs that used the model (a filter cannot attribute a run whose model is unknown).
+   */
+  private coverage(tenantId: string, query: CostQuery): UsageCoverage[] {
+    const filter = runFilter(tenantId, query);
+    const model = query.model
+      ? " AND EXISTS (SELECT 1 FROM run_usage_summary_models m WHERE m.run_id = r.id AND m.model = ?)"
+      : "";
+    const params = query.model ? [...filter.params, query.model] : filter.params;
+    return (
+      this.db
+        .prepare(
+          `SELECT DISTINCT s.coverage
+             ${filter.sql.replace("WHERE", "JOIN run_usage_summaries s ON s.run_id = r.id WHERE")}${model}`,
+        )
+        .all(...params) as { coverage: UsageCoverage }[]
+    ).map((row) => row.coverage);
+  }
+
+  private rows(tenantId: string, query: CostQuery): CostRow[] {
+    const groups = this.grouped<{
+      day: string;
+      bot_id: CostRow["botId"];
+      bot_name: string;
+      model: string;
+      workspace_id: WorkspaceId;
+      workspace_name: string;
+    }>(
+      tenantId,
+      query,
+      `substr(r.created_at, 1, 10) AS day, r.bot_id, b.name AS bot_name, m.model,
+       r.workspace_id, w.name AS workspace_name`,
+      "substr(r.created_at, 1, 10), r.bot_id, m.model",
     );
-    const estimates = new EstimateCache(new PriceStore(this.db).list());
-    const facts: UsageFact[] = [];
-    const coverage: UsageCoverage[] = [];
-    for (const run of runs) {
-      const receipt = receipts.get(run.id);
-      if (!receipt) continue;
-      const rows = receipt.rows.filter((r) => !query.model || r.model === query.model);
-      // A model filter cannot attribute a run whose model is unknown.
-      if (query.model && !rows.length) continue;
-      // A started run without measurements stays visible as unknown coverage; only runs with
-      // usage rows are counted, as before receipts.
-      coverage.push(receipt.coverage);
-      // An in-flight run's observations are lower bounds still awaiting a priced final.
-      const inFlight = !isTerminal(run.status);
-      for (const usage of rows)
-        facts.push({
-          run,
-          usage,
-          coverage: receipt.coverage,
-          inFlight,
-          estimate:
-            usage.costUsd === null ? estimateCost(estimates.at(run.priced_at), usage) : null,
-        });
-    }
-    return { facts, coverage };
+    return groups
+      .map(
+        (g): CostRow =>
+          totalsOf(g, {
+            day: g.day,
+            botId: g.bot_id,
+            botName: g.bot_name,
+            model: g.model,
+            workspaceId: g.workspace_id,
+            workspaceName: g.workspace_name,
+          }),
+      )
+      .sort(compareRows);
   }
 
   report(tenantId: string, query: CostQuery = {}): CostReport & { rows: CostRow[] } {
-    const { facts, coverage } = this.collect(tenantId, query);
-    const total = new Group(empty());
-    const groups = new Map<string, Group<CostRow>>();
-    const days = new Map<string, Group<CostDay>>();
-    for (const f of facts) {
-      total.add(f);
-      const key = JSON.stringify([f.run.day, f.run.bot_id, f.usage.model]);
-      let group = groups.get(key);
-      if (!group) {
-        group = new Group<CostRow>({
-          ...empty(),
-          day: f.run.day,
-          botId: f.run.bot_id,
-          botName: f.run.name,
-          model: f.usage.model,
-          workspaceId: f.run.workspace_id,
-          workspaceName: f.run.workspace_name,
-        });
-        groups.set(key, group);
-      }
-      group.add(f);
-      let day = days.get(f.run.day);
-      if (!day) {
-        day = new Group<CostDay>({ ...empty(), day: f.run.day });
-        days.set(f.run.day, day);
-      }
-      day.add(f);
-    }
-    const totals = total.row;
-    finish(totals, total.runs.size, coverage);
-    const rows = [...groups.values()].map((g) => g.finish());
-    rows.sort(compareRows);
+    const [total] = this.grouped(tenantId, query, "", "");
+    const totals = totalsOf(
+      total && total.usage_count !== null ? total : undefined,
+      {},
+      this.coverage(tenantId, query),
+    );
+    const days = this.grouped<{ day: string }>(
+      tenantId,
+      query,
+      "substr(r.created_at, 1, 10) AS day",
+      "substr(r.created_at, 1, 10)",
+    )
+      .map((g): CostDay => totalsOf(g, { day: g.day }))
+      .sort((a, b) => a.day.localeCompare(b.day));
     return {
       filters: { ...query },
       totals,
-      rows,
-      days: [...days.values()].map((d) => d.finish()).sort((a, b) => a.day.localeCompare(b.day)),
+      rows: this.rows(tenantId, query),
+      days,
       estimate: { version: PRICE_ESTIMATE_VERSION },
     };
   }
@@ -267,7 +295,7 @@ export class CostQueryStore {
     limit: number,
     after?: readonly [string, string, string, string],
   ): { rows: CostRow[]; total: number } {
-    const rows = this.report(tenantId, query).rows;
+    const rows = this.rows(tenantId, query);
     const start = after
       ? rows.findIndex(
           (row) =>
@@ -298,25 +326,28 @@ export class CostQueryStore {
     offset = 0,
     limit = COST_RANKING_PAGE_SIZE,
   ): CostRankingPage {
-    const { facts } = this.collect(tenantId, query);
-    const groups = new Map<string, Group<CostRankingEntry>>();
-    for (const f of facts) {
-      const key = by === "model" ? f.usage.model : by === "bot" ? f.run.bot_id : f.run.workspace_id;
-      let group = groups.get(key);
-      if (!group) {
-        group = new Group<CostRankingEntry>({
-          ...empty(),
-          key,
-          label: by === "model" ? f.usage.model : by === "bot" ? f.run.name : f.run.workspace_name,
-          ...(by === "bot"
-            ? { workspaceId: f.run.workspace_id, workspaceName: f.run.workspace_name }
-            : {}),
-        });
-        groups.set(key, group);
-      }
-      group.add(f);
-    }
-    const entries = [...groups.values()].map((g) => g.finish());
+    const groups = this.grouped<{
+      key: string;
+      label: string;
+      workspace_id: WorkspaceId;
+      workspace_name: string;
+    }>(
+      tenantId,
+      query,
+      by === "model"
+        ? "m.model AS key, m.model AS label, NULL AS workspace_id, NULL AS workspace_name"
+        : by === "bot"
+          ? "r.bot_id AS key, b.name AS label, r.workspace_id, w.name AS workspace_name"
+          : "r.workspace_id AS key, w.name AS label, NULL AS workspace_id, NULL AS workspace_name",
+      by === "model" ? "m.model" : by === "bot" ? "r.bot_id" : "r.workspace_id",
+    );
+    const entries: CostRankingEntry[] = groups.map((g) =>
+      totalsOf(g, {
+        key: g.key,
+        label: g.label,
+        ...(by === "bot" ? { workspaceId: g.workspace_id, workspaceName: g.workspace_name } : {}),
+      }),
+    );
     entries.sort((a, b) => {
       if (metric === "money") {
         const ma = moneyOf(a);
@@ -350,7 +381,10 @@ export interface RunSpend {
   unestimatedUsageCount: number;
 }
 
-/** The spend of one run, from the same receipts and estimate as the report. */
+/**
+ * The spend of one run, from the same receipts and estimate as the report. Live, not from the
+ * stored summary: the budget charges while the attempt is still running (decision 3).
+ */
 export function runSpend(db: GatewayDb, runId: RunId): RunSpend | undefined {
   const run = db
     .prepare("SELECT coalesce(started_at, created_at) AS at FROM runs WHERE id = ?")

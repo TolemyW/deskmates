@@ -52,6 +52,48 @@ export function id(prefix: string): string {
   return `${prefix}_${counter.toString(36).padStart(4, "0")}`;
 }
 
+/** Tools whose calls the sidecar tiers as reversible writes; the rest of the demo's are reads. */
+const WRITE_TOOLS = new Set(["Bash", "Write", "Edit"]);
+
+/**
+ * A seed or script writes a tool event the short way (`{ tool, input }`, `{ tool, output }`);
+ * the ledger's shape is the sidecar's (`toolName`, `toolUseId`, `riskLevel`, `input`; a result
+ * carries its call's `toolUseId`, `content` and `isError`). The screens read only the ledger's
+ * shape, so the demo must produce it, with a result paired to the open call before it.
+ */
+export function ledgerPayload(
+  kind: RunEvent["kind"],
+  payload: Record<string, unknown>,
+  earlier: readonly RunEvent[],
+): Record<string, unknown> {
+  if (kind === "tool_call" && typeof payload.tool === "string" && payload.toolName === undefined) {
+    const { tool, input, ...rest } = payload;
+    return {
+      toolName: tool,
+      toolUseId: `tu_${earlier.length + 1}`,
+      riskLevel: WRITE_TOOLS.has(tool) ? "L1" : "L0",
+      input: input ?? {},
+      ...rest,
+    };
+  }
+  if (kind === "tool_result" && payload.toolUseId === undefined) {
+    const answered = new Set(
+      earlier.filter((e) => e.kind === "tool_result").map((e) => e.payload.toolUseId),
+    );
+    const call = [...earlier]
+      .reverse()
+      .find((e) => e.kind === "tool_call" && !answered.has(e.payload.toolUseId));
+    const { tool: _tool, output, ...rest } = payload;
+    return {
+      ...(call ? { toolUseId: call.payload.toolUseId } : {}),
+      content: output ?? payload.content ?? "",
+      isError: payload.isError === true,
+      ...rest,
+    };
+  }
+  return payload;
+}
+
 export function minutesAgo(minutes: number, base = Date.now()): string {
   return new Date(base - minutes * 60_000).toISOString();
 }
@@ -131,6 +173,11 @@ export class DemoState {
       cheapModel: "demo-small",
       release: "demo",
       cronTimeZone: "UTC",
+      models: [
+        { model: "demo-large", upstream: "default" },
+        { model: "demo-local", upstream: "local" },
+        { model: "demo-small", upstream: "default" },
+      ],
     };
   }
 
@@ -341,7 +388,7 @@ export class DemoState {
       seq: list.length + 1,
       attempt: run.attempt,
       kind,
-      payload,
+      payload: ledgerPayload(kind, payload, list),
       ts,
     };
     list.push(event);

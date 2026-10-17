@@ -223,8 +223,15 @@ blocks from `Read` and from the browser, and the model could still describe what
 The owner's evidence rules (issue #87, comment of 2026-10-13) keep one wrong probe answer as
 `unknown`, not `unsupported`, and say a capability must never be silently upgraded. The owner
 has not ruled on run behaviour; issue #87 proposal 2 lists a prompt notice, withholding the
-vision browser capability and a text notice instead of an image read. The probe is off unless
-`VISION_PROBE=auto`, so most models in most workspaces are `unknown`/`not_probed`.
+vision browser capability and a text notice instead of an image read. The probe is on by
+default in a deployment: the Gateway's environment loader reads an empty `VISION_PROBE` as
+`auto`, and only `VISION_PROBE=off` or a hand-built configuration that omits the setting (the T2
+stacks) queues no automatic probe. (Corrected 2026-10-14: this paragraph first said the probe
+was off unless `VISION_PROBE=auto`.) A run can still meet a model with no settled answer: a
+bot's first runs may start while its probe is `pending`, a probe that failed for transport,
+auth, rate-limit, budget or a missing host bot is `unknown` with that reason, and a deployment
+with the probe off, or a model in use before the probe existed and not yet re-probed, is
+`not_probed`.
 
 ### Decisions
 
@@ -236,9 +243,13 @@ vision browser capability and a text notice instead of an image read. The probe 
     `wrong_answer` withholds (**proposed**): the probe saw the model answer a question about an
     image it did not read correctly, which is the confabulation of #87, and the status stays
     `unknown` with its receipt, so the policy never rewrites the evidence. Every other
-    `unknown`, `pending` and `not_probed` delivers unchanged (**proposed**): with the probe off by
-    default, withholding there would blind every model that can see, and a prompt notice on
-    every run would be a strategy change that needs a paired evaluation first. A model job
+    `unknown`, `pending` and `not_probed` delivers unchanged (**proposed**): none of them is
+    evidence that the model cannot see (decision 7 and the owner's rule that a transport, auth,
+    rate-limit or budget error is not proof of non-support), so withholding there would blind
+    models that can see on exactly the runs where the probe has not answered yet, such as a new
+    bot's welcome run while its probe is `pending` or every run of a deployment that set
+    `VISION_PROBE=off`; and a prompt notice on every such run would be a strategy change that
+    needs a paired evaluation first. A model job
     (`vision_probe`, `soul_proposal`) records no policy; the probe must always send its image.
 12. **Withholding is done in the sidecar, before the model, and says so in text.** Under
     `withhold`: (a) the system prompt gains a fixed notice that this run's model cannot see
@@ -270,7 +281,8 @@ vision browser capability and a text notice instead of an image read. The probe 
 - The policy follows the frozen primary model. An SDK fallback switch (decision 3) to a model
   with another vision status, and subagents on `cheapModel`, keep the primary's policy.
 - PDF reads (document blocks) and image content returned by connectors or integrations are not
-  covered; neither path has been observed to carry images on the deployment endpoint.
+  covered; neither path has been observed to carry images on the deployment endpoint. Closed by
+  amendment 3.
 - Real-model and T2 verification (the real CLI's `Read` of a PNG under `withhold`) have not run.
 
 ### Verification (amendment 2)
@@ -281,3 +293,203 @@ vision browser capability and a text notice instead of an image read. The probe 
 | 12 | Under `withhold` the prompt carries the notice and without it the prompt is byte-identical to before; an image `Read` is denied with the notice and a text `Read` is not; the MCP args lack `--caps vision`; a browser result's image item becomes text and the vision fallback attaches none | T0 `packages/sidecar/src/vision-withhold.test.ts`, `packages/sidecar/src/browser-mcp.test.ts`; T1 `packages/sidecar/src/mcp-proxy/proxy-vision.test.ts`, `packages/sidecar/src/vision-withhold-run.test.ts` (fake SDK). Not run: T2 with the real CLI | Withholding runs with `image_blocks` > 0 on any request = 0 |
 | 13 | A denied image `Read` emits one `image_withheld` event with its tool-use id and path | T1 `packages/sidecar/src/vision-withhold-run.test.ts` | `image_withheld` events per withholding run |
 | 14 | The route returns `visionPolicy` and `botIds`; the settings line shows the withheld effect; a chat with a withholding member shows a notice naming it and one without shows none | T1 `packages/gateway/src/model-jobs/vision-policy.test.ts`; web `packages/web/src/features/contacts/model-capability.test.tsx`, `packages/web/src/features/chats/vision-notice.test.tsx` | Not measured |
+
+## Amendment 3 (2026-10-14): PDF reads and connector or integration results
+
+Status: Proposed, like amendment 2, whose decisions 11 to 14 it extends to the two paths
+amendment 2 left open (issue #87, comment of 2026-10-14). A delivering run is unchanged.
+
+### Context
+
+Amendment 2 withheld images from `Read` of image files and from browser tool results. Two
+paths remained. The SDK's `Read` of a PDF hands the model the document itself (a document
+block, or rendered pages when `pages` is given), which a vision model reads page by page as
+images; what an Anthropic-protocol gateway in front of a text-only model makes of it has not
+been observed, and a model given pages it cannot see is the confabulation of #87 again. The
+connector and integration tools build text results from the Gateway's JSON, so they cannot
+carry an image block, but a SaaS record can hold an image as a `data:` URI or as base64 bytes,
+and a model shown a long base64 string it cannot decode is invited to guess what it depicts.
+The workspace image has no PDF text extractor, so a withheld PDF has no text substitute today.
+
+### Decisions
+
+15. **Under `withhold`, `Read` of a PDF is denied with a notice.** The PreToolUse hook treats a
+    path ending in `.pdf` (any case) like an image path: it denies the `Read` with a notice that
+    the PDF was not read because its pages reach the model as images, that the model must not
+    guess its content, and that it should use a text source (an accompanying text file, a
+    page's text, a person). The `log` event is decision 13's, with `media: "application/pdf"`.
+    A text extractor in the workspace image is not decided here.
+16. **Under `withhold`, a result of any tool on the in-process `deskmates` server carries no
+    image.** The sidecar applies decision 12's replacement to every result of that server:
+    an `image` item becomes the one-line notice. Connector and integration values are cleaned
+    before they are serialised and wrapped as untrusted: an object whose `type` is `image`, a
+    string that is a `data:image/...;base64,` URI, and a string of at least 64 base64
+    characters whose bytes begin with a PNG, JPEG, GIF or WebP header are each replaced by the
+    notice. Other values, including `http(s)` links to images, stay as they are: a link is
+    text, not an image. The Gateway's own `tool_result` (`connector_proxy`,
+    `integration_proxy`) keeps the raw value, as before.
+17. **Each such withholding is in the ledger.** A cleaned connector, integration or other
+    `deskmates` tool result emits one `log` event `source: "vision"`, `op: "image_withheld"`
+    with the tool name, the number of images replaced and their media types when known.
+
+### Open items
+
+- A PDF text extractor (for example `poppler-utils`) in the workspace base image, so a
+  withholding run can still read a PDF's text; an image change, not taken here.
+- Jupyter notebooks: `Read` of an `.ipynb` returns image outputs of its cells as images and is
+  not covered.
+- Real-model and T2 verification of a PDF `Read` under `withhold` have not run.
+
+### Verification (amendment 3)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 15 | Under `withhold` a `.pdf` or `.PDF` `Read` is denied with the PDF notice and one `image_withheld` event with `media: "application/pdf"`; under `deliver` it runs | T0 `packages/sidecar/src/vision-withhold.test.ts`; T1 `packages/sidecar/src/vision-withhold-run.test.ts` (fake SDK) | `image_withheld` events per withholding run, by media |
+| 16 | Under `withhold` a connector or integration value with a `data:` image URI, a base64 PNG, JPEG, GIF or WebP and an `image`-typed object reaches the model as notices, an image link and ordinary base64 text do not change, and an `image` item of any `deskmates` tool result becomes text; under `deliver` results are byte-identical | T0 `vision-withhold.test.ts`; T1 `packages/sidecar/src/connector-tools.test.ts`, `packages/sidecar/src/integration-tools.test.ts` | Withholding runs with `image_blocks` > 0 on any request = 0 |
+| 17 | One cleaned result emits exactly one `image_withheld` event with its tool name, count and media types; a result with nothing to clean emits none | T1 `connector-tools.test.ts`, `integration-tools.test.ts` | `image_withheld` events per withholding run |
+
+## Amendment 4 (2026-10-14): a model job fails inside its cap, naming the cause
+
+Status: Accepted. Decisions 1 to 17 stay in force; decision 3 (the SDK is the only retry owner)
+is unchanged, this amendment only bounds how many retries a model job gives it.
+
+### Context
+
+On the stable deployment of 2026-10-14 `CHEAP_MODEL` named a model the upstream had no worker
+for. Every activity summary (ADR-0033) then ran on it: the upstream answered each request with
+an error, the SDK retried with its default of ten attempts and exponential backoff, the seventh
+retry was still waiting when the job's 55-second deadline aborted the query, and the run row
+said only `Error: Claude Code process aborted by user`. Two jobs failed that way, 47 seconds
+each, and nothing in the ledger or the UI named the model or the HTTP status. Decision 5 gives
+a model job a 60-second cap; ten retries can never finish inside it.
+
+### Decisions
+
+18. **A model job bounds the SDK's retries.** The sidecar sets `CLAUDE_CODE_MAX_RETRIES` to
+    `MODEL_JOB_MAX_RETRIES` (four) in the job's query environment and nowhere else: an agent run
+    keeps the SDK's default. Four retries, about nine seconds of backoff, survive a short
+    upstream blip and still leave the SDK time to end the query with the upstream's error as
+    the run error. Each retry is still a `model_retry` event (decision 3).
+19. **The deadline names its cause.** When the job's deadline (`MODEL_JOB_DEADLINE_MS`, 55 s)
+    aborts the query, the run error is `model job did not finish within 55 s`, followed, when
+    the SDK reported retries, by how many and the last one's HTTP status (or `no response`) and
+    error kind. The SDK's abort message never becomes a run error on its own.
+
+### Open items
+
+- The upstream of 2026-10-14 answers a request for a model it does not serve with HTTP 500 to
+  the SDK's request and 404 `model_not_found` to a plain one; which field of the SDK's body
+  turns the 404 into a 500 is not known. Either way the model is not served, and the fix for
+  the deployment is the `CHEAP_MODEL` value, which this amendment does not touch.
+- A startup check of `DEFAULT_MODEL` and `CHEAP_MODEL` against the upstream would need the
+  Gateway to make a model request, which the architecture forbids; not proposed here.
+
+### Verification (amendment 4)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 18 | A model job's `query()` environment carries `CLAUDE_CODE_MAX_RETRIES` equal to `MODEL_JOB_MAX_RETRIES`, which is below the SDK's default of ten, and the deadline is below the Gateway's 60-second cap; an agent run never sets the variable (by construction: `run-once.ts` builds its own environment and no test asserts the absence) | T1 `packages/sidecar/src/model-job.test.ts` ("bounds the SDK's retries") | `model_retry` events per failed model job (expected at most four) |
+| 19 | A job whose query reports two `api_retry` messages and then only ends on the deadline's abort fails with the deadline error naming two retries, `HTTP 500` and `server_error`, never "aborted by user"; the error for no retry and for a connection failure reads as specified | T1 `packages/sidecar/src/model-job.test.ts` ("names the retries when the deadline ends the job") | Failed model jobs whose error names no cause = 0 |
+
+## Amendment 5 (2026-10-16): measure the context, split the system prompt, trim the CLI surface
+
+Status: Proposed (issue #8). It is implemented behind defaults that change nothing and is pending
+owner acceptance. Decisions 1 to 19 stay in force. Decisions 20 to 23 are framework changes: they
+add records, and they reshape the system-prompt option without changing a byte the model reads.
+Decision 24 adds strategy knobs that are off by default. Turning one on is a strategy change
+(AGENTS.md: paired evaluation, one knob per experiment).
+
+### Context
+
+The Testbox ledger of 2026-10-13 to 10-15 covered 287 runs and 3,795 model requests. The average
+request carried 60k to 70k tokens. A run's first request was already about 57k, while the
+sidecar's own sections (SOUL, guidance, memory, diary, knowledge) were under 10k. The rest came from
+the CLI: its built-in prompt, 44 built-in tool schemas (the sidecar withholds 10 of 54), the MCP
+tool schemas, the bundled-skills listing and the git workflow text. `cache_creation` was 0 on every
+request, so any cache hit came from the upstream gateway's implicit prefix cache. Two workspaces
+hit 0% over 1,300 requests. The ledger could not say which part of a request was large or which
+part changed between requests, so no trimming and no prefix change could be judged.
+
+The sidecar already keeps the memory index, MEMORY.md, the diary and knowledge hits out of the
+system prompt and puts them in the first user turn (ADR-0011 decision 9). The volatile sections the
+issue names are therefore already outside the system prompt in this tree.
+
+### Decisions
+
+20. **The CLI's own view of the window is sampled into the ledger.** The sidecar calls
+    `query.getContextUsage` (SDK 0.3.278) once with `detail: "full"` after `system/init`, and once
+    with `detail: "summary"` after each model response, except the last. That response's usage
+    arrives with the result, and with a string prompt the CLI exits after the result. Each answer
+    is a `log` event `{source: "context", kind: "context_usage"}`. It carries the totals, every
+    category, the MCP tools per server and the built-in tools; a `full` sample also names each tool
+    with its tokens. A query without the method is not asked. A failed answer is logged once as a
+    warning and stops later samples. The run never fails because of a sample, and samples still
+    pending when the query ends get at most two seconds.
+21. **Session and switch cache facts are recorded.** The `SessionStart` hook becomes a `log` event
+    `{source: "sdk", kind: "session_start", sessionSource}`. On a resume it also carries
+    `contextTokens`, `promptCacheLikelyExpired` and `secondsSinceLastResponse`. A `model_switch`
+    event also carries the `PostModelSwitch` hook's `promptCacheWarm` and `contextTokens`.
+22. **The model proxy records each request's shape: counts and hashes, never text.** The shape is
+    the `cache_control` markers anywhere in `system`, `tools` and `messages`; the system block count
+    and characters; and a canonical sha256 of the static prefix and one of the dynamic rest. The
+    static prefix runs through the last system block that carries `cache_control`, which is what
+    the request marks cacheable. The shape also holds the first 16 hex digits of each system
+    block's hash, the tool count and JSON length, and the message count. These are new
+    `model_requests` columns, NULL when the body was unreadable. `GET /api/runs/:id/context` adds
+    `contextUsage`, `sessionStarts`, `requestShapes` (including `changedSystemBlocks`, the
+    positions whose hash varied) and the static and dynamic system-prompt hashes. They are optional
+    fields; every existing field is unchanged.
+23. **The system prompt is split at the SDK's dynamic boundary.** The sidecar passes
+    `{type: "custom", prompt: [static, SYSTEM_PROMPT_DYNAMIC_BOUNDARY, ...dynamic], snapshot: true}`.
+    The static part is SOUL.md and the workspace guidance (working directory, untrusted notice,
+    thread and group guidance, the extra-tool list, the summary instruction). It is identical for
+    every run of a bot in the same kind of thread. The dynamic part holds the sections chosen per
+    run, today only the withheld-image notice (amendment 2). Joined with one blank line, the parts
+    are the string earlier runs sent, so `systemPromptSha256` and every pinned prompt test are
+    unchanged. A new per-run section goes after the boundary or into the first user turn, never
+    into the static part. The `context_sections` event carries `systemPromptStaticSha256` and, when
+    there is a dynamic part, `systemPromptDynamicSha256`. `runs.config_json` records
+    `systemPromptStaticSha256`. `snapshot: true` is the SDK's documented default for a custom
+    prompt and is set explicitly, so a resumed session re-sends the prompt it recorded.
+24. **The CLI surface is a Gateway knob, recorded per run.** `DESKMATES_CLI_DISALLOWED_TOOLS`
+    names built-in CLI tools (PascalCase; an MCP name is refused) that are withheld on top of the
+    sidecar's fixed `DISALLOWED_TOOLS`. The Gateway can only add to that list.
+    `DESKMATES_CLI_DISABLE_BUNDLED_SKILLS`, `DESKMATES_CLI_INCLUDE_GIT_INSTRUCTIONS` and
+    `DESKMATES_CLI_SKILL_LISTING_MAX_DESC_CHARS` become the SDK's inline `settings`. Empty, the
+    default, changes nothing: the start request has no `cliSurface` and the SDK options are as
+    before. Every run row records `cliSurface` with `null` for a CLI default. Every process of the
+    run reads the values back from its row, so a resumed session keeps its tool set.
+
+### Alternatives considered
+
+- **Move the dynamic sections into the first user turn instead of after the boundary.** The
+  volatile sections already are there. Only the image notice remains in the system prompt, and
+  moving it would change what a withholding model reads, which is a behaviour change outside
+  this amendment.
+- **Offer `tools` as an explicit allowlist.** That allowlist would have to be checked against every
+  SDK upgrade before the first trimming result exists. Adding to the withheld list keeps the
+  sidecar's fixed safety withholds in force and is enough to measure the effect first.
+- **Split at the proxy by content.** The CLI drops the boundary marker before sending, so the proxy
+  cannot see the sidecar's split. The marker-based split and the per-block hashes are what the
+  upstream actually receives.
+
+### Open items
+
+- Whether cache hits rise, and whether average context drops by a third, needs a paired
+  before-and-after window on a real model (Testbox). No test here measures it.
+- In SDK 0.3.278 the CLI keeps the static part as a separate, globally scoped cache block only
+  where it enables global cache scope. Elsewhere it drops the marker and joins the blocks, which is
+  the expected behaviour through an Anthropic-protocol gateway. What reaches the upstream is
+  visible in the request shapes (decision 22), not assumed.
+- Mounting the browser MCP server only for runs that need it, and the reasoning knob for
+  script-running bots, are separate strategy experiments.
+
+### Verification (amendment 5)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 20 | A three-response run asks for `full` once and `summary` twice; the samples carry the CLI's totals and per-server MCP tokens; a CLI that throws costs one warning and no further calls, and the run completes; a query without the method is never asked | T1 `packages/sidecar/src/context-usage-run.test.ts`, T0 `packages/testkit/src/fake-sdk/fake-sdk.test.ts` ("session start and context usage") | Share of runs with a `full` `context_usage` sample; median first-sample `totalTokens` per workspace |
+| 21 | A fresh start logs `session_start` with `sessionSource: startup` and no resume fields; a resume logs `contextTokens`, `promptCacheLikelyExpired`, `secondsSinceLastResponse`; a `model_switch` carries `promptCacheWarm` and `contextTokens` | T1 `packages/sidecar/src/context-usage-run.test.ts`, T1 `packages/sidecar/src/model-events.test.ts` | Resumes with `promptCacheLikelyExpired = true` per workspace and day |
+| 22 | The shape splits after the last marked system block, keeps the static hash when only the dynamic part changes, counts markers in nested tool results, survives a store round trip, and is summarised by the run context API with the changed block positions | T0 `packages/gateway/src/model-proxy/request-facts.test.ts`, T1 `packages/gateway/src/ledger/model-requests.test.ts`, T0 `packages/gateway/src/ledger/run-context.test.ts`, T1 `packages/gateway/src/api/run-context-routes.test.ts` | Requests with `cache_control_blocks > 0`; distinct `system_static_sha256` per thread; cache hit % per hour by workspace |
+| 23 | The static hash is equal across two runs of a bot with a different diary, memory and index; a withholding run keeps the static hash and has a dynamic one; the option is a custom prompt with `snapshot: true` and the boundary as its own block; joined, it is byte-identical to `systemPrompt`; the static hash reaches `runs.config_json` | T0 `packages/sidecar/src/system-prompt.test.ts`, T1 `packages/sidecar/src/run-once.test.ts` ("ledgers the context section sizes"), T1 `packages/gateway/src/scheduler/run-lifecycle.test.ts` | Distinct `systemPromptStaticSha256` per bot per day (expected 1 per thread kind) |
+| 24 | Empty variables give no stamp values, no start-request field and the SDK options exactly as before; set values are validated, stamped on the run row, sent from the row even after the Gateway is reconfigured, merged after the fixed withheld list and passed as inline `settings`; an MCP name is refused at startup and on stdin | T0 `packages/gateway/src/config/cli-surface.test.ts`, T1 `packages/gateway/src/scheduler/cli-surface.test.ts`, T1 `packages/sidecar/src/cli-surface.test.ts` | Average input tokens per request in a paired window, knob on against off |

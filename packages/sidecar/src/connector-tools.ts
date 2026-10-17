@@ -11,8 +11,10 @@
 import type { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { type ConnectorToolName, isDeskmatesError } from "@deskmates/contracts";
 import { z } from "zod";
+import { deskmatesToolName } from "./risk-tier.js";
 import type { ThreadToolsContext } from "./thread-tools.js";
 import { wrapConnectorContent } from "./untrusted.js";
+import { valueForModel } from "./vision-withhold.js";
 
 // biome-ignore lint/suspicious/noExplicitAny: the SDK erases schema generics in its tool registry
 export function connectorTools(ctx: ThreadToolsContext): SdkMcpToolDefinition<any>[] {
@@ -43,7 +45,10 @@ export function connectorTools(ctx: ThreadToolsContext): SdkMcpToolDefinition<an
     // Belt and braces: the schema already limits `connector` to the bot's list.
     if (!names.includes(name)) return refused(name, op, new Error("not in this bot's list"));
     try {
-      return ok(name, await call());
+      return ok(
+        name,
+        valueForModel(ctx.request, ctx.sink, deskmatesToolName(`connector_${op}`), await call()),
+      );
     } catch (err) {
       return refused(name, op, err);
     }

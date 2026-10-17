@@ -390,3 +390,33 @@
     width: auto;
   }
 }
+/* Inline network, people and archive editing on the detail page (ADR-0034 decision 9). */
+.workspace-allowlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.workspace-allowlist li code {
+  padding: 2px 8px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  font-size: var(--app-text-xs);
+}
+.workspace-detail-section .members-embedded {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.workspace-detail-section .members-embedded > .card {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.workspace-detail-section .members-embedded .members-table {
+  overflow-x: auto;
+}

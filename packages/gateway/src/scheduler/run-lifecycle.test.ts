@@ -56,6 +56,7 @@ describe("maxTurns as a Gateway knob", () => {
     const run = posted.json.runs[0] as RunRecord;
     expect(run.config.maxTurns).toBe(7);
     expect(run.config.browserSnapshotMode).toBe("explicit-v1");
+    expect(run.config.browserCodeApproval).toBe("name-v1");
     await waitFor(
       () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "succeeded",
       3000,
@@ -63,10 +64,12 @@ describe("maxTurns as a Gateway knob", () => {
     );
     expect(h.provider.execCalls[0]?.request.maxTurns).toBe(7);
     expect(h.provider.execCalls[0]?.request.browserSnapshotMode).toBeUndefined();
+    expect(h.provider.execCalls[0]?.request).not.toHaveProperty("browserCodeApproval");
   });
 
   it("travels with a thread-less trigger too", async () => {
     h.app.deskmates.ctx.config.browserSnapshotMode = "inline-v2";
+    h.app.deskmates.ctx.config.browserCodeApproval = "effects-v1";
     const { bot } = await h.seed();
     h.provider.onRun(async (req, gw) => {
       await gw.post("ended", {
@@ -94,6 +97,7 @@ describe("maxTurns as a Gateway knob", () => {
     });
     expect(run.config.maxTurns).toBe(7);
     h.app.deskmates.ctx.config.browserSnapshotMode = "explicit-v1";
+    h.app.deskmates.ctx.config.browserCodeApproval = "name-v1";
     h.app.deskmates.scheduler.kick();
     await waitFor(
       () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "succeeded",
@@ -103,6 +107,9 @@ describe("maxTurns as a Gateway knob", () => {
     expect(h.provider.execCalls[0]?.request.maxTurns).toBe(7);
     expect(run.config.browserSnapshotMode).toBe("inline-v2");
     expect(h.provider.execCalls[0]?.request.browserSnapshotMode).toBe("inline-v2");
+    // ADR-0002 amendment 5: the run row's policy, not the Gateway's current one, is sent.
+    expect(run.config.browserCodeApproval).toBe("effects-v1");
+    expect(h.provider.execCalls[0]?.request.browserCodeApproval).toBe("effects-v1");
   });
 });
 
@@ -530,23 +537,34 @@ describe("context observability from the sidecar", () => {
   }
 
   it("stores turn_usage and compact_boundary events and merges the hash and window", async () => {
-    const run = await runWith({ systemPromptSha256: HASH, maxContextTokens: 180000 });
+    const run = await runWith({
+      systemPromptSha256: HASH,
+      systemPromptStaticSha256: "f".repeat(64),
+      maxContextTokens: 180000,
+    });
     const kinds = h.app.deskmates.ctx.events.list(run.id).map((e) => e.kind);
     expect(kinds).toEqual(expect.arrayContaining(["turn_usage", "compact_boundary"]));
     expect(run.config.systemPromptSha256).toBe(HASH);
+    // ADR-0023 amendment 5: the static part's hash is a knob of the same kind.
+    expect(run.config.systemPromptStaticSha256).toBe("f".repeat(64));
     expect(run.config.claudeCodeMaxContextTokens).toBe(180000);
   });
 
   it("ignores malformed values instead of failing the run", async () => {
-    const run = await runWith({ systemPromptSha256: "not-a-hash", maxContextTokens: -1 });
+    const run = await runWith({
+      systemPromptSha256: "not-a-hash",
+      systemPromptStaticSha256: "F".repeat(64),
+      maxContextTokens: -1,
+    });
     expect(run.config).not.toHaveProperty("systemPromptSha256");
+    expect(run.config).not.toHaveProperty("systemPromptStaticSha256");
     expect(run.config).not.toHaveProperty("claudeCodeMaxContextTokens");
   });
 });
 
 /**
- * Issue #88: the per-bot working directory is an opt-in knob (`DESKMATES_BOT_WORKDIR`). The run row
- * records the mode it was created under, and every process of that run (first start, thread-less
+ * Issue #88, ADR-0038: the working-directory knob (`DESKMATES_BOT_WORKDIR`) defaults to per-bot;
+ * shared is the other value. The run row records the mode it was created under, and every process of that run (first start, thread-less
  * trigger, approval resume) gets the same mode, whatever the Gateway is configured with later.
  */
 describe("the bot working-directory knob travels with the run", () => {
@@ -567,7 +585,27 @@ describe("the bot working-directory knob travels with the run", () => {
     });
   };
 
-  it("records shared by default and sends no mode, so the sidecar keeps /work", async () => {
+  it("records per-bot by default and sends it (ADR-0038 decision 1)", async () => {
+    // A fresh harness leaves DESKMATES_BOT_WORKDIR unset.
+    const { thread } = await h.seed();
+    h.provider.onRun(finish);
+    const posted = await h.api<{ runs: RunRecord[] }>(
+      "POST",
+      `/api/threads/${thread.id}/messages`,
+      { body: "x" },
+    );
+    const run = posted.json.runs[0] as RunRecord;
+    expect(run.config.botWorkdir).toBe("per-bot");
+    await waitFor(
+      () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "succeeded",
+      3000,
+      "run",
+    );
+    expect(h.provider.execCalls[0]?.request.workdirMode).toBe("per-bot");
+  });
+
+  it("records shared when configured and sends no mode, so the sidecar keeps /work", async () => {
+    h.app.deskmates.ctx.config.botWorkdir = "shared";
     const { thread } = await h.seed();
     h.provider.onRun(finish);
     const posted = await h.api<{ runs: RunRecord[] }>(
@@ -670,5 +708,128 @@ describe("the bot working-directory knob travels with the run", () => {
     });
     await waitFor(() => h.app.deskmates.ctx.runs.mustGet(run.id).attempt === 2, 3000, "resumed");
     expect(h.provider.execCalls.at(-1)?.request.workdirMode).toBe("per-bot");
+  });
+});
+
+/**
+ * ADR-0036 decisions 3 and 6: a workspace's stored settings win over the Gateway knob, are frozen
+ * on the run's first process and sent unchanged on a resume; the lane notice names the bot's live
+ * run on its other lane.
+ */
+describe("workspace working-directory settings freeze at first start", () => {
+  const finish: Parameters<Harness["provider"]["onRun"]>[0] = async (req, gw) => {
+    await gw.post("ended", {
+      type: "run_ended",
+      runId: req.runId,
+      outcome: "completed",
+      summary: {
+        done: "ok",
+        filesChanged: [],
+        sitesVisited: [],
+        pendingApprovals: [],
+        memorySuggestions: [],
+        reply: "ok",
+      },
+      usage: [],
+    });
+  };
+
+  it("sends the workspace's mode, frozen across a resume", async () => {
+    h.app.deskmates.ctx.config.botWorkdir = "shared";
+    const { workspace, thread } = await h.seed();
+    h.app.deskmates.ctx.workdir.set(workspace.id, { mode: "per-bot" }, "user:qa");
+    let attempt = 0;
+    h.provider.onRun(async (req, gw) => {
+      attempt += 1;
+      if (attempt > 1) return finish(req, gw);
+      await gw.post("approvals", {
+        type: "approval_request",
+        runId: req.runId,
+        approvalId: "apr_worktree",
+        action: {
+          toolName: "Bash",
+          input: { command: "git push origin main" },
+          argumentSummary: "git push origin main",
+          argumentPattern: "git push*",
+        },
+        riskLevel: "L2",
+        toolUseId: "toolu_1",
+      });
+      await gw.post("ended", {
+        type: "run_ended",
+        runId: req.runId,
+        outcome: "deferred",
+        sdkSessionId: "sess-1",
+        pendingApprovalId: "apr_worktree",
+        pendingToolUseId: "toolu_1",
+        usage: [],
+      });
+    });
+    const posted = await h.api<{ runs: RunRecord[] }>(
+      "POST",
+      `/api/threads/${thread.id}/messages`,
+      { body: "push it" },
+    );
+    const run = posted.json.runs[0] as RunRecord;
+    await waitFor(
+      () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "waiting_approval",
+      3000,
+      "parked",
+    );
+    expect(h.provider.execCalls[0]?.request).toMatchObject({ workdirMode: "per-bot" });
+    // ADR-0038 decision 7: no worktree repository is ever sent.
+    expect(h.provider.execCalls[0]?.request).not.toHaveProperty("worktreeRepo");
+    expect(h.provider.execCalls[0]?.request).not.toHaveProperty("otherLaneRun");
+    expect(h.app.deskmates.ctx.runs.mustGet(run.id).config).toMatchObject({
+      botWorkdir: "per-bot",
+      botWorkdirSource: "workspace",
+      laneNotice: false,
+      workdirVersion: 1,
+    });
+    h.app.deskmates.ctx.workdir.set(workspace.id, { mode: null }, "user:qa");
+    await h.api("POST", "/api/approvals/apr_worktree/decide", {
+      decision: "allow_once",
+      decidedBy: "human:qa",
+    });
+    await waitFor(() => h.app.deskmates.ctx.runs.mustGet(run.id).attempt === 2, 3000, "resumed");
+    expect(h.provider.execCalls.at(-1)?.request).toMatchObject({ workdirMode: "per-bot" });
+  });
+
+  it("lane notice: names the bot's live background run to its interactive run", async () => {
+    h.app.deskmates.ctx.config.botWorkdir = "shared";
+    const { workspace, bot, thread } = await h.seed();
+    h.app.deskmates.ctx.workdir.set(workspace.id, { laneNotice: true }, "user:qa");
+    h.provider.onRun(finish);
+    const background = h.app.deskmates.ctx.runs.create({
+      botId: bot.id,
+      lane: "background",
+      triggerKind: "cron",
+      triggerRef: "cron_lane",
+      triggerPayload: { prompt: "nightly" },
+      config: h.app.deskmates.ctx.runConfig(),
+    });
+    h.app.deskmates.ctx.db
+      .prepare("UPDATE runs SET status = 'running', started_at = ? WHERE id = ?")
+      .run("2026-10-14T08:00:00.000Z", background.id);
+    const posted = await h.api<{ runs: RunRecord[] }>(
+      "POST",
+      `/api/threads/${thread.id}/messages`,
+      { body: "x" },
+    );
+    const run = posted.json.runs[0] as RunRecord;
+    await waitFor(
+      () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "succeeded",
+      3000,
+      "run",
+    );
+    const request = h.provider.execCalls.find((c) => c.request.runId === run.id)?.request;
+    expect(request?.otherLaneRun).toEqual({
+      runId: background.id,
+      lane: "background",
+      triggerKind: "cron",
+      startedAt: "2026-10-14T08:00:00.000Z",
+    });
+    // The lane notice alone changes no directory.
+    expect(request).not.toHaveProperty("workdirMode");
   });
 });

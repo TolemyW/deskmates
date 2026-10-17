@@ -18,7 +18,8 @@ const CASES: GoldenCases<ChatsApi> = {
   listThreadPage: (a) => a.listThreadPage(WS, { cursor: "c/1", q: "launch" }),
   listThreads: (a) => a.listThreads(),
   pinThread: (a) => a.pinThread(THR),
-  postMessage: (a) => a.postMessage(THR, "hello @Ada", undefined),
+  postMessage: (a) =>
+    a.postMessage(THR, "hello @Ada", undefined, undefined, [{ uploadId: "upl_1" }]),
   readHandoffs: (a) => a.readHandoffs(THR, 12),
   removeThreadMember: (a) => a.removeThreadMember(THR, BOT),
   resolvePrivateChat: (a) => a.resolvePrivateChat(BOT),

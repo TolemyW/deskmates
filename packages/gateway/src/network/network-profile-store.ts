@@ -27,6 +27,7 @@ interface ProfileRow {
   created_at: string;
   updated_at: string;
   updated_by: string;
+  owner_user_id: string | null;
 }
 
 interface SelectionRow {
@@ -75,8 +76,15 @@ function toProfile(row: ProfileRow): NetworkProfile {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     updatedBy: row.updated_by,
+    ...(row.owner_user_id === null ? {} : { ownerUserId: row.owner_user_id }),
   };
 }
+
+/** A root profile, or one whose creator is Owner of the workspace bound to `?` (decision 12). */
+const AVAILABLE_IN = `(p.owner_user_id IS NULL OR EXISTS (
+  SELECT 1 FROM workspace_memberships m
+   WHERE m.workspace_id = ? AND m.user_id = p.owner_user_id
+     AND m.role = 'owner' AND m.status = 'active'))`;
 
 export class NetworkProfileStore {
   constructor(private readonly db: GatewayDb) {}
@@ -98,6 +106,74 @@ export class NetworkProfileStore {
     const profile = this.get(id);
     if (!profile) throw new DeskmatesError("not_found", "network profile not found", { id });
     return profile;
+  }
+
+  /**
+   * Profiles a workspace's Admins and Owners may select (decision 12, owner-decided
+   * 2026-10-14): every root profile, and each profile whose creator is Owner there now.
+   */
+  availableFor(workspaceId: string): NetworkProfile[] {
+    return (
+      this.db
+        .prepare(`SELECT p.* FROM network_profiles p WHERE ${AVAILABLE_IN} ORDER BY p.name`)
+        .all(workspaceId) as ProfileRow[]
+    ).map(toProfile);
+  }
+
+  /**
+   * The profiles a workspace Owner sees: root profiles, their own, and those of co-Owners of a
+   * workspace where they are Owner (available to them there).
+   */
+  visibleToOwner(userId: string): NetworkProfile[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT p.* FROM network_profiles p
+            WHERE p.owner_user_id IS NULL OR p.owner_user_id = ? OR p.owner_user_id IN (
+              SELECT other.user_id FROM workspace_memberships mine
+                JOIN workspace_memberships other ON other.workspace_id = mine.workspace_id
+               WHERE mine.user_id = ? AND mine.role = 'owner' AND mine.status = 'active'
+                 AND other.role = 'owner' AND other.status = 'active')
+            ORDER BY p.name`,
+        )
+        .all(userId, userId) as ProfileRow[]
+    ).map(toProfile);
+  }
+
+  /** Decision 13's switch; no row is the default, allowed. */
+  profilesOnOpenInternet(workspaceId: string): boolean {
+    const row = this.db
+      .prepare(
+        "SELECT profiles_on_open_internet AS allowed FROM workspace_network_settings WHERE workspace_id = ?",
+      )
+      .get(workspaceId) as { allowed: number } | undefined;
+    return row === undefined || row.allowed === 1;
+  }
+
+  /** Set decision 13's switch, audited in the same transaction. */
+  setProfilesOnOpenInternet(workspaceId: string, allowed: boolean, by: string): void {
+    this.db.transaction(() => {
+      const before = this.profilesOnOpenInternet(workspaceId);
+      this.db
+        .prepare(
+          `INSERT INTO workspace_network_settings
+             (workspace_id, profiles_on_open_internet, updated_by, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(workspace_id) DO UPDATE SET
+             profiles_on_open_internet = excluded.profiles_on_open_internet,
+             updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+        )
+        .run(workspaceId, allowed ? 1 : 0, by, nowIso());
+      new AuditLog(this.db).record({
+        action: "workspace.network_settings_set",
+        actor: by,
+        workspaceId,
+        targetKind: "workspace",
+        targetId: workspaceId,
+        before: { profilesOnOpenInternet: before },
+        after: { profilesOnOpenInternet: allowed },
+      });
+    })();
   }
 
   /** The workspaces that select a profile: the only ones a change to it is published to. */
@@ -157,7 +233,13 @@ export class NetworkProfileStore {
     return grants;
   }
 
-  create(input: NetworkProfileInput, by: string, tenantId: string): NetworkProfile {
+  /** `ownerUserId`: the creating workspace Owner; undefined for the root (decision 12). */
+  create(
+    input: NetworkProfileInput,
+    by: string,
+    tenantId: string,
+    ownerUserId?: string,
+  ): NetworkProfile {
     const candidate = validate(input);
     const id = newId("netp");
     const at = nowIso();
@@ -166,8 +248,9 @@ export class NetworkProfileStore {
       this.db
         .prepare(
           `INSERT INTO network_profiles
-             (id, name, description, rules_json, expires_at, revision, created_by, created_at, updated_by, updated_at)
-           VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+             (id, name, description, rules_json, expires_at, revision, created_by, created_at,
+              updated_by, updated_at, owner_user_id)
+           VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
@@ -179,6 +262,7 @@ export class NetworkProfileStore {
           at,
           by,
           at,
+          ownerUserId ?? null,
         );
       new AuditLog(this.db).record({
         action: "network_profile.create",
@@ -186,7 +270,7 @@ export class NetworkProfileStore {
         tenantId,
         targetKind: "network_profile",
         targetId: id,
-        after: { ...candidate, revision: 1 },
+        after: { ...candidate, revision: 1, ...(ownerUserId ? { ownerUserId } : {}) },
       });
     })();
     return this.mustGet(id);

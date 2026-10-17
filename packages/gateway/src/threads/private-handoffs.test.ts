@@ -128,8 +128,17 @@ describe("private-chat handoffs (ADR-0024)", () => {
     );
   });
 
+  it("posts no diagnostic when the bot addresses the person as @user (ADR-0024 amendment 3)", () => {
+    const { ctx, chief, run, chat } = setup();
+    ctx.router.postFromRun(run, "@user done, the report is above.");
+    expect(ctx.runs.list({ botId: chief.id })).toEqual([]);
+    expect(ctx.messages.list(chat.id).filter((m) => m.authorKind === "system")).toEqual([]);
+  });
+
   it.each(["budget", "paused", "relay"])("does not bypass the source %s limit", (limit) => {
-    const { ctx, chief, run, chat } = setup(limit === "budget" ? 1 : 8);
+    const { ctx, chief, run, chat, ws } = setup();
+    // The turn budget is off by default (ADR-0005 amendment 5 decision 42); a workspace turns it on.
+    if (limit === "budget") ctx.limits.set(ws.id, { turnBudget: 1 }, "user:admin");
     if (limit === "paused") ctx.threads.setStatus(chat.id, "paused");
     const trigger =
       limit === "relay"

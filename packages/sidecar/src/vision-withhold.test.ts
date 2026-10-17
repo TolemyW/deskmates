@@ -6,11 +6,17 @@ import { describe, expect, it } from "vitest";
 import { buildContext } from "./context.js";
 import { createMemoryFs } from "./testing/in-memory-fs.js";
 import {
+  VISION_LOOK_GUIDANCE,
   VISION_WITHHELD_GUIDANCE,
   imageReadNotice,
   isImagePath,
+  isPdfPath,
+  pdfReadNotice,
   withheldImageText,
   withholdResultImages,
+  withholdToolResult,
+  withholdValueImages,
+  withholdingToolResults,
 } from "./vision-withhold.js";
 
 describe("isImagePath", () => {
@@ -57,6 +63,144 @@ describe("notices", () => {
   });
 });
 
+// ADR-0023 amendment 3 (issue #87): PDF reads and images inside connector or integration values.
+describe("isPdfPath and the PDF notice", () => {
+  it.each(["/work/a.pdf", "/work/Report.PDF"])("%s is a PDF", (path) =>
+    expect(isPdfPath(path)).toBe(true),
+  );
+  it.each(["/work/a.pdf.txt", "/work/pdf", "/work/a.png", 3, undefined])("%s is not", (path) =>
+    expect(isPdfPath(path)).toBe(false),
+  );
+  it("names the file and forbids guessing", () => {
+    expect(pdfReadNotice("/work/a.pdf")).toMatch(
+      /^image_withheld: \/work\/a\.pdf is a PDF.*cannot see/,
+    );
+  });
+});
+
+function base64Of(...parts: (string | number[])[]): string {
+  const bytes = parts.map((p) =>
+    typeof p === "string" ? Buffer.from(p, "latin1") : Buffer.from(p),
+  );
+  return Buffer.concat([...bytes, Buffer.alloc(60, 7)]).toString("base64");
+}
+
+describe("withholdValueImages", () => {
+  const png = base64Of([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const jpeg = base64Of([0xff, 0xd8, 0xff, 0xe0]);
+  const gif = base64Of("GIF89a");
+  const webp = base64Of("RIFF", [1, 2, 3, 4], "WEBP");
+  const wav = base64Of("RIFF", [1, 2, 3, 4], "WAVE");
+
+  it("replaces data URIs, base64 images and image objects with notices", () => {
+    const value = {
+      id: "msg-1",
+      avatar: "data:image/png;base64,iVBORw0KGgo=",
+      svg: "data:image/svg+xml,%3Csvg%3E",
+      files: [{ name: "a.png", content: png }, { name: "b.jpg", content: jpeg }, gif, webp],
+      block: { type: "image", source: { type: "base64", media_type: "image/webp", data: "x" } },
+      mcp: { type: "image", data: "AAAA" },
+    };
+    const { value: out, withheld } = withholdValueImages(value);
+    expect(withheld).toEqual([
+      "image/png",
+      "image/svg+xml",
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/webp",
+      "image/webp",
+      "image",
+    ]);
+    const text = JSON.stringify(out);
+    expect(text).not.toContain(png);
+    expect(text).not.toContain("iVBORw0KGgo");
+    expect(out).toMatchObject({
+      id: "msg-1",
+      avatar: withheldImageText("image/png"),
+      mcp: withheldImageText(undefined),
+    });
+    expect((out as typeof value).files[0]).toEqual({
+      name: "a.png",
+      content: withheldImageText("image/png"),
+    });
+    expect(value.files[0]).toEqual({ name: "a.png", content: png });
+  });
+
+  it("leaves links, short base64, other base64 bytes and plain text alone, by reference", () => {
+    const value = {
+      link: "https://cdn.example.test/a.png",
+      token: "iVBORw0KGgo",
+      audio: wav,
+      text: "the quick brown fox",
+      n: 3,
+      nested: [{ ok: true }, null],
+    };
+    const { value: out, withheld } = withholdValueImages(value);
+    expect(withheld).toEqual([]);
+    expect(out).toBe(value);
+  });
+});
+
+describe("withholdToolResult", () => {
+  it("reports the media type of each replaced item", () => {
+    const { result, withheld } = withholdToolResult({
+      content: [
+        { type: "image", data: "AAAA", mimeType: "image/png" },
+        { type: "image", data: "AAAA" },
+        { type: "text", text: "x" },
+      ],
+    });
+    expect(withheld).toEqual(["image/png", "image"]);
+    expect(JSON.stringify(result)).not.toContain("AAAA");
+  });
+});
+
+describe("withholdingToolResults", () => {
+  const imageTool = {
+    name: "some_tool",
+    handler: async () => ({ content: [{ type: "image", data: "AAAA", mimeType: "image/png" }] }),
+  };
+
+  it("strips image items from every deskmates tool result and records it on a withholding run", async () => {
+    const events: { kind: string; payload: Record<string, unknown> }[] = [];
+    const sink = {
+      emit: (kind: string, payload: Record<string, unknown>) => events.push({ kind, payload }),
+    };
+    const [wrapped] = withholdingToolResults(
+      { visionPolicy: "withhold" },
+      sink as unknown as Parameters<typeof withholdingToolResults>[1],
+      [imageTool],
+    );
+    const result = await (wrapped?.handler as () => Promise<unknown>)();
+    expect(JSON.stringify(result)).not.toContain("AAAA");
+    expect(events).toEqual([
+      {
+        kind: "log",
+        payload: {
+          source: "vision",
+          op: "image_withheld",
+          toolName: "mcp__deskmates__some_tool",
+          count: 1,
+          media: ["image/png"],
+        },
+      },
+    ]);
+  });
+
+  it("returns the very same tools on a delivering run", () => {
+    const tools = [imageTool];
+    const sink = { emit: () => {} };
+    expect(
+      withholdingToolResults(
+        {},
+        sink as unknown as Parameters<typeof withholdingToolResults>[1],
+        tools,
+      ),
+    ).toBe(tools);
+  });
+});
+
 describe("the system prompt", () => {
   const base: StartRunRequest = {
     runId: "run-1" as RunId,
@@ -87,5 +231,30 @@ describe("the system prompt", () => {
     expect(withholding.systemPrompt).toBe(
       `${delivering.systemPrompt}\n\n${VISION_WITHHELD_GUIDANCE}`,
     );
+  });
+
+  // ADR-0040 decision 11: a withholding run that has the look/OCR tool is pointed at it.
+  it("adds the look/OCR line to a withholding run's Images section and nowhere else", async () => {
+    const fs = createMemoryFs({ "/home/nova/SOUL.md": "You are Nova." });
+    const withTool: StartRunRequest = { ...base, tools: ["image_describe"] };
+    const delivering = await buildContext(withTool, fs, now);
+    const withholding = await buildContext({ ...withTool, visionPolicy: "withhold" }, fs, now);
+    expect(delivering.systemPrompt).not.toContain(VISION_LOOK_GUIDANCE);
+    expect(withholding.systemPrompt).toBe(
+      `${delivering.systemPrompt}\n\n${VISION_WITHHELD_GUIDANCE}\n${VISION_LOOK_GUIDANCE}`,
+    );
+  });
+});
+
+describe("notices with the look/OCR tool (ADR-0040 decision 11)", () => {
+  it("name the tool and the path only when it is offered", () => {
+    expect(imageReadNotice("/work/a.png", true)).toMatch(
+      /^image_withheld: .*Call mcp__deskmates__image_describe with path "\/work\/a\.png"/,
+    );
+    expect(pdfReadNotice("/work/a.pdf", true)).toMatch(
+      /Call mcp__deskmates__image_describe with path "\/work\/a\.pdf" and mode "ocr"/,
+    );
+    expect(imageReadNotice("/work/a.png")).not.toContain("image_describe");
+    expect(pdfReadNotice("/work/a.pdf")).not.toContain("image_describe");
   });
 });

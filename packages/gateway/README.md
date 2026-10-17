@@ -34,28 +34,39 @@ Each feature documents itself in its own file under `docs/`. A new feature adds 
 `docs/<topic>.md` (kebab-case) and one line to this list, in its sorted place; it does not add
 a section to this README.
 
+- [Agent runtimes (ADR-0044)](docs/agent-runtimes.md): `DEFAULT_RUNTIME`, a bot's `runtime`, the OpenAI upstream protocol
+- [App sharing: published workspace apps (ADR-0035)](docs/app-shares.md)
 - [Approvals](docs/approvals.md)
 - [Configuration](docs/configuration.md)
 - [Connectors (ADR-0012)](docs/connectors.md)
+- [Context and prompt-cache observability (ADR-0023 amendment 5)](docs/context-and-cache-observability.md): request shapes, CLI surface knobs
 - [Database and migrations (ADR-0031)](docs/database.md)
 - [Final-reply idempotency and recipient context](docs/final-reply-idempotency.md)
 - [Group routing and direct handoffs (M2 foundation)](docs/group-routing.md)
 - [HTTP API (M0)](docs/http-api.md): operator routes, events, sidecar-facing routes, model proxy
+- [Hybrid Knowledge and memory search (ADR-0041)](docs/hybrid-retrieval.md)
 - [Implemented foundation (M0/M1 and M2 F1–F4)](docs/implemented-foundation.md): run flow, sandbox recreation
 - [Integrations (ADR-0013)](docs/integrations.md)
 - [Interaction development update (2026-09-30)](docs/interaction-update-2026-09-30.md)
 - [Interrupted usage receipts (issue #72)](docs/interrupted-usage-receipts.md)
+- [Look/OCR and speech operations (ADR-0040)](docs/look-and-speech-operations.md)
 - [M1/M2 feature closeout operator APIs](docs/feature-closeout-apis.md)
-- [Model jobs: vision probes and SOUL proposals (ADR-0023 amendment 1)](docs/model-jobs.md)
+- [Model jobs: vision probes, round triage and SOUL proposals (ADR-0023 amendment 1)](docs/model-jobs.md)
 - [Model transport observations](docs/model-transport-observations.md)
+- [Model upstreams (ADR-0039)](docs/model-upstreams.md): `MODEL_UPSTREAMS`, routing by model, local zero prices
+- [Name lookups and bounded chat approvals (#113)](docs/name-lookups.md)
 - [Network profiles (ADR-0027 amendment 1)](docs/network-profiles.md): online LAN grants, publication, preflight
 - [Operations (M1)](docs/operations.md)
 - [Operator authentication and listeners (M2 B4)](docs/operator-authentication.md): browser sign-in and sessions (ADR-0022 P1)
 - [Optional origin coordination prototype (ADR-0007)](docs/origin-coordination.md)
 - [Per-bot screen transport (ADR-0008)](docs/per-bot-screens.md)
-- [Per-bot working directory experiment](docs/per-bot-working-directory.md)
+- [Per-bot working directories (ADR-0038)](docs/per-bot-working-directory.md): soft write guard between bots
 - [Private-chat handoffs (ADR-0024)](docs/private-chat-handoffs.md)
 - [Reviewed knowledge and memory administration (B5)](docs/knowledge-and-memory-administration.md)
+- [Run audit and ledger retention (ADR-0042)](docs/run-audit.md): failure classes, marks, `RUN_EVENTS_RETENTION_DAYS`
+- [Run liveness: stall detection and live progress data (issue #9)](docs/run-liveness.md)
+- [Run startup timeline and reply preview (ADR-0037)](docs/run-startup-timeline.md)
+- [Run usage summaries for Costs (ADR-0032 amendment 1)](docs/run-usage-summaries.md)
 - [Snapshot delivery experiment](docs/snapshot-delivery-experiment.md)
 - [Takeover (M1)](docs/takeover.md)
 - [Triggers (M1)](docs/triggers.md)

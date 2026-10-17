@@ -1,6 +1,8 @@
 // One ledger event in the run replay. Thinking is collapsed by default, tool calls and results
 // expand to their JSON, screenshots render inline when the payload carries an image this origin
-// can serve (see `screenshotSource`), and everything else is a labelled row.
+// can serve (see `screenshotSource`), and everything else is a labelled row. Per-turn usage, model
+// switches, compactions, skills and stalls read as one line (issue #9); their JSON stays behind
+// the row's details. A call paired with its result is `tool-call-row.tsx`.
 
 import {
   type RunEvent,
@@ -12,6 +14,7 @@ import { formatTime } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { currentI18n } from "../../i18n/intl.js";
 import { ModelRetryLine } from "./model-retry.js";
+import { formatElapsed } from "./run-activity.js";
 
 export interface RunEventRowProps {
   event: RunEvent;
@@ -69,6 +72,11 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
+/** A token count in the UI's locale; an unmeasured one is a dash, never 0. */
+function tokens(v: unknown): string {
+  return typeof v === "number" && Number.isFinite(v) ? v.toLocaleString(currentI18n().locale) : "—";
+}
+
 export function RunEventRow({ event, evidenceUrl }: RunEventRowProps) {
   const p = event.payload;
   return (
@@ -94,6 +102,10 @@ function summary(event: RunEvent): string {
     case "tool_result":
       return p.isError === true ? t("runEventRow.summary.error") : "";
     case "log":
+      if (p.source === "stall" && typeof p.idleMs === "number")
+        return p.op === "resumed"
+          ? t("runEventRow.summary.stallResumed", { idle: formatElapsed(p.idleMs) })
+          : t("runEventRow.summary.stalled", { idle: formatElapsed(p.idleMs) });
       return [str(p.source), str(p.level)].filter(Boolean).join(" · ");
     case "approval":
       return [str(p.phase), str(p.toolName), str(p.decision)].filter(Boolean).join(" · ");
@@ -112,6 +124,34 @@ function summary(event: RunEvent): string {
       return t("runEventRow.summary.notLearned", {
         reason: (str(p.reason) ?? t("runEventRow.summary.reasonUnavailable")).replaceAll("_", " "),
       });
+    case "turn_usage":
+      return t("runEventRow.summary.turnUsage", {
+        turn: tokens(p.turn),
+        model: str(p.model) ?? "?",
+        input: tokens(p.inputTokens),
+        output: tokens(p.outputTokens),
+        cacheRead: tokens(p.cacheReadTokens),
+        cacheWrite: tokens(p.cacheCreateTokens),
+      });
+    case "model_switch":
+      return t("runEventRow.summary.modelSwitch", {
+        from: str(p.from) ?? "?",
+        to: str(p.to) ?? "?",
+        source: str(p.source) ?? "?",
+      });
+    case "compact_boundary":
+      return typeof p.postTokens === "number"
+        ? t("runEventRow.summary.compacted", {
+            trigger: str(p.trigger) ?? "?",
+            pre: tokens(p.preTokens),
+            post: tokens(p.postTokens),
+          })
+        : t("runEventRow.summary.compactedAt", {
+            trigger: str(p.trigger) ?? "?",
+            pre: tokens(p.preTokens),
+          });
+    case "skill_used":
+      return t("runEventRow.summary.skillUsed", { skill: str(p.skill) ?? "?" });
     case "rule_file_modified":
       return t("runEventRow.summary.ruleFile", {
         file: str(p.fileName) ?? t("runEventRow.summary.ruleFileDefault"),
@@ -182,7 +222,10 @@ function Body({ event, payload }: { event: RunEvent; payload: Record<string, unk
   }
 }
 
-function JsonDetails({ payload, label }: { payload: Record<string, unknown>; label: string }) {
+export function JsonDetails({
+  payload,
+  label,
+}: { payload: Record<string, unknown>; label: string }) {
   const [open, setOpen] = useState(false);
   return (
     <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
@@ -211,7 +254,7 @@ function Screenshot({ payload }: { payload: Record<string, unknown> }) {
   );
 }
 
-function EvidenceLink({
+export function EvidenceLink({
   payload,
   evidenceUrl,
 }: { payload: Record<string, unknown>; evidenceUrl?: ((path: string) => string) | undefined }) {

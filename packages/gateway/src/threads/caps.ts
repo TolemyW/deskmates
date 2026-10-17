@@ -1,6 +1,7 @@
 // The message caps of ADR-0005 decision 6, as configured per workspace (amendment 5, decisions
-// 37 to 39), and the loop breaker that stands behind them (decision 40). Pure: the router hands
-// in the counts and the effective caps, and acts on what comes back.
+// 37 to 39), and the loop breaker that stands behind them (decision 40: depth and repetition
+// always on, the volume rule behind the `volumeBreaker` switch). Pure: the router hands in the
+// counts and the effective caps, and acts on what comes back.
 
 import {
   type EffectiveLimit,
@@ -30,7 +31,7 @@ export function fixedCaps(threadTurnBudget: number): ThreadCaps {
   return {
     turnBudget: { value: threadTurnBudget, source: "thread" },
     relayCountMax: { value: RELAY_COUNT_MAX, source: "default" },
-    relaxed: false,
+    volumeBreaker: false,
   };
 }
 
@@ -42,24 +43,27 @@ export function normalizeBody(body: string): string {
 /**
  * What one stored bot message breaches. `botCount` includes the message; `repeats` is how many
  * messages of its author since the latest human message have its normalized body, itself
- * included. At most one depth breach and one volume breach are returned.
+ * included. `budgetCount`, when given, is what the turn budget counts instead of `botCount`
+ * (ADR-0005 amendment 6, decision 49: a triaged round counts once); the loop breaker's volume
+ * rule always counts every message. At most one depth breach and one volume breach are returned.
  */
 export function evaluateCaps(
   caps: ThreadCaps,
-  counts: { relayCount: number; botCount: number; repeats: number },
+  counts: { relayCount: number; botCount: number; repeats: number; budgetCount?: number },
 ): CapBreach[] {
   const breaches: CapBreach[] = [];
   breaches.push(...depth(caps.relayCountMax, counts.relayCount));
-  if (caps.turnBudget.value !== null && counts.botCount >= caps.turnBudget.value) {
+  const budgetCount = counts.budgetCount ?? counts.botCount;
+  if (caps.turnBudget.value !== null && budgetCount >= caps.turnBudget.value) {
     breaches.push({
       cap: "turn_budget",
       pauses: true,
       limit: caps.turnBudget.value,
       source: caps.turnBudget.source,
     });
-  } else if (counts.botCount >= LOOP_BREAKER_BOT_MESSAGES) {
+  } else if (caps.volumeBreaker && counts.botCount >= LOOP_BREAKER_BOT_MESSAGES) {
     breaches.push(breaker("volume", LOOP_BREAKER_BOT_MESSAGES, true));
-  } else if (caps.relaxed && counts.repeats >= LOOP_BREAKER_REPEATS) {
+  } else if (counts.repeats >= LOOP_BREAKER_REPEATS) {
     breaches.push(breaker("repetition", LOOP_BREAKER_REPEATS, true));
   }
   return breaches;
@@ -91,7 +95,7 @@ export function breachLabel(breach: CapBreach): string {
     breach.source === "workspace"
       ? "workspace setting"
       : breach.source === "default_no_backstop"
-        ? "default; off needs a budget"
+        ? "default; this workspace requires a budget for unlimited limits"
         : breach.source;
   if (breach.cap === "relay_count") return `relay cap reached (${breach.limit} hops, ${source})`;
   if (breach.cap === "turn_budget")

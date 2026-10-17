@@ -6,6 +6,7 @@ import {
   LOOP_BREAKER_BOT_MESSAGES,
   LOOP_BREAKER_RELAY_MAX,
   type Mention,
+  type MentionOptions,
   type MessageId,
   RUN_ERROR_TURN_BUDGET,
   type RequestedRoundMode,
@@ -23,8 +24,10 @@ import {
 import type { EventStore } from "../ledger/events.js";
 import type { RunRecord, RunStore } from "../ledger/runs.js";
 import type { WorkspaceLimitStore } from "../limits/workspace-limits.js";
+import type { RoundTriageRequester } from "../model-jobs/round-triage.js";
 import { type CapBreach, blockedReason, breachLabel, evaluateCaps, fixedCaps } from "./caps.js";
 import type { MessageStore } from "./messages.js";
+import type { RoundPlanStore, StoredPlan } from "./round-plans.js";
 import type { RoundStore } from "./rounds.js";
 import type { RoutingWalk, RoutingWalkStore, WalkMode } from "./routing-walks.js";
 import type { NamedMember, ThreadStore } from "./threads.js";
@@ -80,6 +83,22 @@ export interface ThreadRouterOptions {
   rounds?: RoundStore;
   /** Workspace caps (amendment 5); a router without them keeps decision 6's fixed caps. */
   limits?: Pick<WorkspaceLimitStore, "threadCaps">;
+  /**
+   * ADR-0026 amendment 1: a paused bot is never woken. A router without it treats every bot as
+   * awake.
+   */
+  isPaused?: (botId: BotId) => boolean;
+  /**
+   * Triaged rounds (amendment 6, proposed): their plans, and the job that triages a request.
+   * Under `round-v1` a router without both routes every request on the fallback of decision 46.
+   */
+  roundPlans?: RoundPlanStore;
+  triage?: RoundTriageRequester;
+}
+
+/** A bounded reason for a plan's fallback or early close. */
+function reasonText(text: string): string {
+  return text.length > 300 ? `${text.slice(0, 299)}…` : text;
 }
 
 export class ThreadRouter {
@@ -95,8 +114,18 @@ export class ThreadRouter {
     private readonly options: ThreadRouterOptions = {},
   ) {}
 
+  /** Amendment 2's routing; `round-v1` keeps it for everything amendment 6 does not change. */
   private get ownerRouting(): boolean {
-    return this.options.groupRouting === "owner-v1";
+    return this.options.groupRouting === "owner-v1" || this.options.groupRouting === "round-v1";
+  }
+
+  private get roundRouting(): boolean {
+    return this.options.groupRouting === "round-v1";
+  }
+
+  /** Amendment 6, decision 50: under `round-v1` a member written `@ name` is a mention. */
+  get mentionOptions(): MentionOptions {
+    return this.roundRouting ? { spaced: true } : {};
   }
 
   postHuman(input: PostHumanMessageInput): PostResult {
@@ -114,7 +143,7 @@ export class ThreadRouter {
         authorKind: "human",
         authorId: input.authorId ?? "web",
         body: input.body,
-        mentions: parseMentions(input.body, members),
+        mentions: parseMentions(input.body, members, undefined, this.mentionOptions),
         relayCount: 0,
         ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
         ...(input.externalId === undefined ? {} : { externalId: input.externalId }),
@@ -168,7 +197,7 @@ export class ThreadRouter {
     threadId: ThreadId,
     body: string,
     attachments: readonly Attachment[] = [],
-    opts: { wakeExcept?: BotId; wakeOnly?: BotId; runId?: Run["id"] } = {},
+    opts: { wakeExcept?: BotId; wakeOnly?: BotId; runId?: Run["id"]; inert?: true } = {},
   ): PostResult {
     const thread = this.threads.mustGet(threadId);
     const members = this.threads.members(threadId);
@@ -183,9 +212,13 @@ export class ThreadRouter {
       ...(opts.runId === undefined ? {} : { runId: opts.runId }),
     });
     if (isPastDeadline(thread)) return { message, runs: [], deadlinePassed: true };
+    // A routing-inert notice (an approval request, reminder or expiry, ADR-0002 amendment 3 A4).
+    if (opts.inert) return { message, runs: [] };
     const runs = members
       .filter((member) => member.botId !== opts.wakeExcept)
       .filter((member) => opts.wakeOnly === undefined || member.botId === opts.wakeOnly)
+      // A notice is not a request: a paused member reads it when it is next woken.
+      .filter((member) => !this.options.isPaused?.(member.botId))
       .filter((member) => !this.runs.findQueued(member.botId, threadId))
       .map((member) => this.createWake(thread, member.botId, message));
     return { message, runs };
@@ -200,10 +233,17 @@ export class ThreadRouter {
     return created;
   }
 
-  /** A terminal run releases its member in an in-turn walk. Parked runs do not. */
+  /**
+   * A terminal run releases its member in an in-turn walk, and moves a triaged round on (amendment
+   * 6): a triage job dispatches or falls back, an assigned run may complete the round. Parked runs
+   * do neither.
+   */
   runEnded(run: RunRecord): RunRecord[] {
     if (!isTerminal(run.status) || !run.threadId) return [];
-    const created = this.walks.transaction(() => this.advanceThreadWalk(run.threadId as ThreadId));
+    const created = this.walks.transaction(() => [
+      ...this.advanceRounds(run),
+      ...this.advanceThreadWalk(run.threadId as ThreadId),
+    ]);
     if (created.length > 0) this.onRunsCreated(created);
     return created;
   }
@@ -220,17 +260,18 @@ export class ThreadRouter {
 
   /**
    * ADR-0005 amendment 5, decision 38: the effective relay cap and turn budget of a thread, `off`
-   * falling back to the loop breaker's ceilings. `message_bot` and the outcome notices of ADR-0016
+   * falling back to the loop breaker's ceilings; a turn budget that is off with the volume rule
+   * off too is null (no message-count bound). `message_bot` and the outcome notices of ADR-0016
    * decision 11 read the same values the router checks.
    */
-  effectiveCaps(threadId: ThreadId): { relayCountMax: number; turnBudget: number } {
+  effectiveCaps(threadId: ThreadId): { relayCountMax: number; turnBudget: number | null } {
     const thread = this.threads.mustGet(threadId);
     const caps =
       this.options.limits?.threadCaps(thread.workspaceId, thread.turnBudget) ??
       fixedCaps(thread.turnBudget);
     return {
       relayCountMax: caps.relayCountMax.value ?? LOOP_BREAKER_RELAY_MAX,
-      turnBudget: caps.turnBudget.value ?? LOOP_BREAKER_BOT_MESSAGES,
+      turnBudget: caps.turnBudget.value ?? (caps.volumeBreaker ? LOOP_BREAKER_BOT_MESSAGES : null),
     };
   }
 
@@ -285,7 +326,7 @@ export class ThreadRouter {
       const relayCount = sourceRelay + 1;
       const mentions: Mention[] = forceTarget
         ? [{ kind: "bot", botId: forceTarget }]
-        : parseMentions(body, members, run.botId);
+        : parseMentions(body, members, run.botId, this.mentionOptions);
       const message = this.messages.append({
         threadId,
         authorKind: "bot",
@@ -302,7 +343,11 @@ export class ThreadRouter {
       const breaches = evaluateCaps(caps ?? fixedCaps(thread.turnBudget), {
         relayCount,
         botCount: this.messages.botCountSinceLastHuman(threadId),
-        repeats: caps?.relaxed ? this.messages.botRepeatsSinceLastHuman(message) : 0,
+        repeats: this.messages.botRepeatsSinceLastHuman(message),
+        // Amendment 6, decision 49: a triaged round's posts count once toward the turn budget.
+        ...(this.roundRouting && this.options.roundPlans
+          ? { budgetCount: this.options.roundPlans.botCountByRound(threadId) }
+          : {}),
       });
       const wakeBlocked = blockedReason(breaches);
       if (!forceTarget)
@@ -331,7 +376,7 @@ export class ThreadRouter {
         return { message, runs: [], changed: [], wakeBlocked: "deadline_passed" };
       }
       const created = forceTarget
-        ? this.directWakes(thread, message, [forceTarget])
+        ? this.directWakes(thread, message, this.withoutPaused(thread, message, [forceTarget]))
         : this.route(thread, members, message, false);
       return { message, runs: created, changed: [] };
     };
@@ -361,19 +406,219 @@ export class ThreadRouter {
     const sequential = message.authorKind === "human" && requested === "sequential";
     let created: RunRecord[];
     if (explicit.length > 0) {
-      const targets = explicit.map((m) => m.botId);
+      const targets = this.withoutPaused(
+        thread,
+        message,
+        explicit.map((m) => m.botId),
+      );
       if (message.authorKind === "human") this.openRound(thread, message, "parallel", targets);
       created = this.directWakes(thread, message, targets);
+    } else if (
+      this.roundRouting &&
+      message.authorKind === "human" &&
+      members.length > 1 &&
+      thread.kind === "chat"
+    ) {
+      created = this.startRound(thread, members, message, everyone);
     } else if (everyone && !sequential) {
       // Amendment 4, decision 28: every eligible member at once; a bot never consults itself.
-      const targets = members
-        .filter((member) => message.authorKind !== "bot" || member.botId !== message.authorId)
-        .map((member) => member.botId);
+      const targets = this.withoutPaused(
+        thread,
+        message,
+        members
+          .filter((member) => message.authorKind !== "bot" || member.botId !== message.authorId)
+          .map((member) => member.botId),
+      );
       this.openRound(thread, message, "parallel", targets);
       created = this.directWakes(thread, message, targets);
     } else created = this.routeUnaddressed(thread, members, message);
     if (publish && created.length > 0) this.onRunsCreated(created);
     return created;
+  }
+
+  /**
+   * Amendment 6, decisions 44 to 46: open the round and its plan in this transaction and queue the
+   * triage job; without a plan store or a job, route as `owner-v1` would.
+   */
+  private startRound(
+    thread: Thread,
+    members: readonly NamedMember[],
+    message: ThreadMessage,
+    everyone: boolean,
+  ): RunRecord[] {
+    if (thread.status === "paused") return [];
+    const targets = members.map((member) => member.botId);
+    this.openRound(thread, message, everyone ? "parallel" : "offer", targets);
+    const plans = this.options.roundPlans;
+    if (!plans || !this.options.rounds?.exists(message.id))
+      return this.fallback(thread, members, message, "no round plans in this Gateway");
+    // ADR-0026 amendment 1: a paused member is not on the triage roster and never runs the job.
+    const awake = members.filter((member) => !this.options.isPaused?.(member.botId));
+    plans.open(message.id);
+    if (awake.length === 0)
+      return this.fallback(thread, members, message, "every member is paused");
+    const job = this.options.triage?.request({ thread, message, members: awake });
+    if (!job) return this.fallback(thread, members, message, "no triage job could be queued");
+    plans.setTriageRun(message.id, job.id);
+    return [job];
+  }
+
+  /** Decision 46: the message is routed as `owner-v1` routes it, and the plan says why. */
+  private fallback(
+    thread: Thread,
+    members: readonly NamedMember[],
+    message: ThreadMessage,
+    reason: string,
+  ): RunRecord[] {
+    this.options.roundPlans?.setPhase(message.id, "fallback", { reason: reasonText(reason) });
+    if (message.mentions.some((mention) => mention.kind === "everyone"))
+      return this.directWakes(
+        thread,
+        message,
+        this.withoutPaused(
+          thread,
+          message,
+          members.map((member) => member.botId),
+        ),
+      );
+    return this.enqueueWalk(thread, message, members, "first_taker");
+  }
+
+  /** The plans a terminal run moves on: the one it triaged or closed, and those it works on. */
+  private advanceRounds(run: RunRecord): RunRecord[] {
+    const plans = this.options.roundPlans;
+    if (!plans) return [];
+    const own = plans.byRun(run.id);
+    if (own?.as === "triage") return this.dispatchRound(own.plan, run);
+    if (own?.as === "closer" && own.plan.phase === "closing")
+      plans.setPhase(own.plan.messageId, "closed");
+    return plans.workingForRun(run.id).flatMap((plan) => this.closeRound(plan));
+  }
+
+  /** The closer a plan has now: the one triage named while it is a member, else an assignee. */
+  private closerOf(plan: StoredPlan, members: readonly NamedMember[]): BotId | undefined {
+    const current = new Set(members.map((member) => member.botId));
+    if (plan.closerBotId && current.has(plan.closerBotId)) return plan.closerBotId;
+    return plan.assignments.find((a) => current.has(a.botId))?.botId;
+  }
+
+  /**
+   * ADR-0026 amendment 1 in a round: a paused closer is replaced by the first assigned member
+   * that is not paused, else by the thread's owner when it is not; undefined when nobody is left.
+   */
+  private awakeCloser(
+    closer: BotId,
+    plan: StoredPlan,
+    thread: Thread,
+    members: readonly NamedMember[],
+  ): BotId | undefined {
+    const isPaused = this.options.isPaused;
+    if (!isPaused?.(closer)) return closer;
+    const current = new Set(members.map((member) => member.botId));
+    const eligible = (botId: BotId | undefined): botId is BotId =>
+      botId !== undefined && current.has(botId) && !isPaused(botId);
+    const assignee = plan.assignments.find((a) => eligible(a.botId))?.botId;
+    if (assignee) return assignee;
+    return eligible(thread.ownerBotId) ? thread.ownerBotId : undefined;
+  }
+
+  /**
+   * Decision 47: the triage job ended. A valid plan wakes its assigned members at once and makes
+   * the closer the owner; anything else falls back (decision 46). A cancelled job wakes nobody.
+   */
+  private dispatchRound(plan: StoredPlan, triage: RunRecord): RunRecord[] {
+    const plans = this.options.roundPlans as RoundPlanStore;
+    if (plan.phase !== "triage") return [];
+    const message = this.messages.mustGet(plan.messageId);
+    const thread = this.threads.mustGet(message.threadId);
+    if (triage.status === "cancelled" || this.options.rounds?.isCancelled(plan.messageId)) {
+      plans.setPhase(plan.messageId, "closed", { reason: "the round or its triage was cancelled" });
+      return [];
+    }
+    const members = this.threads.members(thread.id);
+    const current = new Set(members.map((member) => member.botId));
+    const assigned = plan.assignments.filter((a) => current.has(a.botId));
+    if (triage.status !== "succeeded" || assigned.length === 0) {
+      const why =
+        triage.status !== "succeeded"
+          ? `triage ${triage.status}${triage.error ? `: ${triage.error}` : ""}`
+          : "triage assigned no current member";
+      return this.fallback(thread, members, message, why);
+    }
+    if (thread.status === "paused" || isPastDeadline(thread)) {
+      plans.setPhase(plan.messageId, "closed", {
+        reason: "the thread is paused or past its deadline",
+      });
+      return [];
+    }
+    // ADR-0026 amendment 1: a paused assignee is dropped from the plan and not woken; with none
+    // left awake the request falls back (decision 46), whose routing skips paused members too.
+    if (assigned.every((a) => this.options.isPaused?.(a.botId)))
+      return this.fallback(thread, members, message, "every assigned member is paused");
+    const targets = this.withoutPaused(
+      thread,
+      message,
+      assigned.map((a) => a.botId),
+    );
+    const named = this.closerOf(plan, members);
+    const closer = named && this.awakeCloser(named, plan, thread, members);
+    if (targets.length < assigned.length || closer !== named)
+      plans.storeAssignments(
+        plan.messageId,
+        assigned.filter((a) => targets.includes(a.botId)),
+        closer ?? (targets[0] as BotId),
+      );
+    plans.setPhase(plan.messageId, "working");
+    if (closer && this.threads.setOwner(thread.id, closer))
+      this.options.onThreadChanged?.(thread.id);
+    return this.directWakes(thread, message, targets);
+  }
+
+  /**
+   * Decision 48: once the latest related run of every assigned member is terminal, wake the
+   * closer exactly once (or take its queued wake), unless it was the only assignee or the thread
+   * cannot start work. The phase moves off `working` here, so a later end never wakes it again.
+   */
+  private closeRound(plan: StoredPlan): RunRecord[] {
+    const plans = this.options.roundPlans as RoundPlanStore;
+    if (plan.phase !== "working" || !plans.allAssignedEnded(plan)) return [];
+    const message = this.messages.mustGet(plan.messageId);
+    const thread = this.threads.mustGet(message.threadId);
+    const members = this.threads.members(thread.id);
+    const named = this.closerOf(plan, members);
+    const stop = (reason: string): RunRecord[] => {
+      plans.setPhase(plan.messageId, "closed", { reason });
+      return [];
+    };
+    if (this.options.rounds?.isCancelled(plan.messageId)) return stop("the round was cancelled");
+    if (!named) return stop("no closer is still a member");
+    if (plan.assignments.length === 1 && plan.assignments[0]?.botId === named)
+      return stop("the closer was the only assignee; its reply is the answer");
+    if (thread.status === "paused" || isPastDeadline(thread))
+      return stop("the thread is paused or past its deadline");
+    // ADR-0026 amendment 1: a paused closer is replaced; with nobody left the request falls back.
+    const closer = this.awakeCloser(named, plan, thread, members);
+    if (!closer)
+      return this.fallback(thread, members, message, "the closer and every assignee are paused");
+    const queued = this.runs.findQueued(closer, thread.id);
+    const run = queued ?? this.createWake(thread, closer, message);
+    plans.setPhase(plan.messageId, "closing", { closerRunId: run.id });
+    this.events?.append({
+      runId: run.id,
+      kind: "log",
+      payload: {
+        source: "round_close",
+        messageId: plan.messageId,
+        closerBotId: closer,
+        coalesced: queued !== undefined,
+        assigned: plans.assignedRuns(plan).map((a) => ({
+          botId: a.botId,
+          runId: a.runId ?? null,
+          status: a.status ?? null,
+        })),
+      },
+    });
+    return queued ? [] : [run];
   }
 
   /** Decision 30: the durable round of an accepted originating message, with its parent. */
@@ -429,6 +674,10 @@ export class ThreadRouter {
             state: member.state,
           },
         );
+      if (this.options.isPaused?.(botId))
+        throw new DeskmatesError("invalid_transition", "the bot is paused; resume it first", {
+          botId,
+        });
       const thread = this.threads.mustGet(round.threadId);
       if (thread.status === "paused" || isPastDeadline(thread))
         throw new DeskmatesError(
@@ -581,10 +830,19 @@ export class ThreadRouter {
     mode: WalkMode,
   ): RunRecord[] {
     if (thread.status === "paused") return [];
-    const targets =
+    const awake = new Set(
+      this.withoutPaused(
+        thread,
+        message,
+        members.map((member) => member.botId),
+      ),
+    );
+    const targets = (
       message.authorKind === "bot"
         ? members.filter((member) => member.botId !== message.authorId)
-        : members;
+        : members
+    ).filter((member) => awake.has(member.botId));
+    if (targets.length === 0) return [];
     this.walks.enqueue(
       message.id,
       thread.id,
@@ -640,6 +898,12 @@ export class ThreadRouter {
         continue;
       }
       const message = this.messages.mustGet(walk.messageId);
+      // Paused after the walk began: passed over like a member that has seen the message.
+      if (this.options.isPaused?.(botId)) {
+        this.notePaused(thread, message, [botId]);
+        this.walks.finishMember(walk.messageId);
+        continue;
+      }
       const member = this.threads.member(threadId, botId);
       // A successful/silent run from an earlier walk may already have delivered this queued
       // message. It satisfies this member without another model call; failures do not advance
@@ -661,6 +925,31 @@ export class ThreadRouter {
       this.relate(walk.messageId, botId, run, "created");
       return [run];
     }
+  }
+
+  /**
+   * ADR-0026 amendment 1: drop paused bots from a wake and say so in the thread, once per message.
+   * The message stays unseen by them, so the first wake after they are resumed delivers it.
+   */
+  private withoutPaused(thread: Thread, message: ThreadMessage, botIds: readonly BotId[]): BotId[] {
+    const isPaused = this.options.isPaused;
+    const paused = isPaused ? botIds.filter((botId) => isPaused(botId)) : [];
+    if (paused.length === 0) return [...botIds];
+    this.notePaused(thread, message, paused);
+    return botIds.filter((botId) => !paused.includes(botId));
+  }
+
+  private notePaused(thread: Thread, message: ThreadMessage, paused: readonly BotId[]): void {
+    const names = this.threads.workspaceBotNames(thread.id);
+    const who = paused.map((botId) => names.get(botId) ?? botId).join(", ");
+    const notice = this.messages.append({
+      threadId: thread.id,
+      authorKind: "system",
+      authorId: "",
+      body: `${who} ${paused.length === 1 ? "is" : "are"} paused and was not woken by message #${message.seq}. A paused bot reads what it missed when it is resumed and woken again.`,
+      relayCount: 0,
+    });
+    this.onMessageCreated(notice);
   }
 
   private createWake(thread: Thread, botId: BotId, message: ThreadMessage): RunRecord {

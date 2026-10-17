@@ -63,17 +63,6 @@
   position: relative;
   display: inline-flex;
 }
-.composer-attach .files-upload-jobs {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  right: 0;
-  width: min(320px, 80vw);
-  padding: 8px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  z-index: 5;
-}
 @media (max-width: 640px) {
   .files-upload {
     align-items: stretch;
@@ -599,5 +588,79 @@
   .workspace-file-markdown h3 {
     font-size: var(--app-text-lg);
     margin: 20px 0 10px;
+  }
+  /* ADR-0014 amendment A6: view toggle, zoom, bounded table and source text. */
+  .workspace-file-views {
+    display: inline-flex;
+    gap: 4px;
+  }
+  .workspace-file-views button[aria-pressed="true"] {
+    background: var(--primary-soft);
+    color: var(--primary-text);
+    font-weight: 600;
+  }
+  .workspace-file-zoom {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .workspace-file-zoom output {
+    min-width: 4.5em;
+    text-align: center;
+    font-size: var(--app-text-sm);
+  }
+  .workspace-file-image-viewer {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+  .workspace-file-image-frame,
+  .workspace-file-pdf-canvas {
+    max-width: 100%;
+    overflow: auto;
+  }
+  .workspace-file-image.zoomed {
+    max-width: none;
+    max-height: none;
+  }
+  .workspace-file-pdf-controls {
+    flex-wrap: wrap;
+  }
+  .workspace-file-pdf-page {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .workspace-file-pdf-page input {
+    width: 4em;
+    text-align: center;
+  }
+  .workspace-file-pdf-page input[aria-invalid="true"] {
+    border-color: var(--app-danger);
+  }
+  .workspace-file-csv-preview {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+  .workspace-file-csv-extent {
+    margin: 0;
+  }
+  .workspace-file-csv th {
+    position: sticky;
+    top: 0;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    background: var(--app-surface-hover);
+    text-align: left;
+    white-space: nowrap;
+  }
+  .workspace-file-source {
+    max-height: 70vh;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: var(--app-text-sm);
   }
 }

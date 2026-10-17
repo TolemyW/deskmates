@@ -1,5 +1,5 @@
 {
-  "limits.breaker": "ループブレーカーは常に有効です。{relayMax} ホップを超えるチェーンは誰も起こしません。最後の人間のメッセージ以降にボットのメッセージが {botMessages} 件、または同じボットから同一のメッセージが {repeats} 件になると、人が書き込むまでチャットを一時停止します。",
+  "limits.breaker": "ループブレーカーは常に有効です。{relayMax} ホップを超えるチェーンは誰も起こさず、同じボットから同一のメッセージが {repeats} 件になると、人が書き込むまでチャットを一時停止します。",
   "limits.cancel": "キャンセル",
   "limits.edit": "制限を編集",
   "limits.effective": "{value} · {source}",
@@ -13,14 +13,17 @@
   "limits.key.turnBudget": "ターン予算（最後の人間のメッセージ以降のチャットごとのボットメッセージ数）",
   "limits.loading": "制限を読み込み中…",
   "limits.off": "オフ",
-  "limits.offNeedsBudget": "このワークスペースに週次または累計の予算（コストページ）を設定するとオフを選べます。",
+  "limits.offNeedsBudget": "このワークスペースでは、制限をオフにする前に週次または累計の予算（コストページ）が必要です。",
+  "limits.on": "オン",
   "limits.roleNote": "実行制限を変更",
   "limits.save": "制限を保存",
   "limits.source.default": "既定値",
-  "limits.source.default_no_backstop": "既定値（オフには予算が必要）",
+  "limits.source.default_no_backstop": "既定値（このワークスペースではオフに予算が必要）",
   "limits.source.gateway": "サーバー既定値",
   "limits.source.loop_breaker": "ループブレーカー",
   "limits.source.thread": "チャットごと",
   "limits.source.workspace": "ワークスペース設定",
+  "limits.switch.requireBudgetForOff": "無制限にするには予算を必須にする",
+  "limits.switch.volumeBreaker": "最後の人間のメッセージ以降、ボットのメッセージが {botMessages} 件になったらチャットを一時停止する",
   "limits.title": "実行制限"
 }

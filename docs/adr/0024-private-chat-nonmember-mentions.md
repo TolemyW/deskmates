@@ -268,3 +268,37 @@ created today was listed under **Earlier conversations** below an older canonica
 |---|---|---|---|
 | 11 | `welcomeDelivery` is `delivered` for a succeeded welcome or any welcome with an attributable bot message in its own thread, `partial` for a failed/cancelled/stopped welcome with one, `undelivered` only without one; the retry route refuses delivered and partial welcomes and accepts exactly one of two concurrent retries; the composer agrees on load, after either SSE arrival order and after reload | T0 contracts `welcome.test.ts`; T1 Gateway `chat-lifecycle-routes.test.ts`; T0 web `chat-pane-welcome.test.tsx` | Duplicate welcome runs after a delivered greeting = 0; false "could not send" banners = 0 |
 | 12 | Extra one-member chats are listed under their Bot as Other conversations in every locale; opening one creates no run | T0 web `thread-rail-inboxes.test.tsx` | Unreachable one-member chats = 0 |
+
+## Amendment 3 (2026-10-16): what a bot calls the person is not an address
+
+### Context
+
+In a one-member web chat a bot answering the person often writes `@user`, and the
+Gateway, applying decision 2, posted "@user was not delivered: no bot with this
+name exists in this workspace" under every such reply. On the stable deployment
+this notice headed most private chats and read as an error. The bot was addressing
+the person in front of it, not attempting a handoff; decision 2 exists so that an
+attempted handoff is never lost silently, and nothing was attempted.
+
+### Decision
+
+13. **Human addresses are nobody's address.** The names a bot uses for the person
+    it talks to (`user`, `human`, `operator`, `owner`, `you`, case-insensitive;
+    `HUMAN_ADDRESSES` in contracts) are not unknown names: `mentionDiagnostics`
+    skips them like `@everyone`, the private-chat router posts no diagnostic for
+    them and records nothing, and `thread_post` does not report them to the model.
+    A member of that name still matches as a member; a non-member bot of that name
+    is not reached by it. Every other unrecognised or ineligible name keeps its
+    visible diagnostic (decision 2).
+
+### Verification
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 13 | `@user`, `@Human`, `@operator`, `@owner` and `@you` in a bot's message yield no unknown name and, in a one-member web chat, no system message; `@nobody` still does | T0 contracts `thread.test.ts`; T1 Gateway `threads/private-handoffs.test.ts` | "was not delivered" notices for a human address = 0 |
+
+### Consequences
+
+A bot that misspells a configured recipient still sees the diagnostic. A workspace
+that names a bot `user` or `owner` and expects handoffs to it by that name from a
+chat it is not a member of will not get them; rename the bot.

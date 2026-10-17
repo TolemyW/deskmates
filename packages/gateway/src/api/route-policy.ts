@@ -15,8 +15,10 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Principal } from "../auth/principal.js";
 import type { GatewayContext } from "../context.js";
 import type { OwnedKind } from "../tenancy/ownership.js";
+import { appSharesRoutePolicies } from "./route-policies/app-shares.js";
 import { approvalsRoutePolicies } from "./route-policies/approvals.js";
 import { boardRoutePolicies } from "./route-policies/board.js";
+import { botConfigRoutePolicies } from "./route-policies/bot-config.js";
 import { botsRoutePolicies } from "./route-policies/bots.js";
 import { browserRoutePolicies } from "./route-policies/browser.js";
 import { channelsRoutePolicies } from "./route-policies/channels.js";
@@ -36,6 +38,7 @@ import { runsRoutePolicies } from "./route-policies/runs.js";
 import { skillsRoutePolicies } from "./route-policies/skills.js";
 import { tasksRoutePolicies } from "./route-policies/tasks.js";
 import { threadsRoutePolicies } from "./route-policies/threads.js";
+import { workdirRoutePolicies } from "./route-policies/workdir.js";
 import { workspacesRoutePolicies } from "./route-policies/workspaces.js";
 import { isRootPrincipal, workspaceRole } from "./workspace-access.js";
 
@@ -46,8 +49,10 @@ export type { RoutePolicy } from "./route-policies/policy.js";
  * the order and that every domain file is listed exactly once.
  */
 export const ROUTE_POLICY_DOMAINS: ReadonlyArray<readonly [domain: string, PolicyTable]> = [
+  ["app-shares", appSharesRoutePolicies],
   ["approvals", approvalsRoutePolicies],
   ["board", boardRoutePolicies],
+  ["bot-config", botConfigRoutePolicies],
   ["bots", botsRoutePolicies],
   ["browser", browserRoutePolicies],
   ["channels", channelsRoutePolicies],
@@ -66,6 +71,7 @@ export const ROUTE_POLICY_DOMAINS: ReadonlyArray<readonly [domain: string, Polic
   ["skills", skillsRoutePolicies],
   ["tasks", tasksRoutePolicies],
   ["threads", threadsRoutePolicies],
+  ["workdir", workdirRoutePolicies],
   ["workspaces", workspacesRoutePolicies],
 ];
 

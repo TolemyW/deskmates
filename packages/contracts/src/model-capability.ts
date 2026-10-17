@@ -73,7 +73,8 @@ export type VisionPolicy = "deliver" | "withhold";
 /**
  * The policy for a recorded capability. `unsupported` withholds; so does an `unknown` whose probe
  * got a wrong answer (observed confabulation; proposed). Every other state delivers unchanged:
- * the probe is off by default, and withholding on `not_probed` would blind models that can see.
+ * a pending, failed or absent probe is no evidence of blindness, and withholding there would
+ * blind models that can see (ADR-0023 amendment 2, decision 11).
  * The status is never rewritten by the policy.
  */
 export function visionPolicyFor(vision: {

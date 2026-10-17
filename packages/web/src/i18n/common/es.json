@@ -23,6 +23,7 @@
   "pill.runStatus.queued": "en cola",
   "pill.runStatus.running": "en curso",
   "pill.runStatus.silent": "sin respuesta",
+  "pill.runStatus.stalled": "detenido sin avance",
   "pill.runStatus.stopped": "detenida",
   "pill.runStatus.succeeded": "completada",
   "pill.runStatus.waitingApproval": "esperando aprobación",

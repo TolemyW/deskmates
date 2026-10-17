@@ -1,5 +1,5 @@
 // T1: the approval and rule routes (ADR-0002 amendment 2, rows A2 and A3). Decision order,
-// membership as the whole test for `approval_decide`, wake on the request, and rule CRUD.
+// membership as the whole test for `approval_decide`, the inert request (A4), and rule CRUD.
 
 import type {
   Approval,
@@ -276,6 +276,8 @@ describe("any member of the thread may decide (A2)", () => {
       name: "ws-two",
       egressAllowlist: ["*.example.test"],
     });
+    // The human path (ADR-0002 amendment 6, D2); a new workspace starts in automatic review.
+    await h.api("PUT", `/api/workspaces/${ws.json.workspace.id}/auto-approval`, { mode: "manual" });
     const a = await h.api<{ bot: BotDefinition }>("POST", "/api/bots", {
       name: "ana",
       role: "worker",
@@ -298,7 +300,7 @@ describe("any member of the thread may decide (A2)", () => {
     };
   }
 
-  it("posting a request wakes the other member and not the requester, and that member can decide", async () => {
+  it("posting a request wakes no member, and a member woken later can decide", async () => {
     const { a, b, thread } = await twoBotThread();
     const sse = await openSse(h.baseUrl);
     const gate = deferred();
@@ -338,7 +340,7 @@ describe("any member of the thread may decide (A2)", () => {
         });
         return;
       }
-      // Bo's run was woken by the request card; it settles it with `approval_decide`.
+      // Bo, woken by the human, settles the notice it read with `approval_decide`.
       if (decideStatus !== 0) {
         await gw.post("ended", {
           type: "run_ended",
@@ -372,13 +374,24 @@ describe("any member of the thread may decide (A2)", () => {
       2000,
       "live wait",
     );
-    // The request created exactly one run, for the other member.
+    // ADR-0002 amendment 3, A4: the request is routing-inert and wakes nobody.
+    expect(
+      h.app.deskmates.ctx.runs.list({ threadId: thread.id }).filter((r) => r.id !== aRun.id),
+    ).toEqual([]);
+    // A human asks Bo; Bo's delivery carries the request as an unseen notice.
+    await wake(h, thread.id, "@bo please decide the pending approval");
     const runsForCard = h.app.deskmates.ctx.runs
       .list({ threadId: thread.id })
       .filter((r) => r.id !== aRun.id);
     expect(runsForCard).toHaveLength(1);
     expect(runsForCard[0]?.botId).toBe(b.id);
     expect(runsForCard[0]?.lane).toBe("interactive");
+    await waitFor(() => seen.some((r) => r.botId === b.id), 2000, "bo started");
+    const bTrigger = seen.find((r) => r.botId === b.id)?.trigger;
+    expect(
+      bTrigger?.kind === "thread_message" &&
+        bTrigger.messages.some((m) => m.body.startsWith("Approval needed")),
+    ).toBe(true);
 
     mayDecide.resolve();
     await waitFor(() => decideStatus !== 0, 3000, "bot decision");

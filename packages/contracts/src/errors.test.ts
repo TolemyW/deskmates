@@ -22,6 +22,7 @@ describe("isDeskmatesErrorCode", () => {
       "validation",
       "forbidden",
       "model_not_selected",
+      "model_upstream_missing",
       "payload_too_large",
       "invitation_unusable",
       "memory_rule_refused",

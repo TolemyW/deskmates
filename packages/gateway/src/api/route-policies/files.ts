@@ -1,6 +1,6 @@
 // Operator route policies for files; aggregated in `../route-policy.ts` (ADR-0022 P2).
 
-import { type PolicyTable, member } from "./policy.js";
+import { type PolicyTable, admin, member } from "./policy.js";
 
 // ADR-0014 amendment A5 decision 28: Members, Admins and Owners upload, Guests do not; the guard
 // checks the current workspace role on every request of an upload.
@@ -20,6 +20,11 @@ export const filesRoutePolicies: PolicyTable = {
   "DELETE /api/workspaces/:id/uploads/:uploadId": member({
     params: { id: "workspace" },
     handlerCheck: READ_OR_CANCEL,
+  }),
+  // Decision 43: any Admin or Owner of the workspace deletes a completed upload's file.
+  "DELETE /api/workspaces/:id/uploads/:uploadId/file": admin({
+    params: { id: "workspace" },
+    handlerCheck: UPLOAD,
   }),
   "PUT /api/workspaces/:id/uploads/:uploadId/parts": member({
     params: { id: "workspace" },

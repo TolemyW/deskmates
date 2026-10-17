@@ -33,11 +33,11 @@ async function setup(running = true) {
   const profile = await h.api<{ profile: NetworkProfile }>("POST", "/api/network-profiles", {
     name: "lab",
     rules: [
-      { kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [23001] },
+      { kind: "subnet", cidr: "172.18.200.0/24", schemes: ["http"], ports: [23001] },
       {
         kind: "host",
         hostname: "console.lab.test",
-        address: "10.20.36.35",
+        address: "172.18.201.35",
         schemes: ["https"],
         ports: [443],
       },
@@ -59,11 +59,11 @@ describe("network preflight (ADR-0027 amendment 1 decision 14)", () => {
   it("reports a policy denial without probing", async () => {
     const { harness, preflight } = await setup();
     for (const url of [
-      "http://10.20.30.24:23002/",
-      "https://10.20.30.24:23001/",
+      "http://172.18.200.24:23002/",
+      "https://172.18.200.24:23001/",
       "http://10.0.0.5/",
       "https://unlisted.example.org/",
-      "ftp://10.20.30.24/",
+      "ftp://172.18.200.24/",
     ]) {
       const res = await preflight(url);
       expect(res.status, url).toBe(200);
@@ -74,14 +74,14 @@ describe("network preflight (ADR-0027 amendment 1 decision 14)", () => {
 
   it("probes a granted origin from the proxy, pinning a host rule's address", async () => {
     const { harness, preflight } = await setup();
-    const lan = await preflight("http://10.20.30.24:23001/health");
+    const lan = await preflight("http://172.18.200.24:23001/health");
     expect(lan.json).toMatchObject({ ok: true, admittedBy: "grant", status: 200 });
     expect(lan.json.layers.map((l) => l.layer)).toEqual(["policy", "tcp", "http"]);
     await preflight("https://console.lab.test/");
     await preflight("https://docs.example.org/");
     expect(harness.provider.probes).toEqual([
-      { url: "http://10.20.30.24:23001/health", grant: true },
-      { url: "https://console.lab.test/", grant: true, address: "10.20.36.35" },
+      { url: "http://172.18.200.24:23001/health", grant: true },
+      { url: "https://console.lab.test/", grant: true, address: "172.18.201.35" },
       { url: "https://docs.example.org/", grant: false },
     ]);
   });
@@ -92,13 +92,40 @@ describe("network preflight (ADR-0027 amendment 1 decision 14)", () => {
       ok: false,
       layers: [{ layer: "tcp", ok: false, detail: "ECONNREFUSED" }],
     };
-    const res = await preflight("http://10.20.30.24:23001/");
+    const res = await preflight("http://172.18.200.24:23001/");
     expect(res.json).toMatchObject({ ok: false, failedLayer: "tcp", admittedBy: "grant" });
+  });
+
+  it("fails a granted address inside a Docker network at the route layer, without probing", async () => {
+    // Amendment 2 decision 15, Testbox's shape: the LAN service's /24 sits inside a bridge.
+    const { harness, preflight } = await setup();
+    Object.assign(harness.provider, {
+      networkSubnets: async () => [
+        { name: "bridge", cidr: "172.17.0.0/16" },
+        { name: "vendordb-demo-net", cidr: "172.18.0.0/16" },
+      ],
+    });
+    for (const url of ["http://172.18.200.24:23001/", "https://console.lab.test/"]) {
+      const res = await preflight(url);
+      expect(res.json, url).toMatchObject({ ok: false, failedLayer: "route" });
+      expect(res.json.layers[1]?.detail, url).toContain("vendordb-demo-net (172.18.0.0/16)");
+    }
+    expect(harness.provider.probes).toEqual([]);
+    Object.assign(harness.provider, {
+      networkSubnets: async () => [{ name: "bridge", cidr: "172.17.0.0/16" }],
+    });
+    const clear = await preflight("http://172.18.200.24:23001/");
+    expect(clear.json.layers.map((l) => [l.layer, l.ok])).toEqual([
+      ["policy", true],
+      ["route", true],
+      ["tcp", true],
+      ["http", true],
+    ]);
   });
 
   it("says when the workspace is not running instead of guessing", async () => {
     const { harness, preflight } = await setup(false);
-    const res = await preflight("http://10.20.30.24:23001/");
+    const res = await preflight("http://172.18.200.24:23001/");
     expect(res.json.ok).toBe(true);
     expect(res.json.layers[0]?.detail).toContain("not running");
     expect(harness.provider.probes).toEqual([]);

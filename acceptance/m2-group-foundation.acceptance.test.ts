@@ -145,6 +145,19 @@ describe.sequential("M2 foundation with the configured real model", () => {
             body: `ORDERED case marker ordered${round}: follow your role's test rule.`,
           });
           expect(response.status).toBe(201);
+          // ADR-0005 amendment 6 (proposed): under round-v1 a cheap-model triage picks who works,
+          // so which members run is the model's choice; the transcript still has to show the
+          // chief's one answer. Not run yet: no result under round-v1 exists.
+          if (groupRoutingOf(s) === "round-v1") {
+            const runs = await settle(new Set(bots.map((b) => b.id)), 2);
+            expect(runs.some((r) => r.config.runType === "round_triage")).toBe(true);
+            expect(runs.every((r) => r.status === "succeeded" || r.status === "silent")).toBe(true);
+            const answers = s.app.deskmates.ctx.messages
+              .list(thread.id)
+              .filter((m) => m.authorKind === "bot" && m.body.includes("ORDERED_OK"));
+            expect(answers.map((m) => m.authorId)).toEqual([bots[0]?.id]);
+            return;
+          }
           // Decision 4 walks all three members; under owner-v1 (amendment 2) the offer ends
           // with the chief's answer and the two others are never woken for it.
           const offered = groupRoutingOf(s) === "owner-v1";

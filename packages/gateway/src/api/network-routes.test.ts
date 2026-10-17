@@ -152,13 +152,18 @@ describe("network profiles online (ADR-0027 amendment 1)", () => {
     expect(harness.provider.egressUpdates).toHaveLength(0);
   });
 
-  it("keeps open-internet workspaces and LAN grants apart (decision 13)", async () => {
+  it("keeps open-internet workspaces and LAN grants apart when the switch is off (decision 13)", async () => {
+    // Owner-decided 2026-10-14: allowed by default; `network-ownership.test.ts` covers the switch.
     const { harness, ctx, tested, profile } = await setup();
     const open = ctx.workspaces.create({
       name: "open",
       sandboxProvider: "docker",
       egressAllowlist: ["*"],
     });
+    for (const ws of [open, tested])
+      await harness.api("PUT", `/api/workspaces/${ws.id}/network-settings`, {
+        profilesOnOpenInternet: false,
+      });
     const refused = await harness.api<{ details?: { reason?: string } }>(
       "PUT",
       `/api/workspaces/${open.id}/network-profiles`,
@@ -258,7 +263,7 @@ describe("network profiles online (ADR-0027 amendment 1)", () => {
     expect(res.json.network.grants).toEqual(LAN.rules);
   });
 
-  it("only the root defines and selects; a workspace Admin reads (decision 12)", async () => {
+  it("a workspace Admin reads and selects but defines nothing (decision 12, owner-decided)", async () => {
     const { harness, ctx, tested, profile } = await setup();
     await ctx.auth.createUser({
       loginName: "ada",
@@ -275,17 +280,13 @@ describe("network profiles online (ADR-0027 amendment 1)", () => {
       ["POST", "/api/network-profiles", LAN],
       ["PUT", `/api/network-profiles/${profile.id}`, LAN],
       ["DELETE", `/api/network-profiles/${profile.id}`, undefined],
-      [
-        "PUT",
-        `/api/workspaces/${tested.id}/network-profiles`,
-        { selections: [{ profileId: profile.id }] },
-      ],
     ] as const) {
-      const res = await jar.json<{ details?: { reason?: string } }>(method, path, {
-        ...(body === undefined ? {} : { body }),
-      });
+      const res = await jar.json(method, path, { ...(body === undefined ? {} : { body }) });
       expect(res.status, `${method} ${path}`).toBe(403);
-      expect(res.json.details?.reason).toBe("root_only");
     }
+    const selected = await jar.json("PUT", `/api/workspaces/${tested.id}/network-profiles`, {
+      body: { selections: [{ profileId: profile.id }] },
+    });
+    expect(selected.status).toBe(200);
   });
 });

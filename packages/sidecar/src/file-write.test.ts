@@ -228,4 +228,54 @@ describe("file-write", () => {
     // The session resumes from the kept length once space is back.
     expect(append(3, Buffer.from("defg"))).toEqual({ op: "append", receivedBytes: 7 });
   });
+
+  describe("remove (decision 43)", () => {
+    const dated = (...rest: string[]) => join(root, "work", "uploads", "2026-10-14", ...rest);
+    const remove = (path: string) => ({ op: "remove", uploadId: ID, path });
+
+    it("removes a completed upload's file and answers false once it is gone", () => {
+      mkdirSync(dated(), { recursive: true });
+      writeFileSync(dated("a.txt"), "data");
+      expect(ok(remove("/work/uploads/2026-10-14/a.txt"))).toEqual({ op: "remove", removed: true });
+      expect(fs.existsSync(dated("a.txt"))).toBe(false);
+      expect(ok(remove("/work/uploads/2026-10-14/a.txt"))).toEqual({
+        op: "remove",
+        removed: false,
+      });
+      expect(ok(remove("/work/uploads/2026-10-15/a.txt"))).toEqual({
+        op: "remove",
+        removed: false,
+      });
+    });
+
+    it("refuses paths outside /work/uploads/<date>/", () => {
+      mkdirSync(dated(), { recursive: true });
+      writeFileSync(join(root, "work", "keep.txt"), "x");
+      for (const path of [
+        "/work/keep.txt",
+        "/profile/Cookies",
+        "/work/uploads/2026-10-14/../../keep.txt",
+        "/work/uploads/.partial/x.part",
+        "/work/uploads/2026-10-14/.hidden",
+        "/work/uploads/2026-10-14/sub/a.txt",
+        "/home/nova/a.txt",
+      ])
+        expect(errorOf(remove(path)).error).toBe("forbidden");
+      expect(readFileSync(join(root, "work", "keep.txt"), "utf8")).toBe("x");
+      expect(readFileSync(join(root, "profile", "Cookies"), "utf8")).toBe("secret");
+    });
+
+    it("refuses a link at the date directory or the file, and a directory", () => {
+      mkdirSync(join(root, "work", "uploads"), { recursive: true });
+      symlinkSync(join(root, "profile"), join(root, "work", "uploads", "2026-10-14"));
+      expect(errorOf(remove("/work/uploads/2026-10-14/Cookies")).error).toBe("forbidden");
+      fs.unlinkSync(join(root, "work", "uploads", "2026-10-14"));
+      mkdirSync(dated());
+      symlinkSync(join(root, "profile", "Cookies"), dated("c.txt"));
+      expect(errorOf(remove("/work/uploads/2026-10-14/c.txt")).error).toBe("forbidden");
+      mkdirSync(dated("d.txt"));
+      expect(errorOf(remove("/work/uploads/2026-10-14/d.txt")).error).toBe("forbidden");
+      expect(readFileSync(join(root, "profile", "Cookies"), "utf8")).toBe("secret");
+    });
+  });
 });

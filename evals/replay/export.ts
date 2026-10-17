@@ -28,6 +28,11 @@ export interface ExportOptions {
   runIds?: readonly string[];
   fetch?: Fetch;
   now?: () => Date;
+  /**
+   * Bearer for an authenticated operator API (ADR-0006): the operator token or a service
+   * principal's (`DESKMATES_OPERATOR_TOKEN` on the CLI). Sent as a header, never in a URL.
+   */
+  token?: string;
 }
 
 async function getJson<T>(fetchFn: Fetch, url: string): Promise<T> {
@@ -36,6 +41,16 @@ async function getJson<T>(fetchFn: Fetch, url: string): Promise<T> {
     throw new Error(`GET ${url} failed: ${response.status} ${response.statusText}`);
   }
   return (await response.json()) as T;
+}
+
+/** `fetch` with the operator bearer on every request, when there is one. */
+function withToken(fetchFn: Fetch, token: string | undefined): Fetch {
+  if (!token) return fetchFn;
+  return (input, init) =>
+    fetchFn(input, {
+      ...init,
+      headers: { ...(init?.headers as Record<string, string>), authorization: `Bearer ${token}` },
+    });
 }
 
 /** Terminal runs only: a run still going will not replay to the same place. */
@@ -49,7 +64,7 @@ function isReplayable(run: ApiRun): boolean {
 }
 
 export async function exportTraces(opts: ExportOptions): Promise<RunTrace[]> {
-  const fetchFn = opts.fetch ?? globalThis.fetch;
+  const fetchFn = withToken(opts.fetch ?? globalThis.fetch, opts.token);
   const base = opts.gateway.replace(/\/+$/, "");
   const now = opts.now ?? (() => new Date());
   const exportedAt = now().toISOString();

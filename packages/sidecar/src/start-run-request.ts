@@ -106,6 +106,40 @@ const triggerSchema = z.discriminatedUnion("kind", [
             remaining: z.array(z.string()),
           })
           .optional(),
+        // ADR-0005 amendment 6, decisions 47, 48 and 50: named here for the same reason.
+        round: z
+          .object({
+            messageSeq: z.number().int().positive(),
+            phase: z.enum(["work", "close"]),
+            assignments: z.array(
+              z.object({
+                name: z.string().min(1),
+                task: z.string(),
+                you: z.literal(true).optional(),
+              }),
+            ),
+            closer: z.string().min(1),
+            youClose: z.literal(true).optional(),
+            outcomes: z
+              .array(
+                z.object({
+                  name: z.string().min(1),
+                  outcome: z.enum(["replied", "silent", "failed", "cancelled", "stopped"]),
+                  seqs: z.array(z.number().int().positive()),
+                }),
+              )
+              .optional(),
+          })
+          .optional(),
+        lastReply: z
+          .object({
+            seq: z.number().int().positive(),
+            addressed: z.array(z.string()),
+            everyone: z.boolean(),
+            unknown: z.array(z.string()),
+            spaced: z.array(z.string()),
+          })
+          .optional(),
       })
       .optional(),
     relayCount: z.number().int().nonnegative(),
@@ -136,6 +170,7 @@ const triggerSchema = z.discriminatedUnion("kind", [
     approvalId: id,
     decision: z.enum(["allow_once", "allow_always", "deny"]),
     toolUseId: z.string().optional(),
+    reason: z.string().optional(),
     // The resume hand-over (ADR-0002 amendment 2, "the decision survives a stale snapshot").
     // zod strips keys the schema does not name, so leaving these out silently turns every
     // retry into a fresh L2 call: this is the only thing between the contract and the process.
@@ -168,9 +203,50 @@ export const startRunRequestSchema = z.object({
   modelJob: z
     .discriminatedUnion("kind", [
       z.object({ kind: z.literal("vision_probe"), code: z.string().regex(/^\d{4,8}$/) }),
+      // ADR-0011 amendment 4, A30: at most 40 notes, each an id and a body.
+      z.object({
+        kind: z.literal("memory_organize"),
+        notes: z
+          .array(z.object({ id: z.string().min(1), body: z.string().min(1).max(16_000) }))
+          .min(1)
+          .max(40),
+      }),
+      // ADR-0011 amendment 4, A28: at most 20 flagged notes and a bounded activity excerpt.
+      z.object({
+        kind: z.literal("memory_recheck"),
+        notes: z
+          .array(
+            z.object({
+              id: z.string().min(1),
+              scope: z.enum(["workspace", "bot"]),
+              body: z.string().min(1).max(16_000),
+              effectiveAt: z.string().min(1),
+              lastConfirmedAt: z.string().min(1).optional(),
+            }),
+          )
+          .min(1)
+          .max(20),
+        activity: z.string().max(40_000),
+      }),
       z.object({
         kind: z.literal("approval_review"),
         reviewPackage: z.string().min(2).max(24_000),
+      }),
+      // ADR-0005 amendment 6, decision 45: at most six members and a bounded request.
+      z.object({
+        kind: z.literal("round_triage"),
+        roster: z
+          .array(
+            z.object({
+              name: z.string().min(1),
+              role: z.string(),
+              owner: z.literal(true).optional(),
+            }),
+          )
+          .min(1)
+          .max(6),
+        everyone: z.boolean(),
+        request: z.string().max(16_000),
       }),
       z.object({
         kind: z.literal("soul_proposal"),
@@ -190,8 +266,19 @@ export const startRunRequestSchema = z.object({
     ])
     .optional(),
   groupGuidance: z.literal("owner-v1").optional(),
-  // Issue #88: present only under the opt-in per-bot working directory; absent keeps /work.
+  // Issue #88, ADR-0038: present for a per-bot run (the default); absent keeps the shared /work.
   workdirMode: z.literal("per-bot").optional(),
+  otherLaneRun: z
+    .object({
+      runId: id,
+      lane: z.enum(["interactive", "background"]),
+      triggerKind: z.string().min(1).max(64),
+      threadId: id.optional(),
+      startedAt: z.string().min(1).max(64),
+    })
+    .optional(),
+  // ADR-0044 decision 1: which agent loop runs; absent is the Claude Agent SDK.
+  runtime: z.enum(["claude-agent-sdk", "openai-agents"]).optional(),
   model: z.string().min(1),
   cheapModel: z.string().min(1),
   // ADR-0023 decision 3: FALLBACK_MODEL, passed verbatim to the SDK's `fallbackModel`. Absent
@@ -222,10 +309,25 @@ export const startRunRequestSchema = z.object({
     })
     .optional(),
   browserExecutionMode: z.literal("vision-cli-v2").optional(),
+  // ADR-0002 amendment 5 (opt-in): browser code is tiered by its effects.
+  browserCodeApproval: z.literal("effects-v1").optional(),
   // ADR-0023 amendment 2: the run's model cannot see; image content becomes a text notice.
   visionPolicy: z.literal("withhold").optional(),
   screenSlot: z.number().int().min(0).max(5).optional(),
   browserSnapshotMode: z.enum(["explicit-v1", "inline-v2"]).optional(),
+  // ADR-0023 amendment 5: extra built-in CLI tools to withhold and inline settings switches. A
+  // built-in name is PascalCase; an MCP name can never get here.
+  cliSurface: z
+    .object({
+      disallowedTools: z
+        .array(z.string().regex(/^[A-Z][A-Za-z0-9_]*$/))
+        .max(100)
+        .optional(),
+      disableBundledSkills: z.boolean().optional(),
+      includeGitInstructions: z.boolean().optional(),
+      skillListingMaxDescChars: z.number().int().positive().optional(),
+    })
+    .optional(),
   // The SDK's turn budget for this run. The Gateway owns the knob (`DESKMATES_MAX_TURNS`) and records
   // it in `runs.config_json`, so a stripped or absent value would silently run the bot on a
   // different budget than the one the experiment was attributed to. `null` is the workspace's
@@ -255,6 +357,11 @@ export const startRunRequestSchema = z.object({
       "browser_cli_workflow",
       "memory_search",
       "task_deliver",
+      // ADR-0035 and ADR-0040: offered only where the installation configures the service, so a
+      // Gateway with those settings sends them on every run.
+      "app_publish",
+      "image_describe",
+      "audio_transcribe",
       ...CONNECTOR_TOOL_NAMES,
       ...INTEGRATION_TOOL_NAMES,
     ]),

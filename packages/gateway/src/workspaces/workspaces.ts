@@ -3,6 +3,7 @@
 // never can.
 
 import {
+  APPROVAL_EXPIRY_DEFAULT_MINUTES,
   DeskmatesError,
   type LoginProbe,
   type SandboxProviderKind,
@@ -83,7 +84,7 @@ export class WorkspaceStore {
     this.db.transaction(() => {
       this.db
         .prepare(
-          `INSERT INTO workspaces (id, tenant_id, name, sandbox_provider, status, probe_url, probe_rule_json, egress_updated_at, created_at) VALUES (?, ?, ?, ?, 'ready', ?, ?, ?, ?)`,
+          `INSERT INTO workspaces (id, tenant_id, name, sandbox_provider, status, probe_url, probe_rule_json, egress_updated_at, created_at, approval_expiry_minutes) VALUES (?, ?, ?, ?, 'ready', ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
@@ -94,6 +95,8 @@ export class WorkspaceStore {
           input.probe ? JSON.stringify({ expectText: input.probe.expectText }) : null,
           createdAt,
           createdAt,
+          // ADR-0002 amendment 6, D7: the column default is the old 15; a new workspace gets 60.
+          APPROVAL_EXPIRY_DEFAULT_MINUTES,
         );
       const insertRule = this.db.prepare(
         "INSERT INTO egress_rules (workspace_id, domain_pattern, created_by, created_at) VALUES (?, ?, ?, ?)",

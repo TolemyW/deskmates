@@ -21,6 +21,7 @@ import { BudgetStore } from "./budget/budget-store.js";
 import { ChannelManager } from "./channels/channel-manager.js";
 import { ChannelStore } from "./channels/channel-store.js";
 import { GROUP_ROUTING_DEFAULT, type GatewayConfig } from "./config.js";
+import { modelRegistryOf } from "./config/model-upstreams.js";
 import { createConnectorModule } from "./connectors/connector-module.js";
 import type { ConnectorProxy } from "./connectors/connector-proxy.js";
 import type { ReceiptStore } from "./connectors/receipts.js";
@@ -44,6 +45,8 @@ import { UsageStore } from "./ledger/usage.js";
 import { WorkspaceLimitStore } from "./limits/workspace-limits.js";
 import { LearnedMemory } from "./memory/learned-memory.js";
 import { ModelJobs } from "./model-jobs/model-jobs.js";
+import { roundRouting } from "./model-jobs/round-triage.js";
+import { HybridRetrieval } from "./retrieval/hybrid-retrieval.js";
 import { RunTokenStore } from "./secrets/run-tokens.js";
 import { SecretsStore } from "./secrets/secrets-store.js";
 import { SkillService } from "./skills/skill-service.js";
@@ -61,6 +64,7 @@ import type { SessionStore } from "./threads/sessions.js";
 import { createThreadModule } from "./threads/thread-module.js";
 import type { ThreadPinStore } from "./threads/thread-pins.js";
 import type { ThreadStore } from "./threads/threads.js";
+import { WorkdirSettingsStore } from "./workdir/workdir-settings.js";
 import { BrowserLockStore } from "./workspaces/browser-lock.js";
 import { BrowserOriginQueueStore } from "./workspaces/browser-origin-queue.js";
 import { createSandboxRegistry } from "./workspaces/sandbox-module.js";
@@ -79,6 +83,7 @@ export interface GatewayContext {
   /** Which tenant owns a row; the one place every tenant check resolves through (ADR-0022). */
   ownership: Ownership;
   knowledge: KnowledgeStore;
+  retrieval: HybridRetrieval; // Knowledge and memory search, FTS5 or hybrid (ADR-0041)
   /** Learned memory: entries, the confirmation queue and consolidation (ADR-0011). */
   memory: LearnedMemory;
   /** Skills per workspace: run skill sets, review, stages, measured use (ADR-0015). */
@@ -121,6 +126,7 @@ export interface GatewayContext {
   budget: BudgetStore;
   /** Workspace execution limits (ADR-0005 amendment 5, ADR-0016 amendment 2). */
   limits: WorkspaceLimitStore;
+  workdir: WorkdirSettingsStore /* ADR-0036, ADR-0038 */;
   tokens: RunTokenStore;
   locks: BrowserLockStore;
   originQueue: BrowserOriginQueueStore;
@@ -178,6 +184,8 @@ export function buildContext(
   const presence = new Presence();
   const secrets = new SecretsStore(db, config.secretsKey);
   const runConfig = createRunConfig(config);
+  const dir = config.dbPath === ":memory:" ? undefined : join(dirname(config.dbPath), "knowledge");
+  const knowledge = new KnowledgeStore(db, dir);
   const budget = new BudgetStore(db, opts.clock);
   const limits = new WorkspaceLimitStore(db, budget, () => config.maxTurns);
   const router = new ThreadRouter(
@@ -200,10 +208,12 @@ export function buildContext(
     {
       groupRouting: config.groupRouting ?? GROUP_ROUTING_DEFAULT,
       rounds: thread.rounds,
+      ...roundRouting({ db, runs, bots, runConfig, cheapModel: () => config.cheapModel }),
       limits,
       onThreadChanged: (threadId) => bus.publish({ type: "thread_members", threadId }),
       batch: (work) => bus.batch(work),
       onBotMessage: (run, message, blocked) => routePrivateMentions(context, run, message, blocked),
+      isPaused: (botId) => bots.isPaused(botId),
     },
   );
   // ADR-0015 decision 6: use is what the sidecar's hook recorded, read off the ledger as it lands.
@@ -245,8 +255,9 @@ export function buildContext(
     bots,
     bus,
     presence,
+    privateChats: thread.privateChats,
     runTenant: (runId) => ownership.tenantOf("run", runId),
-    ownSecrets: config.modelAuthToken ? [config.modelAuthToken] : [],
+    ownSecrets: modelRegistryOf(config).secrets(),
   });
   const channels = new ChannelManager({
     store: new ChannelStore(db),
@@ -304,10 +315,8 @@ export function buildContext(
       cheapModel: () => config.cheapModel,
     }),
     skills,
-    knowledge: new KnowledgeStore(
-      db,
-      config.dbPath === ":memory:" ? undefined : join(dirname(config.dbPath), "knowledge"),
-    ),
+    knowledge,
+    retrieval: new HybridRetrieval({ db, knowledge, settings: config.retrieval, log }),
     db,
     provider,
     bus,
@@ -338,6 +347,7 @@ export function buildContext(
     costAlerts: new CostAlertStore(db, new CostQueryStore(db), events),
     budget,
     limits,
+    workdir: new WorkdirSettingsStore(db, () => config.botWorkdir),
     tokens: new RunTokenStore(db, config.modelTokenTtlSeconds),
     locks: new BrowserLockStore(db),
     originQueue: new BrowserOriginQueueStore(db),

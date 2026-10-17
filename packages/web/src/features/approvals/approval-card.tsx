@@ -12,6 +12,7 @@ import {
   type Approval,
   type ApprovalDecision,
   type Attachment,
+  type RunStatus,
   isApprovalAttachmentMime,
   matcherFromAction,
 } from "@deskmates/contracts";
@@ -24,6 +25,7 @@ import type { MessageKey } from "../../i18n/catalogs.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { currentI18n } from "../../i18n/intl.js";
 import { RoleNote, useCan } from "../../state/session-roles.js";
+import { ApprovalWait } from "./approval-wait.js";
 import { IntegrationApprovalPreview } from "./integration-approval-preview.js";
 
 export interface ApprovalCardProps {
@@ -42,6 +44,11 @@ export interface ApprovalCardProps {
    * 2): a pending request shows this note instead of its buttons.
    */
   readOnlyNote?: string | undefined;
+  /**
+   * The asking run's status, where the screen has it (the chat), so the card can tell a live wait
+   * from a parked one (issue #9); without it the approval's wait mode and short wait decide.
+   */
+  runStatus?: RunStatus | undefined;
 }
 
 /** The suggested text when the operator wants the bot to think again before acting. */
@@ -76,6 +83,9 @@ export function decisionLabel(
     approval.decidedBy
       ? t("approvalCard.decision.by", { verb, who: label(approval.decidedBy) })
       : verb;
+  // ADR-0002 amendment 3, A7: nobody denied an expired request, so no "by" either.
+  if (approval.decidedBy === "system:expiry" && approval.kind !== "continuation")
+    return t("approvalCard.decision.expired");
   if (approval.kind === "egress") {
     return by(
       approval.decision === "allow_always"
@@ -239,6 +249,7 @@ export function ApprovalCard(props: ApprovalCardProps) {
               : t("approvalCard.summaryUnavailable")}
         </p>
       )}
+      <ApprovalWait approval={approval} runStatus={props.runStatus} api={api} />
       <details className="approval-source">
         <summary>{t("approvalCard.originalDetails")}</summary>
         <dl className="approval-facts small">

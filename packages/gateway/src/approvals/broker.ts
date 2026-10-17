@@ -1,14 +1,15 @@
 // The approval broker (ADR-0002 amendment 2). Decision order is risk tier → matching rule →
 // thread: the tier check happened in the sidecar's hook and only L2 calls arrive here; a stored
 // rule answers at once and nothing is posted; an unmatched request becomes one `system` message
-// in the run's thread and starts the short wait, unless nobody is online, in which case the
-// sidecar is told to defer and the run parks.
+// in the run's thread, routing-inert (amendment 3, A4), and starts the short wait, unless nobody
+// is online, in which case the sidecar is told to defer and the run parks.
 //
-// The request body is built from the `ToolAction` and the instruction that woke the run, and from
+// The request body is built from the `ToolAction` and the originating instruction, and from
 // nothing else: tool results and page text are the injection vector approvals exist to catch.
 
 import {
   APPROVAL_ATTACHMENT_MIME,
+  APPROVAL_MODE_ACTOR,
   type Approval,
   type ApprovalDecision,
   type ApprovalId,
@@ -16,6 +17,7 @@ import {
   type ApprovalResponse,
   type ApprovalRule,
   type Attachment,
+  type BotId,
   DeskmatesError,
   type MessageId,
   type RunEnded,
@@ -41,6 +43,8 @@ import type { ThreadRouter } from "../threads/router.js";
 import type { ThreadStore } from "../threads/threads.js";
 import type { ApprovalStore } from "./approvals.js";
 import { type ApprovalReviews, actionHash } from "./auto-review.js";
+import { APPROVAL_EXPIRY_ACTOR, expiryReason } from "./expiry.js";
+import { cardInstruction } from "./instruction.js";
 import type { ApprovalRuleStore } from "./rules.js";
 import { scrubSecretShaped } from "./secret-shaped.js";
 
@@ -62,6 +66,11 @@ export interface BrokerDeps {
   bus: EventBus;
   presence: Presence;
   /**
+   * The bot's canonical private chat (ADR-0024), where a threadless run's request is posted
+   * (ADR-0002 amendment 3, A9). Absent, a threadless request reaches only the inbox.
+   */
+  privateChats?: { resolve(botId: BotId): { id: ThreadId } };
+  /**
    * The tenant a run belongs to (ADR-0022): only that tenant's approvers keep its approval live.
    * Omitted, any qualified watcher counts.
    */
@@ -71,6 +80,15 @@ export interface BrokerDeps {
    * of an action by literal match as well as by shape.
    */
   ownSecrets?: readonly string[];
+}
+
+/** What the caller already did for this request before the broker sees it. */
+export interface RequestOptions {
+  /**
+   * ADR-0002 amendment 6, D4: in `approve_all` the internal route has added this egress ask's
+   * host to the allowlist, so the broker may record the ask as allowed by the mode.
+   */
+  egressHostAdded?: boolean;
 }
 
 export interface DecideResult {
@@ -118,6 +136,8 @@ export function approvalRequestBody(
  * where "a human" is the whole point.
  */
 export function denyReason(decidedBy: string | undefined, reason: string | undefined): string {
+  // Amendment 3, A7: nobody denied an expired request; the model gets the fixed instruction.
+  if (decidedBy === APPROVAL_EXPIRY_ACTOR && reason) return reason;
   const tail = reason ? `: ${reason}` : "";
   const [kind, ...rest] = (decidedBy ?? "").split(":");
   const who = rest.join(":");
@@ -140,7 +160,11 @@ export class ApprovalBroker {
    * The sidecar's hook met an L2 call. Returns the response to hand back at once, or `"pending"`
    * when the sidecar should poll for the duration of its short wait.
    */
-  request(run: RunRecord, rawReq: ApprovalRequest): ApprovalResponse | "pending" {
+  request(
+    run: RunRecord,
+    rawReq: ApprovalRequest,
+    options: RequestOptions = {},
+  ): ApprovalResponse | "pending" {
     if (rawReq.action.toolName === "__run_continuation__") {
       throw new DeskmatesError(
         "validation",
@@ -195,6 +219,33 @@ export class ApprovalBroker {
     }
 
     const instruction = this.instructionFor(run);
+    // ADR-0002 amendment 6, D4: `approve_all` allows every gated action without asking anyone,
+    // after the stored rules. An egress ask is allowed only once its host is on the allowlist.
+    if (
+      this.deps.reviews?.mode(run) === "approve_all" &&
+      (req.kind !== "egress" || options.egressHostAdded === true)
+    ) {
+      const decision = req.kind === "egress" ? "allow_always" : "allow_once";
+      const approval = this.deps.approvals.create({
+        ...this.base(run, req),
+        ...(instruction === undefined ? {} : { instruction }),
+        decision,
+        decidedBy: APPROVAL_MODE_ACTOR,
+      });
+      this.event(run.id, {
+        phase: "mode_allowed",
+        mode: "approve_all",
+        approvalId: approval.id,
+        decision,
+        decidedBy: APPROVAL_MODE_ACTOR,
+        toolName: req.action.toolName,
+        riskLevel: req.riskLevel,
+        targetOrigin: req.action.targetOrigin ?? null,
+        argumentSummary: req.action.argumentSummary ?? null,
+      });
+      this.publishApproval(approval);
+      return this.response(approval);
+    }
     const approval = this.deps.approvals.create({
       ...this.base(run, req),
       ...(instruction === undefined ? {} : { instruction }),
@@ -249,29 +300,29 @@ export class ApprovalBroker {
     return "pending";
   }
 
-  /** Post the request into its thread for the members to decide (A1/A2) and record that. */
+  /**
+   * Post the request into its thread for the members to decide (A1/A2) and record that. The
+   * notice is routing-inert (amendment 3, A4): members read it in their next delivery, and no
+   * run is woken by it, so approvals never become the team's main source of runs.
+   */
   private postForHumans(run: RunRecord, approval: Approval): void {
     const action = approval.action;
     let messageId: MessageId | undefined;
-    if (run.threadId) {
+    if (approval.threadId) {
       const bot = this.deps.bots.mustGet(run.botId);
       const posted = this.deps.router.postSystem(
-        run.threadId,
+        approval.threadId,
         approvalRequestBody(bot.name, action, approval.instruction),
         [approvalAttachment(approval.id)],
-        // The requester is the run that is waiting; waking it on its own request is a loop.
-        { wakeExcept: run.botId },
+        { inert: true },
       );
       messageId = posted.message.id;
       this.deps.approvals.setMessage(approval.id, messageId);
       this.deps.bus.publish({
         type: "thread_message",
-        threadId: run.threadId,
+        threadId: approval.threadId,
         message: posted.message,
       });
-      for (const woken of posted.runs) {
-        this.deps.bus.publish({ type: "run_status", threadId: run.threadId, run: woken });
-      }
     }
     this.event(run.id, {
       phase: "posted",
@@ -384,7 +435,10 @@ export class ApprovalBroker {
           "run is not awaiting this continuation decision",
         );
       }
+      // ADR-0002 amendment 6, D6: past the limit in approve_all the reviewer, or a person after
+      // its escalation, may still continue the run once more.
       if (
+        owner.config.continuationBeyondLimit !== true &&
         !continuationAllowed(owner.config, Number(owner.config.continuationCount ?? 0)) &&
         decision === "allow_once"
       ) {
@@ -426,9 +480,11 @@ export class ApprovalBroker {
         ? decision === "deny"
           ? "Stopped"
           : "Continued"
-        : decision === "deny"
-          ? "Denied"
-          : "Approved";
+        : decidedBy === APPROVAL_EXPIRY_ACTOR
+          ? "Expired"
+          : decision === "deny"
+            ? "Denied"
+            : "Approved";
       const message = this.deps.messages.append({
         threadId: approval.threadId,
         authorKind: "system",
@@ -478,6 +534,51 @@ export class ApprovalBroker {
     }
     if (run?.status === "waiting_approval_live") this.transition(run.id, "running");
     return { approval, ...(rule === undefined ? {} : { rule }) };
+  }
+
+  /**
+   * Amendment 3, A7: nobody decided the request within the workspace's window, so it is denied
+   * as `system:expiry`. Returns false when another decision got there first.
+   */
+  expire(approvalId: ApprovalId, minutes: number): boolean {
+    try {
+      const { approval } = this.decide(
+        approvalId,
+        "deny",
+        APPROVAL_EXPIRY_ACTOR,
+        expiryReason(minutes),
+      );
+      this.event(approval.runId, { phase: "expired", approvalId, minutes });
+      return true;
+    } catch (error) {
+      if (error instanceof DeskmatesError && error.code === "invalid_transition") return false;
+      throw error;
+    }
+  }
+
+  /**
+   * Amendment 3, A8: the one reminder before expiry. A routing-inert `system` line with the
+   * approval attachment in the request's thread (how a channel bound to it relays it to its
+   * human) and the approval re-published to the inbox; nothing wakes and nothing reminds a bot.
+   */
+  remind(approvalId: ApprovalId, minutesLeft: number): void {
+    const approval = this.deps.approvals.mustGet(approvalId);
+    const bot = this.deps.bots.get(approval.botId);
+    if (approval.threadId) {
+      const posted = this.deps.router.postSystem(
+        approval.threadId,
+        `Reminder: ${bot?.name ?? approval.botId} is still waiting for approval to run ${approval.action.toolName}. Nobody has decided; it expires in ${minutesLeft} minute${minutesLeft === 1 ? "" : "s"} and will not be done.`,
+        [approvalAttachment(approvalId)],
+        { inert: true },
+      );
+      this.deps.bus.publish({
+        type: "thread_message",
+        threadId: approval.threadId,
+        message: posted.message,
+      });
+    }
+    this.event(approval.runId, { phase: "reminded", approvalId, minutesLeft });
+    this.publishApproval(approval);
   }
 
   /**
@@ -549,17 +650,26 @@ export class ApprovalBroker {
       id: req.approvalId,
       runId: run.id,
       botId: run.botId,
-      ...(run.threadId ? { threadId: run.threadId as ThreadId } : {}),
+      ...this.noticeThread(run),
       action: req.action,
       riskLevel: req.riskLevel,
       ...(req.toolUseId === undefined ? {} : { toolUseId: req.toolUseId }),
     };
   }
 
-  /** The human's original instruction: the thread message that woke this run. */
+  /**
+   * The thread a request's card lives in: the run's own, or for a cron or webhook run the bot's
+   * private chat (amendment 3, A9). The run itself stays threadless.
+   */
+  noticeThread(run: RunRecord): { threadId?: ThreadId } {
+    if (run.threadId) return { threadId: run.threadId as ThreadId };
+    const chat = this.deps.privateChats?.resolve(run.botId);
+    return chat ? { threadId: chat.id } : {};
+  }
+
+  /** The originating human instruction (amendment 3, A4); never an approval or other notice. */
   private instructionFor(run: RunRecord): string | undefined {
-    if (run.triggerKind !== "thread_message") return undefined;
-    return this.deps.messages.get(run.triggerRef as MessageId)?.body;
+    return cardInstruction(this.deps, run);
   }
 
   private transition(runId: RunId, to: RunStatus): void {

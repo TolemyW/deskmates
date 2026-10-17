@@ -58,6 +58,7 @@ function fakeVolume(harness: Harness) {
         sizeBytes?: number;
         dir?: string;
         name?: string;
+        path?: string;
       };
       state.ops.push(r.op);
       const current = partial.get(r.uploadId);
@@ -100,11 +101,13 @@ function fakeVolume(harness: Harness) {
         }
         case "abort":
           return out({ op: "abort", removed: partial.delete(r.uploadId) });
+        case "remove":
+          return out({ op: "remove", removed: finals.delete(r.path as string) });
         default:
           return out({ error: "validation", message: "x" }, 1);
       }
     });
-  return { exec, state, partial };
+  return { exec, state, partial, finals };
 }
 
 async function running(harness: Harness, workspaceId: string): Promise<void> {
@@ -313,6 +316,73 @@ describe("workspace uploads (ADR-0014 A5)", () => {
     expect(count(harness, "knowledge_docs")).toBe(knowledge);
     expect(count(harness, "memory_entries")).toBe(memory);
     expect(thread.id).toBeTruthy();
+  });
+
+  it("Admin deletes another person's upload: removed in the container, audited, gone from Files", async () => {
+    h = await startHarness({ auth: FAST_AUTH });
+    const harness = h;
+    const people = await seedRoles(harness);
+    await running(harness, people.workspace.id);
+    const volume = fakeVolume(harness);
+    const base = uploadsUrl(people.workspace.id);
+    const created = await people.member.json<WorkspaceUpload>("POST", base, {
+      body: { name: "notes.txt", sizeBytes: 3 },
+    });
+    await people.member.fetch("PUT", `${base}/${created.json.id}/parts?offset=0`, {
+      raw: { bytes: Buffer.from("abc"), contentType: "application/octet-stream" },
+    });
+    const done = await people.member.json<WorkspaceUpload>(
+      "POST",
+      `${base}/${created.json.id}/complete`,
+    );
+    const path = done.json.path as string;
+    expect(volume.finals.has(path)).toBe(true);
+    const fileUrl = `${base}/${created.json.id}/file`;
+
+    // A Member, even the uploader, and a Guest may not delete.
+    expect((await people.member.fetch("DELETE", fileUrl)).status).toBe(403);
+    expect((await people.guest.fetch("DELETE", fileUrl)).status).toBe(403);
+    expect(volume.finals.has(path)).toBe(true);
+
+    const deleted = await people.admin.json<{ upload: WorkspaceUpload; removed: boolean }>(
+      "DELETE",
+      fileUrl,
+    );
+    expect(deleted.status).toBe(200);
+    expect(deleted.json.removed).toBe(true);
+    expect(deleted.json.upload.deletedAt).toBeDefined();
+    expect(deleted.json.upload.deletedBy).toBe(`user:${people.ids.ada}`);
+    expect(volume.finals.has(path)).toBe(false);
+    const audit = harness.app.deskmates.ctx.audit
+      .list({ targetId: created.json.id })
+      .filter((event) => event.action === "file.delete");
+    expect(audit).toHaveLength(1);
+    expect(audit[0]).toMatchObject({
+      actor: `user:${people.ids.ada}`,
+      before: { path, sizeBytes: 3 },
+      after: { removed: true },
+    });
+    const files = await people.admin.json<WorkspaceFileCollectionPage>(
+      "GET",
+      `/api/workspaces/${people.workspace.id}/assets`,
+    );
+    expect(files.json.items.map((item) => item.path)).not.toContain(path);
+
+    // A second delete is refused; nothing more reaches the container.
+    const again = await people.admin.json<{ details?: { reason?: string } }>("DELETE", fileUrl);
+    expect(again.status).toBe(409);
+    expect(again.json.details?.reason).toBe("upload_deleted");
+
+    // A receiving upload has no file to delete.
+    const receiving = await people.member.json<WorkspaceUpload>("POST", base, {
+      body: { name: "half.bin", sizeBytes: 9 },
+    });
+    const half = await people.owner.json<{ details?: { reason?: string } }>(
+      "DELETE",
+      `${base}/${receiving.json.id}/file`,
+    );
+    expect(half.status).toBe(409);
+    expect(half.json.details?.reason).toBe("upload_receiving");
   });
 
   it("never overwrites: a second upload of the same name gets another path", async () => {

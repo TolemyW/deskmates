@@ -36,6 +36,7 @@ export interface DirectoryQuery {
 const ACTIVE_RUN_STATUSES = [
   "queued",
   "running",
+  "stalled",
   "waiting_approval_live",
   "waiting_approval",
   "waiting_browser",

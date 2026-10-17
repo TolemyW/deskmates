@@ -5,6 +5,7 @@ import type {
   Approval,
   BrowserLock,
   CostAlert,
+  ReplyPreviewFrame,
   RunEvent,
   RunId,
   Task,
@@ -21,6 +22,11 @@ import type { RunRecord } from "../ledger/runs.js";
 export type GatewayEvent =
   | { type: "run_status"; threadId?: ThreadId; run: RunRecord }
   | { type: "run_event"; threadId?: ThreadId; event: RunEvent }
+  /**
+   * A live run's cumulative reply preview (ADR-0037 decision 7). Not in the ledger; the final
+   * reply message replaces it. Scoped to the run, so it reaches whoever may read `run_status`.
+   */
+  | { type: "run_reply_preview"; threadId: ThreadId; preview: ReplyPreviewFrame }
   | { type: "thread_message"; threadId: ThreadId; message: ThreadMessage }
   | ThreadMembersEvent
   | ThreadActivityEvent

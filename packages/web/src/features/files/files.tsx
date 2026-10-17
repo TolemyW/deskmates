@@ -41,7 +41,9 @@ import type { MessageKey } from "../../i18n/catalogs.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { contactHref, runHref, taskHref, threadHref } from "../../router.js";
 import { useWorkspaceScope } from "../../state/workspace-scope.js";
+import { FilesAppsEntry } from "../app-shares/files-apps-entry.js";
 import { FilesUploadControl } from "./files-upload.js";
+import { UploadDeleteControl } from "./upload-delete.js";
 import type { UploadApi } from "./upload-driver.js";
 import { WorkspaceFilePreview, canPreviewWorkspacePath } from "./workspace-file-preview.js";
 
@@ -51,6 +53,7 @@ export type FilesApi = Pick<
   | "downloadWorkspaceFile"
   | "workspaceFileDownloadUrl"
   | "readWorkspaceFileRange"
+  | "deleteWorkspaceUploadFile"
 > &
   UploadApi;
 
@@ -102,10 +105,26 @@ export function FilesScreen({ api }: { api: ApiClient }) {
       </section>
     );
   // A new workspace mounts a new view: no result, selection or pending answer carries over.
-  return <WorkspaceFiles key={scope.current.id} api={api} workspace={scope.current} />;
+  return (
+    <WorkspaceFiles
+      key={scope.current.id}
+      api={api}
+      workspace={scope.current}
+      apps={<FilesAppsEntry api={api} workspaceId={scope.current.id} />}
+    />
+  );
 }
 
-export function WorkspaceFiles({ api, workspace }: { api: FilesApi; workspace: Workspace }) {
+export function WorkspaceFiles({
+  api,
+  workspace,
+  apps,
+}: {
+  api: FilesApi;
+  workspace: Workspace;
+  /** The published-apps entry (ADR-0035), owned by the app-shares feature. */
+  apps?: ReactNode;
+}) {
   const t = useT();
   const [type, setType] = useState<FileKindFilter>("all");
   const [source, setSource] = useState<FileSourceFilter>("all");
@@ -199,6 +218,7 @@ export function WorkspaceFiles({ api, workspace }: { api: FilesApi; workspace: W
         </div>
         <FilesUploadControl api={api} workspace={workspace} onUploaded={() => void load()} />
       </header>
+      {apps}
       <div className="files-toolbar">
         <div className="files-toolbar-row files-toolbar-primary">
           <fieldset className="app-tabs files-type-filter" aria-label={t("files.filter.type")}>
@@ -457,6 +477,10 @@ export function WorkspaceFiles({ api, workspace }: { api: FilesApi; workspace: W
             workspace={workspace}
             item={selected}
             onClose={() => setSelected(undefined)}
+            onDeleted={() => {
+              setSelected(undefined);
+              void load();
+            }}
           />
         ) : null}
       </div>
@@ -518,11 +542,13 @@ function FileDetail({
   workspace,
   item,
   onClose,
+  onDeleted,
 }: {
   api: FilesApi;
   workspace: Workspace;
   item: WorkspaceFileItem;
   onClose: () => void;
+  onDeleted: () => void;
 }) {
   const t = useT();
   const [size, setSize] = useState<number>();
@@ -630,6 +656,7 @@ function FileDetail({
         describeError={(err) => describeReadError(err, t)}
         onRead={setSize}
       />
+      <UploadDeleteControl api={api} workspaceId={workspace.id} item={item} onDeleted={onDeleted} />
       <section className="files-references" aria-label={t("files.detail.references")}>
         <h3>
           {t("files.detail.references")}{" "}

@@ -5,12 +5,16 @@
 
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
 import type { EventSink } from "./ledger.js";
-import { riskTier } from "./risk-tier.js";
+import { type TierOptions, riskTier } from "./risk-tier.js";
 import type { RunState } from "./run-state.js";
 
-export function createCanUseTool(sink: EventSink, state?: RunState): CanUseTool {
+export function createCanUseTool(
+  sink: EventSink,
+  state?: RunState,
+  tierOptions: TierOptions = {},
+): CanUseTool {
   return async (toolName, input, { toolUseID }) => {
-    const riskLevel = riskTier(toolName, input);
+    const riskLevel = riskTier(toolName, input, tierOptions);
     const message = `Blocked: ${toolName} reached the permission prompt without a hook decision`;
     // A refused call never reaches the MCP proxy; the run loop must not count it as an action.
     if (toolUseID !== undefined) state?.deniedToolUseIds.add(toolUseID);

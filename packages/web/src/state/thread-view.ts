@@ -129,35 +129,52 @@ export function unsuccessfulRuns(state: ThreadViewState): RunView[] {
 
 export type TranscriptItem =
   | { kind: "message"; message: ThreadViewState["messages"][number] }
-  | { kind: "outcome"; run: RunView };
+  | { kind: "outcome"; run: RunView }
+  /** A one-member chat's bot at work in another conversation or on a background task. */
+  | { kind: "elsewhere"; run: RunView };
 
 /**
  * Messages in seq order with each failed or cancelled run placed after the last message sent
- * before that run ended. Listing outcomes after the whole transcript made an old, already fixed
- * failure look like the newest event in the thread.
+ * before that run ended, and each finished run from elsewhere placed the same way; a run from
+ * elsewhere still in progress comes last, oldest first. Listing outcomes after the whole
+ * transcript made an old, already fixed failure look like the newest event in the thread, and
+ * listing finished work from elsewhere below the newest message made yesterday's task read as
+ * the answer to today's question.
  */
-export function transcriptTimeline(state: ThreadViewState, partial = false): TranscriptItem[] {
-  // A transcript that starts mid-history (#113 slice CH) shows no outcome card from before its
-  // first loaded message; Load older brings those back with their messages.
+export function transcriptTimeline(
+  state: ThreadViewState,
+  partial = false,
+  elsewhere: readonly RunView[] = [],
+): TranscriptItem[] {
+  // A transcript that starts mid-history (#113 slice CH) shows no card from before its first
+  // loaded message; Load older brings those back with their messages.
   const from = partial ? (state.messages[0]?.ts ?? "") : "";
-  const outcomes = unsuccessfulRuns(state)
-    .filter((run) => (run.finishedAt ?? run.startedAt ?? run.createdAt) >= from)
-    .map((run) => ({
-      item: { kind: "outcome" as const, run },
-      at: run.finishedAt ?? run.startedAt ?? run.createdAt,
-    }))
+  const endedAt = (run: RunView) => run.finishedAt ?? run.startedAt ?? run.createdAt;
+  const timed = [
+    ...unsuccessfulRuns(state).map((run) => ({ item: { kind: "outcome" as const, run }, run })),
+    ...elsewhere
+      .filter((run) => isTerminal(run.status))
+      .map((run) => ({ item: { kind: "elsewhere" as const, run }, run })),
+  ]
+    .map(({ item, run }) => ({ item, at: endedAt(run) }))
+    .filter((entry) => entry.at >= from)
     .sort((a, b) => a.at.localeCompare(b.at));
   const items: TranscriptItem[] = [];
   let next = 0;
   for (const message of state.messages) {
-    while (next < outcomes.length && (outcomes[next]?.at ?? "") < message.ts) {
-      items.push((outcomes[next] as { item: TranscriptItem }).item);
+    while (next < timed.length && (timed[next]?.at ?? "") < message.ts) {
+      items.push((timed[next] as { item: TranscriptItem }).item);
       next += 1;
     }
     items.push({ kind: "message", message });
   }
-  for (; next < outcomes.length; next += 1) {
-    items.push((outcomes[next] as { item: TranscriptItem }).item);
+  for (; next < timed.length; next += 1) {
+    items.push((timed[next] as { item: TranscriptItem }).item);
+  }
+  for (const run of elsewhere
+    .filter((run) => !isTerminal(run.status))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+    items.push({ kind: "elsewhere", run });
   }
   return items;
 }
@@ -180,6 +197,7 @@ export function runById(state: ThreadViewState, id: RunId | undefined): RunView 
 const RUN_STATUS_LABELS: Readonly<Record<RunStatus, MessageKey>> = {
   queued: "chatPane.runStatus.queued",
   running: "chatPane.runStatus.running",
+  stalled: "chatPane.runStatus.stalled",
   waiting_approval_live: "chatPane.runStatus.waiting_approval_live",
   waiting_approval: "chatPane.runStatus.waiting_approval",
   waiting_browser: "chatPane.runStatus.waiting_browser",

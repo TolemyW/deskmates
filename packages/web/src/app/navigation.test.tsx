@@ -68,12 +68,18 @@ function addresses(): string[] {
 
 const GROUP_LABELS = { talk: "Talk", resources: "Resources", operate: "Operate" };
 
-/** The navigation as the registry says it should look for a role at a route. */
-function expectedNavigation(route: Route, manager: boolean) {
+/**
+ * The navigation as the registry says it should look for a role at a route, with the role facts
+ * the shell checks (a root-only link is hidden from a non-root Owner).
+ */
+function expectedNavigation(route: Route, role: TenantRole) {
+  const manager = role !== "member";
+  const can = (action: Parameters<typeof mayTakeAction>[1]) =>
+    mayTakeAction({ tenantRole: role, platformMaintainer: false }, action);
   return navigationGroups().map(({ group, entries }) => ({
     label: GROUP_LABELS[group],
     links: entries
-      .filter(({ nav }) => nav.visible?.({ manager }) ?? true)
+      .filter(({ nav }) => nav.visible?.({ manager, can }) ?? true)
       .map(({ nav }) => {
         const active = nav.active(route);
         const label = ENGLISH[nav.label];
@@ -147,7 +153,7 @@ describe("main navigation from the feature registry", () => {
         const route = parseRoute(hash);
         if (featureFor(route)?.drawer === undefined) background = route;
         await waitFor(() =>
-          expect(renderedNavigation(nav), hash).toEqual(expectedNavigation(background, manager)),
+          expect(renderedNavigation(nav), hash).toEqual(expectedNavigation(background, role)),
         );
       }
     }, 60_000);
@@ -193,7 +199,7 @@ describe("main navigation from the feature registry", () => {
     render(<App />);
     const nav = await mainNavigation();
     await waitFor(() =>
-      expect(renderedNavigation(nav)).toEqual(expectedNavigation({ name: "threads" }, true)),
+      expect(renderedNavigation(nav)).toEqual(expectedNavigation({ name: "threads" }, "owner")),
     );
   });
 });

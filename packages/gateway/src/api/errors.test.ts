@@ -12,6 +12,8 @@ describe("error handler", () => {
     ["forbidden", 403],
     // ADR-0023 decision 1: a proxied request naming a model the run was not started on.
     ["model_not_selected", 403],
+    // ADR-0039 decision 2: the request's model has no upstream.
+    ["model_upstream_missing", 503],
     ["token_rejected", 401],
     ["sandbox_unavailable", 503],
     // ADR-0014 decision 2: a workspace file over the download cap.

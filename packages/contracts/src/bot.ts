@@ -1,6 +1,7 @@
 // Bot definition row (design v0.3 §3.1). SOUL.md, MEMORY.md, diary and skills live in the
 // workspace filesystem under /home/<bot>/, not here.
 
+import type { AgentRuntime } from "./agent-runtime.js";
 import type { BotId, IsoTimestamp, WorkspaceId } from "./ids.js";
 import type { EffortLevel, ThinkingConfig } from "./reasoning.js";
 
@@ -75,6 +76,8 @@ export interface BotDefinition {
   /** Model ids are deployment configuration; `undefined` means use DEFAULT_MODEL / CHEAP_MODEL. */
   model?: string;
   cheapModel?: string;
+  /** The agent loop this bot's runs use (ADR-0044); `undefined` means `DEFAULT_RUNTIME`. */
+  runtime?: AgentRuntime;
   /**
    * Reasoning overrides, recorded on every run row (`runs.config_json.reasoning`). `undefined`
    * means the SDK's own default, which is a real configuration and is recorded as `sdk-default`.
@@ -88,6 +91,13 @@ export interface BotDefinition {
   messageAllowlist: readonly string[];
   cron: readonly CronEntry[];
   createdAt: IsoTimestamp;
+  /**
+   * Present while the bot is paused (ADR-0026 amendment 1): cron, webhook and thread wakes are
+   * skipped and its queued runs wait; a live run finishes and a parked run stays parked. Unlike
+   * Trash, nothing is cancelled or denied, and resuming needs no restore.
+   */
+  pausedAt?: IsoTimestamp;
+  pausedBy?: string;
   /** Present only in Trash views. Archived bots cannot be scheduled or woken. */
   archivedAt?: IsoTimestamp;
   archivedBy?: string;
@@ -99,9 +109,9 @@ export function botHomeDir(botName: string): string {
 }
 
 /**
- * Where a bot's runs start under the opt-in `per-bot` working-directory mode (issue #88,
- * ADR-0004 amendment 1). A convention inside the shared `/work`, not a boundary: every bot in
- * the workspace can read and write it.
+ * Where a bot's runs start under the `per-bot` working-directory mode, the default (ADR-0038).
+ * Every bot may read it; the sidecar's soft guard refuses other bots' obvious writes into it. A
+ * guard against mistakes, not a security boundary: all bots run as one Unix user.
  */
 export function botWorkDir(botName: string): string {
   return `/work/bots/${botName}`;

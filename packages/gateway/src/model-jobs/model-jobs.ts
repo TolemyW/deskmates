@@ -1,5 +1,6 @@
-// Short model jobs (ADR-0023 amendment 1): the vision probe and the SOUL proposal. Both are runs
-// (row first) that the scheduler starts like any background run; this module is the one place the
+// Short model jobs (ADR-0023 amendment 1): the vision probe, the SOUL proposal, round triage and
+// the rest below. All are runs (row first) that the scheduler starts like any background run (a
+// triage job without waiting for its lane, ADR-0005 amendment 6); this module is the one place the
 // run lifecycle asks what such a run sends to the sidecar and what its end means.
 
 import {
@@ -12,6 +13,9 @@ import {
 import { APPROVAL_REVIEW } from "../approvals/auto-review.js";
 import type { GatewayContext } from "../context.js";
 import type { RunRecord } from "../ledger/runs.js";
+import { MEMORY_ORGANIZE, MemoryOrganizer } from "../memory/organize.js";
+import { MEMORY_RECHECK, MemoryRecheck } from "../memory/recheck.js";
+import { ROUND_TRIAGE, RoundTriage } from "./round-triage.js";
 import { SOUL_PROPOSAL, SoulProposals } from "./soul-proposals.js";
 import { STATUS_INQUIRY, StatusInquiries } from "./status-inquiries.js";
 import { VISION_PROBE, VisionProbes } from "./vision-probes.js";
@@ -19,6 +23,9 @@ import { VISION_PROBE, VisionProbes } from "./vision-probes.js";
 /** Job kinds (`runs.config_json.runType`) that are model jobs: tool-free, one turn, 60 s. */
 export const MODEL_JOB_RUN_TYPES: ReadonlySet<unknown> = new Set([
   APPROVAL_REVIEW,
+  MEMORY_ORGANIZE,
+  MEMORY_RECHECK,
+  ROUND_TRIAGE,
   SOUL_PROPOSAL,
   STATUS_INQUIRY,
   VISION_PROBE,
@@ -41,9 +48,27 @@ export class ModelJobs {
     return new StatusInquiries(this.context());
   }
 
+  /** Memory organisation jobs (ADR-0011 amendment 4, A30). */
+  get organize(): MemoryOrganizer {
+    return new MemoryOrganizer(this.context());
+  }
+
+  /** Automatic model rechecks of flagged notes (ADR-0011 amendment 4, A28). */
+  get recheck(): MemoryRecheck {
+    return new MemoryRecheck(this.context());
+  }
+
+  /** Round triage jobs (ADR-0005 amendment 6, decision 45). */
+  get triage(): RoundTriage {
+    return new RoundTriage(this.context());
+  }
+
   /** The `modelJob` of a model job's `StartRunRequest`; undefined for every other run. */
   request(run: RunRecord, bot: BotDefinition): ModelJobRequest | undefined {
     if (run.config.runType === APPROVAL_REVIEW) return this.context().broker.reviews?.job(run);
+    if (run.config.runType === MEMORY_ORGANIZE) return this.organize.jobRequest(run);
+    if (run.config.runType === MEMORY_RECHECK) return this.recheck.jobRequest(run);
+    if (run.config.runType === ROUND_TRIAGE) return this.triage.job(run, bot);
     if (run.config.runType === SOUL_PROPOSAL) return this.souls.job(run, bot);
     if (run.config.runType === STATUS_INQUIRY) return this.inquiries.job(run, bot);
     if (run.config.runType !== VISION_PROBE) return undefined;
@@ -67,6 +92,9 @@ export class ModelJobs {
   ): "succeeded" | "failed" | undefined {
     if (run.config.runType === APPROVAL_REVIEW)
       return this.context().broker.completeReview(run, ended);
+    if (run.config.runType === MEMORY_ORGANIZE) return this.organize.complete(run, ended);
+    if (run.config.runType === MEMORY_RECHECK) return this.recheck.complete(run, ended);
+    if (run.config.runType === ROUND_TRIAGE) return this.triage.complete(run, ended);
     if (run.config.runType === SOUL_PROPOSAL) return this.souls.complete(run, ended);
     if (run.config.runType === STATUS_INQUIRY) return this.inquiries.complete(run, ended, publish);
     if (run.config.runType === VISION_PROBE) return this.vision.complete(run, ended);

@@ -1,10 +1,11 @@
-// T1, ADR-0002 amendment 4 B2 to B7: automatic approval review end to end. The fake provider plays
+// T1, ADR-0002 amendment 4 B2 to B7 and amendment 6 D2, D3: automatic approval review end to end. The fake provider plays
 // both sidecars over real HTTP: the requesting run posts an L2 request and polls, and the review
 // run (a tool-free model job) answers with a verdict, as the real sidecar's job would relay it.
 
 import type {
   Approval,
   ApprovalId,
+  ApprovalMode,
   ApprovalResponse,
   RunSummary,
   StartRunRequest,
@@ -58,16 +59,18 @@ async function poll(gw: FakeSidecarClient, approvalId: string): Promise<Approval
 
 interface Scenario {
   commands: string[];
+  /** Overrides the Bash action of the command at the same index. */
+  actions?: Array<Record<string, unknown>>;
   verdicts: string[];
   /** Hold the reviewer's reply until this resolves. */
   holdReview?: Promise<void>;
 }
 
-/** Seeds a workspace, turns review on, scripts both sidecars, and wakes the bot. */
-async function scenario(s: Scenario, enabled = true) {
+/** Seeds a workspace, sets its approval mode, scripts both sidecars, and wakes the bot. */
+async function scenario(s: Scenario, mode: ApprovalMode = "automatic") {
   const { workspace, thread } = await h.seed();
   const { ctx } = h.app.deskmates;
-  if (enabled) new AutoApprovalSettings(ctx.db).set(workspace.id as WorkspaceId, true, "user:test");
+  new AutoApprovalSettings(ctx.db).setMode(workspace.id as WorkspaceId, mode, "user:test");
   const packages: string[] = [];
   const responses: ApprovalResponse[] = [];
   let verdictIndex = 0;
@@ -110,7 +113,7 @@ async function scenario(s: Scenario, enabled = true) {
       const res = await gw.post("approvals", {
         type: "approval_request",
         approvalId,
-        action: bash(command),
+        action: s.actions?.[i] ?? bash(command),
         riskLevel: "L2",
         toolUseId: `toolu_${i}`,
       });
@@ -146,8 +149,8 @@ const phases = (h: Harness, runId: string) =>
     .map((e) => e.payload.phase);
 
 describe("automatic approval review (ADR-0002 amendment 4)", () => {
-  it("with the setting off nothing is reviewed and the request is posted (B1, B3)", async () => {
-    const s = await scenario({ commands: ["git push origin feature/x"], verdicts: [] }, false);
+  it("manual reviews nothing and posts the request (B1, B3; amendment 6 D2)", async () => {
+    const s = await scenario({ commands: ["git push origin feature/x"], verdicts: [] }, "manual");
     await waitFor(() => systemMessages(h, s.thread.id).length === 1, 2000, "posted");
     expect(reviewRuns(h)).toHaveLength(0);
     await h.api("POST", "/api/approvals/apr-0/decide", { decision: "allow_once" });
@@ -171,7 +174,8 @@ describe("automatic approval review (ADR-0002 amendment 4)", () => {
       runType: APPROVAL_REVIEW,
       approvalId: "apr-0",
       reviewedRunId: s.run.id,
-      reviewPolicyVersion: 1,
+      reviewPolicyVersion: 2,
+      instructionSource: "human_message",
       maxTurns: 1,
     });
     expect(typeof review?.config.actionSha256).toBe("string");
@@ -181,6 +185,7 @@ describe("automatic approval review (ADR-0002 amendment 4)", () => {
     // The package: the human instruction and the action, never a tool result.
     const pkg = JSON.parse(s.packages[0] as string);
     expect(pkg.instruction).toBe("please push my branch feature/x to origin");
+    expect(pkg.instructionSource).toBe("human_message");
     expect(pkg.action.toolName).toBe("Bash");
     expect(s.packages[0]).not.toContain(MARKER);
     const audit = s.ctx.audit.list({ targetId: "apr-0" });
@@ -259,24 +264,125 @@ describe("automatic approval review (ADR-0002 amendment 4)", () => {
     expect(s.ctx.approvals.mustGet("apr-0" as ApprovalId).decidedBy).toBe("human:web");
   });
 
-  it("three reviewer denials in a row send the run's next request to humans (B6)", async () => {
+  it("five reviewer denials in a row send the run's next request to humans (B6; amendment 6 D3)", async () => {
     const deny = '{"verdict":"deny","reason":"no"}';
     const s = await scenario({
-      commands: [
-        "git push origin a",
-        "git push origin b",
-        "git push origin c",
-        "git push origin d",
-      ],
-      verdicts: [deny, deny, deny],
+      commands: ["a", "b", "c", "d", "e", "f"].map((branch) => `git push origin ${branch}`),
+      verdicts: [deny, deny, deny, deny, deny],
     });
-    await waitFor(() => systemMessages(h, s.thread.id).length === 1, 4000, "fourth posted");
-    expect(reviewRuns(h)).toHaveLength(3);
+    await waitFor(() => systemMessages(h, s.thread.id).length === 1, 6000, "sixth posted");
+    // The fourth and fifth requests were still reviewed: the breaker opens at five.
+    expect(reviewRuns(h)).toHaveLength(5);
     const skipped = s.ctx.events
       .list(s.run.id)
       .find((e) => e.kind === "approval" && e.payload.phase === "review_skipped");
     expect(skipped?.payload.reason).toBe("breaker");
-    await h.api("POST", "/api/approvals/apr-3/decide", { decision: "allow_once" });
+    await h.api("POST", "/api/approvals/apr-5/decide", { decision: "allow_once" });
     await waitFor(() => s.ctx.runs.mustGet(s.run.id).status === "succeeded", 2000, "end");
+  });
+
+  it("a browser action is reviewed in automatic mode (amendment 6 D3)", async () => {
+    const s = await scenario({
+      commands: ["click"],
+      actions: [
+        {
+          toolName: "mcp__playwright__browser_click",
+          input: { element: "Push button", ref: "e12" },
+          targetOrigin: "https://git.example.com",
+          argumentSummary: "click Push button",
+          argumentPattern: "click Push*",
+        },
+      ],
+      verdicts: ['{"verdict":"allow_once","reason":"the human asked to push"}'],
+    });
+    await waitFor(() => s.ctx.runs.mustGet(s.run.id).status === "succeeded", 3000, "end");
+    expect(reviewRuns(h)).toHaveLength(1);
+    expect(s.responses[0]?.decision).toBe("allow");
+    expect(JSON.parse(s.packages[0] as string).action.targetOrigin).toBe("https://git.example.com");
+  });
+});
+
+describe("the instruction a review judges against (amendment 6 D3)", () => {
+  async function queued(run: RunRecord) {
+    const { ctx } = h.app.deskmates;
+    const approval = ctx.approvals.create({
+      id: `apr-${run.id}` as ApprovalId,
+      runId: run.id,
+      botId: run.botId,
+      action: bash("git push origin main"),
+      riskLevel: "L2",
+    });
+    const result = ctx.broker.reviews?.queue(run, approval, { scrubbedSecrets: false });
+    if (!result || !("queued" in result)) throw new Error(`not queued: ${JSON.stringify(result)}`);
+    return JSON.parse(String(result.queued.triggerPayload?.prompt));
+  }
+
+  it("a cron run is reviewed against its prompt, labelled cron_prompt", async () => {
+    const { bot } = await h.seed({ approvalMode: "automatic" });
+    const run = h.app.deskmates.ctx.runs.create({
+      botId: bot.id,
+      lane: "background",
+      triggerKind: "cron",
+      triggerRef: "cron:1",
+      triggerPayload: { prompt: "every morning push the nightly branch", schedule: "0 6 * * *" },
+    });
+    const pkg = await queued(run);
+    expect(pkg).toMatchObject({
+      instructionSource: "cron_prompt",
+      instruction: "every morning push the nightly branch",
+    });
+  });
+
+  it("a webhook run is reviewed against its body, labelled webhook_body", async () => {
+    const { bot } = await h.seed({ approvalMode: "automatic" });
+    const run = h.app.deskmates.ctx.runs.create({
+      botId: bot.id,
+      lane: "background",
+      triggerKind: "webhook",
+      triggerRef: "whk_1",
+      triggerPayload: { body: '{"event":"build_failed"}' },
+    });
+    expect(await queued(run)).toMatchObject({
+      instructionSource: "webhook_body",
+      instruction: '{"event":"build_failed"}',
+    });
+  });
+
+  it("a scheduled task's message is labelled scheduled_task; an empty trigger goes to humans", async () => {
+    const { bot, thread } = await h.seed({ approvalMode: "automatic" });
+    const { ctx } = h.app.deskmates;
+    const message = ctx.messages.append({
+      threadId: thread.id,
+      authorKind: "human",
+      authorId: "schedule",
+      body: "Run the weekly report task",
+      attachments: [],
+      relayCount: 0,
+    });
+    const run = ctx.runs.create({
+      botId: bot.id,
+      threadId: thread.id,
+      lane: "interactive",
+      triggerKind: "thread_message",
+      triggerRef: message.id,
+    });
+    expect((await queued(run)).instructionSource).toBe("scheduled_task");
+    const empty = ctx.runs.create({
+      botId: bot.id,
+      lane: "background",
+      triggerKind: "webhook",
+      triggerRef: "whk_2",
+      triggerPayload: { body: "" },
+    });
+    const approval = ctx.approvals.create({
+      id: "apr-empty" as ApprovalId,
+      runId: empty.id,
+      botId: empty.botId,
+      action: bash("git push origin main"),
+      riskLevel: "L2",
+    });
+    expect(ctx.broker.reviews?.queue(empty, approval, { scrubbedSecrets: false })).toEqual({
+      skipped: "no_instruction",
+    });
   });
 });

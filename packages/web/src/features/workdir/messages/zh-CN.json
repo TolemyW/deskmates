@@ -1,0 +1,22 @@
+{
+  "workdir.cancel": "取消",
+  "workdir.convention": "使用每个机器人独立目录时，机器人可以读取队友的目录，但不能写入；/work/uploads 对机器人只读。这是为了防止失误，不是安全边界。必须相互隔离的工作应放在另一个工作区。",
+  "workdir.edit": "编辑工作目录",
+  "workdir.effective": "{value} · {source}",
+  "workdir.frozen": "已开始的运行保留开始时的设置。",
+  "workdir.inherit": "服务器默认（{mode}）",
+  "workdir.intro": "此工作区的机器人从哪里开始工作：各自在自己的目录中（默认），或全部在共享的 /work 中。",
+  "workdir.laneNoticeLabel": "同一机器人已在另一条通道上工作时，提醒本次运行",
+  "workdir.loading": "正在加载工作目录…",
+  "workdir.mode.per-bot": "每个机器人独立目录（/work/bots/…）",
+  "workdir.mode.shared": "共享 /work",
+  "workdir.modeLabel": "起始目录",
+  "workdir.off": "关闭",
+  "workdir.on": "开启",
+  "workdir.perBotHelp": "使用每个机器人独立目录时，每个机器人克隆自己的一份代码副本，并把交付物放在自己的目录中，队友可以读取。使用共享 /work 时，所有机器人都可以写入除 /work/uploads 以外的任何位置。",
+  "workdir.roleNote": "更改工作目录",
+  "workdir.save": "保存工作目录",
+  "workdir.source.gateway": "服务器默认",
+  "workdir.source.workspace": "工作区设置",
+  "workdir.title": "工作目录"
+}

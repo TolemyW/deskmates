@@ -9,6 +9,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import { type ApprovalId, DeskmatesError, type StartRunRequest } from "@deskmates/contracts";
 import { z } from "zod";
+import { appShareTools } from "./app-share-tools.js";
 import {
   type BrowserCliWorkflowContext,
   type BrowserCliWorkflowDeps,
@@ -21,10 +22,13 @@ import { integrationTools } from "./integration-tools.js";
 import { knowledgeTools } from "./knowledge-tools.js";
 import type { EventSink } from "./ledger.js";
 import { memoryTools } from "./memory-tools.js";
+import type { OperationFiles } from "./operation-input.js";
+import { operationTools } from "./operation-tools.js";
 import { describePosted } from "./posted-message.js";
 import { DESKMATES_MCP_SERVER } from "./risk-tier.js";
 import { taskTools } from "./task-tools.js";
 import { type TtySessions, ttySessionTool } from "./tty-session.js";
+import { withholdingToolResults } from "./vision-withhold.js";
 
 export interface ThreadToolsContext {
   request: StartRunRequest;
@@ -35,6 +39,8 @@ export interface ThreadToolsContext {
   sink: EventSink;
   tool: ToolFn;
   createSdkMcpServer: CreateSdkMcpServerFn;
+  /** How `image_describe` and `audio_transcribe` read files (ADR-0040); tests use a temp root. */
+  operationFiles?: OperationFiles;
 }
 
 const attachmentSchema = z.object({
@@ -186,6 +192,8 @@ export function createThreadTools(ctx: ThreadToolsContext): McpSdkServerConfigWi
   tools.push(...connectorTools(ctx));
   tools.push(...integrationTools(ctx));
   tools.push(...taskTools(ctx));
+  tools.push(...appShareTools(ctx));
+  tools.push(...operationTools(ctx));
   if (
     request.tools.includes("browser_cli_workflow") &&
     request.browserExecutionMode === "vision-cli-v2" &&
@@ -194,5 +202,10 @@ export function createThreadTools(ctx: ThreadToolsContext): McpSdkServerConfigWi
     tools.push(browserCliWorkflowTool(ctx.tool, ctx.browserCli.context, ctx.browserCli.deps));
   if (request.tools.includes("tty_session") && ctx.tty)
     tools.push(ttySessionTool(ctx.tool, ctx.tty, ctx.redactTerminal));
-  return ctx.createSdkMcpServer({ name: DESKMATES_MCP_SERVER, version: "0.0.0", tools });
+  return ctx.createSdkMcpServer({
+    name: DESKMATES_MCP_SERVER,
+    version: "0.0.0",
+    // ADR-0023 amendment 3, decision 16: no tool of this server hands a blind model an image.
+    tools: withholdingToolResults(request, sink, tools),
+  });
 }

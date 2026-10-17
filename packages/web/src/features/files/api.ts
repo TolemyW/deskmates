@@ -3,6 +3,7 @@
 
 import type {
   CreateWorkspaceUploadRequest,
+  DeleteWorkspaceUploadResponse,
   FileCollectionQuery,
   WorkspaceFileCollectionPage,
   WorkspaceId,
@@ -21,6 +22,11 @@ export interface FilesApi {
     workspaceId: WorkspaceId,
     input: CreateWorkspaceUploadRequest,
   ): Promise<WorkspaceUpload>;
+  /** An Admin deletes a completed upload's file (ADR-0014 A5 decision 43). */
+  deleteWorkspaceUploadFile(
+    workspaceId: WorkspaceId,
+    uploadId: string,
+  ): Promise<DeleteWorkspaceUploadResponse>;
   /**
    * One workspace file's bytes (ADR-0014). The caller saves the Blob; nothing here renders or
    * navigates to it. Refusals arrive as ApiError with the Gateway's code.
@@ -68,6 +74,12 @@ export function createFilesApi(t: HttpTransport): FilesApi {
     },
     createWorkspaceUpload(workspaceId, input) {
       return t.json<WorkspaceUpload>("POST", uploadPath(workspaceId), input);
+    },
+    deleteWorkspaceUploadFile(workspaceId, uploadId) {
+      return t.json<DeleteWorkspaceUploadResponse>(
+        "DELETE",
+        `${uploadPath(workspaceId, uploadId)}/file`,
+      );
     },
     getWorkspaceUpload(workspaceId, uploadId) {
       return t.json<WorkspaceUpload>("GET", uploadPath(workspaceId, uploadId));

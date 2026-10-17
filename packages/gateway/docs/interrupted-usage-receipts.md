@@ -24,9 +24,9 @@ Observed usage never advances the SDK session baseline by itself. Requested iden
 served identity is never priced as though it were the requested model. An in-flight run's
 unpriced observations are not counted as unpriced usage (its final may still be priced).
 
-Cost queries project only usage-related events in one batched read per 500 selected runs
-(plus one price lookup per model), not per-run queries. Large historical reports may still
-need a materialized projection.
+Receipt projection reads only usage-related events in one batched read per 500 selected runs
+(plus one price lookup per model), not per-run queries. Cost reports read the stored per-run
+summaries of these receipts ([run-usage-summaries.md](run-usage-summaries.md)).
 These receipts describe Gateway observations, not the provider's invoice.
 
 `GET /api/workspaces/:id/restart-preflight` uses the same administrator/workspace

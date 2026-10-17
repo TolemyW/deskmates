@@ -11,6 +11,7 @@ import type {
   EgressAllowlistResponse,
   MemorySearchHit,
   PostMessageRequest,
+  ReplyPreviewRequest,
   RunEnded,
   SidecarEvent,
 } from "@deskmates/contracts";
@@ -55,6 +56,8 @@ export interface FakeGatewayOptions {
   egressGrants?: () => NonNullable<EgressAllowlistResponse["grants"]>;
   /** What `GET /memory/search` answers; without it the route answers 404. */
   memorySearch?: (query: string, scope: string | undefined) => MemorySearchHit[];
+  /** Status for `POST /reply-preview` (ADR-0037); default 200. */
+  replyPreviewStatus?: number;
 }
 
 export interface FakeGateway {
@@ -66,6 +69,8 @@ export interface FakeGateway {
   decides: ApprovalDecideRequest[];
   locks: BrowserLockRequest[];
   messages: PostMessageRequest[];
+  /** Reply preview frames, in arrival order (ADR-0037 decision 7). */
+  previews: ReplyPreviewRequest[];
   ended: RunEnded[];
   /**
    * Attempts per route, including the ones answered with an injected failure. `egressGets` is how
@@ -97,6 +102,7 @@ export function createFakeGateway(opts: FakeGatewayOptions = {}): FakeGateway {
     decides: [],
     locks: [],
     messages: [],
+    previews: [],
     ended: [],
     attempts: { endedPosts: 0, approvalPolls: 0, approvalPosts: 0, egressGets: 0 },
     decide: (response) => {
@@ -192,6 +198,12 @@ export function createFakeGateway(opts: FakeGatewayOptions = {}): FakeGateway {
         return json({
           entries: opts.memorySearch(params.get("q") ?? "", params.get("scope") ?? undefined),
         });
+      }
+      if (method === "POST" && rest === "reply-preview") {
+        const status = opts.replyPreviewStatus ?? 200;
+        if (status < 200 || status >= 300) return new Response("refused", { status });
+        gw.previews.push(JSON.parse(body) as ReplyPreviewRequest);
+        return json({ ok: true });
       }
       if (method === "POST" && rest === "messages") {
         gw.messages.push(JSON.parse(body) as PostMessageRequest);

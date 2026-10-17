@@ -10,8 +10,10 @@
 export const CHEAP_MODEL_JOB_KINDS = [
   "activity_summary",
   "memory_consolidation",
+  "memory_organize",
+  "memory_recheck",
+  "round_triage",
   "soul_proposal",
-  "status_inquiry",
 ] as const;
 
 export type CheapModelJobKind = (typeof CHEAP_MODEL_JOB_KINDS)[number];

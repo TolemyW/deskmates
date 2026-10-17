@@ -9,9 +9,12 @@ import type {
   BrowserLock,
   CostAlert,
   DeskmatesErrorCode,
+  EffectiveLimit,
   GroupRouting,
   Run,
   RunEvent,
+  RunFailureClass,
+  RunMark,
   Thread,
   ThreadId,
   ThreadMember,
@@ -36,6 +39,10 @@ export interface RunView extends Run {
   roundMessageIds?: string[];
   /** ADR-0024 amendment 2, decision 11: for a welcome run, whether its greeting reached the chat. */
   welcomeDelivery?: WelcomeDelivery;
+  /** ADR-0042 decision 1: the class the Gateway derives from `error`; present when it is set. */
+  failureClass?: RunFailureClass;
+  /** ADR-0042 decision 3: an Owner's or Admin's "this run was wrong" mark. */
+  mark?: RunMark;
 }
 
 /** A bot's versioned Markdown file (SOUL.md or MEMORY.md) as the Gateway returns it. */
@@ -54,6 +61,12 @@ export interface ThreadDetailView {
   thread: Thread;
   members: NamedThreadMember[];
   groupRouting?: GroupRouting;
+  /**
+   * The turn budget the router enforces (ADR-0005 amendment 5 decision 38): the workspace
+   * setting, else `thread.turnBudget`; `value: null` when the workspace turned it off. An older
+   * Gateway omits it.
+   */
+  effectiveTurnBudget?: EffectiveLimit;
 }
 
 /**
@@ -75,6 +88,12 @@ export type GatewayEvent =
   | import("@deskmates/contracts").ThreadActivityEvent
   | { type: "run_status"; threadId?: ThreadId; run: RunView }
   | { type: "run_event"; threadId?: ThreadId; event: RunEvent }
+  /** A live run's cumulative reply preview; the final message replaces it (ADR-0037). */
+  | {
+      type: "run_reply_preview";
+      threadId: ThreadId;
+      preview: import("@deskmates/contracts").ReplyPreviewFrame;
+    }
   | { type: "thread_message"; threadId: ThreadId; message: ThreadMessage }
   | ThreadMembersEvent
   | ThreadPinsEvent
@@ -97,6 +116,7 @@ export type GatewayEventType = GatewayEvent["type"];
 export const GATEWAY_EVENT_TYPES: readonly GatewayEventType[] = [
   "run_status",
   "run_event",
+  "run_reply_preview",
   "thread_message",
   "thread_members",
   "thread_pins",

@@ -13,6 +13,7 @@ import {
 import { describe, expect, it } from "vitest";
 import type { DockerClient } from "./docker-client.js";
 import {
+  APP_RELAY_KEY_ENV,
   DockerProvider,
   EGRESS_OUTBOUND_NETWORK,
   EGRESS_PROXY_ROLE,
@@ -36,11 +37,17 @@ interface Stub {
   onStdin?: (chunk: string) => void;
   proxyPorts?: Record<string, { HostIp: string; HostPort: string }[]>;
   proxyHostTarget?: string;
+  /** Extra variables in the proxy container's environment. */
+  proxyEnv?: string[];
   /**
    * Start the managed proxy stopped, the way a real daemon reports one: no network address and
    * no published ports until it is started. `POST /containers/proxy1/start` flips it.
    */
   proxyStopped?: boolean;
+  /** The proxy's address on the workspace network; a connect with an `IPAMConfig` moves it. */
+  proxyIp?: string;
+  /** The daemon ignores a requested address (it is taken), as a real one answers with 403. */
+  pinUnavailable?: boolean;
   /** Answer for `client.expect`; the returned value becomes `json`. */
   expect?: (method: string, path: string) => unknown;
   /** Answer for `client.request`; defaults to 204 with an empty body. */
@@ -55,6 +62,7 @@ function stubClient(client: DockerClient, stub: Stub): Call[] {
   const networks = new Map<string, unknown>();
   let proxyWorkspace = "ws1";
   let proxyRunning = stub.proxyStopped !== true;
+  let proxyIp = stub.proxyIp ?? "172.31.0.2";
   const patch = {
     expect: async (method: string, path: string, body?: unknown) => {
       calls.push({ method, path, body });
@@ -88,6 +96,7 @@ function stubClient(client: DockerClient, stub: Stub): Call[] {
               Env: [
                 `DESKMATES_HOST_TARGET=${stub.proxyHostTarget ?? "host.docker.internal"}`,
                 "DESKMATES_HOST_FALLBACK_IP=172.31.0.1",
+                ...(stub.proxyEnv ?? []),
               ],
               Labels: managedLabels(proxyWorkspace),
             },
@@ -96,7 +105,7 @@ function stubClient(client: DockerClient, stub: Stub): Call[] {
               Ports: proxyRunning ? (stub.proxyPorts ?? {}) : {},
               Networks: {
                 [networkName(proxyWorkspace as WorkspaceId)]: {
-                  IPAddress: proxyRunning ? "172.31.0.2" : "",
+                  IPAddress: proxyRunning ? proxyIp : "",
                 },
                 [EGRESS_OUTBOUND_NETWORK]: { IPAddress: proxyRunning ? "172.32.0.2" : "" },
               },
@@ -151,6 +160,16 @@ function stubClient(client: DockerClient, stub: Stub): Call[] {
         return { status: 204, body: "" };
       }
       if (method === "POST" && path.startsWith("/networks/") && path.endsWith("/connect")) {
+        const connect = body as {
+          Container: string;
+          EndpointConfig?: { IPAMConfig?: { IPv4Address: string } };
+        };
+        const wanted = connect.EndpointConfig?.IPAMConfig?.IPv4Address;
+        if (connect.Container === "proxy1" && wanted !== undefined && !stub.pinUnavailable)
+          proxyIp = wanted;
+        return { status: 200, body: "" };
+      }
+      if (method === "POST" && path.startsWith("/networks/") && path.endsWith("/disconnect")) {
         return { status: 200, body: "" };
       }
       return stub.request?.(method, path) ?? { status: 204, body: "" };
@@ -608,8 +627,10 @@ describe("DockerProvider workspace isolation (ADR-0006)", () => {
     });
     // A container/daemon restart must never resurrect the creation-time policy. Startup is
     // deny-all and create reloads the requested policy before it starts the workspace.
+    // The app relay key is infrastructure, not policy (ADR-0035 decision 4).
     expect(proxyCreate.Env).toEqual([
       "DESKMATES_SCREEN_TARGET=deskmates-ws-ws1",
+      expect.stringMatching(/^DESKMATES_APP_RELAY_KEY=[0-9a-f]{32}$/),
       "DESKMATES_HOST_TARGET=host.docker.internal",
       "DESKMATES_HOST_FALLBACK_IP=172.31.0.1",
     ]);
@@ -1286,6 +1307,66 @@ it.each([false, true])(
   },
 );
 
+describe("app relay (ADR-0035 decision 4)", () => {
+  const create = async (proxyEnv: string[], proxyPorts: NonNullable<Stub["proxyPorts"]>) => {
+    const provider = newProvider();
+    const calls = stubClient(provider.client, {
+      proxyPorts,
+      proxyEnv,
+      expect: (_method, path) => {
+        if (path !== "/containers/c1/json") throw new Error(`unexpected ${path}`);
+        return inspectOf("c1");
+      },
+      request: (_method, path) =>
+        path.startsWith("/containers/create")
+          ? { status: 201, body: JSON.stringify({ Id: "c1" }) }
+          : { status: 204, body: "" },
+    });
+    const handle = await provider.create({
+      workspaceId: WS,
+      image: "img",
+      env: {},
+      volumes: {},
+      ports: [],
+      egressAllowlist: [],
+    });
+    return { calls, handle };
+  };
+  const relayPorts = { "6090/tcp": [{ HostIp: "127.0.0.1", HostPort: "49190" }] };
+
+  it("publishes the relay from the proxy with a fresh key and nothing from the workspace", async () => {
+    const { calls } = await create([], relayPorts);
+    const bodies = calls
+      .filter((c) => c.method === "POST" && c.path.startsWith("/containers/create"))
+      .map((c) => ({
+        path: c.path,
+        body: c.body as { Env: string[]; HostConfig: { PortBindings: Record<string, unknown> } },
+      }));
+    const proxy = bodies.find((b) => b.path.includes("deskmates-egress-"))?.body;
+    const workspace = bodies.find((b) => b.path.includes("deskmates-ws-"))?.body;
+    expect(proxy?.HostConfig.PortBindings["6090/tcp"]).toEqual([
+      { HostIp: "127.0.0.1", HostPort: "" },
+    ]);
+    expect(proxy?.Env.find((e: string) => e.startsWith(`${APP_RELAY_KEY_ENV}=`))).toMatch(
+      /^DESKMATES_APP_RELAY_KEY=[0-9a-f]{32}$/,
+    );
+    expect(workspace?.HostConfig.PortBindings).toEqual({});
+  });
+
+  it("hands the Gateway the relay address and key read back from the proxy", async () => {
+    const key = "ab".repeat(16);
+    const { handle } = await create([`${APP_RELAY_KEY_ENV}=${key}`], relayPorts);
+    expect(handle.appRelayAddress).toBe("127.0.0.1:49190");
+    expect(handle.appRelayKey).toBe(key);
+  });
+
+  it("reports no relay for a proxy from before the relay existed", async () => {
+    const { handle } = await create([], {});
+    expect(handle.appRelayAddress).toBeUndefined();
+    expect(handle.appRelayKey).toBeUndefined();
+  });
+});
+
 describe("DockerProvider tenant ownership labels (ADR-0022 DOCKER-01)", () => {
   it("labels the workspace container, its proxy and its network with the owning tenant", async () => {
     const p = newProvider();
@@ -1351,5 +1432,91 @@ describe("DockerProvider tenant ownership labels (ADR-0022 DOCKER-01)", () => {
       const result = await attachWith(labels, tenant);
       expect(result.calls.some((c) => c.path === "/containers/c1/json")).toBe(true);
     }
+  });
+});
+
+// A daemon restart without live-restore (or a host reboot) hands the workspace network's
+// addresses out in start order, so the proxy pinned at `.2` in the workspace's /etc/hosts comes
+// back elsewhere; observed on 2026-10-16 on every live workspace after one such restart, each
+// run then failing "address is missing or stale". `attach` moves the proxy back instead.
+describe("DockerProvider.attach: a proxy that lost its pinned address is moved back", () => {
+  const WS_NET = networkName(WS);
+  const workspaceAt = (ip: string) => ({
+    ...inspectOf("c1"),
+    NetworkSettings: {
+      Ports: {},
+      Networks: { [WS_NET]: { IPAddress: ip, Aliases: ["workspace", "c1"] } },
+    },
+  });
+  const networkCalls = (calls: Call[]) =>
+    calls
+      .filter((c) => c.path.startsWith(`/networks/${encodeURIComponent(WS_NET)}/`))
+      .map((c) => ({
+        op: c.path.split("/").at(-1),
+        ...(c.body as { Container: string; EndpointConfig?: unknown }),
+      }));
+
+  it("takes the displaced workspace off the network, reattaches the proxy at the pin, then the workspace", async () => {
+    const p = newProvider();
+    const calls = stubClient(p.client, {
+      proxyIp: "172.31.0.3",
+      expect: (_method, path) => {
+        if (path.startsWith(LIST_PREFIX)) return [summary("c1", "running", managedLabels("ws1"))];
+        if (path === "/containers/c1/json") return workspaceAt("172.31.0.2");
+        throw new Error(`unexpected ${path}`);
+      },
+    });
+
+    const handle = await p.attach(WS);
+
+    expect(handle?.providerRef).toBe("c1");
+    expect(networkCalls(calls)).toEqual([
+      { op: "disconnect", Container: "c1", Force: false },
+      { op: "disconnect", Container: "proxy1", Force: false },
+      {
+        op: "connect",
+        Container: "proxy1",
+        EndpointConfig: { Aliases: ["egress-proxy"], IPAMConfig: { IPv4Address: "172.31.0.2" } },
+      },
+      // The workspace keeps its own aliases; Docker re-adds the short-id one itself.
+      { op: "connect", Container: "c1", EndpointConfig: { Aliases: ["workspace"] } },
+    ]);
+  });
+
+  it("leaves the workspace attached when the pinned address is merely free", async () => {
+    const p = newProvider();
+    const calls = stubClient(p.client, {
+      proxyIp: "172.31.0.3",
+      expect: (_method, path) => {
+        if (path.startsWith(LIST_PREFIX)) return [summary("c1", "running", managedLabels("ws1"))];
+        if (path === "/containers/c1/json") return workspaceAt("172.31.0.4");
+        throw new Error(`unexpected ${path}`);
+      },
+    });
+
+    await p.attach(WS);
+
+    expect(networkCalls(calls).map((c) => [c.op, c.Container])).toEqual([
+      ["disconnect", "proxy1"],
+      ["connect", "proxy1"],
+    ]);
+  });
+
+  it("still fails closed, with the workspace reattached, when the pin cannot be taken", async () => {
+    const p = newProvider();
+    const calls = stubClient(p.client, {
+      proxyIp: "172.31.0.3",
+      pinUnavailable: true,
+      expect: (_method, path) => {
+        if (path.startsWith(LIST_PREFIX)) return [summary("c1", "running", managedLabels("ws1"))];
+        if (path === "/containers/c1/json") return workspaceAt("172.31.0.2");
+        throw new Error(`unexpected ${path}`);
+      },
+    });
+
+    await expect(p.attach(WS)).rejects.toMatchObject({
+      message: expect.stringContaining("address is missing or stale"),
+    });
+    expect(networkCalls(calls).at(-1)).toMatchObject({ op: "connect", Container: "c1" });
   });
 });

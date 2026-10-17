@@ -44,6 +44,7 @@ import type {
   SdkCallToolResult,
   SdkCompactBoundaryMessage,
   SdkContentBlock,
+  SdkContextUsageResponse,
   SdkHookMatcher,
   SdkHookOutput,
   SdkHookPermissionDecision,
@@ -60,6 +61,7 @@ import type {
   SdkQueryParams,
   SdkResultErrorMessage,
   SdkResultSuccessMessage,
+  SdkSessionStartHookInput,
   SdkSystemInitMessage,
   SdkToolDefinition,
   SdkToolDefinitionLoose,
@@ -118,10 +120,54 @@ export interface FakeSdkConfig {
   readOnlyTools?: readonly string[];
   /** Reported as `claude_code_version` on the init message. */
   version?: string;
+  /**
+   * What `getContextUsage` answers; the default is a small fixed breakdown. A throw is passed on
+   * to the caller, like a CLI that cannot answer the control request.
+   */
+  contextUsage?: (detail: "summary" | "full") => SdkContextUsageResponse;
+  /** The resume fields of the `SessionStart` hook input when a known session is resumed. */
+  resumeFacts?: Pick<
+    SdkSessionStartHookInput,
+    "seconds_since_last_response" | "context_tokens" | "prompt_cache_likely_expired"
+  >;
+}
+
+/** What `query()` returns: the message stream plus the control method the sidecar calls. */
+export type FakeQuery = AsyncGenerator<SdkMessage, void, undefined> & {
+  getContextUsage(opts?: { detail?: "summary" | "full" }): Promise<SdkContextUsageResponse>;
+};
+
+/** A small, fixed `getContextUsage` answer. */
+export function defaultContextUsage(model: string): SdkContextUsageResponse {
+  return {
+    categories: [
+      { name: "System prompt", tokens: 3000, color: "", kind: "used" },
+      { name: "System tools", tokens: 12000, color: "", kind: "used" },
+      { name: "MCP tools", tokens: 6000, color: "", kind: "used" },
+      { name: "Messages", tokens: 500, color: "", kind: "used" },
+      { name: "Free space", tokens: 178500, color: "", kind: "free" },
+    ],
+    totalTokens: 21500,
+    maxTokens: 200000,
+    rawMaxTokens: 200000,
+    percentage: 11,
+    model,
+    memoryFiles: [],
+    mcpTools: [
+      { name: "mcp__browser__browser_navigate", serverName: "browser", tokens: 4000 },
+      { name: "mcp__deskmates__thread_post", serverName: "deskmates", tokens: 2000 },
+    ],
+    systemTools: [
+      { name: "Bash", tokens: 9000 },
+      { name: "Read", tokens: 3000 },
+    ],
+  };
 }
 
 export interface FakeSdk {
-  query: (params: SdkQueryParams) => AsyncGenerator<SdkMessage, void, undefined>;
+  query: (params: SdkQueryParams) => FakeQuery;
+  /** Every `getContextUsage` call, in order, across queries. */
+  contextUsageCalls: { detail: "summary" | "full" }[];
   tool: <Schema, Result = SdkCallToolResult>(
     name: string,
     description: string,
@@ -561,6 +607,7 @@ export function createFakeSdk(source: ScriptSource, config: FakeSdkConfig = {}):
       uuid: uuid(),
       session_id: session.id,
     };
+    await sessionStart(options.resume !== undefined);
     yield emit(init);
 
     let turns = 0;
@@ -699,6 +746,35 @@ export function createFakeSdk(source: ScriptSource, config: FakeSdkConfig = {}):
      * A model switch as the CLI reports it: every `PostModelSwitch` hook with the old and new
      * model, then the new model serves. A hook's output and its failure are both ignored.
      */
+    async function sessionStart(resumed: boolean): Promise<void> {
+      const cwd = options.cwd ?? process.cwd();
+      const hookSignal = signal ?? new AbortController().signal;
+      for (const matcher of options.hooks?.SessionStart ?? []) {
+        for (const hook of matcher.hooks) {
+          const input: SdkSessionStartHookInput = {
+            hook_event_name: "SessionStart",
+            session_id: session.id,
+            transcript_path: `${cwd}/.claude/fake-transcript-${session.id}.jsonl`,
+            cwd,
+            source: resumed ? "resume" : "startup",
+            model,
+            ...(resumed ? (config.resumeFacts ?? {}) : {}),
+          };
+          try {
+            await withAbort(
+              withHookTimeout(
+                Promise.resolve().then(() => hook(input, undefined, { signal: hookSignal })),
+                matcher.timeout,
+              ),
+              signal,
+            );
+          } catch (err) {
+            if (isAbortError(err)) throw err;
+          }
+        }
+      }
+    }
+
     async function switchModel(step: Extract<ScriptStep, { type: "model_switch" }>): Promise<void> {
       const to = step.to ?? options.fallbackModel?.split(",")[0]?.trim();
       if (to === undefined || to === "") {
@@ -831,6 +907,29 @@ export function createFakeSdk(source: ScriptSource, config: FakeSdkConfig = {}):
           );
           break;
         }
+        case "streamed_text": {
+          turns += 1;
+          const u = { ...DEFAULT_TURN_USAGE, ...step.usage };
+          addUsage(u);
+          if (options.includePartialMessages) {
+            for (const text of step.chunks) {
+              yield emit({
+                type: "stream_event",
+                event: {
+                  type: "content_block_delta",
+                  index: 0,
+                  delta: { type: "text_delta", text },
+                },
+                parent_tool_use_id: null,
+                uuid: uuid(),
+                session_id: session.id,
+              });
+            }
+          }
+          lastText = step.chunks.join("");
+          yield emit(assistant([{ type: "text", text: lastText, citations: null }], "end_turn", u));
+          break;
+        }
         case "thinking": {
           // A thinking block adds to the totals only when the script gives it its own usage.
           if (step.usage) addUsage({ ...DEFAULT_TURN_USAGE, ...step.usage });
@@ -946,5 +1045,18 @@ export function createFakeSdk(source: ScriptSource, config: FakeSdkConfig = {}):
     yield emit(result(lastText, undefined, undefined));
   }
 
-  return { query: run, tool, createSdkMcpServer, sessions };
+  const contextUsageCalls: FakeSdk["contextUsageCalls"] = [];
+  const query = (params: SdkQueryParams): FakeQuery =>
+    Object.assign(run(params), {
+      getContextUsage: async (opts?: { detail?: "summary" | "full" }) => {
+        // The real SDK's default detail is `full`.
+        const detail = opts?.detail ?? "full";
+        contextUsageCalls.push({ detail });
+        return config.contextUsage
+          ? config.contextUsage(detail)
+          : defaultContextUsage(params.options?.model ?? "");
+      },
+    });
+
+  return { query, contextUsageCalls, tool, createSdkMcpServer, sessions };
 }

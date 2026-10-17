@@ -17,7 +17,7 @@ import type {
   TriggerPayload,
   WorkspaceId,
 } from "@deskmates/contracts";
-import { assemblePinnedIndex } from "@deskmates/contracts";
+import { APPROVAL_ATTACHMENT_MIME, assemblePinnedIndex } from "@deskmates/contracts";
 import { describe, expect, it } from "vitest";
 import { buildContext, renderThreadMessage, renderTrigger } from "./context.js";
 import { createMemoryFs } from "./testing/in-memory-fs.js";
@@ -171,6 +171,41 @@ describe("renderThreadMessage wraps everything a bot chose", () => {
       message({ authorKind: "system", authorName: "system", body: "orion joined", attachments }),
     );
     expect(system).toBe("[system] orion joined\n  attachments: a.csv (text/csv) /work/a.csv");
+  });
+
+  it("lists attachment paths of a person's uploads, even with a blank body (ADR-0014 A5 decision 42)", () => {
+    const rendered = renderThreadMessage(
+      message({
+        authorKind: "human",
+        authorName: "Alice",
+        body: "",
+        attachments: [
+          {
+            name: "Screenshot 1.png",
+            mimeType: "image/png",
+            ref: "/work/uploads/2026-10-14/Screenshot_1.png",
+            uploadId: `upl_${"a".repeat(32)}`,
+            sizeBytes: 1234,
+          },
+          { name: "q.csv", mimeType: "text/csv", ref: "/work/uploads/2026-10-14/q.csv" },
+        ],
+      }),
+    );
+    expect(rendered).toBe(
+      "[human: Alice] \n  attachments: Screenshot 1.png (image/png) /work/uploads/2026-10-14/Screenshot_1.png, q.csv (text/csv) /work/uploads/2026-10-14/q.csv",
+    );
+  });
+
+  it("marks a system message carrying an approval as an approval notice (ADR-0002 A4)", () => {
+    const notice = renderThreadMessage(
+      message({
+        authorKind: "system",
+        authorName: "system",
+        body: "Approval needed: orion wants to run Bash",
+        attachments: [{ name: "approval", mimeType: APPROVAL_ATTACHMENT_MIME, ref: "apr-1" }],
+      }),
+    );
+    expect(notice.startsWith("[system: approval notice] Approval needed")).toBe(true);
   });
 });
 
@@ -394,6 +429,74 @@ describe("buildContext thread delivery guidance", () => {
     );
     expect(resumed.systemPrompt).toBe(group.systemPrompt);
     expect(resumed.systemPromptSha256).toBe(group.systemPromptSha256);
+  });
+
+  it("puts a round's plan and rules in the first turn and leaves the system prompt unchanged (ADR-0005 amendment 6)", async () => {
+    const base: TriggerPayload = {
+      kind: "thread_message",
+      thread: { id: "thread-1" as ThreadId, title: "group", kind: "chat" },
+      relayCount: 0,
+      messages: [message({ authorKind: "human", authorName: "web" })],
+      routing: {
+        version: 2,
+        recipientBotId: "bot-nova" as BotId,
+        recipientName: "nova",
+        members: [
+          { name: "nova", role: "prices", you: true },
+          { name: "orion", role: "stock" },
+          { name: "lead", role: "coordinates", owner: true },
+        ],
+      },
+    };
+    const routing = base.kind === "thread_message" ? base.routing : undefined;
+    const work: TriggerPayload = {
+      ...base,
+      routing: {
+        ...(routing as NonNullable<typeof routing>),
+        round: {
+          messageSeq: 1,
+          phase: "work",
+          assignments: [
+            { name: "nova", task: "unit price of K", you: true },
+            { name: "orion", task: "units of K" },
+          ],
+          closer: "lead",
+        },
+        lastReply: { seq: 4, addressed: [], everyone: false, unknown: ["orin"], spaced: [] },
+      },
+    };
+    const close: TriggerPayload = {
+      ...base,
+      routing: {
+        ...(routing as NonNullable<typeof routing>),
+        round: {
+          messageSeq: 1,
+          phase: "close",
+          assignments: [{ name: "orion", task: "units of K" }],
+          closer: "nova",
+          youClose: true,
+          outcomes: [{ name: "orion", outcome: "replied", seqs: [2, 3] }],
+        },
+      },
+    };
+    const fs = createMemoryFs({ "/home/nova/SOUL.md": "You are nova." });
+    const group = (trigger: TriggerPayload) =>
+      buildContext({ ...request(trigger), groupGuidance: "owner-v1" }, fs, new Date(0));
+    const [plain, working, closing] = await Promise.all([group(base), group(work), group(close)]);
+    expect(working.systemPrompt).toBe(plain.systemPrompt);
+    expect(closing.systemPromptSha256).toBe(plain.systemPromptSha256);
+    expect(plain.prompt).not.toContain("triaged into a round");
+    expect(working.prompt).toContain("Message #1 was triaged into a round.");
+    expect(working.prompt).toContain("- nova (you): unit price of K");
+    expect(working.prompt).toContain("Closer: lead.");
+    expect(working.prompt).toContain("Do your part only.");
+    expect(working.prompt).toContain("lead answers the human once every part has ended");
+    expect(working.prompt).toContain("When you have nothing to add, end with an empty summary");
+    expect(working.prompt).toContain("No member of this thread is called @orin");
+    expect(closing.prompt).toContain("Closer: nova (you).");
+    expect(closing.prompt).toContain("- orion: replied (message #2, #3)");
+    expect(closing.prompt).toContain("you close it");
+    expect(closing.prompt).not.toContain("Do your part only.");
   });
 
   it("keeps the same system prompt on thread approval and turn continuation resumes", async () => {
@@ -631,9 +734,9 @@ describe("Deskmates tool names in the system prompt", () => {
   });
 });
 
-// Issue #88: a per-bot working directory is an opt-in knob (`DESKMATES_BOT_WORKDIR`, recorded per
-// run). It is a convention the prompt states, not a boundary, and with the knob off the system
-// prompt is the one every run had before the knob existed.
+// ADR-0038: per-bot is the default mode (the Gateway sends `workdirMode: "per-bot"`); its prompt
+// states the rule the hook's soft guard applies. The shared mode, a workspace option, keeps the
+// system prompt every run had before issue #88.
 describe("buildContext working directory", () => {
   const trigger: TriggerPayload = {
     kind: "thread_message",
@@ -644,10 +747,10 @@ describe("buildContext working directory", () => {
   const fs = () => createMemoryFs({ "/home/nova/SOUL.md": "You are Nova." });
   const at = new Date("2026-10-12T00:00:00Z");
 
-  it("leaves the default system prompt byte-identical to the one before the knob", async () => {
+  it("leaves the shared-mode system prompt byte-identical to the one before issue #88", async () => {
     const context = await buildContext(request(trigger), fs(), at);
     // sha256 of the system prompt this exact request produced on main before issue #88. A
-    // deliberate guidance change elsewhere updates it; the per-bot knob must never move it.
+    // deliberate guidance change elsewhere updates it; the per-bot mode must never move it.
     expect(context.systemPromptSha256).toBe(DEFAULT_PROMPT_SHA256);
     expect(context.systemPrompt).toContain(
       "Your shared working directory is /work. Your home is /home/nova.",
@@ -656,18 +759,28 @@ describe("buildContext working directory", () => {
     expect(context.systemPrompt).not.toContain("git worktree");
   });
 
-  it("names the bot's own directory, the shared /work and git worktrees under per-bot", async () => {
+  it("names the bot's own directory and the read-only rule under per-bot", async () => {
     const context = await buildContext({ ...request(trigger), workdirMode: "per-bot" }, fs(), at);
     expect(context.systemPrompt).toContain("Your own working directory is /work/bots/nova");
-    expect(context.systemPrompt).toContain("/work is shared with every bot in this workspace");
-    expect(context.systemPrompt).toContain("not a boundary");
-    expect(context.systemPrompt).toContain("worktree add /work/bots/nova/<repo>");
+    expect(context.systemPrompt).toContain("your work and deliverables belong there");
+    expect(context.systemPrompt).toContain("/work/bots/<its name>");
+    expect(context.systemPrompt).toContain("never write into it: writes there are refused");
+    expect(context.systemPrompt).toContain("/work/uploads");
+    expect(context.systemPrompt).toContain("git clone /work/<repo> /work/bots/nova/<repo>");
     expect(context.systemPrompt).toContain("Your home is /home/nova.");
     expect(context.systemPrompt).not.toContain("Your shared working directory is /work.");
+    // ADR-0038 decision 7: the platform prepares no worktree, and the prompt never says it does.
+    expect(context.systemPrompt).not.toContain("worktree");
   });
 
-  it("keeps the per-bot guidance on an approval resume", async () => {
+  it("keeps the per-bot guidance byte-stable and on an approval resume", async () => {
     const fresh = await buildContext({ ...request(trigger), workdirMode: "per-bot" }, fs(), at);
+    const later = await buildContext(
+      { ...request(trigger), workdirMode: "per-bot" },
+      fs(),
+      new Date("2026-10-13T00:00:00Z"),
+    );
+    expect(later.systemPromptSha256).toBe(fresh.systemPromptSha256);
     const resumed = await buildContext(
       {
         ...request({
@@ -681,6 +794,60 @@ describe("buildContext working directory", () => {
       at,
     );
     expect(resumed.systemPrompt).toBe(fresh.systemPrompt);
+  });
+});
+
+// ADR-0036 decision 6, kept by ADR-0038 decision 8: a note in the run's prompt, never in the
+// cached system prompt.
+describe("buildContext lane notice", () => {
+  const trigger: TriggerPayload = { kind: "cron", prompt: "nightly check" };
+  const fs = () => createMemoryFs({ "/home/nova/SOUL.md": "You are Nova." });
+  const at = new Date("2026-10-14T00:00:00Z");
+  const otherLaneRun = {
+    runId: "run_chat",
+    lane: "interactive",
+    triggerKind: "thread_message",
+    threadId: "thread-1",
+    startedAt: "2026-10-14T07:59:00.000Z",
+  } as const;
+
+  it("names the other lane's run and the shared directory", async () => {
+    const without = await buildContext({ ...request(trigger) }, fs(), at);
+    const context = await buildContext(
+      { ...request(trigger), workdirMode: "per-bot", otherLaneRun },
+      fs(),
+      at,
+    );
+    expect(context.prompt).toContain(
+      "run run_chat on your interactive lane (trigger thread_message in thread thread-1, started 2026-10-14T07:59:00.000Z)",
+    );
+    expect(context.prompt).toContain("shares your working directory. Before");
+    expect(context.prompt).not.toContain("worktree");
+    expect(context.prompt).toContain("git status");
+    expect(context.systemPrompt).not.toContain("run_chat");
+    expect(without.prompt).not.toContain("other lane");
+  });
+
+  it("adds the note on a resume as well", async () => {
+    const context = await buildContext(
+      {
+        ...request({
+          kind: "approval",
+          approvalId: "approval-lane" as ApprovalId,
+          decision: "allow_once",
+        }),
+        otherLaneRun: {
+          runId: otherLaneRun.runId,
+          lane: otherLaneRun.lane,
+          triggerKind: otherLaneRun.triggerKind,
+          startedAt: otherLaneRun.startedAt,
+        },
+      },
+      fs(),
+      at,
+    );
+    expect(context.prompt).toContain("(trigger thread_message, started");
+    expect(context.prompt).toContain("shares your working directory. Before");
   });
 });
 

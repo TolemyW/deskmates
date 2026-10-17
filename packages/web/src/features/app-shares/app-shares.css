@@ -1,0 +1,61 @@
+/* Published apps (ADR-0035): the workspace's Apps section and the entry page. */
+
+.app-share-list {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-share-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.app-share-row[data-state="revoked"] {
+  opacity: 0.7;
+}
+
+.app-share-url code {
+  overflow-wrap: anywhere;
+}
+
+.app-open {
+  max-width: 36rem;
+  margin: 24px auto;
+}
+
+/* The share form and the Files page's Apps entry (owner-decided 2026-10-14). */
+.app-share-publish {
+  display: grid;
+  grid-template-columns: minmax(6rem, 8rem) minmax(10rem, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.app-share-publish > p,
+.app-share-publish > .form-actions {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.files-apps-entry {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  margin-block: 0 12px;
+}
+
+.files-apps-panel {
+  justify-self: stretch;
+}
+
+@media (max-width: 480px) {
+  .app-share-publish {
+    grid-template-columns: 1fr;
+  }
+}

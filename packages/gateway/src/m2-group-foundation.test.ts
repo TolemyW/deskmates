@@ -30,6 +30,9 @@ async function group(turnBudget?: number, overrides: Parameters<typeof startHarn
     botIds: bots.map((b) => b.id),
     ...(turnBudget === undefined ? {} : { turnBudget }),
   });
+  // The turn budget is off by default (ADR-0005 amendment 5 decision 42); a fixture that wants one
+  // turns it on for the workspace, which is what the router enforces.
+  if (turnBudget !== undefined) ctx.limits.set(ws.id, { turnBudget }, "user:admin");
   return { h, ctx, bots, thread };
 }
 
@@ -73,6 +76,10 @@ describe("M2 group foundation through the Gateway", () => {
       ...startEvents,
       expect.objectContaining({
         payload: { source: "final_reply", op: "deduplicated", messageId: posted.id },
+      }),
+      // ADR-0037: recorded only after the end committed, so the rolled-back try left none.
+      expect.objectContaining({
+        payload: expect.objectContaining({ source: "run_timeline", mark: "run_ended" }),
       }),
     ]);
     route.mockRestore();
@@ -243,9 +250,12 @@ describe("M2 group foundation through the Gateway", () => {
   it("caps an explicit bot ping-pong and a fresh human message starts a new chain", async () => {
     const { h, ctx, thread } = await group();
     // Always reply to the other peer. This deliberately adversarial behavior is a
-    // framework test of caps, not a production prompt strategy.
+    // framework test of caps, not a production prompt strategy. Each reply differs, so the relay
+    // cap ends the chain rather than the repetition rule (ADR-0005 amendment 5 decision 40).
+    let hop = 0;
     h.provider.onRun(async (req, gw) => {
-      const reply = req.botName === "chief" ? "@alice next" : "@chief next";
+      hop += 1;
+      const reply = req.botName === "chief" ? `@alice next ${hop}` : `@chief next ${hop}`;
       await gw.post("ended", {
         type: "run_ended",
         runId: req.runId,
@@ -539,7 +549,7 @@ describe("ADR-0005 amendment 2 through the Gateway: an unaddressed request gets 
       if (req.botName === "chief" && ++chiefRuns === 1) {
         for (const body of [
           "@alice count item K",
-          "@ bob, and you look up the price. cc @human",
+          "@ bob, and you look up the price. cc @nobody",
           "@everyone status?",
         ]) {
           const res = await gw.post("messages", {
@@ -571,7 +581,7 @@ describe("ADR-0005 amendment 2 through the Gateway: an unaddressed request gets 
         seq: posted[1]?.seq,
         addressed: [],
         everyone: false,
-        unknown: ["human"],
+        unknown: ["nobody"],
         spaced: ["bob"],
       },
       { seq: posted[2]?.seq, addressed: [], everyone: true, unknown: [], spaced: [] },

@@ -148,6 +148,44 @@ describe("threadViewReducer", () => {
     expect(outcomes).toEqual(["run_failed", "run_other"]);
   });
 
+  it("places finished work from elsewhere at the time it ended and work in progress last", () => {
+    const at = (hhmm: string) => `2026-09-29T${hhmm}:00.000Z`;
+    const s = threadViewReducer(EMPTY_THREAD_VIEW, {
+      type: "loaded",
+      messages: [
+        message(1, "human", "yesterday's ask", { ts: at("07:00") }),
+        message(2, "human", "today's ask", { ts: at("09:00") }),
+        message(3, "bot", "today's answer", { ts: at("09:01") }),
+      ],
+      runs: [],
+    });
+    const other = { threadId: "thr_other" as never };
+    const elsewhere = [
+      run({
+        id: "run_task" as never,
+        ...other,
+        status: "succeeded",
+        createdAt: at("07:30"),
+        finishedAt: at("08:00"),
+      }),
+      run({ id: "run_live" as never, ...other, status: "running", createdAt: at("08:30") }),
+      run({
+        id: "run_before" as never,
+        ...other,
+        status: "succeeded",
+        createdAt: at("06:00"),
+        finishedAt: at("06:30"),
+      }),
+    ];
+    const ids = (partial: boolean) =>
+      transcriptTimeline(s, partial, elsewhere).map((item) =>
+        item.kind === "message" ? `msg${item.message.seq}` : item.run.id,
+      );
+    expect(ids(false)).toEqual(["run_before", "msg1", "run_task", "msg2", "msg3", "run_live"]);
+    // A transcript opened mid-history shows no card from before its first loaded message.
+    expect(ids(true)).toEqual(["msg1", "run_task", "msg2", "msg3", "run_live"]);
+  });
+
   it("merges a stale load into what SSE already delivered instead of replacing it", () => {
     // The fetch behind `loaded` left before the bot answered, so it describes the thread as it was.
     let s = threadViewReducer(EMPTY_THREAD_VIEW, {

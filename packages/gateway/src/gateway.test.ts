@@ -108,11 +108,13 @@ describe("one full run (design v0.3 §5)", () => {
     expect(
       h.app.deskmates.ctx.events
         .list(run.id)
+        // Seqs 2 to 4 are the Gateway's own startup timeline marks (ADR-0037).
+        .filter((event) => event.payload.source !== "run_timeline")
         .map((event) => [event.seq, event.kind, event.sidecarSeq]),
     ).toEqual([
       [1, "memory_index", undefined],
-      [2, "tool_call", 1],
-      [3, "log", undefined],
+      [5, "tool_call", 1],
+      [6, "log", undefined],
     ]);
     h.app.deskmates.ctx.config.strategyEvidence = { completionContract: "later-candidate" };
     expect(h.app.deskmates.ctx.runs.mustGet(run.id).config).toMatchObject({
@@ -238,15 +240,17 @@ describe("one full run (design v0.3 §5)", () => {
     // Ledger: the Gateway's pinned-index receipt at start, the sidecar's events, then
     // pricing_missing; usage priced by the Gateway.
     const events = await h.api<{ events: RunEvent[] }>("GET", `/api/runs/${run.id}/events`);
-    expect(events.json.events.map((e) => [e.seq, e.kind])).toEqual([
+    // Startup timeline marks (ADR-0037) are asserted in `scheduler/run-timeline-marks.test.ts`.
+    const ledger = events.json.events.filter((e) => e.payload.source !== "run_timeline");
+    expect(ledger.map((e) => [e.seq, e.kind])).toEqual([
       [1, "memory_index"],
-      [2, "thinking"],
-      [3, "tool_call"],
-      [4, "log"],
-      [5, "log"],
-      [6, "log"],
+      [5, "thinking"],
+      [6, "tool_call"],
       [7, "log"],
-      [8, "pricing_missing"],
+      [8, "log"],
+      [9, "log"],
+      [10, "log"],
+      [11, "pricing_missing"],
     ]);
     const detail = await h.api<{
       run: RunRecord;
@@ -286,7 +290,11 @@ describe("one full run (design v0.3 §5)", () => {
     // SSE saw the human message, every status, every ledger event and the bot's reply, in order.
     await waitFor(() => sse.events.length >= 8, 2000, "sse events");
     sse.close();
-    const kinds = sse.events.map((e) =>
+    // Startup timeline marks (ADR-0037) stream too; the last one lands after the process exits.
+    const streamed = sse.events.filter(
+      (e) => e.type !== "run_event" || e.event.payload.source !== "run_timeline",
+    );
+    const kinds = streamed.map((e) =>
       e.type === "run_status"
         ? `status:${e.run.status}`
         : e.type === "run_event"
@@ -307,7 +315,9 @@ describe("one full run (design v0.3 §5)", () => {
                         ? `task_delivered:${e.task.id}`
                         : e.type === "board"
                           ? `board:${e.workspaceId}`
-                          : `message:${e.message.authorKind}`,
+                          : e.type === "run_reply_preview"
+                            ? `preview:${e.preview.seq}`
+                            : `message:${e.message.authorKind}`,
     );
     expect(kinds).toEqual([
       "message:human",
@@ -864,12 +874,15 @@ describe("failure paths", () => {
       2000,
       "run",
     );
-    const events = h.app.deskmates.ctx.events.list(run.id);
+    // Seqs 2 to 4 are startup timeline marks (ADR-0037), not part of this assertion.
+    const events = h.app.deskmates.ctx.events
+      .list(run.id)
+      .filter((e) => e.payload.source !== "run_timeline");
     expect(events.map((e) => [e.seq, e.kind, e.sidecarSeq])).toEqual([
       [1, "memory_index", undefined],
-      [2, "approval", undefined],
-      [3, "approval", 1],
-      [4, "approval", 2],
+      [5, "approval", undefined],
+      [6, "approval", 1],
+      [7, "approval", 2],
     ]);
     expect(events[1]?.payload).toMatchObject({ phase: "posted", approvalId: "apr-1" });
     expect(events[2]?.payload).toMatchObject({ phase: "requested" });

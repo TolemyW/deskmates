@@ -11,6 +11,16 @@ import zhTW from "./zh-TW.json";
 
 export const contactsMessages = defineMessages({
   owner: "features/contacts/messages",
-  prefixes: ["avatarPicker", "botActivity", "botProfile", "botSchedules", "contacts", "management"],
+  prefixes: [
+    "avatarPicker",
+    "botActivity",
+    "botDiary",
+    "botIdentity",
+    "botProfile",
+    "botSchedules",
+    "contacts",
+    "management",
+    "ruleVersions",
+  ],
   locales: { en, "zh-CN": zhCN, "zh-TW": zhTW, ja, es },
 });

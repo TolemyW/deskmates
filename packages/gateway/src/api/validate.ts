@@ -380,6 +380,12 @@ export function asRunEnded(runId: RunId, raw: unknown): RunEnded {
     ended.systemPromptSha256 = body.systemPromptSha256;
   }
   if (
+    typeof body.systemPromptStaticSha256 === "string" &&
+    /^[0-9a-f]{64}$/.test(body.systemPromptStaticSha256)
+  ) {
+    ended.systemPromptStaticSha256 = body.systemPromptStaticSha256;
+  }
+  if (
     typeof body.maxContextTokens === "number" &&
     Number.isSafeInteger(body.maxContextTokens) &&
     body.maxContextTokens > 0

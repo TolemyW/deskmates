@@ -10,6 +10,7 @@ import type { WorkspaceStore } from "../workspaces/workspaces.js";
 import { ConfirmationStore } from "./confirmations.js";
 import { ConsolidationService } from "./consolidation.js";
 import { MemoryEntryStore } from "./entries.js";
+import { MemoryFreshness } from "./freshness.js";
 import { type IndexScope, pinnedIndexFor } from "./index.js";
 import type { MemoryStores } from "./learned-writes.js";
 import { backfillFactKeys } from "./recency.js";
@@ -31,11 +32,14 @@ export class LearnedMemory {
   readonly confirmations: ConfirmationStore;
   readonly consolidation: ConsolidationService;
   readonly supplied: RunMemorySupply;
+  /** "Needs revalidation" (amendment 4, A26 and A27). */
+  readonly freshness: MemoryFreshness;
 
   constructor(private readonly deps: LearnedMemoryDeps) {
     this.entries = new MemoryEntryStore(deps.db);
     this.confirmations = new ConfirmationStore(deps.db);
     this.supplied = new RunMemorySupply(deps.db);
+    this.freshness = new MemoryFreshness(deps.db, this.entries);
     this.consolidation = new ConsolidationService({
       db: deps.db,
       runs: deps.runs,

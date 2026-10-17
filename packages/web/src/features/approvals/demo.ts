@@ -4,9 +4,13 @@
 
 import {
   APPROVAL_ATTACHMENT_MIME,
+  APPROVAL_EXPIRY_DEFAULT_MINUTES,
+  APPROVAL_MODE_DEFAULT,
   type ApprovalDecision,
   type ApprovalId,
+  type ApprovalMode,
   type ApprovalRule,
+  isApprovalMode,
 } from "@deskmates/contracts";
 import type { GatewayEvent } from "../../api/types.js";
 import type { DemoFeature, DemoRequest, DemoSeedContext } from "../../demo/feature.js";
@@ -16,8 +20,10 @@ import { resumeAfterApproval } from "../../demo/team.js";
 
 export const demo: DemoFeature = { route, seed: { after: "team", run: seed } };
 
-/** The demo's automatic-approval switch per workspace (ADR-0002 amendment 4); off by default. */
-const autoApproval = new Map<string, boolean>();
+/** The demo's approval mode per workspace (ADR-0002 amendment 6); automatic by default. */
+const approvalMode = new Map<string, ApprovalMode>();
+/** The demo's request expiry per workspace (ADR-0002 amendment 3, A7). */
+const approvalExpiry = new Map<string, number>();
 
 function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undefined {
   const { method, path, query: q, body: b } = req;
@@ -45,6 +51,16 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
     const limit = Number(q.get("limit") ?? 25) || 25;
     return ok({ rules: rules.slice(offset, offset + limit), offset, limit, total: rules.length });
   }
+  // ADR-0043 decision 6: a rule is edited in place.
+  // biome-ignore lint/suspicious/noAssignInExpressions: route matching
+  if ((x = m(/^\/api\/approval-rules\/([^/]+)$/)) && method === "PATCH") {
+    const rule = s.rules.find((item) => item.id === decodeURIComponent(x?.[1] ?? ""));
+    if (!rule) return notFound("approval rule");
+    if (b.decision === "allow_always" || b.decision === "deny") rule.decision = b.decision;
+    if (b.matcher && typeof b.matcher === "object")
+      rule.matcher = b.matcher as ApprovalRule["matcher"];
+    return ok({ rule });
+  }
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
   if ((x = m(/^\/api\/approval-rules\/([^/]+)$/)) && method === "DELETE") {
     const i = s.rules.findIndex((rule) => rule.id === decodeURIComponent(x?.[1] ?? ""));
@@ -52,10 +68,13 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
     return ok({ deleted: true });
   }
   if (path === "/api/approvals" && method === "GET") {
-    const status = q.get("status") ?? "pending";
+    const named = q.has("ids") ? new Set((q.get("ids") ?? "").split(",")) : undefined;
+    // A chat names the approvals of its loaded messages; both states unless asked (#113, 26).
+    const status = q.get("status") ?? (named ? "all" : "pending");
     const threadId = q.get("threadId");
     const approvals = [...s.approvals.values()].filter(
       (a) =>
+        (!named || named.has(a.id)) &&
         (status === "all" ||
           (status === "pending" ? a.decision === undefined : a.decision !== undefined)) &&
         (!threadId || a.threadId === threadId),
@@ -68,8 +87,20 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
   if ((x = m(/^\/api\/workspaces\/([^/]+)\/auto-approval$/))) {
     const workspaceId = decodeURIComponent(x[1] ?? "");
-    if (method === "PUT") autoApproval.set(workspaceId, b.enabled === true);
-    return ok({ autoApproval: { workspaceId, enabled: autoApproval.get(workspaceId) ?? false } });
+    if (method === "PUT" && isApprovalMode(b.mode)) approvalMode.set(workspaceId, b.mode);
+    if (method === "PUT" && typeof b.enabled === "boolean")
+      approvalMode.set(workspaceId, b.enabled ? "automatic" : "manual");
+    if (method === "PUT" && typeof b.expiryMinutes === "number")
+      approvalExpiry.set(workspaceId, b.expiryMinutes);
+    const mode = approvalMode.get(workspaceId) ?? APPROVAL_MODE_DEFAULT;
+    return ok({
+      autoApproval: {
+        workspaceId,
+        mode,
+        enabled: mode === "automatic",
+        expiryMinutes: approvalExpiry.get(workspaceId) ?? APPROVAL_EXPIRY_DEFAULT_MINUTES,
+      },
+    });
   }
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
   if ((x = m(/^\/api\/approvals\/([^/]+)\/decide$/))) {

@@ -3,13 +3,16 @@
 // like every other operator route.
 
 import {
+  APPROVAL_MODES,
   type ApprovalId,
+  type ApprovalMode,
   type BotId,
   DeskmatesError,
   type RunId,
   type ThreadId,
   type WorkspaceId,
   decidedByHuman,
+  isApprovalMode,
 } from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
 import { AutoApprovalSettings } from "../approvals/auto-approval.js";
@@ -21,6 +24,7 @@ import { pendingInboxPage } from "./approval-inbox.js";
 import { parseOffsetQuery } from "./pagination.js";
 import { requestTenant } from "./route-policy.js";
 import { requireOwnRun } from "./side-chat-guard.js";
+import { threadApprovalsByIds } from "./thread-approvals.js";
 import {
   asApprovalDecision,
   asRecord,
@@ -45,11 +49,15 @@ export function registerApprovalRoutes(
       botId?: string;
       cursor?: string;
       limit?: string;
+      ids?: string;
     };
   }>("/api/approvals", async (request) => {
+    // A chat asks only for the approvals its loaded messages name (#113 surface 26).
+    if (request.query.ids !== undefined)
+      return threadApprovalsByIds(ctx, request, { ...request.query, ids: request.query.ids });
     const status = request.query.status === "decided" ? "decided" : "pending";
-    // The Attention inbox is paged with a total (#113 surface 23). A thread's approvals stay
-    // bound to its loaded messages (surface 26) and the decided history is not paged yet.
+    // The Attention inbox is paged with a total (#113 surface 23). A thread's pending approvals
+    // are bounded by its parked runs; the decided history is not paged yet.
     if (status === "pending" && !request.query.threadId)
       return pendingInboxPage(ctx, request, request.query);
     return {
@@ -146,23 +154,41 @@ export function registerApprovalRoutes(
     return { run: ctx.runs.mustGet(run.id), approval: result.approval };
   });
 
-  // ADR-0002 amendment 4, B1: the workspace automatic-approval setting. Reading it is a member's;
-  // changing it an Owner's or Admin's (route policy), and every change is audited.
+  // ADR-0002 amendment 6, D1: the workspace approval mode. Reading it is a member's; changing it
+  // an Owner's or Admin's (route policy), and every change is audited.
   app.get<{ Params: { id: string } }>("/api/workspaces/:id/auto-approval", async (request) => ({
     autoApproval: new AutoApprovalSettings(ctx.db).get(request.params.id as WorkspaceId),
   }));
 
   app.put<{ Params: { id: string } }>("/api/workspaces/:id/auto-approval", async (request) => {
     const body = asRecord(request.body);
+    // The legacy boolean of amendment 4 still means automatic or manual.
     const enabled = optionalBoolean(body, "enabled");
-    if (enabled === undefined)
-      throw new DeskmatesError("validation", "enabled must be true or false", { field: "enabled" });
+    if (body.mode !== undefined && !isApprovalMode(body.mode))
+      throw new DeskmatesError("validation", `mode must be one of ${APPROVAL_MODES.join(", ")}`, {
+        field: "mode",
+      });
+    const mode: ApprovalMode | undefined =
+      body.mode ?? (enabled === undefined ? undefined : enabled ? "automatic" : "manual");
+    // ADR-0002 amendment 3, A7: the expiry of an unattended request rides on the same setting.
+    const expiryMinutes = body.expiryMinutes;
+    if (expiryMinutes !== undefined && typeof expiryMinutes !== "number")
+      throw new DeskmatesError("validation", "expiryMinutes must be a number", {
+        field: "expiryMinutes",
+      });
+    if (mode === undefined && expiryMinutes === undefined)
+      throw new DeskmatesError("validation", `mode must be one of ${APPROVAL_MODES.join(", ")}`, {
+        field: "mode",
+      });
     const workspaceId = request.params.id as WorkspaceId;
     ctx.workspaces.mustGet(workspaceId);
     return {
-      autoApproval: new AutoApprovalSettings(ctx.db).set(
+      autoApproval: new AutoApprovalSettings(ctx.db).change(
         workspaceId,
-        enabled,
+        {
+          ...(mode === undefined ? {} : { mode }),
+          ...(expiryMinutes === undefined ? {} : { expiryMinutes }),
+        },
         requestActorId(request, body),
       ),
     };
@@ -197,6 +223,38 @@ export function registerApprovalRoutes(
       createdBy: decidedByHuman(authorId),
     });
     return reply.code(201).send({ rule });
+  });
+
+  // ADR-0043 decision 6: a rule is edited in place, under the same validation as a new one.
+  app.patch<{ Params: { id: string } }>("/api/approval-rules/:id", async (request) => {
+    const rule = ctx.rules.mustGet(request.params.id);
+    const body = asRecord(request.body);
+    if (
+      body.decision !== undefined &&
+      body.decision !== "allow_always" &&
+      body.decision !== "deny"
+    ) {
+      throw new DeskmatesError("validation", "a rule decision is allow_always or deny", {
+        got: body.decision,
+      });
+    }
+    if (body.matcher === undefined && body.decision === undefined)
+      throw new DeskmatesError("validation", "nothing to update: send matcher or decision");
+    const updated = ctx.rules.update(
+      rule.id,
+      {
+        ...(body.matcher === undefined ? {} : { matcher: asRuleMatcher(body.matcher) }),
+        ...(body.decision === undefined
+          ? {}
+          : { decision: body.decision as "allow_always" | "deny" }),
+      },
+      decidedByHuman(requestActorId(request, body)),
+    );
+    if (rule.createdFromApprovalId) {
+      const approval = ctx.approvals.get(rule.createdFromApprovalId);
+      if (approval) ctx.broker.event(approval.runId, { phase: "rule_updated", ruleId: rule.id });
+    }
+    return { rule: updated };
   });
 
   app.delete<{ Params: { id: string } }>("/api/approval-rules/:id", async (request) => {

@@ -16,6 +16,7 @@ import type { DemoFeature, DemoRequest } from "../../demo/feature.js";
 import { type Result, created, notFound, ok } from "../../demo/result.js";
 import type { DemoState } from "../../demo/state.js";
 import { recipients, wake } from "../../demo/team.js";
+import { demoUploadAttachment } from "../files/demo-uploads.js";
 
 export const demo: DemoFeature = { route };
 
@@ -113,7 +114,25 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
     const thread = s.thread(x[1]);
     if (!thread) return notFound("thread");
     if (method === "POST") {
-      const message = s.post(thread, "human", "operator", String(b.body ?? ""));
+      // ADR-0014 A5 decision 42: the person's own completed uploads, by id.
+      const ids = Array.isArray(b.attachments)
+        ? (b.attachments as Array<{ uploadId?: unknown }>)
+        : [];
+      const attachments = ids.map((entry) =>
+        demoUploadAttachment(thread.workspaceId, String(entry.uploadId ?? "")),
+      );
+      if (attachments.some((a) => a === undefined))
+        return {
+          status: 400,
+          json: {
+            code: "validation",
+            message: "Demo: attachments must name your own completed uploads",
+            details: { field: "attachments", reason: "attachment_not_attachable" },
+          },
+        };
+      const message = s.post(thread, "human", "operator", String(b.body ?? ""), {
+        attachments: attachments as NonNullable<(typeof attachments)[number]>[],
+      });
       if (thread.status === "paused") thread.status = "active";
       const runs = wake(s, thread, message, recipients(s, thread, message.body, undefined), 0);
       return created({ message, runs });
@@ -151,6 +170,7 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
 const DEMO_STATE: Readonly<Partial<Record<RunStatus, RoundMemberState>>> = {
   queued: "queued",
   running: "running",
+  stalled: "running",
   waiting_browser: "running",
   waiting_approval: "awaiting_approval",
   waiting_approval_live: "awaiting_approval",

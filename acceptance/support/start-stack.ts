@@ -38,7 +38,7 @@ function groupRoutingFromEnv(): GroupRouting | undefined {
   const value = process.env.DESKMATES_GROUP_ROUTING?.trim();
   if (!value) return undefined;
   if (!isGroupRouting(value)) {
-    throw new Error(`DESKMATES_GROUP_ROUTING must be walk-v1 or owner-v1, got ${value}`);
+    throw new Error(`DESKMATES_GROUP_ROUTING must be walk-v1, owner-v1 or round-v1, got ${value}`);
   }
   return value;
 }
@@ -294,6 +294,7 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
     modelAuthToken: opts.modelAuthToken,
     defaultModel: opts.defaultModel,
     cheapModel: opts.cheapModel,
+    defaultRuntime: "claude-agent-sdk",
     ...(opts.fallbackModel === undefined ? {} : { fallbackModel: opts.fallbackModel }),
     ...(opts.cliSmallFastModel === undefined ? {} : { cliSmallFastModel: opts.cliSmallFastModel }),
     sandboxProvider: "docker",
@@ -308,6 +309,7 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
     ...(groupRouting === undefined ? {} : { groupRouting }),
     // Above the benchmark's 10-minute task limit so a slow model is failed by its oracle, not here.
     runTimeoutSeconds: 900,
+    runStallSeconds: 300,
     workspaceMemoryLimitMb: 4096,
     // Acceptance cases drive triggers themselves; the zone is pinned so a cron case reads the
     // same wall clock wherever it runs.

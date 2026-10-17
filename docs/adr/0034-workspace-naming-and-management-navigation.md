@@ -1,7 +1,7 @@
 # ADR-0034: Workspace names are bounded by weighted width, and 100 workspaces are managed from a paged list
 
 Date: 2026-10-14
-Status: Proposed (decisions 1, 2, 4 and 7 carry owner decisions on issue #117 of 2026-10-13: the 32-unit budget with Han as two, the list layout with 20 per page and a full-page detail, and three User Settings pages. The exact character classes in decision 1, the legacy-name rule in decision 2, the aggregates in decision 5, pin storage in decision 6 and the route addresses in decision 7 are engineering proposals awaiting owner review.)
+Status: Proposed (decisions 1, 2, 4 and 7 carry owner decisions on issue #117 of 2026-10-13: the 32-unit budget with Han as two, the list layout with 20 per page and a full-page detail, and three User Settings pages. On 2026-10-14 the owner accepted the 32-unit bound of decision 1 (about 16 CJK characters), the Admin/Owner-only running-work count of decision 5, unaudited per-person pins in decision 6, and decided decision 9: network, people and archive edit in place on the detail page. The legacy-name rule in decision 2, the last-activity aggregate in decision 5 and the route addresses in decision 7 are engineering proposals awaiting owner review.)
 
 ## Context
 
@@ -27,6 +27,11 @@ The owner's wireframe decisions of 2026-10-13: workspace management lives in Use
 
 8. **The switcher is bounded.** It shows the current workspace, a search box that queries the directory (at most 8 results, the latest answer only), up to 5 pinned and up to 5 recently active workspaces (two directory requests made when the menu opens), then Manage all, Trash and New. It never renders the whole list.
 
+9. **Network, People and Archive edit in place (owner-decided 2026-10-14).** The detail page edits these three sections itself instead of linking to the Computer and People pages, and it never changes the selected workspace to do so. Each reuses an existing route and the Gateway's existing role check; no route or permission is added.
+   - **Network policy.** The section reads the workspace (`GET /api/workspaces/:id`) and shows open internet or the list. An Admin or Owner there (`workspace.configure`) picks open internet or a list, edits the hostnames, and saves through `PATCH /api/workspaces/:id` with `egressAllowlist`. Removing a hostname asks for confirmation first, as the Contacts editor does. Everyone else reads the mode and the list. An archived workspace is read only.
+   - **People.** An Admin or Owner (`people.manage`) gets the People page's own member list, role changes, removal and invitations for this workspace, the same component with the workspace ID passed in, so every call (`GET`/`PATCH /api/members`, `GET`/`POST`/`DELETE /api/invitations`) names it. A Member or Guest sees a note that an Admin manages people.
+   - **Archive.** An Admin or Owner (`workspace.archive`) archives through `POST /api/workspaces/:id/archive` after the same confirmation as the Computer page: what stops, what is kept, how to restore. An archived workspace restores in place through `POST /api/workspaces/:id/restore`. Permanent deletion stays in Trash, behind its typed-name confirmation.
+
 ## Alternatives considered
 
 - **32 graphemes, 16 Han characters, or UTF-8 bytes.** Rejected by the owner (issue #117); bytes punish non-Latin scripts and graphemes do not match how wide the label renders.
@@ -40,7 +45,8 @@ The owner's wireframe decisions of 2026-10-13: workspace management lives in Use
 - A person sees one consistent bound in the create dialog, the rename field and the API error.
 - 100 workspaces are five pages; the switcher stays the same size at any count.
 - The shell still loads the unpaged authorized list once per session for name lookups; bounding that is follow-up work (#113 surface 40 remainder).
-- Running work is hidden from Members and Guests, which is less informative than the wireframe row; the owner may choose a different rule.
+- Running work is hidden from Members and Guests, which is less informative than the wireframe row; the owner kept this rule on 2026-10-14.
+- The Computer and People pages keep their own editors; the detail page is a second place to edit the same settings through the same routes (decision 9).
 
 ## Verification
 
@@ -54,3 +60,4 @@ The owner's wireframe decisions of 2026-10-13: workspace management lives in Use
 | 6 | a pin is visible only to its person, the pinned filter shows it, the operator credential cannot pin | `gateway/src/api/workspace-routes.test.ts` | none |
 | 7 | `#/account`, `#/account/agent-access` and `#/account/workspaces?ws=` parse to the right page | web `features/account/route.test.ts`; web `features/account/account-settings.test.tsx` | none |
 | 8 | the switcher renders at most current, 5 pinned, 5 recent and 8 search results, and drops a late search answer | web `features/workspaces/workspace-switcher.test.tsx` | none |
+| 9 | an Admin saves an allowlist in place (removal asks first) and a Member reads it; an Admin sees the member list with role controls and the invite form for this workspace, a Member a note; an Admin archives after the confirmation and restores an archived workspace in place; the selected workspace never changes | web `features/workspaces/workspace-detail-inline.test.tsx`; Gateway checks unchanged (`workspace-routes.test.ts`, `member-role.test.ts`) | none (visual check at 390 px and both themes not run) |

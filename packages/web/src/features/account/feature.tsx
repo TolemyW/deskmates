@@ -26,6 +26,7 @@ export const feature = defineFeature(routes, {
         route.page === "workspaces" ? (
           <WorkspaceManagement
             api={ctx.api}
+            shell={{ members: ctx.members, session: ctx.session }}
             list={route.list ?? {}}
             {...(route.workspaceId ? { workspaceId: route.workspaceId } : {})}
           />

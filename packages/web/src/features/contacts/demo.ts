@@ -1,5 +1,6 @@
 // Demo routes of Contacts and the bot profile: the bot list, creating a bot, model, schedule,
 // role and avatar edits, SOUL.md and MEMORY.md with version checks, and memory consolidation.
+// Versions, the diary and "Run now" (ADR-0043) are in `demo-bot-editing.ts`.
 
 import {
   type BotAvatar,
@@ -13,6 +14,7 @@ import type { DemoFeature, DemoRequest } from "../../demo/feature.js";
 import { type Result, created, notFound, ok } from "../../demo/result.js";
 import { type DemoState, ignoreCancelled, summary } from "../../demo/state.js";
 import { finishLater } from "../../demo/team.js";
+import { botEditingRoute, recordDemoSave } from "./demo-bot-editing.js";
 
 export const demo: DemoFeature = { route };
 
@@ -125,7 +127,7 @@ function demoRoute(req: DemoRequest, s: DemoState): Result | undefined {
 }
 
 function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undefined {
-  const handled = demoRoute(req, s);
+  const handled = demoRoute(req, s) ?? botEditingRoute(req, s);
   if (handled) return handled;
   const { method, path, query: q, body: b } = req;
   const m = (re: RegExp) => req.match(re);
@@ -133,6 +135,11 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
   if (path === "/api/bots" && method === "GET") {
     const ws = q.get("workspaceId");
     const bots = ws ? s.bots.filter((bot) => bot.workspaceId === ws) : s.bots;
+    // #113 §3.2: a name lookup answers only the named bots.
+    if (q.has("ids")) {
+      const named = new Set((q.get("ids") ?? "").split(","));
+      return ok({ bots: bots.filter((bot) => named.has(bot.id)) });
+    }
     // #113 slice B: with paging parameters, one page by name with server search and the total.
     if (q.has("offset") || q.has("limit") || q.has("q")) {
       const needle = (q.get("q") ?? "").toLowerCase();
@@ -170,6 +177,32 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
     }
     if (Array.isArray(b.cron)) bot.cron = b.cron as BotDefinition["cron"];
     if (typeof b.role === "string") bot.role = b.role;
+    // ADR-0043 decision 1: the fields that were create-time, and the pause flag.
+    if (typeof b.name === "string" && b.name !== bot.name) {
+      if (!/^[\w-]+$/.test(b.name) || s.bots.some((o) => o.id !== bot.id && o.name === b.name))
+        return {
+          status: 400,
+          json: { code: "validation", message: "That name is not free", details: {} },
+        };
+      bot.name = b.name;
+    }
+    if (Array.isArray(b.connectors)) bot.connectors = b.connectors as string[];
+    if (Array.isArray(b.messageAllowlist)) bot.messageAllowlist = b.messageAllowlist as string[];
+    const mutable = bot as {
+      effort?: BotDefinition["effort"] | undefined;
+      thinking?: BotDefinition["thinking"] | undefined;
+      pausedAt?: string | undefined;
+      pausedBy?: string | undefined;
+    };
+    if ("effort" in b) mutable.effort = (b.effort ?? undefined) as BotDefinition["effort"];
+    if ("thinking" in b) mutable.thinking = (b.thinking ?? undefined) as BotDefinition["thinking"];
+    if (b.paused === true && !bot.pausedAt) {
+      mutable.pausedAt = new Date().toISOString();
+      mutable.pausedBy = "human:demo";
+    } else if (b.paused === false) {
+      mutable.pausedAt = undefined;
+      mutable.pausedBy = undefined;
+    }
     if ("avatar" in b) {
       if (isBotAvatar(b.avatar)) bot.avatar = b.avatar;
       else (bot as { avatar?: BotAvatar | undefined }).avatar = undefined;
@@ -193,6 +226,7 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
       };
       s.souls.set(bot.id, next);
       bot.soulVersion += 1;
+      recordDemoSave(s, bot.id, "soul", next.body);
       return ok({ soul: next });
     }
     return ok({ soul });
@@ -217,6 +251,7 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
         version: `n${Number(note.version.slice(1)) + 1}`,
       };
       s.notes.set(bot.id, next);
+      recordDemoSave(s, bot.id, "memory", next.body);
       return ok({ memory: next });
     }
     return ok({ memory: note });

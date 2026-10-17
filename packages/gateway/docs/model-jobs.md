@@ -1,6 +1,6 @@
-# Model jobs: vision probes and SOUL proposals
+# Model jobs: vision probes, round triage and SOUL proposals
 
-ADR-0023 amendment 1; issues #87 and #77. Both are short runs (row first) of a bot's background
+ADR-0023 amendment 1; issues #87, #77 and #12. All are short runs (row first) of a bot's background
 lane with no tools, no session and one turn. The sidecar relays the model's text; the Gateway
 grades or applies it. The Gateway never calls a model.
 
@@ -26,6 +26,19 @@ grades or applies it. The Gateway never calls a model.
   notice (`packages/sidecar/src/vision-withhold.ts`). The capabilities route returns each
   model's `visionPolicy` and the `botIds` that use it.
 
+## Round triage
+
+- ADR-0005 amendment 6 (proposed), `DESKMATES_GROUP_ROUTING=round-v1` only. A human request to a
+  group queues a `round_triage` run of the thread's owner (or first member) on the cheap model,
+  in the thread, on the background lane; it never waits for that lane (`scheduler.ts`).
+- The job reads the roster (name, role, owner mark), whether the request said `@everyone`, and the
+  request (at most 8,000 characters) wrapped as untrusted data, and answers one JSON object:
+  `{"assignments":[{"member","task"}],"closer"}`.
+- `RoundTriage.complete` keeps current members only, drops repeats and empty tasks, bounds a task to
+  one line of 200 characters and replaces an invalid closer (the assigned owner, else the first
+  assignee). No assignment left ends the job `failed` with a `{source: "round_triage"}` event; the
+  router then falls back to `owner-v1` routing. See `docs/group-routing.md`.
+
 ## SOUL proposals
 
 - `POST /api/bots/:id/soul-proposals` (`{ instruction }`, Admin) queues a cheap-model job against
@@ -34,8 +47,9 @@ grades or applies it. The Gateway never calls a model.
 - An empty SOUL gets a whole draft (`mode: create`); otherwise the model returns find-and-replace
   edits that the Gateway applies to the stored base, so untouched text is byte-identical.
 - `GET /api/bots/:id/soul-proposals/:proposalId` (Member) reads it;
-  `POST .../apply` (Admin) writes it through the canonical SOUL write: refused with
-  `invalid_transition` when SOUL changed since the base or a run is parked, `lane_busy` while the
-  bot has a live run; idempotent once applied. `POST .../discard` ends it.
+  `POST .../apply` (Admin) writes it through the canonical SOUL write, a new numbered version:
+  refused with `invalid_transition` when SOUL changed since the base; a live or parked run of the
+  bot does not refuse it, the answer carries `appliesFromNextRun` (ADR-0043 decision 3);
+  idempotent once applied. `POST .../discard` ends it.
 - `POST /api/bots` accepts `welcome: false` to create a bot unstarted for a drafted first SOUL;
   `POST /api/bots/:id/welcome` starts it after the apply (#89 ordering).

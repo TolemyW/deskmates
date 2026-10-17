@@ -1,0 +1,22 @@
+{
+  "workdir.cancel": "Cancelar",
+  "workdir.convention": "Con un directorio propio por bot, un bot puede leer el directorio de un compañero pero no escribir en él, y /work/uploads es de solo lectura para los bots. Esto evita errores; no es una barrera de seguridad. El trabajo que deba mantenerse aparte va en otro espacio de trabajo.",
+  "workdir.edit": "Editar directorios de trabajo",
+  "workdir.effective": "{value} · {source}",
+  "workdir.frozen": "Las ejecuciones ya iniciadas conservan la configuración con la que empezaron.",
+  "workdir.inherit": "Valor del servidor ({mode})",
+  "workdir.intro": "Dónde empiezan a trabajar los bots de este espacio de trabajo: cada uno en su propio directorio (lo predeterminado) o todos juntos en el /work compartido.",
+  "workdir.laneNoticeLabel": "Avisar a una ejecución cuando el mismo bot ya está ocupado en su otro carril",
+  "workdir.loading": "Cargando directorios de trabajo…",
+  "workdir.mode.per-bot": "Directorio propio por bot (/work/bots/…)",
+  "workdir.mode.shared": "/work compartido",
+  "workdir.modeLabel": "Directorio de inicio",
+  "workdir.off": "Desactivado",
+  "workdir.on": "Activado",
+  "workdir.perBotHelp": "Con un directorio propio por bot, cada bot clona su propia copia del código con el que trabaja y guarda allí sus entregables, que sus compañeros pueden leer. Con el /work compartido, todos los bots pueden escribir en cualquier sitio salvo en /work/uploads.",
+  "workdir.roleNote": "cambiar los directorios de trabajo",
+  "workdir.save": "Guardar directorios de trabajo",
+  "workdir.source.gateway": "valor del servidor",
+  "workdir.source.workspace": "ajuste del espacio de trabajo",
+  "workdir.title": "Directorios de trabajo"
+}

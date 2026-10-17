@@ -27,6 +27,8 @@ export function triggerLabel(kind: RunTriggerKind): string {
       return t("botActivity.trigger.webhook");
     case "approval":
       return t("botActivity.trigger.approval");
+    case "manual":
+      return t("botActivity.trigger.manual");
     default:
       return String(kind).replaceAll("_", " ");
   }

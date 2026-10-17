@@ -13,8 +13,10 @@ const RULES = [
 const CASES: GoldenCases<NetworkApi> = {
   createNetworkProfile: (a) => a.createNetworkProfile({ name: "Lab", rules: RULES }),
   deleteNetworkProfile: (a) => a.deleteNetworkProfile("netp/1"),
+  getNetworkOverlaps: (a) => a.getNetworkOverlaps(),
   getWorkspaceNetwork: (a) => a.getWorkspaceNetwork(WS),
   listNetworkProfiles: (a) => a.listNetworkProfiles(),
+  preflightWorkspaceNetwork: (a) => a.preflightWorkspaceNetwork(WS, "http://10.20.30.24:23001/"),
   replaceNetworkProfile: (a) =>
     a.replaceNetworkProfile(
       "netp/1",
@@ -23,6 +25,7 @@ const CASES: GoldenCases<NetworkApi> = {
     ),
   setWorkspaceNetworkProfiles: (a) =>
     a.setWorkspaceNetworkProfiles(WS, [{ profileId: "netp_1", expiresAt: "2026-10-20T00:00:00Z" }]),
+  setWorkspaceNetworkSettings: (a) => a.setWorkspaceNetworkSettings(WS, false),
 };
 
 describe("network API wire golden", () => {

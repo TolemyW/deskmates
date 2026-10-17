@@ -26,6 +26,9 @@ export type DeskmatesErrorCode =
   // The model proxy refused a request whose body names a model the run was not started on
   // (ADR-0023 decision 1). Final: the proxy sends `x-should-retry: false` with it.
   | "model_not_selected"
+  // The model proxy has no upstream for the request's model (ADR-0039 decision 2): 503, final
+  // (`x-should-retry: false`), never forwarded to any other upstream.
+  | "model_upstream_missing"
   // A request the policy would allow but whose content exceeds a configured size cap, e.g. a
   // workspace file larger than the download limit (ADR-0014 decision 2).
   | "payload_too_large"
@@ -53,7 +56,10 @@ export type DeskmatesErrorCode =
   | "channel_thread_read_only"
   // The workspace's disk is full or over its filesystem quota while writing an upload; the
   // partial upload is kept consistent and can resume (ADR-0014 amendment A5 decision 30).
-  | "storage_exhausted";
+  | "storage_exhausted"
+  // The look/OCR or speech service failed, timed out or answered something unreadable; the
+  // operation proxy never retries (ADR-0040 decision 1). `details.reason` says which.
+  | "operation_unavailable";
 
 export class DeskmatesError extends Error {
   readonly code: DeskmatesErrorCode;
@@ -92,6 +98,7 @@ const DESKMATES_ERROR_CODES = [
   "validation",
   "forbidden",
   "model_not_selected",
+  "model_upstream_missing",
   "payload_too_large",
   "invitation_unusable",
   "memory_rule_refused",
@@ -108,6 +115,7 @@ const DESKMATES_ERROR_CODES = [
   "integration_protocol",
   "channel_thread_read_only",
   "storage_exhausted",
+  "operation_unavailable",
 ] as const satisfies readonly DeskmatesErrorCode[];
 
 type MissingErrorCode = Exclude<DeskmatesErrorCode, (typeof DESKMATES_ERROR_CODES)[number]>;

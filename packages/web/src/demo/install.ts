@@ -298,6 +298,17 @@ export function installMockGateway(): MockGateway {
     if (!path.startsWith("/api/")) return realFetch(input, init);
     const result = await gateway.handle(method, path, body);
     if (result.blob) {
+      // The Gateway's file route answers a byte range (ADR-0014 decision 17); previews need it.
+      const range = /^bytes=(\d+)-(\d+)$/.exec(new Headers(init?.headers).get("range") ?? "");
+      if (range && result.status === 200) {
+        const size = result.blob.size;
+        const start = Math.min(Number(range[1]), size);
+        const end = Math.min(Number(range[2]), size - 1);
+        return new Response(result.blob.slice(start, end + 1), {
+          status: 206,
+          headers: { "content-range": `bytes ${start}-${Math.max(start, end)}/${size}` },
+        });
+      }
       return new Response(result.blob, { status: result.status });
     }
     return new Response(JSON.stringify(result.json), {

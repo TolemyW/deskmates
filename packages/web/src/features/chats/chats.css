@@ -208,6 +208,7 @@
 }
 /* ADR-0023 amendment 2: a member bot cannot see images (vision-notice.tsx). */
 .vision-notice {
+  display: block;
   margin: 0 0 8px;
   padding: 6px 10px;
   border-radius: 8px;
@@ -249,10 +250,6 @@
 .composer-footer .mention-preview {
   padding: 0;
   margin: 0;
-}
-/* Clear space between the composer's top divider and the Stop controls (#111). */
-.chat-run-stop {
-  margin-top: 12px;
 }
 .mention-menu {
   bottom: calc(100% + 16px);
@@ -451,36 +448,20 @@
 .composer-box:focus-within {
   border-color: var(--focus);
 }
-.private-chat-activity {
+/* The bot's work elsewhere, in the transcript at the time it ended (ADR-0033 card). */
+.message.elsewhere-activity {
   width: 100%;
-  max-width: 760px;
-  margin: 20px auto;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 4px;
 }
-.private-chat-activity summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  list-style: none;
-  cursor: pointer;
-  min-height: 44px;
+.elsewhere-activity-source {
+  margin: 0;
+  text-align: center;
 }
-.private-chat-activity summary::-webkit-details-marker {
-  display: none;
-}
-.private-chat-activity summary > svg {
-  flex-shrink: 0;
-  transform: rotate(-90deg);
-}
-.private-chat-activity details[open] > summary > svg {
-  transform: none;
-}
-.private-chat-activity summary:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: var(--app-radius-sm);
-}
-.private-chat-activity .incoming-handoff {
-  margin: 8px 0;
+.elsewhere-activity .activity-card {
+  width: 100%;
+  max-width: 70ch;
 }
 .incoming-handoff-heading strong {
   font-size: var(--app-text-sm);
@@ -978,7 +959,8 @@
     color: var(--info-text);
   }
   .message.approval-echo,
-  .message.run-outcome {
+  .message.run-outcome,
+  .message.elsewhere-activity {
     grid-template-columns: minmax(0, 1fr);
     max-width: 100%;
     justify-items: center;
@@ -1110,24 +1092,143 @@
     font-size: var(--app-text-xs);
     color: var(--app-text-3);
   }
-  /* Stop in an open chat (issue #76): one control per unfinished run, wrapping on narrow screens. */
-  .chat-run-stop {
-    margin: 0 24px 8px;
-    padding: 0;
-    border: 0;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
+  /* Unfinished work by bot (issue #126): one compact row per bot; the runs and their Stop
+     controls (issue #76) open beneath it. Rows wrap at 390 px instead of overflowing. */
+  .chat-run-status {
+    list-style: none;
+    display: grid;
     gap: 6px;
-    font-size: var(--app-text-xs);
+    min-width: 0;
+    font-size: var(--app-text-sm);
   }
-  .chat-run-stop-actions {
+  .chat-run-bots,
+  .chat-run-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+  .typing.chat-run-bot {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+  .chat-run-bot-summary {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    min-width: 0;
+  }
+  .chat-run-bot-icon {
+    display: inline-flex;
+    padding: 6px 10px;
+    border-radius: 4px 12px 12px 12px;
+    background: var(--bot-bubble);
+    color: var(--app-text-3);
+  }
+  .chat-run-bot-text {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .chat-run-bot[data-state="stalled"] .chat-run-bot-icon {
+    background: var(--app-warning-soft);
+    color: var(--warning-text);
+  }
+  .chat-run-bot-extra {
+    font-size: var(--app-text-xs);
+  }
+  .chat-run-bot-activity {
+    font-variant-numeric: tabular-nums;
+  }
+  .chat-run-bot-extra::before {
+    content: "·";
+    margin-right: 8px;
+  }
+  .chat-run-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 32px;
+    padding: 2px 10px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-full);
+    background: var(--app-surface);
+    color: var(--app-text-2);
+    font: inherit;
+    font-size: var(--app-text-xs);
+    cursor: pointer;
+  }
+  .chat-run-toggle:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+  .chat-run-toggle svg {
+    transition: transform 0.15s ease;
+  }
+  .chat-run-toggle[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+  }
+  .chat-run-details {
+    margin-left: 42px;
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+  .chat-run-details[hidden] {
+    display: none;
+  }
+  .chat-run-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-sm);
+    background: var(--app-surface);
+    color: var(--text);
+  }
+  .chat-run-item-facts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    min-width: 0;
+  }
+  .chat-run-item-context {
+    grid-column: 1;
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .chat-run-item-actions {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
     gap: 8px;
   }
-  .chat-run-stop-actions > button {
-    max-width: 100%;
+  @media (max-width: 480px) {
+    .chat-run-details {
+      margin-left: 0;
+    }
+    .chat-run-item {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .chat-run-item-actions {
+      grid-column: 1;
+      grid-row: auto;
+      justify-content: space-between;
+    }
   }
   .chat-run-stop-scope {
     margin-top: 12px;
@@ -1661,4 +1762,165 @@
     background: var(--app-surface-hover);
     font-weight: 600;
   }
+  /* A triaged round as one card (ADR-0005 amendment 6, decision 51; round-v1 only). */
+  .round-card {
+    border-bottom: 1px solid var(--app-border);
+    padding: 6px 16px 8px;
+    font-size: var(--app-text-sm);
+    overflow-wrap: anywhere;
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+  .round-card-assignments {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .round-card-assignments .round-member {
+    border-radius: var(--app-radius-sm);
+    align-self: flex-start;
+    max-width: 100%;
+  }
+  .round-card-task {
+    color: var(--app-text-2);
+  }
+  .round-card-closer,
+  .round-card-reason {
+    margin: 4px 0 0;
+  }
+  .round-card-synthesis {
+    margin-top: 6px;
+    white-space: pre-wrap;
+  }
+  .round-card-synthesis p {
+    margin: 0 0 4px;
+  }
+  .round-card-replies {
+    margin-top: 4px;
+    font-size: var(--app-text-xs);
+  }
+  .round-card-replies ul {
+    margin: 4px 0 0;
+    padding-left: 16px;
+    white-space: pre-wrap;
+  }
+  /* ADR-0037: a provisional, streamed reply; the final message replaces it. */
+  .transcript .reply-preview .body {
+    white-space: pre-wrap;
+    opacity: 0.85;
+  }
+}
+/* Composer attachments and message attachment cards (ADR-0014 A5 decisions 41 and 42). */
+.composer-chips {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.composer-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(280px, 100%);
+  padding: 6px 8px 6px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: var(--surface);
+  font-size: var(--app-text-sm);
+}
+.composer-chip > svg {
+  flex-shrink: 0;
+  color: var(--app-text-3);
+}
+.composer-chip.failed {
+  border-color: var(--danger);
+}
+.composer-chip-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+.composer-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.composer-chip-meta {
+  font-size: var(--app-text-xs);
+  overflow-wrap: anywhere;
+}
+.composer-chip.failed .composer-chip-meta {
+  color: var(--danger);
+}
+.composer-chip progress {
+  width: 100%;
+  height: 4px;
+}
+.composer-chip-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  min-width: 28px;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: none 0 0;
+  color: var(--app-text-3);
+  cursor: pointer;
+}
+.composer-chip-action:hover {
+  background: var(--app-surface);
+  color: var(--text);
+}
+.chat-drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed var(--primary-text);
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-surface) 88%, transparent);
+  color: var(--primary-text);
+  font-weight: 600;
+  pointer-events: none;
+}
+.attachment-cards {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.attachment-cards > li {
+  flex: 0 1 300px;
+  min-width: 0;
+}
+.attachment-cards .workspace-file-card {
+  margin: 0;
+  flex-wrap: nowrap;
+}
+.attachment-cards .workspace-file-card .workspace-file-label strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The attach button's badge for a member that cannot see images (vision-notice.tsx). */
+.vision-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+  color: var(--warning-text);
 }

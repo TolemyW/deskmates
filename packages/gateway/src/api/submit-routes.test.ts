@@ -91,6 +91,8 @@ async function settled(runId: string): Promise<RunRecord> {
     3000,
     "run end",
   );
+  // The attempt's process exit is recorded after its end (ADR-0037 `attempt_closed`).
+  await h.app.deskmates.scheduler.drain();
   return runs.mustGet(runId as RunId);
 }
 

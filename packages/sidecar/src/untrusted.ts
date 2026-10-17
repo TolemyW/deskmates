@@ -73,6 +73,15 @@ export function wrapMemoryContent(text: string): string {
   return `${UNTRUSTED_MEMORY_MARK}\n${escapeEntities(text)}\n</untrusted>`;
 }
 
+/**
+ * A look/OCR description or a transcript (ADR-0040 decision 7): text a service read out of an
+ * image, a page or audio the bot was handed. Converting modality never raises trust, so it is
+ * entity-escaped like page text.
+ */
+export function wrapOperationContent(operation: "look" | "asr", text: string): string {
+  return `<untrusted source="operation:${operation}">\n${escapeEntities(text)}\n</untrusted>`;
+}
+
 /** Approved knowledge is reference data, not a new instruction channel. */
 export function wrapKnowledgeContent(text: string): string {
   return `<untrusted source="knowledge">\n${escapeEntities(text)}\n</untrusted>`;

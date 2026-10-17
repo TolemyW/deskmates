@@ -116,6 +116,7 @@ Based on ADR-0005. Wherever the design leaves behavior undecided, copy Grok Bot'
 |---|---|---|
 | C46 | M3 is closed under the owner-revised scope; M4 holds the deferred acceptance gates. ADR-0021 Task management is merged on main `6bf09f1`. | Dated scope/CI receipts are recorded in [M4 status](m4-status-2026-10-04.md); implementation does not imply runtime/model/statistical acceptance. |
 | C47 | ADR-0001's verification/status check is executable and matches explicit decision IDs, including amendments, rather than counting rows. | Grouped rows were legitimate, while row counts could hide missing coverage; acceptance proof still requires its actual evidence. |
+| C48 | [ADR-0045](../adr/0045-workspace-credential-vault.md) proposes a workspace Vault with credential references and tool-mediated browser fill / bounded HTTP token use. The owner selected mediated use on 2026-10-13; the detailed contract is Proposed and unimplemented. | Extends §3.8 on acceptance with encrypted host storage for user-entered browser credentials; preserves shared-workspace recoverability and existing connector/OAuth credential paths. |
 
 ## 1. Goals and non-goals
 

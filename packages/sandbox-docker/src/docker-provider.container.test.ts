@@ -15,6 +15,7 @@ import {
   MANAGED_LABEL,
   WORKSPACE_LABEL,
   containerName,
+  networkName,
   proxyName,
 } from "./docker-provider.js";
 import { ENV_FILE_PATH, renderEnvFile } from "./env-file.js";
@@ -235,6 +236,40 @@ describe.skipIf(!available)("DockerProvider (T2, real Docker, alpine)", () => {
     expect(found?.providerRef).toBe(handle.providerRef);
     const r = await provider.exec(handle, { cmd: ["echo", "alive"] });
     expect(r.stdout).toBe("alive\n");
+  }, 30_000);
+
+  it("verifyTopology and attach both refuse a network added by hand (ADR-0027 amendment 2)", async () => {
+    await expect(provider.verifyTopology(handle)).resolves.toBeUndefined();
+    const own = (await provider.networkSubnets()).filter(
+      (s) => s.name === networkName(workspaceId),
+    );
+    expect(own).toHaveLength(1);
+    // An explicit private /24 so the check never draws from the daemon's address pools.
+    const extra = `t2-extra-${suffix}`;
+    const subnet = `10.231.${Math.floor(Math.random() * 250)}.0/24`;
+    const made = await provider.client.request("POST", "/networks/create", {
+      Name: extra,
+      Internal: true,
+      IPAM: { Config: [{ Subnet: subnet }] },
+    });
+    expect(made.status, made.body).toBe(201);
+    try {
+      const joined = await provider.client.request("POST", `/networks/${extra}/connect`, {
+        Container: handle.providerRef,
+      });
+      expect(joined.status, joined.body).toBe(200);
+      expect(await provider.networkSubnets()).toContainEqual({ name: extra, cidr: subnet });
+      await expect(provider.verifyTopology(handle)).rejects.toThrow("mismatched network");
+      const fresh = new DockerProvider({ containerCommand: ALPINE_COMMAND });
+      await expect(fresh.attach(workspaceId)).rejects.toThrow("mismatched network");
+    } finally {
+      await provider.client.request("POST", `/networks/${extra}/disconnect`, {
+        Container: handle.providerRef,
+        Force: true,
+      });
+      await provider.client.request("DELETE", `/networks/${extra}`);
+    }
+    await expect(provider.verifyTopology(handle)).resolves.toBeUndefined();
   }, 30_000);
 
   it("create: refuses a second container for the same workspace", async () => {

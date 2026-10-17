@@ -99,7 +99,8 @@ describe("RunScreen", () => {
     render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
 
     const list = await screen.findByLabelText("Run events");
-    await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(9));
+    // Issue #9: the tool call and its result are one row.
+    await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(8));
     const descending = within(list).getAllByRole("listitem");
     const sequences = descending.map((row) =>
       Number(row.querySelector(".seq")?.textContent?.slice(1)),
@@ -110,7 +111,6 @@ describe("RunScreen", () => {
     expect(rows.map((r) => r.querySelector(".seq")?.textContent)).toEqual([
       "#1",
       "#2",
-      "#3",
       "#4",
       "#5",
       "#6",
@@ -121,7 +121,6 @@ describe("RunScreen", () => {
     expect(rows.map((r) => r.querySelector(".kind")?.textContent)).toEqual([
       "thinking",
       "tool_call",
-      "tool_result",
       "screenshot",
       "approval",
       "takeover",
@@ -130,7 +129,7 @@ describe("RunScreen", () => {
       "log",
     ]);
 
-    fireEvent.click(screen.getByText("Details and usage"));
+    fireEvent.click(screen.getByText("Details"));
     // Header facts.
     expect(screen.getByText("succeeded").className).toContain("status");
     expect(screen.getByText("interactive")).toBeTruthy();
@@ -159,16 +158,22 @@ describe("RunScreen", () => {
     const thinking = rows[0]?.querySelector("details");
     expect(thinking?.open).toBe(false);
     expect(thinking?.textContent).toContain("let me look");
-    expect(rows[1]?.textContent).toContain("browser_navigate");
-    expect(rows[1]?.querySelector("details")?.open).toBe(false);
-    expect(rows[3]?.querySelector("img")?.getAttribute("src")).toBe(PNG);
-    expect(rows[3]?.textContent).toContain("console");
-    expect(rows[4]?.textContent).toContain("decided · browser_click · deny");
+    expect(rows[1]?.querySelector(".event-summary")?.textContent).toBe(
+      "browser_navigate · L0 · 0 ms",
+    );
+    expect([...(rows[1]?.querySelectorAll("details") ?? [])].map((d) => d.open)).toEqual([
+      false,
+      false,
+    ]);
+    expect(rows[1]?.textContent).toContain("result (#3)");
+    expect(rows[2]?.querySelector("img")?.getAttribute("src")).toBe(PNG);
+    expect(rows[2]?.textContent).toContain("console");
+    expect(rows[3]?.textContent).toContain("decided · browser_click · deny");
     // A takeover that parked a browser call shows the wait message the hook returned.
-    expect(rows[5]?.textContent).toContain("human holds the browser");
-    expect(rows[6]?.textContent).toContain("turn_budget");
-    expect(rows[7]?.textContent).toContain("some-model has no price");
-    expect(rows[8]?.textContent).toContain("all green");
+    expect(rows[4]?.textContent).toContain("human holds the browser");
+    expect(rows[5]?.textContent).toContain("turn_budget");
+    expect(rows[6]?.textContent).toContain("some-model has no price");
+    expect(rows[7]?.textContent).toContain("all green");
   });
 
   it("labels a takeover ledger event with its phase", async () => {
@@ -215,7 +220,7 @@ describe("RunScreen", () => {
     expect(notice.textContent).toContain("(deadline)");
   });
 
-  it("hides timing diagnostics by default and reveals every raw event on request", async () => {
+  it("hides diagnostic log rows by default and reveals every raw event on request", async () => {
     const { fetch } = fakeFetch({
       "GET /api/runs/run_1": { run: run({ status: "succeeded" }), usage: [] },
       "GET /api/runs/run_1/events": {
@@ -223,20 +228,24 @@ describe("RunScreen", () => {
           runEvent(1, "log", { source: "phase_timing", phase: "model_request", edge: "start" }),
           runEvent(2, "log", { source: "assistant", text: "finished" }),
           runEvent(3, "log", { source: "phase_timing", phase: "model_request", edge: "end" }),
+          runEvent(4, "log", { source: "resource_observation", version: 1, memoryMb: 512 }),
+          runEvent(5, "log", { source: "sidecar", level: "error", error: "boom" }),
+          runEvent(6, "log", { source: "stall", op: "stalled", idleMs: 300000, stallSeconds: 300 }),
         ],
       },
     });
     render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
 
     const list = await screen.findByLabelText("Run events");
-    await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(1));
-    expect(screen.getByText("(1 visible of 3 total)")).toBeTruthy();
-    const toggle = screen.getByRole("checkbox", { name: "Show timing diagnostics (2)" });
+    await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(3));
+    expect(screen.getByText("(3 visible of 6 total)")).toBeTruthy();
+    expect(within(list).getByText("no progress for 5 min 0 s: marked stalled")).toBeTruthy();
+    const toggle = screen.getByRole("checkbox", { name: "Show diagnostic log rows (3)" });
     expect((toggle as HTMLInputElement).checked).toBe(false);
 
     fireEvent.click(toggle);
-    expect(within(list).getAllByRole("listitem")).toHaveLength(3);
-    expect(screen.getByText("(3 visible of 3 total)")).toBeTruthy();
+    expect(within(list).getAllByRole("listitem")).toHaveLength(6);
+    expect(screen.getByText("(6)")).toBeTruthy();
   });
 
   it("appends events live from SSE and refetches usage when the run ends", async () => {
@@ -251,7 +260,7 @@ describe("RunScreen", () => {
       "GET /api/runs/run_1/events": { events: [runEvent(1, "log", { text: "start" })] },
     });
     render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
-    await screen.findByText("start");
+    await screen.findAllByText("start");
     expect(screen.getByText("running").className).toContain("status");
     expect(screen.getByText(/No usage recorded yet/)).toBeTruthy();
     await waitFor(() => expect(FakeEventSource.last.url).toBe(`/api/events?threadId=${THREAD_ID}`));
@@ -273,7 +282,7 @@ describe("RunScreen", () => {
       threadId: THREAD_ID,
       event: { ...runEvent(99, "log", { text: "other" }), runId: "run_other" as typeof RUN_ID },
     });
-    await screen.findByText("third");
+    await screen.findAllByText("third");
     const list = screen.getByLabelText("Run events");
     expect(
       within(list)
@@ -319,7 +328,7 @@ describe("RunScreen", () => {
     // Always the pre-change row: the response left the Gateway before the run finished.
     releaseRun({ run: run({ status: "running" }), usage: [] });
 
-    await screen.findByText("start");
+    await screen.findAllByText("start");
     expect(subscribedAtFetch).toBe(true);
     // The status that arrived first is kept; the stale row does not roll it back to running.
     expect(screen.getByText("succeeded").className).toContain("status");
@@ -338,7 +347,7 @@ describe("RunScreen", () => {
       },
     });
     render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
-    await screen.findByText("start");
+    await screen.findAllByText("start");
 
     // The browser drops the stream and gets it back. Frames sent meanwhile are never replayed.
     // The stream is opened by an effect React may flush after the fetch answered, so wait for it.
@@ -346,7 +355,7 @@ describe("RunScreen", () => {
     es.drop();
     es.open();
 
-    await screen.findByText("missed while down");
+    await screen.findAllByText("missed while down");
     expect(calls.map((c) => c.path)).toContain("/api/runs/run_1/events?afterSeq=1");
     const list = screen.getByLabelText("Run events");
     expect(
@@ -379,7 +388,7 @@ describe("RunScreen", () => {
     es.emit({ type: "run_status", threadId: THREAD_ID, run: completed });
     await screen.findByText("late-priced-model");
     releaseFirst({ run: run({ status: "running" }), usage: [] });
-    await screen.findByText("initial snapshot event");
+    await screen.findAllByText("initial snapshot event");
     expect(screen.getByText("succeeded").className).toContain("status");
     expect(screen.getByText("late-priced-model")).toBeTruthy();
     expect(screen.queryByText("No usage recorded.")).toBeNull();
@@ -405,17 +414,18 @@ describe("RunScreen", () => {
     const api = createApiClient({ fetch });
     const view = render(<RunScreen runId={RUN_ID} api={api} />);
 
-    expect(screen.getByText(RUN_ID)).toBeTruthy();
+    const screenOf = (id: string) => view.container.querySelector(`[data-run-id="${id}"]`);
+    expect(screenOf(RUN_ID)).toBeTruthy();
     view.rerender(<RunScreen runId={secondId} api={api} />);
-    expect(screen.queryByText("from A")).toBeNull();
-    expect(screen.getByText(secondId)).toBeTruthy();
-    await screen.findByText("from B");
+    expect(screen.queryAllByText("from A")).toEqual([]);
+    expect(screenOf(secondId)).toBeTruthy();
+    await screen.findAllByText("from B");
     expect(screen.getByText("B failed")).toBeTruthy();
 
     resolveFirst?.({ run: run({ status: "succeeded" }), usage: [] });
     await Promise.resolve();
-    expect(screen.queryByText("from A")).toBeNull();
-    expect(screen.getByText(secondId)).toBeTruthy();
+    expect(screen.queryAllByText("from A")).toEqual([]);
+    expect(screenOf(secondId)).toBeTruthy();
   });
 
   it("cancels a live run from the header and shows the cancelled status", async () => {

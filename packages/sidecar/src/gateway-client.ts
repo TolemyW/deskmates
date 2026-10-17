@@ -23,10 +23,14 @@
 
 import { randomUUID } from "node:crypto";
 import {
+  type AppPublishRequest,
+  type AppPublishResponse,
   type ApprovalDecideRequest,
   type ApprovalId,
   type ApprovalRequest,
   type ApprovalResponse,
+  type AsrOperationRequest,
+  type AsrOperationResponse,
   type BrowserLockRequest,
   type BrowserLockResponse,
   type BrowserOriginRequest,
@@ -46,10 +50,13 @@ import {
   type KnowledgeDocument,
   type KnowledgeHit,
   type KnowledgeProposal,
+  type LookOperationRequest,
+  type LookOperationResponse,
   type MemorySearchHit,
   type PhaseTimingSample,
   type PostMessageRequest,
   type PostedMessageRouting,
+  type ReplyPreviewRequest,
   type RunEnded,
   type RunId,
   type SidecarEvent,
@@ -74,6 +81,11 @@ export const GATEWAY_TIMEOUT_MS = 10_000;
  * own 25 s deadline, so the sidecar waits a little longer and hears the typed error instead.
  */
 export const CONNECTOR_TIMEOUT_MS = 30_000;
+
+/** The Gateway waits up to 120 s for one look call (ADR-0040); the sidecar a little longer. */
+export const LOOK_OPERATION_TIMEOUT_MS = 130_000;
+/** The Gateway waits up to 300 s for one transcription (ADR-0040). */
+export const ASR_OPERATION_TIMEOUT_MS = 310_000;
 
 export interface GatewayClientOptions {
   /** Per-request timeout; tests shorten it. */
@@ -220,6 +232,33 @@ export class GatewayClient {
     );
   }
 
+  /** `app_publish` (ADR-0035 decision 1). The Gateway binds workspace, bot and run itself. */
+  async publishApp(req: AppPublishRequest): Promise<AppPublishResponse> {
+    return this.gatewayCall<AppPublishResponse>("POST", "/app-shares", req, "sandbox_unavailable");
+  }
+
+  /** `image_describe` (ADR-0040): one image or rendered page; the Gateway picks the service. */
+  async look(req: LookOperationRequest): Promise<LookOperationResponse> {
+    return this.gatewayCall<LookOperationResponse>(
+      "POST",
+      "/operations/look",
+      req,
+      "operation_unavailable",
+      LOOK_OPERATION_TIMEOUT_MS,
+    );
+  }
+
+  /** `audio_transcribe` (ADR-0040): one audio file. */
+  async transcribe(req: AsrOperationRequest): Promise<AsrOperationResponse> {
+    return this.gatewayCall<AsrOperationResponse>(
+      "POST",
+      "/operations/asr",
+      req,
+      "operation_unavailable",
+      ASR_OPERATION_TIMEOUT_MS,
+    );
+  }
+
   /** `task_checkpoint` (ADR-0021 A3h). The Gateway binds run, attempt and bot itself. */
   async checkpointTask(req: TaskCheckpointRequest): Promise<TaskCheckpointResponse> {
     const { taskId, ...body } = req;
@@ -255,8 +294,9 @@ export class GatewayClient {
     fullPath: string,
     body: unknown,
     unavailable: DeskmatesErrorCode,
+    timeoutMs: number = CONNECTOR_TIMEOUT_MS,
   ): Promise<T> {
-    const res = await this.send(method, fullPath, body, undefined, CONNECTOR_TIMEOUT_MS);
+    const res = await this.send(method, fullPath, body, undefined, timeoutMs);
     const text = await res.text();
     let parsed: unknown;
     try {
@@ -347,6 +387,11 @@ export class GatewayClient {
       ts: sample.at,
     }));
     await this.expectOk(await this.send("POST", "/events", events), "phase timings");
+  }
+
+  /** ADR-0037 decision 7: one cumulative reply preview frame; not retried. */
+  async postReplyPreview(preview: ReplyPreviewRequest): Promise<void> {
+    await this.expectOk(await this.send("POST", "/reply-preview", preview), "reply preview");
   }
 
   async postEnded(ended: RunEnded): Promise<void> {

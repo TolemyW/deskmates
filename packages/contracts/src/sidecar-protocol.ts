@@ -23,6 +23,8 @@ export type TriggerPayload =
       kind: "approval";
       approvalId: ApprovalId;
       decision: ApprovalDecision;
+      /** For a deny: the reason as the hook would have given it live (ADR-0002 amendment 3, A7). */
+      reason?: string;
       /**
        * The SDK tool-use id of the deferred call (`RunEnded.pendingToolUseId`). The sidecar applies
        * the decision to the replayed call with this id or, when that call's result is an error, to
@@ -51,6 +53,23 @@ export type TriggerPayload =
  */
 export type ModelJobRequest =
   | { kind: "vision_probe"; code: string }
+  /** ADR-0011 amendment 4, A30: label and propose splits for at most 40 notes; decides nothing. */
+  | { kind: "memory_organize"; notes: { id: string; body: string }[] }
+  /**
+   * ADR-0011 amendment 4, A28: judge whether each flagged note is still true against `activity`,
+   * the Gateway's bounded excerpt of recent shared threads and tasks; decides nothing itself.
+   */
+  | {
+      kind: "memory_recheck";
+      notes: {
+        id: string;
+        scope: "workspace" | "bot";
+        body: string;
+        effectiveAt: string;
+        lastConfirmedAt?: string;
+      }[];
+      activity: string;
+    }
   /**
    * ADR-0002 amendment 4, B4: judge one pending L2 request. `reviewPackage` is the JSON the
    * Gateway built: the action and the originating human instruction, nothing a tool returned.
@@ -62,6 +81,16 @@ export type ModelJobRequest =
       role: string;
       projection: string;
       question: string;
+    }
+  /**
+   * ADR-0005 amendment 6, decision 45: plan one round of a group thread from its roster and the
+   * human's request (untrusted data); the Gateway validates the plan and decides who wakes.
+   */
+  | {
+      kind: "round_triage";
+      roster: { name: string; role: string; owner?: true }[];
+      everyone: boolean;
+      request: string;
     }
   | {
       kind: "soul_proposal";
@@ -78,11 +107,41 @@ export type DeferredAction = Pick<ToolAction, "toolName" | "targetOrigin" | "arg
 export type BrowserCoordinationMode = "tab-v1" | "origin-v2";
 export type BrowserSnapshotMode = "explicit-v1" | "inline-v2";
 /**
- * Where a run starts (issue #88, ADR-0004 amendment 1). `shared`: `/work`, as every run did
- * before the knob. `per-bot`: `botWorkDir(botName)`, with `/work` still shared. A soft
- * distinction, never access control between bots.
+ * How generic browser code is tiered (ADR-0002 amendment 5, proposed). `name-v1`, the default:
+ * by tool name, as before the amendment. `effects-v1`: by the effects its text may have.
+ */
+export type BrowserCodeApproval = "name-v1" | "effects-v1";
+/**
+ * Where a run starts (issue #88, ADR-0038). `per-bot`, the default: `botWorkDir(botName)`, and the
+ * sidecar's soft guard refuses this bot's obvious writes into another bot's directory (a guard
+ * against mistakes, not a security boundary). `shared`: `/work`, as every run did before.
  */
 export type BotWorkdirMode = "shared" | "per-bot";
+
+/** ADR-0036 decision 6: what a run is told about its bot's other live lane. */
+export interface OtherLaneRun {
+  runId: string;
+  lane: "interactive" | "background";
+  triggerKind: string;
+  threadId?: string;
+  startedAt: string;
+}
+
+/**
+ * What the CLI offers the model beyond the sidecar's fixed configuration (ADR-0023 amendment 5).
+ * Every field is optional and an absent one changes nothing: the sidecar's own withheld tools stay
+ * withheld and the CLI keeps its defaults.
+ */
+export interface CliSurface {
+  /** Built-in CLI tool names withheld on top of the sidecar's fixed list (`disallowedTools`). */
+  disallowedTools?: readonly string[];
+  /** SDK inline `settings.disableBundledSkills`: drop the skills that ship with the CLI. */
+  disableBundledSkills?: boolean;
+  /** SDK inline `settings.includeGitInstructions`: the CLI's commit and PR workflow text. */
+  includeGitInstructions?: boolean;
+  /** SDK inline `settings.skillListingMaxDescChars`: per-skill description cap in the listing. */
+  skillListingMaxDescChars?: number;
+}
 
 /** Gateway → sidecar supervisor: start one run as one sidecar process. */
 export interface StartRunRequest {
@@ -108,6 +167,11 @@ export interface StartRunRequest {
    */
   attempt: number;
   trigger: TriggerPayload;
+  /**
+   * The agent loop for this run, frozen on the run row (ADR-0044 decision 1). Absent means the
+   * Claude Agent SDK, which is what every run was before the knob existed.
+   */
+  runtime?: "claude-agent-sdk" | "openai-agents";
   /** Deployment configuration relayed from .env. Never a literal in code. */
   model: string;
   cheapModel: string;
@@ -138,10 +202,17 @@ export interface StartRunRequest {
   browserCoordination?: { mode: "origin-v2"; deadlineAt: string };
   /** Experimental page-read policy. Absent is the established explicit-v1 behavior. */
   browserSnapshotMode?: BrowserSnapshotMode;
+  /** ADR-0023 amendment 5: from the run row; absent keeps the CLI surface as it always was. */
+  cliSurface?: CliSurface;
   /** Shared Chromium, fixed full-desktop region for this bot (ADR-0008). */
   screenSlot?: number;
   /** Opt-in strategy: automatic vision guidance and reviewed CLI workflows. */
   browserExecutionMode?: "vision-cli-v2";
+  /**
+   * ADR-0002 amendment 5 (proposed, opt-in): tier browser code by its effects. Absent is
+   * `name-v1`, the tiers of every earlier run. Frozen on the run row.
+   */
+  browserCodeApproval?: "effects-v1";
   /**
    * ADR-0023 amendment 2: the run's model cannot see images (or was observed inventing what it
    * saw), so the sidecar replaces image content with a text notice. Absent means images are
@@ -155,10 +226,15 @@ export interface StartRunRequest {
    */
   groupGuidance?: "owner-v1";
   /**
-   * Present only under the opt-in `per-bot` working-directory mode recorded on the run row
-   * (`runs.config_json.botWorkdir`); absent keeps `/work` and the prompt of every earlier run.
+   * Present for a `per-bot` run, the mode recorded on the run row (`runs.config_json.botWorkdir`,
+   * ADR-0038 decision 1); absent keeps the shared `/work` and the prompt of every earlier run.
    */
   workdirMode?: "per-bot";
+  /**
+   * ADR-0036 decision 6: the same bot's live run on its other lane when this process started.
+   * Sent only when the run froze `laneNotice` on and such a run exists; a note, never a lock.
+   */
+  otherLaneRun?: OtherLaneRun;
   /**
    * SDK `maxTurns` for this run, frozen in `runs.config_json` when attempt 1 starts: the
    * workspace setting, else `DESKMATES_MAX_TURNS` (ADR-0016 amendment 2). `null` is the workspace's
@@ -233,6 +309,10 @@ export type SidecarToolName =
   | "browser_cli_workflow"
   | "memory_search"
   | "task_deliver"
+  | "app_publish"
+  // ADR-0040: offered only where the installation configures the service.
+  | "image_describe"
+  | "audio_transcribe"
   | ConnectorToolName
   | IntegrationToolName;
 
@@ -351,6 +431,11 @@ export interface RunEnded {
    * `runs.config_json` (M3 context plan, Phase 1). Absent when context assembly failed.
    */
   systemPromptSha256?: string;
+  /**
+   * Hex sha256 of the part of that prompt before the SDK's dynamic boundary (ADR-0023 amendment
+   * 5); merged into `runs.config_json` like `systemPromptSha256`.
+   */
+  systemPromptStaticSha256?: string;
   /**
    * `CLAUDE_CODE_MAX_CONTEXT_TOKENS` as the SDK's CLI subprocess received it, when it did; a knob
    * the Gateway records in `runs.config_json`.

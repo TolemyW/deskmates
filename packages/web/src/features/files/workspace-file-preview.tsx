@@ -4,7 +4,7 @@ import {
   WORKSPACE_FILE_RANGE_BYTES,
   type WorkspaceId,
 } from "@deskmates/contracts";
-import { Download, Eye, FileText } from "lucide-react";
+import { Download, Eye, FileText, ZoomIn, ZoomOut } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { Button } from "../../components/ui/button.js";
@@ -14,8 +14,11 @@ import { errorMessage } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { currentI18n } from "../../i18n/intl.js";
 import { Markdown } from "../../lib/markdown.js";
+import { CSV_PREVIEW_MAX_COLUMNS, parseDelimited } from "./csv-table.js";
+import { formatFileSize } from "./file-size.js";
 import { downloadWorkspaceFile } from "./path-links.js";
 import { PdfRangePreview } from "./pdf-range-preview.js";
+import { IMAGE_ZOOM_STEPS, stepZoom } from "./preview-zoom.js";
 import {
   type WorkspaceFileRangeApi,
   WorkspaceFileRangeReader,
@@ -25,8 +28,15 @@ const TEXT_PREVIEW_BYTES = WORKSPACE_FILE_RANGE_BYTES;
 const IMAGE_PREVIEW_BYTES = 16 * 1024 * 1024;
 const HTML_PREVIEW_BYTES = 4 * 1024 * 1024;
 const MAX_IMAGE_PIXELS = 40_000_000;
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp"];
+const HTML_EXTENSIONS = ["html", "htm", "xhtml"];
+/** Types with a Rendered and a Source view (ADR-0014 amendment A6 decision 36). */
+const SOURCE_VIEW_EXTENSIONS = ["md", "markdown", "json", "csv", "tsv", "svg", ...HTML_EXTENSIONS];
+/** Inert text types: source and configuration files are never parsed (A6 decision 39). */
+const INERT_TEXT =
+  /\.(?:txt|log|ya?ml|toml|ini|cfg|conf|xml|py|[cm]?js|tsx?|jsx|sh|sql|css|go|rs|java|c|h|cpp|rb|diff|patch)$/i;
 const PREVIEWABLE =
-  /\.(?:txt|log|md|markdown|csv|tsv|json|html?|xhtml|pdf|png|jpe?g|webp|gif|svg)$/i;
+  /\.(?:md|markdown|csv|tsv|json|html?|xhtml|pdf|png|jpe?g|webp|gif|svg|avif|bmp)$/i;
 const OFFICE = /\.(?:docx?|xlsx?|pptx?)$/i;
 
 type PreviewApi = Pick<
@@ -53,7 +63,7 @@ function hasControlBytes(body: string): boolean {
 }
 
 export function canPreviewWorkspacePath(path: string): boolean {
-  return PREVIEWABLE.test(path) && !OFFICE.test(path);
+  return (PREVIEWABLE.test(path) || INERT_TEXT.test(path)) && !OFFICE.test(path);
 }
 
 export async function decodeWorkspacePreview(blob: Blob): Promise<string> {
@@ -107,7 +117,7 @@ function contentType(path: string): string {
   const ext = extension(path);
   if (ext === "svg") return "image/svg+xml";
   if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
-  if (["png", "gif", "webp"].includes(ext)) return `image/${ext}`;
+  if (["png", "gif", "webp", "avif", "bmp"].includes(ext)) return `image/${ext}`;
   if (ext === "pdf") return "application/pdf";
   return "text/html;charset=utf-8";
 }
@@ -126,20 +136,75 @@ function BlobPreview({
     [bytes, path],
   );
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  const t = useT();
+  const image = useRef<HTMLImageElement>(null);
+  // undefined is "fit to the panel"; a number is a share of the natural size (A6 decision 38).
+  const [zoom, setZoom] = useState<number>();
+  const [natural, setNatural] = useState<{ width: number; height: number }>();
+  const step = (direction: 1 | -1) => {
+    const element = image.current;
+    const fitted =
+      element && element.naturalWidth > 0 && element.clientWidth > 0
+        ? element.clientWidth / element.naturalWidth
+        : 1;
+    setZoom(stepZoom(IMAGE_ZOOM_STEPS, zoom ?? fitted, direction));
+  };
   return (
-    <img
-      className="workspace-file-image"
-      src={url}
-      alt={path.slice(path.lastIndexOf("/") + 1)}
-      referrerPolicy="no-referrer"
-      onLoad={(event) => {
-        const image = event.currentTarget;
-        if (image.naturalWidth * image.naturalHeight > MAX_IMAGE_PIXELS) {
-          URL.revokeObjectURL(url);
-          onImageError?.(currentI18n().t("workspaceFilePreview.imagePixels"));
-        }
-      }}
-    />
+    <div className="workspace-file-image-viewer">
+      <div
+        className="workspace-file-zoom"
+        role="toolbar"
+        aria-label={t("workspaceFilePreview.zoom")}
+      >
+        <Button
+          type="button"
+          aria-label={t("workspaceFilePreview.zoomOut")}
+          disabled={zoom === IMAGE_ZOOM_STEPS[0]}
+          onClick={() => step(-1)}
+        >
+          <ZoomOut size={16} aria-hidden="true" />
+        </Button>
+        <output>
+          {zoom === undefined
+            ? t("workspaceFilePreview.zoomFit")
+            : t("workspaceFilePreview.zoomPercent", { percent: Math.round(zoom * 100) })}
+        </output>
+        <Button
+          type="button"
+          aria-label={t("workspaceFilePreview.zoomIn")}
+          disabled={zoom === IMAGE_ZOOM_STEPS.at(-1)}
+          onClick={() => step(1)}
+        >
+          <ZoomIn size={16} aria-hidden="true" />
+        </Button>
+        <Button type="button" disabled={zoom === undefined} onClick={() => setZoom(undefined)}>
+          {t("workspaceFilePreview.zoomFit")}
+        </Button>
+      </div>
+      <div className="workspace-file-image-frame">
+        <img
+          ref={image}
+          className={`workspace-file-image${zoom === undefined ? "" : " zoomed"}`}
+          src={url}
+          alt={path.slice(path.lastIndexOf("/") + 1)}
+          referrerPolicy="no-referrer"
+          style={
+            zoom !== undefined && natural
+              ? { width: `${natural.width * zoom}px`, height: `${natural.height * zoom}px` }
+              : undefined
+          }
+          onLoad={(event) => {
+            const loaded = event.currentTarget;
+            if (loaded.naturalWidth * loaded.naturalHeight > MAX_IMAGE_PIXELS) {
+              URL.revokeObjectURL(url);
+              onImageError?.(currentI18n().t("workspaceFilePreview.imagePixels"));
+              return;
+            }
+            setNatural({ width: loaded.naturalWidth, height: loaded.naturalHeight });
+          }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -264,32 +329,70 @@ function MarkdownImage({
   return url ? <img src={url} alt={alt} referrerPolicy="no-referrer" /> : <span>{alt}</span>;
 }
 
-function CsvPreview({ text, delimiter }: { text: string; delimiter: string }) {
-  const rows = text
-    .split(/\r?\n/)
+function CsvPreview({
+  text,
+  delimiter,
+  truncated,
+}: {
+  text: string;
+  delimiter: string;
+  truncated: boolean;
+}) {
+  const { t } = currentI18n();
+  const table = parseDelimited(text, delimiter, truncated);
+  const extent = [
+    t("workspaceFilePreview.csvExtent", {
+      rows: table.rows.length,
+      columns: Math.min(table.totalColumns, CSV_PREVIEW_MAX_COLUMNS),
+    }),
+    table.moreRows ? t("workspaceFilePreview.csvMoreRows") : "",
+    table.moreColumns
+      ? t("workspaceFilePreview.csvMoreColumns", { columns: table.totalColumns })
+      : "",
+  ]
     .filter(Boolean)
-    .slice(0, 200)
-    .map((row) => row.split(delimiter).slice(0, 50));
+    .join(" ");
   return (
-    <section
-      className="workspace-file-csv"
-      aria-label={currentI18n().t("workspaceFilePreview.csvLabel")}
-    >
-      <table>
-        <tbody>
-          {rows.map((row, r) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: immutable preview rows
-            <tr key={r}>
-              {row.map((cell, c) => (
+    <section className="workspace-file-csv-preview" aria-label={t("workspaceFilePreview.csvLabel")}>
+      <p className="muted small workspace-file-csv-extent">{extent}</p>
+      <div className="workspace-file-csv">
+        <table>
+          <thead>
+            <tr>
+              {table.header.map((cell, c) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: immutable preview cells
-                <td key={c}>{cell}</td>
+                <th key={c} scope="col">
+                  {cell}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {table.rows.map((row, r) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: immutable preview rows
+              <tr key={r}>
+                {row.map((cell, c) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: immutable preview cells
+                  <td key={c}>{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
+}
+
+/** The bytes already read, as inert text; nothing more is read or rendered (A6 decision 36). */
+function SourcePreview({ bytes }: { bytes: Uint8Array }) {
+  let text: string;
+  try {
+    text = decodeText(bytes);
+  } catch (error) {
+    return <p role="alert">{(error as Error).message}</p>;
+  }
+  return <pre className="workspace-file-source">{text}</pre>;
 }
 
 function JsonTree({ value, name }: { value: unknown; name?: string }) {
@@ -342,9 +445,11 @@ function renderedPreview(
   value: PreviewBytes,
   remoteEnabled: boolean,
   onError: (message: string) => void,
+  view: PreviewView,
 ): ReactNode {
   const ext = extension(path);
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext))
+  if (view === "source") return <SourcePreview bytes={value.bytes} />;
+  if (IMAGE_EXTENSIONS.includes(ext))
     return <BlobPreview bytes={value.bytes} path={path} onImageError={onError} />;
   const text = decodeText(value.bytes);
   if (ext === "md" || ext === "markdown")
@@ -371,7 +476,9 @@ function renderedPreview(
       </div>
     );
   if (ext === "csv" || ext === "tsv")
-    return <CsvPreview text={text} delimiter={ext === "tsv" ? "\t" : ","} />;
+    return (
+      <CsvPreview text={text} delimiter={ext === "tsv" ? "\t" : ","} truncated={value.truncated} />
+    );
   if (ext === "json" && !value.truncated) {
     try {
       return <JsonTree value={JSON.parse(text)} />;
@@ -379,8 +486,18 @@ function renderedPreview(
       return <pre>{text}</pre>;
     }
   }
-  if (["html", "htm", "xhtml"].includes(ext)) return <HtmlPreview text={text} path={path} />;
+  if (HTML_EXTENSIONS.includes(ext)) return <HtmlPreview text={text} path={path} />;
   return <pre>{text}</pre>;
+}
+
+type PreviewView = "rendered" | "source";
+
+/** Whether a loaded preview has a distinct Rendered view next to Source (A6 decision 36). */
+function offersSourceView(path: string, value: PreviewBytes): boolean {
+  const ext = extension(path);
+  if (!SOURCE_VIEW_EXTENSIONS.includes(ext)) return false;
+  // A truncated JSON prefix is source text only (decision 18); it has no Rendered view.
+  return !(ext === "json" && value.truncated);
 }
 
 /** Safe, bounded rich preview of current workspace bytes. */
@@ -393,6 +510,7 @@ export function WorkspaceFilePreview({
   compact = false,
   source,
   sourceId,
+  card,
 }: {
   api: PreviewApi;
   workspaceId: WorkspaceId;
@@ -402,6 +520,8 @@ export function WorkspaceFilePreview({
   compact?: boolean;
   source?: string;
   sourceId?: string;
+  /** A message attachment card (ADR-0014 A5 decision 42): its name and size instead of the path. */
+  card?: { name: string; sizeBytes?: number | undefined };
 }) {
   const t = useT();
   const previewButton = useRef<HTMLButtonElement>(null);
@@ -416,13 +536,18 @@ export function WorkspaceFilePreview({
   const [busy, setBusy] = useState(false);
   const [downloadError, setDownloadError] = useState("");
   const [remoteEnabled, setRemoteEnabled] = useState(false);
+  const [view, setView] = useState<PreviewView>("rendered");
   const controller = useRef<AbortController | undefined>(undefined);
   const ext = extension(path);
 
   const supported = canPreviewWorkspacePath(path);
-  const hasRemoteImages = value
-    ? /!\[[^\]]*\]\(https:\/\/[^)\s]+\)/i.test(new TextDecoder().decode(value.bytes))
-    : false;
+  const hasRemoteImages = useMemo(
+    () =>
+      value && (ext === "md" || ext === "markdown")
+        ? /!\[[^\]]*\]\(https:\/\/[^)\s]+\)/i.test(new TextDecoder().decode(value.bytes))
+        : false,
+    [value, ext],
+  );
 
   useEffect(
     () => () => {
@@ -449,16 +574,16 @@ export function WorkspaceFilePreview({
         onRead?.(first.fileSize);
         return;
       }
-      const max = ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext)
+      const image = IMAGE_EXTENSIONS.includes(ext);
+      const max = image
         ? IMAGE_PREVIEW_BYTES
-        : ["html", "htm", "xhtml"].includes(ext)
+        : HTML_EXTENSIONS.includes(ext)
           ? HTML_PREVIEW_BYTES
           : TEXT_PREVIEW_BYTES;
       const result = await readPreviewBytes(api, workspaceId, path, max, next.signal);
       if (next.signal.aborted) return;
-      if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext) && result.truncated)
-        throw new Error(t("workspaceFilePreview.imageTooLarge"));
-      if (!["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext)) decodeText(result.bytes);
+      if (image && result.truncated) throw new Error(t("workspaceFilePreview.imageTooLarge"));
+      if (!image) decodeText(result.bytes);
       setPdfSource(undefined);
       setValue(result);
       onRead?.(result.fileSize);
@@ -480,7 +605,7 @@ export function WorkspaceFilePreview({
   };
 
   const content: ReactNode = value ? (
-    renderedPreview(api, workspaceId, path, value, remoteEnabled, setError)
+    renderedPreview(api, workspaceId, path, value, remoteEnabled, setError, view)
   ) : pdfSource ? (
     <PdfRangePreview source={pdfSource} path={path} onError={setError} />
   ) : undefined;
@@ -498,9 +623,20 @@ export function WorkspaceFilePreview({
     .join(" · ");
 
   return (
-    <div className={`workspace-file-preview${compact ? " workspace-file-compact" : ""}`}>
+    <div
+      className={`workspace-file-preview${compact ? " workspace-file-compact" : ""}${
+        card ? " workspace-file-card" : ""
+      }`}
+    >
       <FileText size={20} aria-hidden="true" />
-      {compact ? (
+      {card ? (
+        <span className="workspace-file-label" title={path}>
+          <strong>{card.name}</strong>
+          {card.sizeBytes === undefined ? null : (
+            <span className="muted small">{formatFileSize(card.sizeBytes)}</span>
+          )}
+        </span>
+      ) : compact ? (
         <details className="workspace-file-identity">
           <summary title={path} aria-label={`${t("workspaceFilePreview.details")}: ${path}`}>
             <strong>{shortName}</strong>
@@ -533,12 +669,14 @@ export function WorkspaceFilePreview({
           </span>
         </span>
       )}
-      {supported || compact ? (
+      {supported || compact || card ? (
         <Button
           ref={previewButton}
           type="button"
           disabled={busy || !supported}
-          aria-label={compact ? t("workspaceFilePreview.previewLabel", { path }) : undefined}
+          aria-label={
+            compact || card ? t("workspaceFilePreview.previewLabel", { path }) : undefined
+          }
           title={
             !supported
               ? t("workspaceFilePreview.unavailableType")
@@ -546,7 +684,7 @@ export function WorkspaceFilePreview({
           }
           onClick={() => void loadPreview()}
         >
-          {compact ? (
+          {compact || card ? (
             <Eye size={18} aria-hidden="true" />
           ) : busy ? (
             t("workspaceFilePreview.loading")
@@ -562,7 +700,11 @@ export function WorkspaceFilePreview({
         aria-label={t("workspaceFilePreview.downloadLabel", { path })}
         onClick={download}
       >
-        {compact ? <Download size={18} aria-hidden="true" /> : t("workspaceFilePreview.download")}
+        {compact || card ? (
+          <Download size={18} aria-hidden="true" />
+        ) : (
+          t("workspaceFilePreview.download")
+        )}
       </Button>
       {downloadError ? (
         <p role="alert">{t("workspaceFilePreview.downloadError", { error: downloadError })}</p>
@@ -578,6 +720,7 @@ export function WorkspaceFilePreview({
             setValue(undefined);
             setPdfSource(undefined);
             setRemoteEnabled(false);
+            setView("rendered");
           }
         }}
       >
@@ -599,7 +742,29 @@ export function WorkspaceFilePreview({
             >
               {t("workspaceFilePreview.download")}
             </Button>
-            {hasRemoteImages && !remoteEnabled ? (
+            {value && offersSourceView(path, value) ? (
+              <div
+                className="workspace-file-views"
+                role="toolbar"
+                aria-label={t("workspaceFilePreview.viewLabel")}
+              >
+                {(["rendered", "source"] as const).map((option) => (
+                  <Button
+                    key={option}
+                    type="button"
+                    aria-pressed={view === option}
+                    onClick={() => setView(option)}
+                  >
+                    {t(
+                      option === "rendered"
+                        ? "workspaceFilePreview.viewRendered"
+                        : "workspaceFilePreview.viewSource",
+                    )}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+            {hasRemoteImages && !remoteEnabled && view === "rendered" ? (
               <Fragment>
                 <Button onClick={() => setRemoteEnabled(true)}>
                   {t("workspaceFilePreview.loadRemote")}

@@ -1,9 +1,10 @@
 // Workspace execution limits (ADR-0005 amendment 5, ADR-0016 amendment 2): the message caps, the
-// per-attempt turn cap and the continuation limit as audited per-workspace settings, and the
-// Gateway loop breaker that stands behind them. Defaults are unchanged; a new workspace stores
-// nothing and behaves exactly as before.
+// per-attempt turn cap and the continuation limit as audited per-workspace settings, two switches
+// beside them, and the Gateway loop breaker that stands behind them. Owner rulings of 2026-10-14:
+// the turn budget and the volume rule are off by default, and `off` needs no money budget unless
+// the workspace turns on `requireBudgetForOff`.
 
-import { RELAY_COUNT_MAX, TURN_BUDGET_DEFAULT } from "./thread.js";
+import { RELAY_COUNT_MAX } from "./thread.js";
 
 /** Every limit a workspace may store, sorted. */
 export const WORKSPACE_LIMIT_KEYS = [
@@ -15,15 +16,24 @@ export const WORKSPACE_LIMIT_KEYS = [
 ] as const;
 export type WorkspaceLimitKey = (typeof WORKSPACE_LIMIT_KEYS)[number];
 
-/** A stored setting: a number in range, or `off` (needs a monetary limit, decision 39). */
+/** A stored setting: a number in range, or `off`. */
 export type WorkspaceLimitValue = number | "off";
 
 /** What a workspace stores; an absent key inherits. */
 export type WorkspaceLimitSettings = Partial<Record<WorkspaceLimitKey, WorkspaceLimitValue>>;
 
 /**
- * Where an effective value came from. `default_no_backstop` is a stored `off` that resolves to
- * the default because the workspace has no monetary limit (ADR-0005 amendment 5, decision 39).
+ * The workspace switches, sorted; an absent switch is off (ADR-0005 amendment 5 decisions 39
+ * and 40). `requireBudgetForOff`: "require a budget for unlimited limits". `volumeBreaker`: the
+ * loop breaker's bot-message volume rule.
+ */
+export const WORKSPACE_LIMIT_SWITCH_KEYS = ["requireBudgetForOff", "volumeBreaker"] as const;
+export type WorkspaceLimitSwitchKey = (typeof WORKSPACE_LIMIT_SWITCH_KEYS)[number];
+export type WorkspaceLimitSwitches = Record<WorkspaceLimitSwitchKey, boolean>;
+
+/**
+ * Where an effective value came from. `default_no_backstop` is an `off` that resolves to a number
+ * because the workspace requires a budget for unlimited limits and has none (decision 39).
  */
 export type WorkspaceLimitSource =
   | "workspace"
@@ -48,7 +58,8 @@ export interface WorkspaceLimitRange {
 
 /** Loop breaker (ADR-0005 amendment 5, decision 40): Gateway constants, not settings. */
 export const LOOP_BREAKER_RELAY_MAX = 50;
-export const LOOP_BREAKER_BOT_MESSAGES = 100;
+/** The volume rule's threshold; the rule itself is the `volumeBreaker` switch, off by default. */
+export const LOOP_BREAKER_BOT_MESSAGES = 300;
 /** A bot's third identical message since the latest human message trips the breaker. */
 export const LOOP_BREAKER_REPEATS = 3;
 export type LoopBreakerRule = "depth" | "volume" | "repetition";
@@ -65,16 +76,19 @@ export const WORKSPACE_LIMIT_RANGES: Readonly<Record<WorkspaceLimitKey, Workspac
   turnBudget: { min: 1, max: LOOP_BREAKER_BOT_MESSAGES, off: true },
 };
 
-/** The values a workspace with no settings gets; `maxTurns` is the Gateway's configured value. */
+/**
+ * The values a workspace with no settings gets; `maxTurns` is the Gateway's configured value and
+ * null is off (the turn budget, owner 2026-10-14).
+ */
 export function workspaceLimitDefaults(
   gatewayMaxTurns: number,
-): Readonly<Record<WorkspaceLimitKey, number>> {
+): Readonly<Record<WorkspaceLimitKey, number | null>> {
   return {
     continuationLimit: CONTINUATION_LIMIT_DEFAULT,
     continuationWindowHours: CONTINUATION_WINDOW_HOURS_DEFAULT,
     maxTurns: gatewayMaxTurns,
     relayCountMax: RELAY_COUNT_MAX,
-    turnBudget: TURN_BUDGET_DEFAULT,
+    turnBudget: null,
   };
 }
 
@@ -82,20 +96,28 @@ export function workspaceLimitDefaults(
 export interface WorkspaceLimitsView {
   workspaceId: string;
   settings: WorkspaceLimitSettings;
+  /** Every switch, absent ones false. */
+  switches: WorkspaceLimitSwitches;
   /**
    * Effective values for runs and messages of this workspace. `turnBudget` here is the
-   * workspace-level value; a thread without a workspace setting uses its own row (source
-   * `thread`).
+   * workspace-level value; under `requireBudgetForOff` without a budget a thread's default `off`
+   * falls back to its own row (source `default_no_backstop`).
    */
   effective: Record<WorkspaceLimitKey, EffectiveLimit>;
-  defaults: Record<WorkspaceLimitKey, number>;
+  /** null is off. */
+  defaults: Record<WorkspaceLimitKey, number | null>;
   ranges: Record<WorkspaceLimitKey, WorkspaceLimitRange>;
   loopBreaker: { relayMax: number; botMessages: number; repeats: number };
-  /** Whether a weekly or cumulative monetary limit is set (ADR-0032), which `off` needs. */
+  /** Whether a weekly or cumulative monetary limit is set (ADR-0032). */
   budgetBackstop: boolean;
   updatedAt?: string;
   updatedBy?: string;
 }
 
-/** `PUT /api/workspaces/:id/limits`: a key set to null clears it (inherit). */
-export type WorkspaceLimitsInput = Partial<Record<WorkspaceLimitKey, WorkspaceLimitValue | null>>;
+/**
+ * `PUT /api/workspaces/:id/limits`: a limit set to null clears it (inherit); a switch is a
+ * boolean, and false clears it.
+ */
+export type WorkspaceLimitsInput = Partial<
+  Record<WorkspaceLimitKey, WorkspaceLimitValue | null> & Record<WorkspaceLimitSwitchKey, boolean>
+>;

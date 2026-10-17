@@ -17,11 +17,25 @@ ARG PLAYWRIGHT_MCP_VERSION=0.0.82
 ARG PLAYWRIGHT_CLI_VERSION=0.1.21
 ARG AGENT_SDK_VERSION=0.3.278
 ARG NODE_PTY_VERSION=1.1.0
+# The second agent runtime (ADR-0044) and the MCP client the sidecar attaches its tools with.
+# Pinned with packages/sidecar/package.json.
+ARG OPENAI_AGENTS_VERSION=0.20.0
+ARG MCP_SDK_VERSION=1.30.0
 
 ENV DEBIAN_FRONTEND=noninteractive
+# An Ubuntu mirror for hosts where the official archive is slow (stable.sh passes APT_MIRROR from
+# the deployment's .env, e.g. https://mirrors.tuna.tsinghua.edu.cn/ubuntu). Empty keeps the image's
+# own sources, which is what the release workflow builds. Package versions do not depend on it.
+ARG APT_MIRROR=
+RUN if [ -n "$APT_MIRROR" ]; then \
+      for f in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do \
+        [ -f "$f" ] && sed -i -E "s#https?://(archive|security)\.ubuntu\.com/ubuntu/?#${APT_MIRROR%/}/#g" "$f"; \
+      done; \
+    fi; true
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb fluxbox x11vnc novnc websockify xdotool imagemagick \
     postgresql-client git gh python3 make g++ curl ca-certificates procps \
+    poppler-utils \
  && rm -rf /var/lib/apt/lists/* \
  && ln -sf vnc.html /usr/share/novnc/index.html
 
@@ -40,4 +54,6 @@ RUN node -e 'const {createRequire}=require("node:module"); const {execFileSync}=
 
 ARG UNDICI_VERSION=7.29.1
 RUN npm install -g --no-fund --no-audit "undici@${UNDICI_VERSION}" \
+    "@openai/agents@${OPENAI_AGENTS_VERSION}" \
+    "@modelcontextprotocol/sdk@${MCP_SDK_VERSION}" \
  && npm cache clean --force

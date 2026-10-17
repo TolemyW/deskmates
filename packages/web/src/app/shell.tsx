@@ -1,5 +1,6 @@
 // App shell: the sidebar (workspace switcher, the features' navigation, status, Help and the
-// signed-in identity), the work area showing the feature screen for the hash route, the detail
+// signed-in identity), the role badge at the top right of the work area (ADR-0022 amendment 7
+// S8), the work area showing the feature screen for the hash route, the detail
 // drawer for drawer routes (a run), and the bundled manual. The shell names no feature: the
 // screens, links and drawers come from `features.ts` (issue #53).
 
@@ -35,6 +36,7 @@ import type { ShellContext } from "./feature.js";
 import { drawerFeatures, featureFor } from "./features.js";
 import { type FirstRunGuide, FirstRunProvider } from "./first-run-checklist.js";
 import { Navigation } from "./navigation.js";
+import { RoleBadge } from "./role-badge.js";
 import { shownRoute } from "./route-registry.js";
 import type { Route, RouteRoles } from "./routes.js";
 import { startSso } from "./start-sso.js";
@@ -283,6 +285,9 @@ export function Shell({
       </header>
       {/* The work area stays mounted under the manual, inert, so drafts and scroll survive. */}
       <main className="content" inert={manual !== null || undefined}>
+        <div className="shell-topbar">
+          <RoleBadge roles={sessionRoles} workspaceId={selectedId} />
+        </div>
         <FirstRunProvider guide={firstRun}>
           {featureFor(shown)?.render(shown, ctx)}
         </FirstRunProvider>

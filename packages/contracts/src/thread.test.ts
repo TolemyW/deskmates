@@ -18,9 +18,16 @@ const members = [
 
 describe("mentionDiagnostics (ADR-0005 amendment 2)", () => {
   it("reports names nobody has and member names written with a space after the @", () => {
-    expect(mentionDiagnostics("@ bob please, cc @human and @alice", members, alice)).toEqual({
-      unknown: ["human"],
+    expect(mentionDiagnostics("@ bob please, cc @nobody and @alice", members, alice)).toEqual({
+      unknown: ["nobody"],
       spaced: ["bob"],
+    });
+  });
+
+  it("treats what a bot calls the person it talks to as nobody's address (ADR-0024 amendment 3)", () => {
+    expect(mentionDiagnostics("@user see above; @Human, @operator and @you too", members)).toEqual({
+      unknown: [],
+      spaced: [],
     });
   });
 
@@ -66,6 +73,32 @@ describe("parseMentions (ADR-0005 item 3)", () => {
 
   it("returns nothing for an unaddressed message", () => {
     expect(parseMentions("hello all", members)).toEqual([]);
+  });
+});
+
+describe("spaced mentions (ADR-0005 amendment 6, decision 50)", () => {
+  const spaced = { spaced: true };
+
+  it("reads a member written `@ name` as a mention, in order with the others", () => {
+    expect(parseMentions("@  Bob and @alice", members, undefined, spaced)).toEqual([
+      { kind: "bot", botId: bob },
+      { kind: "bot", botId: alice },
+    ]);
+  });
+
+  it("still ignores unknown names, self-mentions, `@ everyone`, emails and a spaced number", () => {
+    expect(parseMentions("@ carol, @ alice", members, alice, spaced)).toEqual([]);
+    expect(parseMentions("@ everyone hi", members, undefined, spaced)).toEqual([]);
+    expect(parseMentions("mail alice@ bob.example", members, undefined, spaced)).toEqual([]);
+    expect(parseMentions("the rate @ 5 percent", members, undefined, spaced)).toEqual([]);
+  });
+
+  it("is off by default, and leaves nothing spaced to report when on", () => {
+    expect(parseMentions("@ bob please", members)).toEqual([]);
+    expect(mentionDiagnostics("@ bob and @carol", members, alice, spaced)).toEqual({
+      unknown: ["carol"],
+      spaced: [],
+    });
   });
 });
 

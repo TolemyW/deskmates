@@ -143,6 +143,8 @@ describe("Guest status inquiries (ADR-0022 amendment 7)", () => {
   it("a Guest's question is answered by one tool-free job attached to the inquiry (S1)", async () => {
     const f = await seed();
     const { ctx } = f.harness.app.deskmates;
+    // The bot's own models are not the job's: it runs on the default model (owner, 2026-10-14).
+    ctx.bots.update(f.bot.id, { model: "bot-own-model", cheapModel: "bot-own-cheap" });
     const inquiry = await openInquiry(f);
     const asked = await f.guest.json<{ runs: Array<{ id: string; lane: string }> }>(
       "POST",
@@ -165,7 +167,7 @@ describe("Guest status inquiries (ADR-0022 amendment 7)", () => {
     expect(messages[1]?.runId).toBe(runId);
     expect(messages[1]?.authorId).toBe(f.bot.id);
 
-    // One job, as a model job: no session, the cheap model, the question as its input.
+    // One job, as a model job: no session, the default model, the question as its input.
     expect(jobs).toHaveLength(1);
     const job = jobs[0] as StartRunRequest;
     expect(job.modelJob).toMatchObject({
@@ -174,13 +176,16 @@ describe("Guest status inquiries (ADR-0022 amendment 7)", () => {
       question: "when does the report ship?",
     });
     expect(job.sdkSessionId).toBeUndefined();
-    expect(job.model).toBe(ctx.config.cheapModel);
+    expect(job.model).toBe(ctx.config.defaultModel);
+    expect(job.model).not.toBe(ctx.config.cheapModel);
+    // The background lane: a person's chat with the bot is never held by a Guest's question.
     const run = ctx.runs.mustGet(runId as never);
-    expect(run).toMatchObject({ threadId: inquiry, lane: "interactive", status: "succeeded" });
+    expect(run).toMatchObject({ threadId: inquiry, lane: "background", status: "succeeded" });
     expect(run.config).toMatchObject({
       runType: STATUS_INQUIRY,
       requestedBy: `user:${f.ids.gus}`,
       maxTurns: 1,
+      model: ctx.config.defaultModel,
     });
     // No ordinary bot run, round or session came of it.
     expect(runRows(f)).toHaveLength(1);
@@ -258,6 +263,83 @@ describe("Guest status inquiries (ADR-0022 amendment 7)", () => {
       "status?",
       "succeeded",
       "SOUL",
+    ])
+      expect(projection, absent).not.toContain(absent);
+  });
+
+  it("the projection carries task status and progress (S2, owner 2026-10-14)", async () => {
+    const f = await seed();
+    const { ctx } = f.harness.app.deskmates;
+    const ws = f.workspace.id;
+    const shared = ctx.threads.create({ workspaceId: ws, botIds: [f.bot.id], title: "Ops" });
+    const privateChat = await f.member.json<{ thread: { id: string } }>("POST", "/api/threads", {
+      body: { workspaceId: ws, botIds: [f.bot.id] },
+    });
+    const privateId = privateChat.json.thread.id;
+    const report = ctx.tasks.create(ws, {
+      title: "Quarterly report",
+      description: "secret description text",
+      ownerBotId: f.bot.id,
+      threadIds: [shared.id],
+    });
+    const blocked = ctx.tasks.create(ws, { title: "Vendor contract", ownerBotId: f.bot.id });
+    ctx.tasks.update(ws, blocked.id, {
+      version: blocked.version,
+      status: "blocked",
+      blockedReason: "waiting for legal",
+      nextAction: "ask legal on Monday",
+    });
+    const gone = ctx.tasks.create(ws, { title: "Deleted errand" });
+    ctx.tasks.softDelete(ws, gone.id, { version: gone.version }, `user:${f.ids.ada}`);
+    const quiet = ctx.tasks.create(ws, { title: "Private errand", threadIds: [privateId] });
+    // A run in the shared chat records progress; a run in a Member's private chat records some
+    // too. Both rows are finished in the same tick, before the scheduler could pick them up.
+    const runIn = (threadId: string) => {
+      const run = ctx.runs.create({
+        botId: f.bot.id,
+        threadId: threadId as never,
+        lane: "background",
+        triggerKind: "cron",
+        triggerRef: "test",
+        triggerPayload: { prompt: "" },
+        config: {},
+      });
+      ctx.db.prepare("UPDATE runs SET status = 'succeeded' WHERE id = ?").run(run.id);
+      return run.id;
+    };
+    ctx.tasks.recordCheckpoint(runIn(shared.id), {
+      taskId: report.id,
+      completed: [
+        { unit: "draft section 1", outcome: "written", evidence: ["/work/report/draft.md"] },
+      ],
+      outstanding: ["charts"],
+      note: "half way there",
+    });
+    ctx.tasks.recordCheckpoint(runIn(privateId), {
+      taskId: quiet.id,
+      completed: [{ unit: "private step", outcome: "a member's private progress" }],
+      note: "private note",
+    });
+    const inquiry = await openInquiry(f);
+    await f.guest.fetch("POST", `/api/threads/${inquiry}/messages`, { body: { body: "tasks?" } });
+    await waitFor(async () => jobs.length === 1, 3000, "job started");
+    const job = jobs[0]?.modelJob;
+    const projection = job?.kind === "status_inquiry" ? job.projection : "";
+    expect(projection).toContain("Tasks (newest first):");
+    expect(projection).toMatch(/Quarterly report \(planned; owner helper;/);
+    expect(projection).toContain("draft section 1: written");
+    expect(projection).toContain("outstanding: charts");
+    expect(projection).toContain("half way there");
+    expect(projection).toMatch(/Vendor contract \(blocked; owner helper;/);
+    expect(projection).toContain("waiting for legal");
+    expect(projection).toContain("ask legal on Monday");
+    expect(projection).toMatch(/Private errand \(planned; no owner bot;/);
+    for (const absent of [
+      "Deleted errand",
+      "secret description text",
+      "/work/report/draft.md",
+      "a member's private progress",
+      "private note",
     ])
       expect(projection, absent).not.toContain(absent);
   });

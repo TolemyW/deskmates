@@ -3,6 +3,8 @@
 // an ordinary run: no router, round, session, memory or tool. The job reads a projection the
 // Gateway builds from what the Guest may already read through the API, and its answer is appended
 // to the inquiry as the bot's message. The inquiry's private audience (W7) covers the job's run.
+// Owner-decided 2026-10-14: the job runs on the default model and the bot's background lane, and
+// the projection carries the workspace's task status and progress.
 
 import {
   type BotDefinition,
@@ -16,7 +18,6 @@ import {
 import { BoardStore } from "../board/board-store.js";
 import type { GatewayContext } from "../context.js";
 import type { RunRecord } from "../ledger/runs.js";
-import { modelsForJob } from "../scheduler/job-models.js";
 
 export const STATUS_INQUIRY = "status_inquiry";
 
@@ -27,9 +28,14 @@ export const PROJECTION_LIMITS = {
   messageChars: 400,
   boardPosts: 5,
   boardChars: 300,
+  tasks: 10,
+  taskTitleChars: 160,
+  taskTextChars: 240,
+  checkpointUnits: 5,
+  checkpointChars: 200,
   inquiryMessages: 6,
   inquiryChars: 600,
-  total: 12_000,
+  total: 14_000,
 } as const;
 
 /** S1: what the inquiry shows when the job returns nothing. */
@@ -55,7 +61,7 @@ export class StatusInquiries {
   private open(threadId: ThreadId): RunRecord | undefined {
     const row = this.ctx.db
       .prepare(
-        `SELECT id FROM runs WHERE thread_id = ? AND status IN ('queued', 'running')
+        `SELECT id FROM runs WHERE thread_id = ? AND status IN ('queued', 'running', 'stalled')
            AND json_extract(config_json, '$.runType') = ? LIMIT 1`,
       )
       .get(threadId, STATUS_INQUIRY) as { id: string } | undefined;
@@ -100,11 +106,11 @@ export class StatusInquiries {
         body: input.body,
         ...(input.externalId !== undefined ? { externalId: input.externalId } : {}),
       });
-      const bot = ctx.bots.mustGet(botId);
       const run = ctx.runs.create({
         botId,
         threadId: thread.id,
-        lane: "interactive",
+        // Never the interactive lane: a person's chat with the bot is not held by a Guest.
+        lane: "background",
         triggerKind: "cron",
         triggerRef: `${STATUS_INQUIRY}:${message.id}`,
         triggerPayload: { prompt: "" },
@@ -113,10 +119,11 @@ export class StatusInquiries {
           runType: STATUS_INQUIRY,
           inquiryMessageId: message.id,
           requestedBy: `user:${input.userId}`,
-          ...modelsForJob(STATUS_INQUIRY, bot.cheapModel ?? ctx.config.cheapModel),
+          // The default model, frozen now: not the cheap model, not the bot's own override.
+          model: ctx.config.defaultModel,
           fallbackModel: null,
           maxTurns: 1,
-          statusInquiryVersion: 1,
+          statusInquiryVersion: 2,
         },
       });
       return { message, runs: [run] };
@@ -140,8 +147,8 @@ export class StatusInquiries {
 
   /**
    * S2: the workspace's name, its bots, its shared chats (no private chat, no bus thread), the
-   * board's visible posts and the inquiry's own recent messages. Nothing about runs, approvals,
-   * tasks, files, memory, Knowledge, costs, desktops or SOUL.
+   * board's visible posts, its tasks' status and progress, and the inquiry's own recent messages.
+   * Nothing about runs, approvals, files, memory, Knowledge, costs, desktops or SOUL.
    */
   projection(workspaceId: string, inquiryId: ThreadId, questionSeq: number): string {
     const { ctx } = this;
@@ -184,6 +191,7 @@ export class StatusInquiries {
     if (board.posts.length === 0) lines.push("- none");
     for (const post of board.posts)
       lines.push(`- ${post.createdAt}: ${cut(post.body, L.boardChars)}`);
+    lines.push(...this.taskLines(workspace.id, botName));
     const earlier = ctx.messages
       .list(inquiryId, Math.max(0, questionSeq - 1 - L.inquiryMessages))
       .filter((m) => m.seq < questionSeq);
@@ -195,6 +203,57 @@ export class StatusInquiries {
         );
     }
     return cut(lines.join("\n"), L.total);
+  }
+
+  /**
+   * S2 (owner-decided 2026-10-14): the ten most recently updated tasks that are not deleted, each
+   * with title, state, owner bot, blocked reason, next action and the summary of its latest
+   * checkpoint not recorded in someone's private chat. No description, output, evidence path,
+   * delivery or run detail.
+   */
+  private taskLines(workspaceId: Thread["workspaceId"], botName: Map<string, string>): string[] {
+    const L = PROJECTION_LIMITS;
+    const { tasks } = this.ctx.tasks.page(workspaceId, {}, 0, L.tasks);
+    const lines = ["Tasks (newest first):"];
+    if (tasks.length === 0) lines.push("- none");
+    const latest = this.ctx.db.prepare(
+      `SELECT c.body_json, c.created_at FROM task_checkpoints c
+         LEFT JOIN runs r ON r.id = c.run_id
+         LEFT JOIN threads t ON t.id = r.thread_id
+       WHERE c.task_id = ? AND t.private_to_user_id IS NULL
+       ORDER BY c.created_at DESC, c.rowid DESC LIMIT 1`,
+    );
+    for (const task of tasks) {
+      const owner = task.ownerBotId
+        ? `owner ${botName.get(task.ownerBotId) ?? "a bot"}`
+        : "no owner bot";
+      lines.push(
+        `- ${cut(task.title, L.taskTitleChars)} (${task.status}; ${owner}; last update ${task.updatedAt})`,
+      );
+      if (task.status === "blocked" && task.blockedReason.trim())
+        lines.push(`  - blocked: ${cut(task.blockedReason, L.taskTextChars)}`);
+      if (task.nextAction.trim())
+        lines.push(`  - next action: ${cut(task.nextAction, L.taskTextChars)}`);
+      const row = latest.get(task.id) as { body_json: string; created_at: string } | undefined;
+      if (!row) continue;
+      const body = JSON.parse(row.body_json) as {
+        completed?: Array<{ unit: string; outcome: string }>;
+        outstanding?: string[];
+        note?: string;
+      };
+      lines.push(`  - progress as of ${row.created_at}:`);
+      for (const unit of (body.completed ?? []).slice(0, L.checkpointUnits))
+        lines.push(
+          `    - ${cut(unit.unit, L.checkpointChars)}: ${cut(unit.outcome, L.checkpointChars)}`,
+        );
+      const outstanding = (body.outstanding ?? []).slice(0, L.checkpointUnits);
+      if (outstanding.length > 0)
+        lines.push(
+          `    - outstanding: ${outstanding.map((o) => cut(o, L.checkpointChars)).join("; ")}`,
+        );
+      if (body.note?.trim()) lines.push(`    - note: ${cut(body.note, L.taskTextChars)}`);
+    }
+    return lines;
   }
 
   /** S1: append the answer, or the no-answer notice, to the inquiry. Returns the run's status. */

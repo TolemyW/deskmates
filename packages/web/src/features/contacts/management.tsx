@@ -18,10 +18,12 @@ import { currentI18n } from "../../i18n/intl.js";
 import { PageBar } from "../../lib/page-bar.js";
 import { usePagedQuery } from "../../lib/use-paged-query.js";
 import { RoleNote, useCan } from "../../state/session-roles.js";
-import { AutoApprovalToggle } from "../approvals/auto-approval-toggle.js";
 import { EgressModePicker } from "../workspaces/egress-mode-picker.js";
+import { BotIdentity } from "./bot-identity.js";
 import { BotSchedules } from "./bot-schedules.js";
 import { VisionCapability } from "./model-capability.js";
+import { ModelPicker, ModelSuggestions, registeredModelLabel } from "./model-picker.js";
+import { RuleVersions } from "./rule-versions.js";
 import { SoulProposalPanel } from "./soul-proposal.js";
 
 interface SoulDraft {
@@ -299,7 +301,6 @@ export function EgressEditor({
         </Button>
       )}
       <RoleNote action="workspace.configure" does={t("management.egress.roleNote")} />
-      <AutoApprovalToggle api={api} workspaceId={workspace.id} />
     </article>
   );
 }
@@ -359,7 +360,10 @@ function SoulEditor({ api, bot }: { api: ApiClient; bot: BotDefinition }) {
       setVersion(saved.version);
       setLatest(undefined);
       soulDraftMap(api).delete(bot.id);
-      setNotice(t("management.soul.saved"));
+      // ADR-0043 decision 3: a live or parked run keeps what it started with.
+      setNotice(
+        saved.appliesFromNextRun ? t("management.soul.savedNextRun") : t("management.soul.saved"),
+      );
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         try {
@@ -434,6 +438,24 @@ function SoulEditor({ api, bot }: { api: ApiClient; bot: BotDefinition }) {
           }}
         />
       ) : null}
+      {loaded ? (
+        <RuleVersions
+          api={api}
+          bot={bot}
+          file="soul"
+          currentVersion={version}
+          refreshKey={version}
+          disabled={body !== savedBody}
+          onRestored={(restored) => {
+            setBody(restored.body);
+            setSavedBody(restored.body);
+            setVersion(restored.version);
+            setLatest(undefined);
+            setError("");
+            soulDraftMap(api).delete(bot.id);
+          }}
+        />
+      ) : null}
       {latest ? (
         <div className="management-conflict">
           <p>{t("management.soul.latest")}</p>
@@ -489,6 +511,94 @@ function matcherSummary(matcher: ApprovalRuleMatcher): string {
   return values.length ? values.join(" · ") : t("management.rules.matcherAll");
 }
 
+/**
+ * Edit one rule in place (ADR-0043 decision 6): same id and place in the oldest-first order, so
+ * only what it says changes. The fields a hand-made rule has; any other matcher key is kept.
+ */
+function ApprovalRuleEditForm({
+  api,
+  rule,
+  onDone,
+}: {
+  api: ApiClient;
+  rule: ApprovalRule;
+  onDone: (saved?: ApprovalRule) => void;
+}) {
+  const [decision, setDecision] = useState<"allow_always" | "deny">(rule.decision);
+  const [toolName, setToolName] = useState(rule.matcher.toolName ?? "");
+  const [targetOrigin, setTargetOrigin] = useState(rule.matcher.targetOrigin ?? "");
+  const [argumentPattern, setArgumentPattern] = useState(rule.matcher.argumentPattern ?? "");
+  const [filePath, setFilePath] = useState(rule.matcher.filePath ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const t = useT();
+  const save = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const {
+        toolName: _tool,
+        targetOrigin: _origin,
+        argumentPattern: _pattern,
+        filePath: _path,
+        ...kept
+      } = rule.matcher;
+      const matcher: ApprovalRuleMatcher = {
+        ...kept,
+        ...(toolName.trim() ? { toolName: toolName.trim() } : {}),
+        ...(targetOrigin.trim() ? { targetOrigin: targetOrigin.trim() } : {}),
+        ...(argumentPattern.trim() ? { argumentPattern: argumentPattern.trim() } : {}),
+        ...(filePath.trim() ? { filePath: filePath.trim() } : {}),
+      };
+      onDone(await api.updateApprovalRule(rule.id, { decision, matcher }));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <fieldset className="rule-edit" disabled={busy}>
+      {error ? <p role="alert">{error}</p> : null}
+      <Select
+        label={t("management.rules.decision")}
+        value={decision}
+        onValueChange={(value) => setDecision(value as typeof decision)}
+        disabled={busy}
+        options={[
+          { value: "allow_always", label: t("management.rules.alwaysAllow") },
+          { value: "deny", label: t("management.rules.deny") },
+        ]}
+      />
+      <label>
+        {t("management.rules.toolName")}
+        <input value={toolName} onChange={(event) => setToolName(event.target.value)} />
+      </label>
+      <label>
+        {t("management.rules.targetOrigin")}
+        <input value={targetOrigin} onChange={(event) => setTargetOrigin(event.target.value)} />
+      </label>
+      <label>
+        {t("management.rules.argumentPattern")}
+        <input
+          value={argumentPattern}
+          onChange={(event) => setArgumentPattern(event.target.value)}
+        />
+      </label>
+      <label>
+        {t("management.rules.filePath")}
+        <input value={filePath} onChange={(event) => setFilePath(event.target.value)} />
+      </label>
+      <Button type="button" onClick={() => void save()}>
+        {t("management.rules.saveEdit")}
+      </Button>
+      <Button type="button" onClick={() => onDone()}>
+        {t("management.cancel")}
+      </Button>
+    </fieldset>
+  );
+}
+
 /** Approval rules per page (#113 slice B, plan row 31). */
 export const RULE_PAGE_SIZE = 25;
 
@@ -512,6 +622,8 @@ function ApprovalRulesEditor({ api, bot }: { api: ApiClient; bot: BotDefinition 
   const [filePath, setFilePath] = useState("");
   const [decision, setDecision] = useState<"allow_always" | "deny">("allow_always");
   const [confirmDelete, setConfirmDelete] = useState<string>();
+  const [editing, setEditing] = useState<string>();
+  const canUpdate = useCan("approvalRule.update").allowed;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const canCreate = useCan("approvalRule.create").allowed;
@@ -577,6 +689,20 @@ function ApprovalRulesEditor({ api, bot }: { api: ApiClient; bot: BotDefinition 
                 : t("management.rules.deny")}
             </span>{" "}
             {matcherSummary(rule.matcher)}
+            {editing === rule.id ? (
+              <ApprovalRuleEditForm
+                api={api}
+                rule={rule}
+                onDone={(saved) => {
+                  setEditing(undefined);
+                  if (saved) reloadRules();
+                }}
+              />
+            ) : canUpdate ? (
+              <Button type="button" disabled={busy} onClick={() => setEditing(rule.id)}>
+                {t("management.rules.edit")}
+              </Button>
+            ) : null}
             {confirmDelete === rule.id ? (
               <span className="management-confirm">
                 {t("management.rules.confirmRemove")}
@@ -680,18 +806,11 @@ export function BotEditor({
   workspaceName: string;
   onSaved: (bot: BotDefinition) => void;
 }) {
-  type Choice = "default" | "cheap" | "custom";
-  const choiceOf = (value: string | undefined): Choice =>
-    value === undefined || value === "" || value === config.defaultModel
-      ? "default"
-      : value === config.cheapModel
-        ? "cheap"
-        : "custom";
-  const [choice, setChoice] = useState<Choice>(() => choiceOf(bot.model));
-  const [customModel, setCustomModel] = useState(
-    choiceOf(bot.model) === "custom" ? (bot.model ?? "") : "",
-  );
+  const [model, setModel] = useState(bot.model ?? "");
   const [cheapModel, setCheapModel] = useState(bot.cheapModel ?? "");
+  // Remounts the pickers after a save so their choice follows the saved override.
+  const [saves, setSaves] = useState(0);
+  const models = config.models ?? [];
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -713,24 +832,18 @@ export function BotEditor({
       setOpeningChat(false);
     }
   };
-  const chosenModel = (): string | null =>
-    choice === "default"
-      ? null
-      : choice === "cheap"
-        ? config.cheapModel
-        : customModel.trim() || null;
   const save = async () => {
     setBusy(true);
     setError("");
     setNotice("");
     try {
       const saved = await api.updateBot(bot.id, {
-        model: chosenModel(),
+        model: model.trim() || null,
         cheapModel: cheapModel.trim() || null,
       });
-      setChoice(choiceOf(saved.model));
-      setCustomModel(choiceOf(saved.model) === "custom" ? (saved.model ?? "") : "");
+      setModel(saved.model ?? "");
       setCheapModel(saved.cheapModel ?? "");
+      setSaves((n) => n + 1);
       onSaved(saved);
       setNotice(t("management.model.saved"));
     } catch (err) {
@@ -746,6 +859,9 @@ export function BotEditor({
       {error ? <p role="alert">{error}</p> : null}
       {notice ? <output>{notice}</output> : null}
       <section className="card settings-section">
+        <BotIdentity key={bot.id} api={api} bot={bot} onSaved={onSaved} />
+      </section>
+      <section className="card settings-section">
         <SoulEditor api={api} bot={bot} />
       </section>
       <section className="card settings-section">
@@ -753,51 +869,29 @@ export function BotEditor({
         <p className="muted small">{t("management.model.intro", { name: bot.name })}</p>
         <RoleNote action="bot.configure" does={t("management.model.roleNote")} />
         <fieldset disabled={busy || !canConfigure}>
-          <Select
+          <ModelPicker
+            key={`model-${saves}`}
             label={t("management.model.label")}
-            value={choice}
-            onValueChange={(value) => setChoice(value as Choice)}
+            overrideLabel={t("management.model.override")}
+            value={model}
+            onChange={setModel}
+            deploymentModel={config.defaultModel}
+            models={models}
             disabled={busy || !canConfigure}
-            options={[
-              {
-                value: "default",
-                label: t("management.model.deploymentDefault", { model: config.defaultModel }),
-              },
-              config.cheapModel && config.cheapModel !== config.defaultModel
-                ? {
-                    value: "cheap",
-                    label: config.cheapModel,
-                  }
-                : null,
-
-              {
-                value: "custom",
-                label: t("management.model.another"),
-              },
-            ]}
           />
-
-          {choice === "custom" ? (
-            <label>
-              {t("management.model.override")}
-              <input
-                value={customModel}
-                placeholder={t("management.model.overridePlaceholder")}
-                onChange={(event) => setCustomModel(event.target.value)}
-              />
-            </label>
-          ) : null}
           <details className="settings-advanced">
             <summary>{t("management.model.cheapSummary")}</summary>
             <p className="muted small">{t("management.model.cheapIntro")}</p>
-            <label>
-              {t("management.model.cheapOverride")}
-              <input
-                value={cheapModel}
-                placeholder={config.cheapModel}
-                onChange={(event) => setCheapModel(event.target.value)}
-              />
-            </label>
+            <ModelPicker
+              key={`cheap-${saves}`}
+              label={t("management.model.cheapLabel")}
+              overrideLabel={t("management.model.cheapOverride")}
+              value={cheapModel}
+              onChange={setCheapModel}
+              deploymentModel={config.cheapModel}
+              models={models}
+              disabled={busy || !canConfigure}
+            />
           </details>
           <div className="settings-actions">
             <Button type="button" variant="default" onClick={() => void save()}>
@@ -805,13 +899,13 @@ export function BotEditor({
             </Button>
             <span className="management-effective-model">
               {t.rich("management.model.effective", {
-                model: bot.model || config.defaultModel,
+                model: registeredModelLabel(t, models, bot.model || config.defaultModel),
                 code: (chunks) => <code>{chunks}</code>,
               })}
             </span>
             <span className="management-effective-model">
               {t.rich("management.model.effectiveCheap", {
-                model: bot.cheapModel || config.cheapModel,
+                model: registeredModelLabel(t, models, bot.cheapModel || config.cheapModel),
                 code: (chunks) => <code>{chunks}</code>,
               })}
             </span>
@@ -1057,6 +1151,7 @@ export function ManagementScreen({
                 {t("management.bot.modelOverride")}
                 <input
                   value={model}
+                  list="management-registered-models"
                   placeholder={config?.defaultModel}
                   onChange={(event) => setModel(event.target.value)}
                 />
@@ -1065,10 +1160,12 @@ export function ManagementScreen({
                 {t("management.bot.cheapModelOverride")}
                 <input
                   value={cheapModel}
+                  list="management-registered-models"
                   placeholder={config?.cheapModel}
                   onChange={(event) => setCheapModel(event.target.value)}
                 />
               </label>
+              <ModelSuggestions id="management-registered-models" models={config?.models ?? []} />
               <Button type="submit">{t("management.bot.create")}</Button>
             </fieldset>
           </form>
