@@ -208,6 +208,7 @@
 }
 /* ADR-0023 amendment 2: a member bot cannot see images (vision-notice.tsx). */
 .vision-notice {
+  display: block;
   margin: 0 0 8px;
   padding: 6px 10px;
   border-radius: 8px;

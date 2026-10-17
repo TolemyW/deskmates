@@ -59,8 +59,8 @@ export function VisionNotice({ names }: { names: readonly string[] }) {
   const t = useT();
   if (names.length === 0) return null;
   return (
-    <p className="vision-notice small" role="status">
+    <output className="vision-notice small">
       {t("chatPane.visionNotice", { names: names.join(", ") })}
-    </p>
+    </output>
   );
 }
