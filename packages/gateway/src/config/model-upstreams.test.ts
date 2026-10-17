@@ -13,21 +13,21 @@ const BASE_ENV = {
   CHEAP_MODEL: "qwen3.8-27b",
 };
 
-const TOS = [
+const GPU_UPSTREAMS = [
   {
-    id: "tos-9b",
+    id: "gpu-9b",
     baseUrl: "http://10.20.50.16:8003/",
     models: ["qwen3.5-9b"],
     protocol: "anthropic",
   },
   {
-    id: "tos-27b",
+    id: "gpu-27b",
     baseUrl: "http://10.20.50.16:8004",
     models: ["qwen3.8-27b"],
     protocol: "anthropic",
   },
   {
-    id: "tos-vl",
+    id: "gpu-vl",
     baseUrl: "http://10.20.50.16:8005",
     authToken: "vl-secret",
     models: ["qwen3.5-9b-vl"],
@@ -49,16 +49,16 @@ describe("MODEL_UPSTREAMS (ADR-0039 decision 1)", () => {
   });
 
   it("routes listed models to their upstream and everything else to default", () => {
-    const config = loadConfig({ ...BASE_ENV, MODEL_UPSTREAMS: JSON.stringify(TOS) });
+    const config = loadConfig({ ...BASE_ENV, MODEL_UPSTREAMS: JSON.stringify(GPU_UPSTREAMS) });
     const registry = modelRegistryOf(config);
     expect(registry.resolve("qwen3.5-9b")).toEqual({
-      id: "tos-9b",
+      id: "gpu-9b",
       baseUrl: "http://10.20.50.16:8003",
       protocol: "anthropic",
     });
-    expect(registry.resolve("qwen3.8-27b")?.id).toBe("tos-27b");
+    expect(registry.resolve("qwen3.8-27b")?.id).toBe("gpu-27b");
     expect(registry.resolve("qwen3.5-9b-vl")).toEqual({
-      id: "tos-vl",
+      id: "gpu-vl",
       baseUrl: "http://10.20.50.16:8005",
       authToken: "vl-secret",
       protocol: "anthropic",
@@ -69,12 +69,12 @@ describe("MODEL_UPSTREAMS (ADR-0039 decision 1)", () => {
 
   it("lists registered models with upstream ids only, sorted", () => {
     const registry = new ModelRegistry(
-      loadConfig({ ...BASE_ENV, MODEL_UPSTREAMS: JSON.stringify(TOS) }),
+      loadConfig({ ...BASE_ENV, MODEL_UPSTREAMS: JSON.stringify(GPU_UPSTREAMS) }),
     );
     expect(registry.registered()).toEqual([
-      { model: "qwen3.5-9b", upstream: "tos-9b" },
-      { model: "qwen3.5-9b-vl", upstream: "tos-vl" },
-      { model: "qwen3.8-27b", upstream: "tos-27b" },
+      { model: "qwen3.5-9b", upstream: "gpu-9b" },
+      { model: "qwen3.5-9b-vl", upstream: "gpu-vl" },
+      { model: "qwen3.8-27b", upstream: "gpu-27b" },
       { model: "remote-large", upstream: "default" },
     ]);
   });
@@ -85,16 +85,16 @@ describe("MODEL_UPSTREAMS (ADR-0039 decision 1)", () => {
       MODEL_BASE_URL: "",
       MODEL_AUTH_TOKEN: "",
       DEFAULT_MODEL: "qwen3.5-9b",
-      MODEL_UPSTREAMS: JSON.stringify(TOS),
+      MODEL_UPSTREAMS: JSON.stringify(GPU_UPSTREAMS),
     });
     const registry = new ModelRegistry(config);
     expect(registry.resolve("remote-large")).toBeUndefined();
-    expect(registry.resolve("qwen3.5-9b")?.id).toBe("tos-9b");
+    expect(registry.resolve("qwen3.5-9b")?.id).toBe("gpu-9b");
     expect(registry.secrets()).toEqual(["vl-secret"]);
   });
 
   it("refuses a configured model no upstream serves (decision 4)", () => {
-    const only = JSON.stringify(TOS);
+    const only = JSON.stringify(GPU_UPSTREAMS);
     expect(() => loadConfig({ ...BASE_ENV, MODEL_BASE_URL: "", MODEL_UPSTREAMS: only })).toThrow(
       /DEFAULT_MODEL "remote-large" is served by no upstream/,
     );
@@ -122,7 +122,7 @@ describe("MODEL_UPSTREAMS (ADR-0039 decision 1)", () => {
     expect(() => loadConfig({ ...BASE_ENV, MODEL_BASE_URL: "" })).toThrow(/MODEL_BASE_URL/);
     expect(() => loadConfig({ ...BASE_ENV, MODEL_AUTH_TOKEN: "" })).toThrow(/MODEL_AUTH_TOKEN/);
     expect(() =>
-      loadConfig({ ...BASE_ENV, MODEL_AUTH_TOKEN: "", MODEL_UPSTREAMS: JSON.stringify(TOS) }),
+      loadConfig({ ...BASE_ENV, MODEL_AUTH_TOKEN: "", MODEL_UPSTREAMS: JSON.stringify(GPU_UPSTREAMS) }),
     ).toThrow(/MODEL_AUTH_TOKEN/);
   });
 
