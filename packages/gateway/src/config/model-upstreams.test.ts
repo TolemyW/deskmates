@@ -122,7 +122,11 @@ describe("MODEL_UPSTREAMS (ADR-0039 decision 1)", () => {
     expect(() => loadConfig({ ...BASE_ENV, MODEL_BASE_URL: "" })).toThrow(/MODEL_BASE_URL/);
     expect(() => loadConfig({ ...BASE_ENV, MODEL_AUTH_TOKEN: "" })).toThrow(/MODEL_AUTH_TOKEN/);
     expect(() =>
-      loadConfig({ ...BASE_ENV, MODEL_AUTH_TOKEN: "", MODEL_UPSTREAMS: JSON.stringify(GPU_UPSTREAMS) }),
+      loadConfig({
+        ...BASE_ENV,
+        MODEL_AUTH_TOKEN: "",
+        MODEL_UPSTREAMS: JSON.stringify(GPU_UPSTREAMS),
+      }),
     ).toThrow(/MODEL_AUTH_TOKEN/);
   });
 
