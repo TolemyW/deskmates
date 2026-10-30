@@ -361,7 +361,9 @@ export class ConnectorProxy {
       });
     }
     try {
-      if (!res.ok)
+      if (!res.ok) {
+        // An unread body keeps its socket checked out of the shared dispatcher until GC.
+        await res.body?.cancel().catch(() => undefined);
         throw new DeskmatesError(
           "connector_unavailable",
           `the connector answered HTTP ${res.status}`,
@@ -370,6 +372,7 @@ export class ConnectorProxy {
             status: res.status,
           },
         );
+      }
       return await res.json();
     } catch (err) {
       if (err instanceof DeskmatesError) throw err;

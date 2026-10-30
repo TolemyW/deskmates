@@ -8,7 +8,12 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit -p .",
-    "test": "vitest run --config ../../vitest.config.ts --environment jsdom"
+    "test": "vitest run --config ../../vitest.config.ts --environment jsdom",
+    "check:tab-layout": "node scripts/check-tab-layout.mjs",
+    "check:layout": "npm run check:tab-layout && npm run check:page-rows && npm run check:chat-layout && npm run check:mobile-density",
+    "check:page-rows": "node scripts/check-page-rows.mjs",
+    "check:chat-layout": "node scripts/check-chat-layout.mjs",
+    "check:mobile-density": "node scripts/check-mobile-density.mjs"
   },
   "dependencies": {
     "@deskmates/contracts": "*",
@@ -19,6 +24,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "clsx": "^2.1.1",
     "lucide-react": "^1.47.0",
+    "parse5": "7.3.0",
     "pdfjs-dist": "5.4.624",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
@@ -35,6 +41,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
     "jsdom": "^26.1.0",
+    "playwright": "1.58.2",
     "vite": "^7.3.6"
   }
 }

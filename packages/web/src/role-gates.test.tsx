@@ -10,9 +10,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApiClient } from "./api/client.js";
 import type { MembersClient } from "./api/members-client.js";
 import { App } from "./app.js";
-import { BotEditor, EgressEditor, ManagementScreen } from "./features/contacts/management.js";
+import { BotEditor } from "./features/contacts/management.js";
 import { CostAlertsPanel } from "./features/costs/cost-alerts.js";
-import { IntegrationsScreen } from "./features/integrations/integrations.js";
+import { AppsTab } from "./features/integrations/apps-tab.js";
+import { DatabasesTab } from "./features/integrations/databases-tab.js";
 import { KnowledgePanel } from "./features/knowledge/knowledge.js";
 import { MembersScreen } from "./features/members/members.js";
 import { SessionRolesProvider } from "./state/session-roles.js";
@@ -127,43 +128,58 @@ function api() {
   });
 }
 
-describe("Integrations", () => {
-  it("a Member sees what platform maintenance and Admins can do, and cannot start it", async () => {
-    as(MEMBER, <IntegrationsScreen api={api()} />);
-    const adopt = await screen.findByRole("button", { name: "Adopt" });
-    expect(adopt).toBeDisabled();
-    expect(
-      screen.getByText("Only a platform maintainer can adopt or unadopt an app."),
-    ).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Unadopt slack" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Add account" })).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Revoke slack/team" })).not.toBeInTheDocument();
+describe("Connections", () => {
+  const apps = () => <AppsTab api={api()} workspaceId={workspace.id} />;
+  const search = (text: string) =>
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search all apps" }), {
+      target: { value: text },
+    });
+
+  it("a Member sees what is in use and who can connect, with no action they cannot take", async () => {
+    as(MEMBER, apps());
+    expect(await screen.findByText("1 connected")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Add another Slack account/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Revoke slack/team" })).toBeNull();
     expect(
       screen.getByText("Only an Admin or Owner can connect or revoke an account."),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Register a database" })).toBeDisabled();
-    expect(screen.getByText("Only an Admin or Owner can register a database.")).toBeVisible();
+    search("git");
+    expect(await screen.findByText("Needs the maintainer")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Enable/ })).toBeNull();
   });
 
-  it("an Admin connects accounts and databases but does not adopt apps", async () => {
-    as(ADMIN, <IntegrationsScreen api={api()} />);
-    expect(await screen.findByRole("button", { name: "Adopt" })).toBeDisabled();
-    expect(
-      screen.getByText("Only a platform maintainer can adopt or unadopt an app."),
-    ).toBeVisible();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Add account" })).toBeEnabled());
+  it("an Admin connects accounts but does not enable apps", async () => {
+    as(ADMIN, apps());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Add another Slack account" })).toBeEnabled(),
+    );
     expect(await screen.findByRole("button", { name: "Revoke slack/team" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Register a database" })).toBeEnabled();
+    search("git");
+    expect(await screen.findByText("Needs the maintainer")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Enable/ })).toBeNull();
     expect(screen.queryByText(/Only an Admin or Owner/)).not.toBeInTheDocument();
   });
 
-  it("a platform maintainer adopts and unadopts apps whatever the tenant role", async () => {
-    as(MAINTAINER, <IntegrationsScreen api={api()} />);
-    expect(await screen.findByRole("button", { name: "Adopt" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Unadopt slack" })).toBeEnabled();
-    expect(screen.queryByText(/platform maintainer can/)).not.toBeInTheDocument();
-    // Connecting is the tenant's configuration: this maintainer is only a Member here.
-    expect(screen.getByRole("button", { name: "Register a database" })).toBeDisabled();
+  it("a platform maintainer enables and disables apps whatever the workspace role", async () => {
+    as(MAINTAINER, apps());
+    await screen.findByText("1 connected");
+    search("slack");
+    expect(await screen.findByRole("button", { name: "Unadopt slack" })).toBeEnabled();
+    search("git");
+    expect(
+      await screen.findByRole("button", { name: "Enable GitHub on this installation" }),
+    ).toBeEnabled();
+    // Connecting is the workspace's configuration: this maintainer is only a Member here.
+    expect(screen.queryByRole("button", { name: "Add another Slack account" })).toBeNull();
+  });
+
+  it("registering a database is an Admin's", async () => {
+    as(MEMBER, <DatabasesTab api={api()} workspaceId={workspace.id} />);
+    expect(await screen.findByRole("button", { name: "Register a database" })).toBeDisabled();
+    expect(screen.getByText("Only an Admin or Owner can register a database.")).toBeVisible();
+    cleanup();
+    as(ADMIN, <DatabasesTab api={api()} workspaceId={workspace.id} />);
+    expect(await screen.findByRole("button", { name: "Register a database" })).toBeEnabled();
   });
 });
 
@@ -197,7 +213,7 @@ describe("Workspace and bot configuration", () => {
       screen.getByText("Only an Admin or Owner can write or remove an approval rule."),
     ).toBeVisible();
     // Using the bot stays open to a Member.
-    expect(screen.getByRole("button", { name: "Start test conversation" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Start test chat" })).toBeEnabled();
   });
 
   it("an Admin edits a bot's instructions, model, schedules and approval rules", async () => {
@@ -208,23 +224,6 @@ describe("Workspace and bot configuration", () => {
     expect(screen.getByRole("button", { name: "Add schedule" })).toBeEnabled();
     expect(await screen.findByRole("button", { name: "Remove rule" })).toBeEnabled();
     expect(screen.getByText("Write a rule by hand")).toBeInTheDocument();
-    expect(screen.queryByText(ROLE_NOTE)).not.toBeInTheDocument();
-  });
-
-  it("only an Admin changes a workspace's egress or creates workspaces and bots", async () => {
-    as(MEMBER, <EgressEditor api={api()} workspace={workspace} onSaved={() => undefined} />);
-    expect(screen.getByRole("button", { name: "Save egress allowlist" })).toBeDisabled();
-    expect(
-      screen.getByText("Only an Admin or Owner can change the allowed domains."),
-    ).toBeVisible();
-    cleanup();
-    as(MEMBER, <ManagementScreen api={api()} />);
-    expect(await screen.findByRole("button", { name: "Create workspace" })).toBeDisabled();
-    expect(screen.getByText("Only an Admin or Owner can create a workspace.")).toBeVisible();
-    expect(await screen.findByRole("button", { name: "Create bot" })).toBeDisabled();
-    cleanup();
-    as(ADMIN, <EgressEditor api={api()} workspace={workspace} onSaved={() => undefined} />);
-    expect(screen.getByRole("button", { name: "Save egress allowlist" })).toBeEnabled();
     expect(screen.queryByText(ROLE_NOTE)).not.toBeInTheDocument();
   });
 });
@@ -401,9 +400,12 @@ describe("the signed-in app", () => {
         }),
       );
       render(<App />);
-      const adopt = await screen.findByRole("button", { name: "Adopt" });
-      if (adoptEnabled) expect(adopt).toBeEnabled();
-      else expect(adopt).toBeDisabled();
+      fireEvent.change(await screen.findByRole("searchbox", { name: "Search all apps" }), {
+        target: { value: "git" },
+      });
+      const enable = screen.queryByRole("button", { name: "Enable GitHub on this installation" });
+      if (adoptEnabled) expect(enable).toBeEnabled();
+      else expect(enable).toBeNull();
     });
   }
 });

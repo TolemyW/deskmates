@@ -14,6 +14,7 @@
   "workdir.off": "オフ",
   "workdir.on": "オン",
   "workdir.perBotHelp": "ボットごとの専用ディレクトリでは、各ボットが扱うコードを自分用に複製し、成果物もそこに置きます。仲間はそれを読めます。共有の /work では、どのボットも /work/uploads 以外のどこにでも書き込めます。",
+  "workdir.retry": "設定を再読み込み",
   "workdir.roleNote": "作業ディレクトリを変更",
   "workdir.save": "作業ディレクトリを保存",
   "workdir.source.gateway": "サーバーの既定値",

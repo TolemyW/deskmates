@@ -60,7 +60,7 @@ describe("direct-message internal route", () => {
       triggerKind: "thread_message",
       triggerRef: "test",
     });
-    ctx.threads.setStatus(thread.id, "paused");
+    ctx.threads.pause(thread.id, { reason: "turn_budget", seq: 0, at: new Date().toISOString() });
     const events: GatewayEvent[] = [];
     const unsubscribe = ctx.bus.subscribe((event) => events.push(event));
     const response = await app.inject({
@@ -74,6 +74,8 @@ describe("direct-message internal route", () => {
     expect(response.json().routing).toMatchObject({
       addressed: ["bob"],
       wakeBlocked: "thread_paused",
+      // ADR-0005 amendment 3, decision 27: the reason travels with the answer.
+      paused: { reason: "turn_budget" },
     });
     for (const key of ["runs", "changed", "blocked", "wakeBlocked"])
       expect(response.json().message).not.toHaveProperty(key);
@@ -98,7 +100,7 @@ describe("direct-message internal route", () => {
       triggerKind: "thread_message",
       triggerRef: "test",
     });
-    ctx.threads.setStatus(thread.id, "paused");
+    ctx.threads.pause(thread.id, { reason: "turn_budget", seq: 0, at: new Date().toISOString() });
     const response = await app.inject({
       method: "POST",
       url: `/internal/runs/${stalled.id}/messages`,

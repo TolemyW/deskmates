@@ -1,3 +1,4 @@
+import "./skills.css";
 import { Puzzle } from "lucide-react";
 import { defineFeature } from "../../app/feature.js";
 import { readableBy } from "../../app/routes.js";
@@ -7,6 +8,7 @@ import { SkillsScreen } from "./skills.js";
 export const feature = defineFeature(routes, {
   nav: {
     group: "resources",
+    audience: "tune",
     order: 30,
     icon: <Puzzle size={18} />,
     label: "app.nav.skills",

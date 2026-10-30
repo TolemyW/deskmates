@@ -1,7 +1,7 @@
 // T0: the wording of a `thread_post` result from the Gateway's routing facts.
 
 import { describe, expect, it } from "vitest";
-import { describeLastReply, describePosted } from "./posted-message.js";
+import { describeLastReply, describePause, describePosted } from "./posted-message.js";
 
 const base = { seq: 4, addressed: [], everyone: false, unknown: [], spaced: [] };
 
@@ -51,9 +51,12 @@ describe("describePosted", () => {
 
   // Issue #68 item 2: the Gateway created no run for the post, so the mention woke nobody.
   it.each([
-    ["relay_count", "the thread's relay cap was reached"],
-    ["turn_budget", "the thread reached its turn budget and is paused until a human messages it"],
-    ["thread_paused", "the thread is paused until a human messages it"],
+    [
+      "relay_count",
+      "the thread's relay cap was reached, so bots cannot wake each other here until a person posts. Mentioning them again wakes nobody; if their part is still needed, say so to the people in this thread and do not report it as done",
+    ],
+    ["turn_budget", "the thread reached its turn budget and is paused"],
+    ["thread_paused", "the thread is paused"],
     ["deadline_passed", "the thread is past its deadline"],
   ] as const)("says whom a %s refusal did not wake", (wakeBlocked, reason) => {
     expect(describePosted({ ...base, addressed: ["g_stock"], wakeBlocked }, true)).toBe(
@@ -64,10 +67,32 @@ describe("describePosted", () => {
   it("names every addressee, or everyone, a refused wake left asleep", () => {
     expect(
       describePosted({ ...base, addressed: ["a", "b"], wakeBlocked: "thread_paused" }, true),
-    ).toContain("@a, @b were not woken: the thread is paused until a human messages it.");
+    ).toContain("@a, @b were not woken: the thread is paused.");
     expect(
       describePosted({ ...base, everyone: true, wakeBlocked: "thread_paused" }, true),
-    ).toContain("Nobody was woken: the thread is paused until a human messages it.");
+    ).toContain("Nobody was woken: the thread is paused.");
+  });
+
+  // ADR-0005 amendment 3, decision 27: the reason, and for a turn-budget pause when it resumes.
+  it("says why the thread is paused and when a turn-budget pause resumes", () => {
+    const at = "2026-10-17T13:00:00.000Z";
+    const budget = describePosted(
+      {
+        ...base,
+        addressed: ["g_stock"],
+        wakeBlocked: "turn_budget",
+        paused: { reason: "turn_budget", resumeAt: at },
+      },
+      true,
+    );
+    expect(budget).toContain("@g_stock was not woken: the thread reached its turn budget");
+    expect(budget).toContain(`until it resumes by itself at ${at}`);
+    expect(budget).not.toContain("Nobody was woken.");
+    const operator = describePosted({ ...base, paused: { reason: "operator" } }, true);
+    expect(operator).toContain("Nobody was woken.");
+    expect(operator).toContain("paused by an operator");
+    expect(operator).toContain("until a person resumes it");
+    expect(describePause({ reason: "operator" })).not.toContain("by itself");
   });
 });
 

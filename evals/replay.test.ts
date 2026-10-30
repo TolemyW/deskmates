@@ -54,6 +54,8 @@ function startRequest(): StartRunRequest {
     runId: "run-replay-1" as RunId,
     botId: "bot-nova" as BotId,
     botName: "nova",
+    botRole: "research assistant",
+    workspaceName: "Ops",
     workspaceId: "ws-1" as WorkspaceId,
     threadId: "thread-1" as ThreadId,
     botHomeDir: HOME,
@@ -795,6 +797,7 @@ describe("a trace carries the run's visibility (issue #70)", () => {
       decidedApproval: true,
       deliveredTask: false,
       visibleOutcome: true,
+      silent: false,
     };
     const trace = buildTrace({ ...base, run: { ...silentRun, visibility }, events: [] });
     expect(trace.run.status).toBe("silent");
@@ -810,6 +813,8 @@ describe("a trace carries the run's visibility (issue #70)", () => {
       decidedApproval: false,
       deliveredTask: false,
       visibleOutcome: true,
+      // A run stored `silent` that posted is not silent by the owner's definition (2026-10-17).
+      silent: false,
     });
   });
 });

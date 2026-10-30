@@ -45,7 +45,7 @@ describe("BotIdentity", () => {
         onSaved={onSaved}
       />,
     );
-    fireEvent.change(screen.getByLabelText("One-line role"), { target: { value: "Escalations" } });
+    fireEvent.change(screen.getByLabelText("One-line job"), { target: { value: "Escalations" } });
     fireEvent.click(await screen.findByLabelText("ledger"));
     fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
     await waitFor(() =>
@@ -55,7 +55,7 @@ describe("BotIdentity", () => {
       }),
     );
     expect(onSaved).toHaveBeenCalled();
-    expect(screen.getByText("Saved. The bot uses this from its next run.")).toBeTruthy();
+    expect(screen.getByText("Saved. The Bot uses this when it starts its next work.")).toBeTruthy();
   });
 
   it("pauses and resumes with one switch, saying what pausing does", async () => {
@@ -69,7 +69,7 @@ describe("BotIdentity", () => {
         onSaved={vi.fn()}
       />,
     );
-    expect(screen.getByText(/schedules, webhooks and chat messages are skipped/)).toBeTruthy();
+    expect(screen.getByText(/schedules, other apps and chat messages are skipped/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
     await waitFor(() => expect(updateBot).toHaveBeenCalledWith("bot_1", { paused: true }));
     rerender(
@@ -136,7 +136,7 @@ describe("RuleVersions", () => {
         onRestored={onRestored}
       />,
     );
-    expect(await screen.findByText("last run used v1")).toBeTruthy();
+    expect(await screen.findByText("last work used v1")).toBeTruthy();
     const diff = await screen.findByLabelText("Changes from v1 to v2");
     expect(within(diff).getByText(/- You are terse\./)).toBeTruthy();
     expect(within(diff).getByText(/\+ You are warm\./)).toBeTruthy();
@@ -147,7 +147,7 @@ describe("RuleVersions", () => {
     );
     expect(onRestored).toHaveBeenCalled();
     expect(
-      await screen.findByText(/Version 1 restored as version 3\. The bot is busy/),
+      await screen.findByText(/Version 1 restored as version 3\. The Bot is busy/),
     ).toBeTruthy();
   });
 });
@@ -193,14 +193,14 @@ describe("Run now", () => {
         onSaved={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Run schedule 1 now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start schedule 1 now" }));
     await waitFor(() => expect(runCronNow).toHaveBeenCalledWith("bot_1", 0));
     expect(await screen.findByText(/Schedule 1 started/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Scheduled instruction 1"), {
       target: { value: "Changed" },
     });
     expect(
-      (screen.getByRole("button", { name: "Run schedule 1 now" }) as HTMLButtonElement).disabled,
+      (screen.getByRole("button", { name: "Start schedule 1 now" }) as HTMLButtonElement).disabled,
     ).toBe(true);
     rerender(
       <BotSchedules
@@ -210,6 +210,6 @@ describe("Run now", () => {
         onSaved={vi.fn()}
       />,
     );
-    expect(screen.getByText(/The bot is paused/)).toBeTruthy();
+    expect(screen.getByText(/The Bot is paused/)).toBeTruthy();
   });
 });

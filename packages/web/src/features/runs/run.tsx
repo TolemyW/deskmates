@@ -19,7 +19,8 @@ import {
 import { useEffect, useReducer, useRef, useState } from "react";
 import { type ApiClient, api as defaultApi } from "../../api/client.js";
 import { subscribeEvents } from "../../api/events.js";
-import type { GatewayEvent } from "../../api/types.js";
+import { ApiError, type GatewayEvent } from "../../api/types.js";
+import { DeletedObjectState } from "../../components/deleted-object-state.js";
 import { Button } from "../../components/ui/button.js";
 import {
   describeRunError,
@@ -30,10 +31,12 @@ import {
 } from "../../format.js";
 import type { MessageKey } from "../../i18n/catalogs.js";
 import { useT } from "../../i18n/i18n-provider.js";
+import { useTuneView } from "../../lib/interface-view.js";
 import { Markdown } from "../../lib/markdown.js";
-import { threadHref } from "../../router.js";
+import { runHref, threadHref } from "../../router.js";
 import { initialRunView, runViewReducer } from "../../state/run-view.js";
-import { RoleNote, useCan, useCanInOwnSideChat } from "../../state/session-roles.js";
+import { RoleNote, useCanInOwnSideChat } from "../../state/session-roles.js";
+import { AnalyticsRunLink } from "../analytics/analytics-run-link.js";
 import { eventsShown, isDiagnosticEvent, ledgerRows } from "./ledger-rows.js";
 import { PhaseTimingTimeline, phaseSpans } from "./phase-timing.js";
 import { RunChangesSection } from "./run-changes.js";
@@ -43,7 +46,7 @@ import { RunStory } from "./run-story-panel.js";
 import { RunTimelinePanel } from "./run-timeline.js";
 import { ToolCallRow } from "./tool-call-row.js";
 
-/** A run's status as the pill shows it; the English is the status code itself. */
+/** A run's status as the pill shows it, always as localized words rather than an internal code. */
 const RUN_STATUS_LABEL: Readonly<Record<RunStatus, MessageKey>> = {
   queued: "run.status.queued",
   running: "run.status.running",
@@ -52,6 +55,7 @@ const RUN_STATUS_LABEL: Readonly<Record<RunStatus, MessageKey>> = {
   waiting_approval: "run.status.waitingApproval",
   waiting_browser: "run.status.waitingBrowser",
   waiting_continuation: "run.status.waitingContinuation",
+  waiting_platform: "run.status.waitingPlatform",
   succeeded: "run.status.succeeded",
   silent: "run.status.silent",
   failed: "run.status.failed",
@@ -71,6 +75,7 @@ const TRIGGER_LABEL: Readonly<Record<RunTriggerKind, MessageKey>> = {
   approval: "run.trigger.approval",
   welcome: "run.trigger.welcome",
   manual: "run.trigger.manual",
+  model_job: "run.trigger.modelJob",
 };
 
 /** The trigger as the lede reads it: "started by a message in the chat". */
@@ -81,6 +86,7 @@ const TRIGGER_STORY: Readonly<Record<RunTriggerKind, MessageKey>> = {
   approval: "runStory.trigger.approval",
   welcome: "runStory.trigger.welcome",
   manual: "runStory.trigger.manual",
+  model_job: "runStory.trigger.modelJob",
 };
 
 export interface RunScreenProps {
@@ -98,8 +104,13 @@ function RunScreenContent(props: RunScreenProps) {
   const { runId } = props;
   const api = props.api ?? defaultApi;
   const t = useT();
+  // Tokens, timings and the technical log are for tuning (docs/use-and-tune-views.md); the use
+  // view keeps the story, the facts, what the run changed and the continuation controls.
+  const tune = useTuneView();
   const [state, dispatch] = useReducer(runViewReducer, runId, initialRunView);
   const [error, setError] = useState<string | undefined>();
+  const [missing, setMissing] = useState(false);
+  const [loadRevision, setLoadRevision] = useState(0);
   const [oldestFirst, setOldestFirst] = useState(false);
   // #113 slice R: the replay opens on the newest events; older ones load on request.
   const [hasOlder, setHasOlder] = useState(false);
@@ -109,6 +120,14 @@ function RunScreenContent(props: RunScreenProps) {
   // The subscription callbacks outlive a render, so the refetch reads the event list from a ref.
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Issue #15: the startup timeline sits in the collapsed Details; the header link opens it there.
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const timelineRef = useRef<HTMLElement>(null);
+  const showTimeline = (): void => {
+    if (detailsRef.current) detailsRef.current.open = true;
+    timelineRef.current?.scrollIntoView?.({ block: "start" });
+    timelineRef.current?.focus({ preventScroll: true });
+  };
 
   // The stream is opened before the first fetch: subscribing afterwards drops every frame emitted
   // in between, and a short run can finish there. The reducer merges, so an overlap is free but a
@@ -116,10 +135,26 @@ function RunScreenContent(props: RunScreenProps) {
   // answers; it is then narrowed to that thread, and the unfiltered one is closed only after the
   // narrowed one is open so the swap has no gap of its own. Cron and webhook runs have no thread
   // and stay on the unfiltered stream, where the reducer drops other runs' frames.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: explicit retry starts a fresh subscription and fetch.
   useEffect(() => {
     let cancelled = false;
     let stopWide: (() => void) | undefined;
     let stopScoped: (() => void) | undefined;
+    setMissing(false);
+    setError(undefined);
+
+    const fail = (err: unknown): void => {
+      if (cancelled) return;
+      if (err instanceof ApiError && err.status === 404) {
+        setMissing(true);
+        stopWide?.();
+        stopWide = undefined;
+        stopScoped?.();
+        stopScoped = undefined;
+        return;
+      }
+      setError(errorMessage(err));
+    };
 
     /** Ask for what the stream may not have delivered; the reducer merges it in. */
     const refetch = async (): Promise<void> => {
@@ -152,10 +187,7 @@ function RunScreenContent(props: RunScreenProps) {
     };
 
     const onReconnect = (): void => {
-      void refetch().catch(() => {
-        // A failed gap recovery is not worth replacing the screen with an error; the next
-        // reconnect or the terminal refetch tries again.
-      });
+      void refetch().catch(fail);
     };
 
     const onEvent = (event: GatewayEvent): void => {
@@ -185,21 +217,25 @@ function RunScreenContent(props: RunScreenProps) {
         if (!cancelled) dispatch({ type: "loaded", run, usage, usageCoverage, events });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(errorMessage(err));
+        fail(err);
       });
     return () => {
       cancelled = true;
       stopWide?.();
       stopScoped?.();
     };
-  }, [runId, api]);
+  }, [runId, api, loadRevision]);
 
   // Usage is only written at the end of a run, so refetch once the status turns terminal.
   const status = state.run?.status;
   useEffect(() => {
     if (
       !status ||
-      (!isTerminal(status) && status !== "waiting_continuation" && status !== "waiting_approval")
+      (!isTerminal(status) &&
+        status !== "waiting_continuation" &&
+        status !== "waiting_approval" &&
+        // ADR-0029 decision 8: a platform park may have just filled the attempt's usage in.
+        status !== "waiting_platform")
     )
       return;
     let cancelled = false;
@@ -244,49 +280,61 @@ function RunScreenContent(props: RunScreenProps) {
   // its workspace serves the evidence files. A failed read leaves the id in the facts.
   const [bot, setBot] = useState<{ name: string; workspaceId: WorkspaceId }>();
   const botId = run?.botId;
+  const [lookupRevision, setLookupRevision] = useState(0);
+  const [botLookupFailed, setBotLookupFailed] = useState(false);
+  const [threadLookupFailed, setThreadLookupFailed] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: lookupRevision retries this scoped read.
   useEffect(() => {
     let cancelled = false;
     if (botId) {
+      setBotLookupFailed(false);
       void api
         .listBotsByIds([botId])
         .then((bots) => {
           const found = bots.find((b) => b.id === botId);
           if (!cancelled && found) setBot({ name: found.name, workspaceId: found.workspaceId });
         })
-        .catch(() => {});
+        .catch(() => {
+          if (!cancelled) setBotLookupFailed(true);
+        });
     }
     return () => {
       cancelled = true;
     };
-  }, [api, botId]);
+  }, [api, botId, lookupRevision]);
   const evidenceWorkspace = bot?.workspaceId;
-  // A Member stops or continues only the runs of their own side chat (ADR-0022 amendment 1
-  // A11/A12); the thread is fetched only for a role that needs the answer. The Gateway decides.
-  const managesRuns = useCan("run.cancel").allowed;
+  // Resolve the run thread even when the selected workspace role is Admin: its actual
+  // workspace and private-chat ownership determine cancellation/continuation (ADR-0022).
   const [runThread, setRunThread] = useState<{ thread: Thread; memberCount: number }>();
   const runThreadId = run?.threadId;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: lookupRevision retries this scoped read.
   useEffect(() => {
-    if (managesRuns || runThreadId === undefined) return;
+    if (runThreadId === undefined) return;
     let active = true;
+    setThreadLookupFailed(false);
     api
       .getThread(runThreadId)
       .then((detail) => {
         if (active) setRunThread({ thread: detail.thread, memberCount: detail.members.length });
       })
-      .catch(() => {});
+      .catch(() => {
+        if (active) setThreadLookupFailed(true);
+      });
     return () => {
       active = false;
     };
-  }, [api, managesRuns, runThreadId]);
+  }, [api, runThreadId, lookupRevision]);
   const canCancel = useCanInOwnSideChat(
     "run.cancel",
     runThread?.thread,
     runThread?.memberCount ?? 0,
+    evidenceWorkspace ?? null,
   );
   const canContinue = useCanInOwnSideChat(
     "run.continue",
     runThread?.thread,
     runThread?.memberCount ?? 0,
+    evidenceWorkspace ?? null,
   );
   const cancel = async (): Promise<void> => {
     setCancelling(true);
@@ -312,6 +360,13 @@ function RunScreenContent(props: RunScreenProps) {
   const waitingContinuation = run?.status === "waiting_continuation";
   const trigger = run ? TRIGGER_STORY[run.triggerKind] : undefined;
 
+  if (missing)
+    return (
+      <section className="run-screen" data-run-id={runId}>
+        <DeletedObjectState />
+      </section>
+    );
+
   return (
     <section className="run-screen" data-run-id={runId}>
       <header className="run-header">
@@ -319,9 +374,7 @@ function RunScreenContent(props: RunScreenProps) {
           <h2>
             {t("run.title")}
             {run ? (
-              <span className={`status ${run.status}`}>
-                {RUN_STATUS_LABEL[run.status] ? t(RUN_STATUS_LABEL[run.status]) : run.status}
-              </span>
+              <span className={`status ${run.status}`}>{t(RUN_STATUS_LABEL[run.status])}</span>
             ) : null}
           </h2>
           {run?.threadId ? (
@@ -329,6 +382,20 @@ function RunScreenContent(props: RunScreenProps) {
               {t("run.openConversation")}
             </a>
           ) : null}
+          {run && tune ? (
+            <a
+              href={runHref(run.id)}
+              className="small"
+              data-testid="run-timeline-link"
+              onClick={(event) => {
+                event.preventDefault();
+                showTimeline();
+              }}
+            >
+              {t("run.timelineLink")}
+            </a>
+          ) : null}
+          {run && tune ? <AnalyticsRunLink api={api} runId={run.id} /> : null}
           {run && !isTerminal(run.status) && canCancel.allowed ? (
             <Button
               variant="destructive"
@@ -344,7 +411,16 @@ function RunScreenContent(props: RunScreenProps) {
           <p className="run-lede muted small">
             {bot ? <strong>{bot.name}</strong> : null}
             {trigger ? <span>{t("runStory.startedBy", { trigger: t(trigger) })}</span> : null}
-            {run.startedAt ? <span>{formatDuration(run.startedAt, run.finishedAt)}</span> : null}
+            {run.startedAt ? (
+              <span>
+                {/* The startup timeline it points to is part of the tune view. */}
+                {tune
+                  ? t("run.timingWhere", {
+                      duration: formatDuration(run.startedAt, run.finishedAt),
+                    })
+                  : formatDuration(run.startedAt, run.finishedAt)}
+              </span>
+            ) : null}
           </p>
         ) : null}
         {run && !isTerminal(run.status) ? (
@@ -354,7 +430,20 @@ function RunScreenContent(props: RunScreenProps) {
             does={t("run.roleNote.cancel")}
           />
         ) : null}
-        {error ? <p className="error">{error}</p> : null}
+        {run && (botLookupFailed || threadLookupFailed) ? (
+          <div role="alert" className="run-lookup-error">
+            <p>{t("run.lookupFailed")}</p>
+            <Button onClick={() => setLookupRevision((value) => value + 1)}>
+              {t("run.retryLookup")}
+            </Button>
+          </div>
+        ) : null}
+        {error ? (
+          <div role="alert">
+            <p className="error">{error}</p>
+            <Button onClick={() => setLoadRevision((value) => value + 1)}>{t("run.reload")}</Button>
+          </div>
+        ) : null}
         {run?.error ? (
           <output className="notice danger">{describeRunError(run.error)}</output>
         ) : null}
@@ -367,10 +456,12 @@ function RunScreenContent(props: RunScreenProps) {
           loadingOlder={loadingOlder}
           onLoadOlder={() => void loadOlder()}
         />
-      ) : (
-        <p className="muted">{t("run.loading")}</p>
+      ) : error ? null : (
+        <p className="muted" aria-busy="true">
+          {t("run.loading")}
+        </p>
       )}
-      <details className="run-metadata" open={waitingContinuation}>
+      <details hidden={!run} className="run-metadata" open={waitingContinuation} ref={detailsRef}>
         <summary>{t("runStory.details")}</summary>
         {run && waitingContinuation ? (
           <RunContextPanel
@@ -393,11 +484,10 @@ function RunScreenContent(props: RunScreenProps) {
               <code>{run.id}</code>
             </dd>
             <dt>{t("run.fact.lane")}</dt>
-            <dd>{LANE_LABEL[run.lane] ? t(LANE_LABEL[run.lane]) : run.lane}</dd>
+            <dd>{t(LANE_LABEL[run.lane])}</dd>
             <dt>{t("run.fact.trigger")}</dt>
             <dd>
-              {TRIGGER_LABEL[run.triggerKind] ? t(TRIGGER_LABEL[run.triggerKind]) : run.triggerKind}{" "}
-              <code className="muted">{run.triggerRef}</code>
+              {t(TRIGGER_LABEL[run.triggerKind])} <code className="muted">{run.triggerRef}</code>
             </dd>
             {run.threadId ? (
               <>
@@ -438,45 +528,51 @@ function RunScreenContent(props: RunScreenProps) {
         ) : (
           <p className="muted">{t("run.loading")}</p>
         )}
-        <h3>{t("run.usage.heading")}</h3>
-        {state.usageCoverage ? <p>{t(`run.usage.${state.usageCoverage}`)}</p> : null}
-        {state.usage.length === 0 ? (
-          <p className="muted small">
-            {run && !isTerminal(run.status) ? t("run.usage.noneYet") : t("run.usage.none")}
-          </p>
-        ) : (
-          <Table className="usage" aria-label={t("run.usage.heading")}>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("run.usage.model")}</TableHead>
-                <TableHead>{t("run.usage.input")}</TableHead>
-                <TableHead>{t("run.usage.output")}</TableHead>
-                <TableHead>{t("run.usage.cacheRead")}</TableHead>
-                <TableHead>{t("run.usage.cacheCreate")}</TableHead>
-                <TableHead>{t("run.usage.cost")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {state.usage.map((u) => (
-                <TableRow key={u.model}>
-                  <TableCell>
-                    <code>{u.model}</code>
-                    {u.coverage === "partial" ? ` (${t("run.usage.partial")})` : ""}
-                  </TableCell>
-                  <TableCell>{u.inputTokens ?? "—"}</TableCell>
-                  <TableCell>{u.outputTokens ?? "—"}</TableCell>
-                  <TableCell>{u.cacheReadTokens ?? "—"}</TableCell>
-                  <TableCell>{u.cacheCreateTokens ?? "—"}</TableCell>
-                  <TableCell>
-                    {formatCost(u.costUsd)}
-                    {u.attributionUncertain ? <p>{t("run.usage.attributionUncertain")}</p> : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        {!tune ? null : (
+          <>
+            <h3>{t("run.usage.heading")}</h3>
+            {state.usageCoverage ? <p>{t(`run.usage.${state.usageCoverage}`)}</p> : null}
+            {state.usage.length === 0 ? (
+              <p className="muted small">
+                {run && !isTerminal(run.status) ? t("run.usage.noneYet") : t("run.usage.none")}
+              </p>
+            ) : (
+              <Table className="usage" aria-label={t("run.usage.heading")}>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("run.usage.model")}</TableHead>
+                    <TableHead>{t("run.usage.input")}</TableHead>
+                    <TableHead>{t("run.usage.output")}</TableHead>
+                    <TableHead>{t("run.usage.cacheRead")}</TableHead>
+                    <TableHead>{t("run.usage.cacheCreate")}</TableHead>
+                    <TableHead>{t("run.usage.cost")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {state.usage.map((u) => (
+                    <TableRow key={u.model}>
+                      <TableCell>
+                        <code>{u.model}</code>
+                        {u.coverage === "partial" ? ` (${t("run.usage.partial")})` : ""}
+                      </TableCell>
+                      <TableCell>{u.inputTokens ?? "—"}</TableCell>
+                      <TableCell>{u.outputTokens ?? "—"}</TableCell>
+                      <TableCell>{u.cacheReadTokens ?? "—"}</TableCell>
+                      <TableCell>{u.cacheCreateTokens ?? "—"}</TableCell>
+                      <TableCell>
+                        {formatCost(u.costUsd)}
+                        {u.attributionUncertain ? (
+                          <p>{t("run.usage.attributionUncertain")}</p>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </>
         )}
-        {run && !waitingContinuation ? (
+        {run && tune && !waitingContinuation ? (
           <RunContextPanel
             api={api}
             run={run}
@@ -485,13 +581,18 @@ function RunScreenContent(props: RunScreenProps) {
             onRunChanged={(updated) => dispatch({ type: "run_status", run: updated })}
           />
         ) : null}
-        {run ? (
-          <section className="management-subsection">
+        {run && tune ? (
+          <section
+            className="management-subsection"
+            ref={timelineRef}
+            tabIndex={-1}
+            data-testid="run-startup-timeline"
+          >
             <h3>{t("runTimeline.heading")}</h3>
             <RunTimelinePanel api={api} run={run} />
           </section>
         ) : null}
-        {spanCount > 0 ? (
+        {tune && spanCount > 0 ? (
           <section className="management-subsection">
             <h3>{t("phaseTiming.heading", { count: spanCount })}</h3>
             <PhaseTimingTimeline events={state.events} />
@@ -499,46 +600,48 @@ function RunScreenContent(props: RunScreenProps) {
         ) : null}
         {run ? <RunChangesSection api={api} run={run} /> : null}
       </details>
-      <details className="run-metadata run-log">
-        <summary>{t("runStory.technicalLog", { count: state.events.length })}</summary>
-        <div className="events-toolbar">
-          <span className="muted small">
-            {shown !== state.events.length
-              ? t("run.events.visibleOfTotal", {
-                  visible: shown,
-                  total: state.events.length,
-                })
-              : `(${state.events.length})`}
-          </span>
-          {hasOlder ? (
-            <Button size="sm" disabled={loadingOlder} onClick={() => void loadOlder()}>
-              {loadingOlder ? t("run.events.loadingOlder") : t("run.events.loadOlder")}
+      {!tune ? null : (
+        <details className="run-metadata run-log">
+          <summary>{t("runStory.technicalLog", { count: state.events.length })}</summary>
+          <div className="events-toolbar">
+            <span className="muted small">
+              {shown !== state.events.length
+                ? t("run.events.visibleOfTotal", {
+                    visible: shown,
+                    total: state.events.length,
+                  })
+                : `(${state.events.length})`}
+            </span>
+            {hasOlder ? (
+              <Button size="sm" disabled={loadingOlder} onClick={() => void loadOlder()}>
+                {loadingOlder ? t("run.events.loadingOlder") : t("run.events.loadOlder")}
+              </Button>
+            ) : null}
+            <Button size="sm" onClick={() => setOldestFirst((value) => !value)}>
+              {oldestFirst ? t("run.events.newestFirst") : t("run.events.oldestFirst")}
             </Button>
-          ) : null}
-          <Button size="sm" onClick={() => setOldestFirst((value) => !value)}>
-            {oldestFirst ? t("run.events.newestFirst") : t("run.events.oldestFirst")}
-          </Button>
-          {diagnosticCount > 0 ? (
-            <label className="small">
-              <input
-                type="checkbox"
-                checked={showDiagnostics}
-                onChange={(event) => setShowDiagnostics(event.currentTarget.checked)}
-              />{" "}
-              {t("run.events.showDiagnostics", { count: diagnosticCount })}
-            </label>
-          ) : null}
-        </div>
-        <ol className="events" aria-label={t("run.events.list")}>
-          {(oldestFirst ? rows : [...rows].reverse()).map((row) =>
-            row.kind === "tool" ? (
-              <ToolCallRow key={row.call.seq} row={row} evidenceUrl={evidenceUrl} />
-            ) : (
-              <RunEventRow key={row.event.seq} event={row.event} evidenceUrl={evidenceUrl} />
-            ),
-          )}
-        </ol>
-      </details>
+            {diagnosticCount > 0 ? (
+              <label className="small">
+                <input
+                  type="checkbox"
+                  checked={showDiagnostics}
+                  onChange={(event) => setShowDiagnostics(event.currentTarget.checked)}
+                />{" "}
+                {t("run.events.showDiagnostics", { count: diagnosticCount })}
+              </label>
+            ) : null}
+          </div>
+          <ol className="events" aria-label={t("run.events.list")}>
+            {(oldestFirst ? rows : [...rows].reverse()).map((row) =>
+              row.kind === "tool" ? (
+                <ToolCallRow key={row.call.seq} row={row} evidenceUrl={evidenceUrl} />
+              ) : (
+                <RunEventRow key={row.event.seq} event={row.event} evidenceUrl={evidenceUrl} />
+              ),
+            )}
+          </ol>
+        </details>
+      )}
     </section>
   );
 }

@@ -12,12 +12,17 @@
 //     `details.reason = "already_exists"`.
 
 import {
+  type AddressPool,
   DeskmatesError,
   type ExecRequest,
   type ExecResult,
+  type HostResource,
+  type HostResourceInventory,
+  type HostResourceTarget,
   type NetworkGrant,
   type SandboxHandle,
   type SandboxImageDrift,
+  type SandboxNetworkSubnet,
   type SandboxProvider,
   type SandboxSnapshot,
   type SandboxSpec,
@@ -153,11 +158,32 @@ export class FaultInjector {
   }
 }
 
+/**
+ * The host beyond the live sandboxes, for ADR-0006 amendment 5: resources a test seeds (T2
+ * leftovers, former-name networks), topology problems of live sandboxes, the daemon's pools.
+ */
+export interface FakeHost {
+  /** Listed after the live sandboxes' own resources. */
+  resources: HostResource[];
+  /** A live sandbox's topology verdict, by workspace id; Re-attach clears it. */
+  topology: Map<string, string>;
+  /** What Re-attach leaves wrong, by workspace id, instead of repairing. */
+  reattachLeaves: Map<string, string>;
+  addressPools?: AddressPool[];
+  subnets: SandboxNetworkSubnet[];
+}
+
 export class FakeSandboxProvider implements SandboxProvider {
   readonly kind = "fake" as const;
   readonly faults = new FaultInjector();
   /** Image references `removeStaleSandbox` treats as absent from the provider. */
   readonly missingImages = new Set<string>();
+  readonly host: FakeHost = {
+    resources: [],
+    topology: new Map(),
+    reattachLeaves: new Map(),
+    subnets: [],
+  };
 
   private readonly sandboxes = new Map<string, SandboxRecord>();
   private readonly handlers = new Map<string, ExecHandler>();
@@ -317,6 +343,13 @@ export class FakeSandboxProvider implements SandboxProvider {
     return record(result === TIMED_OUT ? timedOutResult(partial) : normalize(result, partial));
   }
 
+  /** Runs killed by marker (ADR-0029 decision 4), in order; the fake has no processes to stop. */
+  readonly killedRuns: string[] = [];
+  async killRun(handle: SandboxHandle, runId: string): Promise<void> {
+    this.live(handle);
+    this.killedRuns.push(runId);
+  }
+
   /** Rewrites the whole env file, like DockerProvider: a later call drops the earlier keys. */
   async injectEnv(handle: SandboxHandle, env: Readonly<Record<string, string>>): Promise<void> {
     const sandbox = this.live(handle);
@@ -354,6 +387,118 @@ export class FakeSandboxProvider implements SandboxProvider {
     for (const sandbox of this.sandboxes.values()) {
       if (sandbox.spec.workspaceId === workspaceId) sandbox.destroyed = true;
     }
+  }
+
+  /**
+   * Each live sandbox as DockerProvider names its pieces (container, proxy, network, volumes),
+   * then `host.resources`.
+   */
+  async listHostResources(): Promise<HostResourceInventory> {
+    const resources: HostResource[] = [];
+    for (const s of this.list()) {
+      const id = s.spec.workspaceId;
+      const problem = this.host.topology.get(id);
+      resources.push(
+        {
+          kind: "container",
+          name: `deskmates-ws-${id}`,
+          id: s.handle.providerRef,
+          workspaceId: id,
+          role: "workspace",
+          state: "running",
+          sidecarProcesses: 0,
+          ...(problem === undefined ? {} : { topologyProblem: problem }),
+        },
+        {
+          kind: "container",
+          name: `deskmates-egress-${id}`,
+          id: `${s.handle.providerRef}-proxy`,
+          workspaceId: id,
+          role: "egress-proxy",
+          state: "running",
+        },
+        {
+          kind: "network",
+          name: `deskmates-net-${id}`,
+          id: `${s.handle.providerRef}-net`,
+          workspaceId: id,
+          role: "workspace",
+          attachedContainers: 2,
+        },
+        ...Object.values(s.spec.volumes).map(
+          (name): HostResource => ({
+            kind: "volume",
+            name,
+            id: name,
+            workspaceId: id,
+            role: "volume",
+          }),
+        ),
+      );
+    }
+    resources.push(...this.host.resources.map((r) => ({ ...r })));
+    return {
+      resources,
+      ...(this.host.addressPools ? { addressPools: [...this.host.addressPools] } : {}),
+      subnets: [...this.host.subnets],
+    };
+  }
+
+  /** Like DockerProvider: containers, then networks, then volumes unless kept. */
+  async removeHostResources(target: HostResourceTarget): Promise<HostResource[]> {
+    const all = (await this.listHostResources()).resources;
+    if (target.kind === "network") {
+      const network = this.host.resources.find(
+        (r) => r.kind === "network" && r.name === target.name,
+      );
+      if (network === undefined) return [];
+      if (network.role !== "legacy")
+        throw new DeskmatesError(
+          "validation",
+          `network ${target.name} is not a former-name network`,
+        );
+      if ((network.attachedContainers ?? 0) > 0)
+        throw new DeskmatesError(
+          "invalid_transition",
+          `network ${target.name} still has containers attached`,
+          { reason: "network_in_use" },
+        );
+      this.host.resources = this.host.resources.filter((r) => r !== network);
+      return [network];
+    }
+    const order: HostResource["kind"][] = ["container", "network", "volume"];
+    const removed = all
+      .filter((r) => r.workspaceId === target.workspaceId && r.role !== "legacy")
+      .filter((r) => !(target.keepVolumes && r.kind === "volume"))
+      .sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+    this.host.resources = this.host.resources.filter(
+      (r) => !removed.some((x) => x.kind === r.kind && x.id === r.id),
+    );
+    for (const s of this.sandboxes.values())
+      if (s.spec.workspaceId === target.workspaceId) s.destroyed = true;
+    this.host.topology.delete(target.workspaceId);
+    return removed;
+  }
+
+  /** Clears the workspace's topology problem, unless `host.reattachLeaves` names one. */
+  async reattachWorkspaceNetwork(workspaceId: WorkspaceId): Promise<{ problem?: string }> {
+    const live = this.list().some((s) => s.spec.workspaceId === workspaceId);
+    const seeded = this.host.resources.some(
+      (r) => r.kind === "container" && r.workspaceId === workspaceId && r.role === "workspace",
+    );
+    if (!live && !seeded)
+      throw new DeskmatesError("not_found", `workspace ${workspaceId} has no container`, {
+        workspaceId,
+      });
+    const left = this.host.reattachLeaves.get(workspaceId);
+    if (left !== undefined) return { problem: left };
+    this.host.topology.delete(workspaceId);
+    this.host.resources = this.host.resources.map((r) => {
+      if (r.workspaceId !== workspaceId || r.kind !== "container") return r;
+      const { topologyProblem: _repaired, ...rest } = r;
+      return rest;
+    });
+    return {};
   }
 
   private live(handle: SandboxHandle): SandboxRecord {

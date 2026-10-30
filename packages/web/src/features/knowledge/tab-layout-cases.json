@@ -1,0 +1,8 @@
+[
+  {
+    "id": "navigation",
+    "route": "#/knowledge/documents",
+    "container": ".knowledge-page",
+    "strip": ".knowledge-page > .gb-tab-scroll"
+  }
+]

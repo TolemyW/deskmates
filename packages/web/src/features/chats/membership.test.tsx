@@ -94,7 +94,7 @@ describe("conversation membership", () => {
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
     await screen.findByRole("button", { name: "Add bot" });
     fireEvent.click(screen.getByRole("button", { name: "Add bot" }));
-    const dialog = await screen.findByRole("dialog", { name: "Add bots to conversation" });
+    const dialog = await screen.findByRole("dialog", { name: "Add bots to chat" });
     await within(dialog).findByLabelText("Search bots");
     expect(within(dialog).queryByText("outside")).toBeNull();
     expect(within(dialog).queryByRole("checkbox", { name: /ops/ })).toBeNull();
@@ -106,7 +106,7 @@ describe("conversation membership", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Add selected bots" }));
 
     await waitFor(() =>
-      expect(within(screen.getByLabelText("Thread members")).getByText("reviewer")).toBeTruthy(),
+      expect(within(screen.getByLabelText("Chat members")).getByText("reviewer")).toBeTruthy(),
     );
     expect(
       within(screen.getByLabelText("Bot desktops")).getByRole("heading", { name: "reviewer" }),
@@ -135,9 +135,9 @@ describe("conversation membership", () => {
     const transcript = screen.getByLabelText("Transcript");
     expect(within(transcript).getByText("reviewer")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));
-    fireEvent.click(screen.getByRole("button", { name: "Remove reviewer from conversation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove reviewer from chat" }));
     await waitFor(() =>
-      expect(within(screen.getByLabelText("Thread members")).queryByText("reviewer")).toBeNull(),
+      expect(within(screen.getByLabelText("Chat members")).queryByText("reviewer")).toBeNull(),
     );
     expect(
       within(screen.getByLabelText("Bot desktops")).queryByRole("heading", { name: "reviewer" }),
@@ -169,11 +169,11 @@ describe("conversation membership", () => {
     };
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
     fireEvent.click(await screen.findByRole("button", { name: "Manage" }));
-    await screen.findByRole("button", { name: "Remove reviewer from conversation" });
-    expect(screen.queryByRole("button", { name: "Remove ops from conversation" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Remove reviewer from conversation" }));
+    await screen.findByRole("button", { name: "Remove reviewer from chat" });
+    expect(screen.queryByRole("button", { name: "Remove ops from chat" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove reviewer from chat" }));
     await screen.findByText(/member has an active run/);
-    expect(within(screen.getByLabelText("Thread members")).getByText("reviewer")).toBeTruthy();
+    expect(within(screen.getByLabelText("Chat members")).getByText("reviewer")).toBeTruthy();
     expect(calls.filter((call) => call.method === "DELETE")).toHaveLength(1);
   });
 
@@ -193,14 +193,14 @@ describe("conversation membership", () => {
     const fullAdd = await screen.findByRole("button", { name: "Add bot" });
     expect((fullAdd as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(fullAdd);
-    expect(screen.queryByRole("dialog", { name: "Add bots to conversation" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Add bots to chat" })).toBeNull();
 
     view.unmount();
     const sole = fakeFetch(routes());
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch: sole.fetch })} />);
     fireEvent.click(await screen.findByRole("button", { name: "Manage" }));
     const lastRemove = await screen.findByRole("button", {
-      name: "Remove ops from conversation",
+      name: "Remove ops from chat",
     });
     expect((lastRemove as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(lastRemove);
@@ -223,7 +223,7 @@ describe("conversation membership", () => {
       threadId: THREAD_ID,
     });
     await waitFor(() =>
-      expect(within(screen.getByLabelText("Thread members")).getByText("auditor")).toBeTruthy(),
+      expect(within(screen.getByLabelText("Chat members")).getByText("auditor")).toBeTruthy(),
     );
     expect(
       within(screen.getByLabelText("Bot desktops")).getByRole("heading", { name: "auditor" }),
@@ -243,11 +243,11 @@ describe("conversation membership", () => {
       }),
     );
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
-    const memberList = await screen.findByLabelText("Thread members");
+    const memberList = await screen.findByLabelText("Chat members");
     expect(within(memberList).getByText("ops")).toBeTruthy();
     expect(within(memberList).getByText("reviewer")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add bot" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Remove .* from conversation/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Remove .* from chat/ })).toBeNull();
   });
 
   it("drops a selected bot when another tab adds it, leaving other candidates selectable", async () => {
@@ -263,7 +263,7 @@ describe("conversation membership", () => {
     );
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
     fireEvent.click(await screen.findByRole("button", { name: "Add bot" }));
-    const dialog = await screen.findByRole("dialog", { name: "Add bots to conversation" });
+    const dialog = await screen.findByRole("dialog", { name: "Add bots to chat" });
     fireEvent.click(await within(dialog).findByRole("checkbox", { name: /reviewer/ }));
     expect(
       (within(dialog).getByRole("button", { name: "Add selected bots" }) as HTMLButtonElement)
@@ -300,7 +300,7 @@ describe("conversation membership", () => {
       }),
     );
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
-    const list = await screen.findByLabelText("Thread members");
+    const list = await screen.findByLabelText("Chat members");
     await waitFor(() => expect(ownerOf(list)).toBe("reviewer"));
     const badge = within(list).getByText("owner");
     expect(badge.getAttribute("title")).toBe(
@@ -357,7 +357,7 @@ describe("conversation membership", () => {
     for (const { preview, ...detail } of cases) {
       const { fetch } = fakeFetch(routes({ "GET /api/threads/thr_1": detail }));
       render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
-      const list = await screen.findByLabelText("Thread members");
+      const list = await screen.findByLabelText("Chat members");
       await within(list).findByText(detail.members.at(-1)?.name ?? "");
       fireEvent.change(screen.getByLabelText("Message"), { target: { value: "any update?" } });
       await screen.findByText(preview);
@@ -391,7 +391,7 @@ describe("conversation membership", () => {
     const view = render(<ThreadScreen threadId={THREAD_ID} api={api} />);
     await screen.findByRole("button", { name: "Add bot" });
     fireEvent.click(screen.getByRole("button", { name: "Add bot" }));
-    const dialog = await screen.findByRole("dialog", { name: "Add bots to conversation" });
+    const dialog = await screen.findByRole("dialog", { name: "Add bots to chat" });
     fireEvent.click(await within(dialog).findByRole("checkbox", { name: /reviewer/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Add selected bots" }));
     view.rerender(<ThreadScreen threadId={secondId} api={api} />);
@@ -400,6 +400,6 @@ describe("conversation membership", () => {
     );
     resolveAdd?.({ thread, members: [...members, reviewerMember] });
     await Promise.resolve();
-    expect(within(screen.getByLabelText("Thread members")).queryByText("reviewer")).toBeNull();
+    expect(within(screen.getByLabelText("Chat members")).queryByText("reviewer")).toBeNull();
   });
 });

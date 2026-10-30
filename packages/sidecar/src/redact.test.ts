@@ -241,3 +241,140 @@ describe("redactValue applies the key rule (review M4)", () => {
     ).toEqual({ items: [{ headers: { "Set-Cookie": REDACTED }, credentials: REDACTED }] });
   });
 });
+
+describe("redactText: credential spellings in shell commands and URLs (#62 M9)", () => {
+  it.each([
+    [
+      "curl -d 'client_secret=abc123def&grant_type=client_credentials' https://h/token",
+      `curl -d 'client_secret=${REDACTED}&grant_type=client_credentials' https://h/token`,
+    ],
+    ["curl -d password=hunter2 https://h/login", `curl -d password=${REDACTED} https://h/login`],
+    [
+      `curl -H 'Content-Type: application/json' -d '{"password":"hunter2"}' https://h/login`,
+      `curl -H 'Content-Type: application/json' -d '{"password":"${REDACTED}"}' https://h/login`,
+    ],
+    ["curl -u user:pass https://h/", `curl -u user:${REDACTED} https://h/`],
+    ["curl --user user:pass https://h/", `curl --user user:${REDACTED} https://h/`],
+    ["curl -uuser:pass https://h/", `curl -uuser:${REDACTED} https://h/`],
+    [
+      "git clone https://user:pass@host.example/repo.git",
+      `git clone https://user:${REDACTED}@host.example/repo.git`,
+    ],
+    ["https://h/cb?password=hunter2&next=/", `https://h/cb?password=${REDACTED}&next=/`],
+    ["https://h/cb?refresh_token=abcdef", `https://h/cb?refresh_token=${REDACTED}`],
+    ["https://h/cb?id_token=abcdef", `https://h/cb?id_token=${REDACTED}`],
+    ["https://h/cb?pwd=abcdef", `https://h/cb?pwd=${REDACTED}`],
+    ["PGPASSWORD=s3cret psql -h db", `PGPASSWORD=${REDACTED} psql -h db`],
+    ["PGPASSWORD='a b' psql", `PGPASSWORD=${REDACTED} psql`],
+    ["MYSQL_PWD=s3cret mysql", `MYSQL_PWD=${REDACTED} mysql`],
+    [
+      `GITHUB_TOKEN=${"ghp"}_abcdefghijklmnopqrstuvwxyz0123456789 gh pr list`,
+      `GITHUB_TOKEN=${REDACTED} gh pr list`,
+    ],
+    [
+      "export AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCY",
+      `export AWS_SECRET_ACCESS_KEY=${REDACTED}`,
+    ],
+    ["DB_PASSWORD: hunter2", `DB_PASSWORD=${REDACTED}`],
+  ])("scrubs %j", (text, expected) => {
+    expect(redactText(text)).toBe(expected);
+  });
+
+  // Built from parts so a secret scanner on the public mirror does not take the samples for keys.
+  it.each([
+    `git push https://${"ghp"}_abcdefghijklmnopqrstuvwxyz0123456789@github.com/o/r`,
+    `token ${"github"}_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz`,
+    `slack ${"xoxb"}-1234567890-0987654321-abcdefABCDEF`,
+    `slack ${"xoxp"}-1234567890-abcdef`,
+    `key id ${"AKIA"}IOSFODNN7EXAMPLE`,
+    `jwt ${"eyJ"}hbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U`,
+  ])("scrubs a well-known token prefix in %j", (text) => {
+    const out = redactText(text);
+    expect(out).toContain(REDACTED);
+    expect(out).not.toMatch(/ghp_a|github_pat_1|xox[bp]-1|AKIAI|eyJzdWIi/);
+  });
+
+  it.each([
+    "write to ops@example.test about the password policy",
+    "the password must be at least 12 characters",
+    "https://ops.example.test/tickets?status=open&page=2",
+    "https://ops.example.test:8443/a/b@c",
+    "git push -u origin main",
+    "git push -u origin feature:main",
+    "docker run -u 1000:1000 image",
+    "cd $PWD && PWD=/work/bots/nova ls",
+    "MAX_TOKENS=4096 TOKENS_USED=12 npm test",
+    "sort -k2 key=value notes.txt",
+    "echo $GITHUB_TOKEN",
+  ])("leaves ordinary text alone: %j", (text) => {
+    expect(redactText(text)).toBe(text);
+  });
+});
+
+describe("redactText: database, sshpass, --password and escaped JSON spellings (#62)", () => {
+  it.each([
+    ["mysql -uroot -phunter2 shop", `mysql -uroot -p${REDACTED} shop`],
+    ["mysql -u root -p hunter2 shop", `mysql -u root -p ${REDACTED} shop`],
+    ["mysqldump -h db -p'a b' shop", `mysqldump -h db -p${REDACTED} shop`],
+    ["mysql --password=hunter2 shop", `mysql --password=${REDACTED} shop`],
+    ["mysql --password hunter2 shop", `mysql --password ${REDACTED} shop`],
+    ["wget --http-password=hunter2 https://h/", `wget --http-password=${REDACTED} https://h/`],
+    ["sshpass -p hunter2 ssh ops@h", `sshpass -p ${REDACTED} ssh ops@h`],
+    ["sshpass -phunter2 ssh ops@h", `sshpass -p${REDACTED} ssh ops@h`],
+    ["password: hunter2", `password: ${REDACTED}`],
+    ["  db_password: hunter2\nhost: db", `  db_password: ${REDACTED}\nhost: db`],
+    ["Password:hunter2", `Password: ${REDACTED}`],
+    [
+      String.raw`curl -d "{\"user\":\"ops\",\"password\":\"hunter2\"}" https://h/login`,
+      String.raw`curl -d "{\"user\":\"ops\",\"password\":\"${REDACTED}\"}" https://h/login`,
+    ],
+    [
+      String.raw`curl -d "{\"client_secret\": \"abc123\"}" https://h/token`,
+      String.raw`curl -d "{\"client_secret\": \"${REDACTED}\"}" https://h/token`,
+    ],
+    ["curl -u ops:hunter2 https://h/", `curl -u ops:${REDACTED} https://h/`],
+    ["curl -u 1000:2000 https://h/", `curl -u 1000:${REDACTED} https://h/`],
+    ["wget --user ops:hunter2 https://h/", `wget --user ops:${REDACTED} https://h/`],
+  ])("scrubs %j", (text, expected) => {
+    expect(redactText(text)).toBe(expected);
+  });
+
+  // A bare `key=` is redacted only when its value looks like a credential: 16 or more
+  // characters, or 8 or more with both a letter and a digit.
+  it.each([
+    ["https://h/x?key=abcdefghijklmnop", `https://h/x?key=${REDACTED}`],
+    ["https://h/x?key=a1b2c3d4&page=2", `https://h/x?key=${REDACTED}&page=2`],
+    ["https://h/x?page=2&key=AIzaSyA1b2C3d4E5f6", `https://h/x?page=2&key=${REDACTED}`],
+    ["https://h/x?api_key=abc", `https://h/x?api_key=${REDACTED}`],
+  ])("scrubs a credential-looking key in %j", (text, expected) => {
+    expect(redactText(text)).toBe(expected);
+  });
+
+  it.each([
+    "https://h/list?key=sort&page=2",
+    "https://h/list?key=created_at",
+    "https://h/i18n?key=title2",
+    "docker run -u app:app image",
+    "ssh -p 2222 ops@h",
+    "docker login --password-stdin",
+    "mysql -p -h db shop",
+    "the password must be at least 12 characters",
+    "Enter password:",
+  ])("leaves ordinary text alone: %j", (text) => {
+    expect(redactText(text)).toBe(text);
+  });
+
+  // A rule that looks back for the command name at every position is quadratic on one long line
+  // (a base64 body, a minified page); a 20 kB line took seconds. These stay linear.
+  it.each([
+    ["base64", "QUJD".repeat(250_000)],
+    ["a curl command", `curl -d @- https://h/ ${"a ".repeat(250_000)}-u ops:pw`],
+    ["a mysql command", `mysql ${"-h db -p ".repeat(125_000)}`],
+    ["double-dashed words", "a--b ".repeat(200_000)],
+    ["password words", "db_password ".repeat(80_000)],
+  ])("redacts a one-megabyte line of %s in linear time", (_, text) => {
+    const started = performance.now();
+    redactText(text);
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+});

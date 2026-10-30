@@ -2,6 +2,8 @@
 # minor tag or with T2_SCOPE=full), not in the smoke subset of t2-smoke.list.
 # Format: <repo-relative path> <one-line reason>. `#` starts a comment line.
 # acceptance/t2-lists.test.ts fails on a *.container.test.ts that is in neither list.
+acceptance/desktop-tools.container.test.ts                ADR-0048 desktop variant and desktop-proxy against the real LCU; needs a locally built variant that is never published
+acceptance/grafana-image.container.test.ts                ADR-0046 Grafana image, provisioning and stable.sh grafana; runs once the image is built, changes only with images/grafana or the dashboards
 acceptance/m1-takeover.container.test.ts                  human takeover lock and wait message; the M1 browser lock, not an M3 trial feature
 acceptance/m2-boundaries.container.test.ts                B4 listeners, networks and egress proxy; slow two-workspace network probes, changed only with the proxy or provider
 acceptance/m2-browser-approval.container.test.ts          L2 browser approval park and resume in the same tab; M2 browser path, 55 s
@@ -18,11 +20,17 @@ acceptance/m2-tty.container.test.ts                       native PTY contract in
 acceptance/m2-vision-transport.container.test.ts          screenshot bytes reach the next model request; diagnostic for the vision path
 acceptance/m2-vision.container.test.ts                    opt-in vision fallback after stale targets; visual model integration deferred
 acceptance/m4-model-selection.container.test.ts     ADR-0023 proxy refusal, rewrite, served model and SDK overload fallback; changes only with the model proxy or the SDK
+acceptance/m4-restart-recovery.container.test.ts          ADR-0029 Gateway restart with a live sidecar: kill by marker, token revoked, resume on the session; changes only with restart recovery
 acceptance/m4-tenancy.container.test.ts                  ADR-0022 two-tenant labels, attach refusal, files, desktop and restart; changes only with tenancy
 acceptance/m4-turn-exhaustion.container.test.ts           ADR-0016 turn warning, waiting_continuation park, bot continue resume and outcome notice; changes only with the turn budget path
+acceptance/m4-upgrade-drain.container.test.ts             ADR-0029 drain parks at a non-L2 hook and replays the call once after; 15 s hold, changes only with the drain path
+acceptance/m4-vault-browser.container.test.ts real Chromium fill, origin recheck and capture suppression for the workspace vault (ADR-0045); synthetic HTTPS origin
+acceptance/sdk-resume-compat.container.test.ts            ADR-0029 decision 10 release gate: an old image parks a session, the new one resumes it; needs DESKMATES_OLD_WORKSPACE_IMAGE, run when the SDK pin changes
 packages/connector-postgres/src/service.container.test.ts connector against real PostgreSQL 16; package-level, changes only with the connector
 packages/sandbox-docker/src/app-share.container.test.ts   ADR-0035 app relay round trip on node:22-alpine; changes only with the relay or the provider
 packages/sandbox-docker/src/docker-provider.container.test.ts DockerProvider against alpine; package-level, changes only with the provider
+packages/sandbox-docker/src/host-resources.container.test.ts ADR-0006 amendment 5 listing, Remove and Re-attach on alpine; changes only with the provider's host-resource code
+packages/sandbox-docker/src/run-supervisor.container.test.ts cancellation/timeout/restart descendant cleanup with the real workspace image and Chromium; changes only with run lifecycle supervision
 packages/sandbox-docker/src/workspace-image.container.test.ts image contents, pins and restart behaviour; changes only with the image, which CI smoke-builds
 packages/sidecar/src/sdk-shape.container.test.ts          fake SDK vs real SDK call shape (needs a model) and the ADR-0015 skill filter (loopback upstream)
 packages/sidecar/src/sdk-tool-inventory.container.test.ts pinned SDK tool inventory vs the risk-tier tables (ADR-0002 amendment 3 A5, loopback upstream); changes only with the SDK pin

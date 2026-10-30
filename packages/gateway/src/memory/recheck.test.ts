@@ -17,6 +17,7 @@ import type { FakeSidecarClient } from "../test-support/fake-provider.js";
 import { type Harness, startHarness, waitFor } from "../test-support/harness.js";
 import { MAINTENANCE_PASS_INTERVAL_MS, queueMemoryMaintenance } from "./maintenance-due.js";
 import { DAILY_REQUESTER } from "./organize.js";
+import { MemoryRecheck } from "./recheck.js";
 
 let h: Harness | undefined;
 let reply: (request: StartRunRequest) => string = () => "";
@@ -69,6 +70,7 @@ async function setup() {
   const make = async (name: string) =>
     (
       await harness.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+        defaultBot: false,
         name,
         egressAllowlist: ["docs.example.test"],
       })
@@ -109,8 +111,21 @@ async function setup() {
       decided_by: string | null;
       model_verdict: string | null;
     };
+  const support = (body: string) => {
+    const thread = ctx.threads.create({
+      workspaceId: workspace.id,
+      botIds: [bot.id as never],
+      title: "Fresh evidence",
+    });
+    return ctx.messages.append({
+      threadId: thread.id,
+      authorKind: "human",
+      authorId: "u_bob",
+      body,
+    });
+  };
   const launch = () => harness.app.deskmates.scheduler.kick();
-  return { harness, ctx, workspace, other, bot, note, flags, flagOf, launch };
+  return { harness, ctx, workspace, other, bot, note, flags, flagOf, launch, support };
 }
 
 async function settled(harness: Harness, workspaceId: WorkspaceId): Promise<MemoryRecheckJob> {
@@ -131,8 +146,14 @@ async function settled(harness: Harness, workspaceId: WorkspaceId): Promise<Memo
   return job as MemoryRecheckJob;
 }
 
-const verdicts = (items: { id: string; verdict: string; reason?: string }[]) =>
-  JSON.stringify({ verdicts: items.map((i) => ({ reason: "seen in the thread", ...i })) });
+const verdicts = (
+  items: {
+    id: string;
+    verdict: string;
+    reason?: string;
+    evidence?: { sourceId: string; quote: string };
+  }[],
+) => JSON.stringify({ verdicts: items.map((i) => ({ reason: "seen in the thread", ...i })) });
 
 describe("A28 which flags are sent", () => {
   it("queues one cheap-model job with only eligible flags and none while it is pending", async () => {
@@ -149,12 +170,13 @@ describe("A28 which flags are sent", () => {
     expect(queued?.job).toMatchObject({ status: "pending", noteCount: 2 });
     const run = queued?.run as RunRecord;
     expect(run.lane).toBe("background");
+    expect(run.triggerKind).toBe("model_job");
     expect(run.config).toMatchObject({
       runType: "memory_recheck",
       model: ctx.config.cheapModel,
       cheapModel: ctx.config.cheapModel,
       maxTurns: 1,
-      memoryRecheckBounds: { maxNotes: 20, dailyLimit: 200 },
+      memoryRecheckBounds: { maxNotes: 8, dailyLimit: 200 },
     });
     const input = (run.config.memoryRecheckInput as [string, string, number][]).map((t) => t[1]);
     expect(input.sort()).toEqual([a.id, b.id].sort());
@@ -198,14 +220,19 @@ describe("A28 which flags are sent", () => {
 
 describe("A28 verdicts", () => {
   it("renews still-true notes as a model confirmation and leaves the others open", async () => {
-    const { harness, ctx, workspace, note, flags, flagOf, launch } = await setup();
+    const { harness, ctx, workspace, note, flags, flagOf, launch, support } = await setup();
     const kept = note("The ledger host is ledger.example.test", { trust: "untrusted" });
+    const evidence = support(kept.body);
     const stale = note("The billing export runs on Mondays");
     const unclear = note("The audit report is due quarterly");
     ctx.memory.freshness.sweep(workspace.id);
     reply = () =>
       verdicts([
-        { id: kept.id, verdict: "still_true" },
+        {
+          id: kept.id,
+          verdict: "still_true",
+          evidence: { sourceId: `message:${evidence.id}`, quote: evidence.body },
+        },
         { id: stale.id, verdict: "possibly_stale", reason: "Bob said it moved to Tuesdays" },
         { id: unclear.id, verdict: "unclear" },
         { id: "mem_unknown", verdict: "still_true" },
@@ -263,6 +290,71 @@ describe("A28 verdicts", () => {
     ).toEqual([unclear.id]);
   });
 
+  it("withholds unsupported, invented and foreign citations, including after restart", async () => {
+    const { harness, ctx, workspace, note, support, launch, flagOf } = await setup();
+    const a = note("Cedar quota is 12");
+    const b = note("Cedar quota is 13");
+    const c = note("Cedar quota is 14");
+    const shared = support("The weekly order target is 200");
+    ctx.memory.freshness.sweep(workspace.id);
+    const queued = ctx.modelJobs.recheck.request(workspace.id);
+    // A newly appended source after queueing is not part of the input, even after restart.
+    const late = support(c.body);
+    const restarted = new MemoryRecheck(ctx);
+    expect(restarted.jobRequest(queued?.run as RunRecord)).toMatchObject({
+      asOf: expect.any(String),
+    });
+    reply = () =>
+      verdicts([
+        { id: a.id, verdict: "still_true" },
+        {
+          id: b.id,
+          verdict: "still_true",
+          evidence: { sourceId: `message:${shared.id}`, quote: b.body },
+        },
+        {
+          id: c.id,
+          verdict: "still_true",
+          evidence: { sourceId: `message:${late.id}`, quote: c.body },
+        },
+      ]);
+    launch();
+    expect(await settled(harness, workspace.id)).toMatchObject({ stillTrue: 0, unclear: 3 });
+    for (const entry of [a, b, c]) {
+      expect(ctx.memory.entries.mustGet(entry.id)).toMatchObject({ version: entry.version });
+      expect(ctx.memory.entries.mustGet(entry.id).lastConfirmedAt).toBeUndefined();
+      expect(flagOf(entry.id)).toMatchObject({ status: "open", model_verdict: "unclear" });
+    }
+    expect(restarted.request(workspace.id)).toBeUndefined();
+  });
+
+  it("uses the frozen redacted source rather than reconstructing edited messages", async () => {
+    const { harness, ctx, workspace, note, support, launch } = await setup();
+    const a = note("The current Cedar quota is 12.");
+    const source = support(`${a.body} Authorization: Bearer secret-token-12345`);
+    ctx.memory.freshness.sweep(workspace.id);
+    const queued = ctx.modelJobs.recheck.request(workspace.id);
+    if (!queued) throw new Error("expected queued recheck");
+    const frozen = JSON.stringify(queued.run.config.memoryRecheckSnapshot);
+    expect(frozen).not.toContain("secret-token-12345");
+    ctx.db
+      .prepare("UPDATE thread_messages SET body = ? WHERE id = ?")
+      .run("Edited after queueing", source.id);
+    reply = (request) => {
+      expect(JSON.stringify(request.modelJob)).toContain(a.body);
+      expect(JSON.stringify(request.modelJob)).not.toContain("Edited after queueing");
+      return verdicts([
+        {
+          id: a.id,
+          verdict: "still_true",
+          evidence: { sourceId: `message:${source.id}`, quote: a.body },
+        },
+      ]);
+    };
+    launch();
+    expect(await settled(harness, workspace.id)).toMatchObject({ stillTrue: 1, unclear: 0 });
+  });
+
   it("keeps a model topic label through a confirmation and drops it on a body edit (A31)", async () => {
     const { ctx, workspace, note } = await setup();
     const a = note("The ledger host is ledger.example.test");
@@ -292,13 +384,18 @@ describe("A28 verdicts", () => {
   });
 
   it("drops a verdict on a note that changed after the job was queued", async () => {
-    const { harness, ctx, workspace, note, flagOf, launch } = await setup();
+    const { harness, ctx, workspace, note, flagOf, launch, support } = await setup();
     const a = note("The ledger host is ledger.example.test");
+    const evidence = support(a.body);
     const b = note("The billing export runs on Mondays");
     ctx.memory.freshness.sweep(workspace.id);
     reply = () =>
       verdicts([
-        { id: a.id, verdict: "still_true" },
+        {
+          id: a.id,
+          verdict: "still_true",
+          evidence: { sourceId: `message:${evidence.id}`, quote: evidence.body },
+        },
         { id: b.id, verdict: "still_true" },
       ]);
     ctx.modelJobs.recheck.request(workspace.id);
@@ -328,6 +425,24 @@ describe("A28 verdicts", () => {
     expect(job.status).toBe("failed");
     expect(flagOf(a.id)).toMatchObject({ status: "open", model_verdict: null });
     expect(ctx.modelJobs.recheck.usedToday(workspace.id, new Date())).toBe(1);
+    // A failed entry/version must not be submitted again by the next minute's pass,
+    // including after the service object is reconstructed from durable state.
+    const restarted = new MemoryRecheck(ctx);
+    expect(restarted.request(workspace.id, new Date(Date.now() + 60_000))).toBeUndefined();
+    const fresh = note("A different old fact about the export host");
+    ctx.memory.freshness.sweep(workspace.id);
+    expect(restarted.eligible(workspace.id, 20, new Date()).map((entry) => entry.entryId)).toEqual([
+      fresh.id,
+    ]);
+    ctx.memory.entries.appendVersion(
+      a.id,
+      "edit",
+      { body: "The ledger host is ledger2.example.test" },
+      "human:o",
+    );
+    expect(
+      restarted.eligible(workspace.id, 20, new Date()).map((entry) => entry.entryId),
+    ).toContain(a.id);
   });
 });
 

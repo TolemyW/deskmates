@@ -15,6 +15,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { Principal } from "../auth/principal.js";
 import type { GatewayContext } from "../context.js";
 import type { OwnedKind } from "../tenancy/ownership.js";
+import { analyticsRoutePolicies } from "./route-policies/analytics.js";
 import { appSharesRoutePolicies } from "./route-policies/app-shares.js";
 import { approvalsRoutePolicies } from "./route-policies/approvals.js";
 import { boardRoutePolicies } from "./route-policies/board.js";
@@ -23,7 +24,9 @@ import { botsRoutePolicies } from "./route-policies/bots.js";
 import { browserRoutePolicies } from "./route-policies/browser.js";
 import { channelsRoutePolicies } from "./route-policies/channels.js";
 import { costsRoutePolicies } from "./route-policies/costs.js";
+import { desktopToolsRoutePolicies } from "./route-policies/desktop-tools.js";
 import { filesRoutePolicies } from "./route-policies/files.js";
+import { hostResourcesRoutePolicies } from "./route-policies/host-resources.js";
 import { installationRoutePolicies } from "./route-policies/installation.js";
 import { integrationsRoutePolicies } from "./route-policies/integrations.js";
 import { knowledgeRoutePolicies } from "./route-policies/knowledge.js";
@@ -32,12 +35,17 @@ import { membersRoutePolicies } from "./route-policies/members.js";
 import { memoryRoutePolicies } from "./route-policies/memory.js";
 import { modelJobsRoutePolicies } from "./route-policies/model-jobs.js";
 import { networkRoutePolicies } from "./route-policies/network.js";
+import { observabilityRoutePolicies } from "./route-policies/observability.js";
 import type { PolicyTable, RoutePolicy } from "./route-policies/policy.js";
 import { profileRoutePolicies } from "./route-policies/profile.js";
+import { runStatsRoutePolicies } from "./route-policies/run-stats.js";
 import { runsRoutePolicies } from "./route-policies/runs.js";
 import { skillsRoutePolicies } from "./route-policies/skills.js";
+import { taskKindsRoutePolicies } from "./route-policies/task-kinds.js";
 import { tasksRoutePolicies } from "./route-policies/tasks.js";
 import { threadsRoutePolicies } from "./route-policies/threads.js";
+import { vaultRoutePolicies } from "./route-policies/vault.js";
+import { webSearchRoutePolicies } from "./route-policies/web-search.js";
 import { workdirRoutePolicies } from "./route-policies/workdir.js";
 import { workspacesRoutePolicies } from "./route-policies/workspaces.js";
 import { isRootPrincipal, workspaceRole } from "./workspace-access.js";
@@ -49,6 +57,7 @@ export type { RoutePolicy } from "./route-policies/policy.js";
  * the order and that every domain file is listed exactly once.
  */
 export const ROUTE_POLICY_DOMAINS: ReadonlyArray<readonly [domain: string, PolicyTable]> = [
+  ["analytics", analyticsRoutePolicies],
   ["app-shares", appSharesRoutePolicies],
   ["approvals", approvalsRoutePolicies],
   ["board", boardRoutePolicies],
@@ -57,7 +66,9 @@ export const ROUTE_POLICY_DOMAINS: ReadonlyArray<readonly [domain: string, Polic
   ["browser", browserRoutePolicies],
   ["channels", channelsRoutePolicies],
   ["costs", costsRoutePolicies],
+  ["desktop-tools", desktopToolsRoutePolicies],
   ["files", filesRoutePolicies],
+  ["host-resources", hostResourcesRoutePolicies],
   ["installation", installationRoutePolicies],
   ["integrations", integrationsRoutePolicies],
   ["knowledge", knowledgeRoutePolicies],
@@ -66,11 +77,16 @@ export const ROUTE_POLICY_DOMAINS: ReadonlyArray<readonly [domain: string, Polic
   ["memory", memoryRoutePolicies],
   ["model-jobs", modelJobsRoutePolicies],
   ["network", networkRoutePolicies],
+  ["observability", observabilityRoutePolicies],
   ["profile", profileRoutePolicies],
+  ["run-stats", runStatsRoutePolicies],
   ["runs", runsRoutePolicies],
   ["skills", skillsRoutePolicies],
+  ["task-kinds", taskKindsRoutePolicies],
   ["tasks", tasksRoutePolicies],
   ["threads", threadsRoutePolicies],
+  ["vault", vaultRoutePolicies],
+  ["web-search", webSearchRoutePolicies],
   ["workdir", workdirRoutePolicies],
   ["workspaces", workspacesRoutePolicies],
 ];
@@ -174,8 +190,11 @@ export function registerRoutePolicy(app: FastifyInstance, ctx: GatewayContext): 
         throw new DeskmatesError("forbidden", "platform maintenance only");
       return;
     }
-    if (policy.access === "root") {
-      if (!isRootPrincipal(ctx, principal))
+    if (policy.access === "root" || policy.access === "root_session") {
+      // `root_session` is the protected account's own session: no bearer passes, the operator
+      // credential included (ADR-0046 amendment 1 decision 13).
+      const bearer = policy.access === "root_session" && principal?.kind !== "user";
+      if (bearer || !isRootPrincipal(ctx, principal))
         throw new DeskmatesError("forbidden", "only the administrator account may do this", {
           reason: "root_only",
         });

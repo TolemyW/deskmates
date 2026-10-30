@@ -16,7 +16,7 @@ import {
 } from "./router.js";
 
 describe("parseRoute", () => {
-  it("parses threads, runs and approvals, and falls back to home", () => {
+  it("parses threads, runs and approvals, and gives an unknown address a 404 route", () => {
     expect(parseRoute("#/threads")).toEqual({ name: "threads" });
     expect(parseRoute("#/threads/thr_1")).toEqual({ name: "threads", id: "thr_1" });
     expect(parseRoute("#/tasks")).toEqual({ name: "tasks" });
@@ -25,10 +25,10 @@ describe("parseRoute", () => {
     expect(parseRoute("#/runs/run_1")).toEqual({ name: "runs", id: "run_1" });
     expect(parseRoute("#/approvals")).toEqual({ name: "approvals" });
     expect(parseRoute("#/approvals/")).toEqual({ name: "approvals" });
-    expect(parseRoute("#/integrations")).toEqual({ name: "integrations" });
+    expect(parseRoute("#/integrations")).toEqual({ name: "connections", tab: "apps" });
     expect(parseRoute("#/resources/files")).toEqual({ name: "files" });
     expect(parseRoute("")).toEqual({ name: "home" });
-    expect(parseRoute("#/nope")).toEqual({ name: "home" });
+    expect(parseRoute("#/nope")).toEqual({ name: "notFound", path: "nope" });
   });
 
   it("parses the Resources destinations and Computer (issue #27)", () => {

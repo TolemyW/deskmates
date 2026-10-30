@@ -1,7 +1,7 @@
 # ADR-0043: A bot is editable after creation
 
 Date: 2026-10-16
-Status: Accepted for the scope the owner wrote in issue #10 (every field editable, SOUL/MEMORY version history with restore, edit while busy, diary view, pause, "Run now", rule edit). The engineering choices inside it are proposed and await owner review: decision 1's directory move and its refusal while the bot has a live or parked run, decision 3's session rule, decision 4's refusal while the bot has a live run, and the audit contents of decisions 2 and 4. Pause is recorded as ADR-0026 amendment 1.
+Status: Accepted for the scope the owner wrote in issue #10 (every field editable, SOUL/MEMORY version history with restore, edit while busy, diary view, pause, "Run now", rule edit). The engineering choices inside it (decision 1's directory move and its refusal while the bot has a live or parked run, decision 3's session rule, decision 4's refusal while the bot has a live run, and the audit contents of decisions 2 and 4) were proposed and are Accepted under owner delegation (2026-10-17): each keeps a run in the home and files it started with, and the audit rows hold hashes, never SOUL, MEMORY or diary text. Pause is recorded as ADR-0026 amendment 1.
 Source: GitHub issue #10
 Builds on: ADR-0004 (one workspace, shared files), ADR-0011 A5 (canonical SOUL and MEMORY), ADR-0023 (model fields), ADR-0026 (Trash), ADR-0031 (schema conventions), ADR-0038 (per-bot directories)
 

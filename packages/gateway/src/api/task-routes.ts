@@ -18,6 +18,8 @@ import type { GatewayContext } from "../context.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
 import { type DispatchResult, TaskDispatcher } from "../tasks/task-dispatch.js";
 import { taskExecution } from "../tasks/task-execution.js";
+import { kindProgress, progressReports } from "../tasks/task-kind-progress.js";
+import { TaskTemplateStore } from "../tasks/task-templates.js";
 import { createTaskRequest, runTaskRequest } from "../tasks/validate.js";
 import { requestActorId } from "./actor.js";
 import { parseOffsetQuery } from "./pagination.js";
@@ -38,6 +40,7 @@ export function registerTaskRoutes(
   scheduler?: Scheduler,
 ): void {
   const dispatcher = new TaskDispatcher(ctx, () => scheduler?.kick());
+  const templates = new TaskTemplateStore(ctx.db);
 
   // One page of the workspace's tasks, status and search applied on the server, with the honest
   // total and the whole workspace's counts by status for the metric cards (#113).
@@ -100,6 +103,11 @@ export function registerTaskRoutes(
           let task = ctx.tasks.create(workspaceId, checked.input, {
             ...(key === undefined ? {} : { createKey: key }),
             ...(checked.schedule === undefined ? {} : { schedule: checked.schedule }),
+            // ADR-0021 A4c: a template stamps the kind and copies its criteria.
+            ...(checked.templateId === undefined
+              ? {}
+              : { template: templates.mustGet(workspaceId, checked.templateId) }),
+            ...(checked.fields === undefined ? {} : { fields: checked.fields }),
           });
           if (checked.schedule !== undefined)
             ctx.audit.record({
@@ -143,6 +151,9 @@ export function registerTaskRoutes(
       return {
         task,
         execution: taskExecution({ db: ctx.db, tasks: ctx.tasks, dispatcher }, task, new Date()),
+        ...(task.kind
+          ? { kindProgress: kindProgress(task.kind, task.status, progressReports(ctx.db, task.id)) }
+          : {}),
       };
     },
   );
@@ -196,6 +207,20 @@ export function registerTaskRoutes(
           const found = dispatcher.findByKey(task.id, key);
           if (found) return { submission: found, task, duplicate: true } as DispatchResult;
           ctx.tasks.checkVersion(task, input.version);
+          if (input.feedback !== undefined) {
+            if (task.status !== "delivered")
+              throw new DeskmatesError(
+                "invalid_transition",
+                "Only a delivered task can be revised",
+              );
+            ctx.tasks.update(
+              workspaceId,
+              task.id,
+              { version: task.version, status: "in_progress" },
+              actor,
+              { revision: true },
+            );
+          }
           const done = dispatcher.submit({
             workspaceId,
             taskId: task.id,
@@ -203,6 +228,7 @@ export function registerTaskRoutes(
             key,
             actor,
             authorId,
+            ...(input.feedback === undefined ? {} : { feedback: input.feedback }),
           });
           ctx.audit.record({
             action: "task.run",

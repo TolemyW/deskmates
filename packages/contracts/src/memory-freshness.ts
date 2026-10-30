@@ -106,10 +106,22 @@ export const MEMORY_RECHECK_REASONS: readonly MemoryFreshnessReason[] = [
   "ttl_expiring",
   "ttl_expired",
 ];
-/** The most notes one recheck job reads (A28). */
-export const MEMORY_RECHECK_MAX_NOTES = 20;
+/**
+ * The most notes one recheck job reads (A28, an engineering default). Policy version 2 asks a
+ * quoted source for every still-true verdict, so each note costs a few hundred output tokens: on
+ * stable (2026-10-19 to 26) jobs of 20 notes wrote 5,000 to 8,000 tokens and most ran past the
+ * 55 s model-job deadline, and a failed job leaves its notes eligible, so the same 20 were sent
+ * again until the day's limit ran out. Eight notes write about 2,500 tokens, well inside it.
+ */
+export const MEMORY_RECHECK_MAX_NOTES = 8;
 /** A verdict's reason is cut to this many characters (A28). */
 export const MEMORY_RECHECK_REASON_MAX_CHARS = 200;
+/**
+ * A supplied source is at most 500 characters plus a truncation mark, and a model may add a
+ * little framing around a verbatim quote. The Gateway still requires the quote to be a
+ * substring of the frozen source, so the slack bounds reply size, not what can renew a note.
+ */
+export const MEMORY_RECHECK_QUOTE_MAX_CHARS = 600;
 
 /** `decided_by` and the `confirm` version's `by` of a model confirmation (A28). */
 export function decidedByModelRun(runId: string): string {
@@ -121,13 +133,18 @@ export function isModelDecision(by: string | undefined): boolean {
   return by?.startsWith("model:") === true;
 }
 
+export interface MemoryRecheckReplyItem {
+  id: string;
+  verdict: MemoryRecheckVerdict;
+  reason: string;
+  evidence?: { sourceId: string; quote: string };
+}
+
 /**
  * The recheck reply: one JSON object `{verdicts: [{id, verdict, reason}]}`. Items with an
  * unknown verdict or no id are dropped; anything that is not such an object is undefined.
  */
-export function parseMemoryRecheckReply(
-  reply: string,
-): { id: string; verdict: MemoryRecheckVerdict; reason: string }[] | undefined {
+export function parseMemoryRecheckReply(reply: string): MemoryRecheckReplyItem[] | undefined {
   const fenced = /^```[a-zA-Z]*\n([\s\S]*?)\n```\s*$/.exec(reply.trim());
   const text = (fenced ? (fenced[1] as string) : reply).trim();
   const start = text.indexOf("{");
@@ -141,9 +158,14 @@ export function parseMemoryRecheckReply(
   }
   const verdicts = (parsed as { verdicts?: unknown } | null)?.verdicts;
   if (!Array.isArray(verdicts)) return undefined;
-  const out: { id: string; verdict: MemoryRecheckVerdict; reason: string }[] = [];
+  const out: MemoryRecheckReplyItem[] = [];
   for (const item of verdicts) {
-    const v = item as { id?: unknown; verdict?: unknown; reason?: unknown } | null;
+    const v = item as {
+      id?: unknown;
+      verdict?: unknown;
+      reason?: unknown;
+      evidence?: { sourceId?: unknown; quote?: unknown };
+    } | null;
     if (typeof v?.id !== "string" || v.id === "") continue;
     if (!(MEMORY_RECHECK_VERDICTS as readonly unknown[]).includes(v.verdict)) continue;
     const reason = typeof v.reason === "string" ? v.reason.replace(/\s+/g, " ").trim() : "";
@@ -151,6 +173,12 @@ export function parseMemoryRecheckReply(
       id: v.id,
       verdict: v.verdict as MemoryRecheckVerdict,
       reason: reason.slice(0, MEMORY_RECHECK_REASON_MAX_CHARS),
+      ...(typeof v.evidence?.sourceId === "string" &&
+      typeof v.evidence.quote === "string" &&
+      v.evidence.quote.trim().length > 0 &&
+      v.evidence.quote.length <= MEMORY_RECHECK_QUOTE_MAX_CHARS
+        ? { evidence: { sourceId: v.evidence.sourceId, quote: v.evidence.quote } }
+        : {}),
     });
   }
   return out;

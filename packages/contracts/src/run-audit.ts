@@ -21,6 +21,13 @@ import type { MemoryAuthority, MemoryEntryKind, MemoryScope, MemoryTrust } from 
  * - `sdk_abort`: the SDK reported its process aborted, with no cause named.
  * - `no_reply`: a must-reply wake ended silent (Gateway reason `no_reply`).
  * - `budget_limit`: a money or turn budget stopped it (Gateway reasons).
+ * - `platform_interruption`: a drain or a Gateway restart stopped it and it could not be
+ *   continued (Gateway reason `gateway_restarted`, ADR-0029 decision 7).
+ * - `sandbox_unavailable`: the workspace's computer could not be prepared, so no sidecar ran
+ *   (the Gateway's `sandbox error:`; a Docker network, address pool, egress proxy or volume
+ *   ownership problem; ADR-0042 amendment 2).
+ * - `sidecar_exit`: the sidecar process ended without reporting how the run ended and its
+ *   output names no cause above (ADR-0042 amendment 2).
  * - `other`: none of the above.
  */
 export const RUN_FAILURE_CLASSES = [
@@ -33,6 +40,11 @@ export const RUN_FAILURE_CLASSES = [
   "sdk_abort",
   "no_reply",
   "budget_limit",
+  // ADR-0029 decision 7: a drain or a restart stopped the run and it could not be continued.
+  "platform_interruption",
+  // ADR-0042 amendment 2: the infrastructure and process failures the v0.7.3 acceptance found.
+  "sandbox_unavailable",
+  "sidecar_exit",
   "other",
 ] as const;
 export type RunFailureClass = (typeof RUN_FAILURE_CLASSES)[number];

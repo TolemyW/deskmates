@@ -41,6 +41,11 @@ import {
   screenshotFileName,
 } from "../screenshots.js";
 import { wrapPageContent } from "../untrusted.js";
+import {
+  VAULT_CAPTURE_SKIPPED,
+  type VaultCaptureGuard,
+  maskCredentialResult,
+} from "../vault-capture.js";
 import { withholdResultImages } from "../vision-withhold.js";
 import {
   type BrowserCall,
@@ -109,6 +114,11 @@ export interface McpProxyOptions {
   visionFallback?: boolean;
   /** ADR-0023 amendment 2: replace image items with a notice and attach no fallback image. */
   withholdImages?: boolean;
+  /**
+   * ADR-0045 decision 7: while a Vault fill is on the run's page, field values in results are
+   * masked, images and page-code output withheld, and no run screenshot is taken.
+   */
+  vaultGuard?: VaultCaptureGuard;
   /** Gateway-selected terminal run targets. Cleanup runs once, before the first model browser call. */
   retention?: {
     candidates(): Promise<readonly string[]>;
@@ -292,6 +302,18 @@ export function runMcpProxy(params: McpProxyParams): Promise<void> {
     withholdImages && msg.result !== undefined
       ? { ...msg, result: withholdResultImages(msg.result) }
       : msg;
+  /** Whether the run's page carries a Vault fill mark now (ADR-0045 decision 7). */
+  const vaultMarked = async (): Promise<boolean> => {
+    if (!options.vaultGuard) return false;
+    try {
+      return await options.vaultGuard.active(coordination?.verifiedPage?.());
+    } catch {
+      // A mark that cannot be read is treated as present: the safe side.
+      return true;
+    }
+  };
+  const vaultMasked = async (toolName: string, result: unknown): Promise<unknown> =>
+    (await vaultMarked()) ? maskCredentialResult(toolName, result) : result;
   let childClosed = false;
   let inlineSessionTainted = false;
   let retentionStarted = false;
@@ -592,6 +614,7 @@ export function runMcpProxy(params: McpProxyParams): Promise<void> {
     if (call.name === "browser_tabs") result = stripTabIdentity(result);
     const origin = originOf(call.arguments.url);
     if (!inlineSnapshot && origin) currentOrigin = origin;
+    result = await vaultMasked(call.name, result);
     let outgoing = withheld(
       wrapResultMessage({ jsonrpc: "2.0", id: message.id, result }, currentOrigin),
     );
@@ -735,6 +758,7 @@ export function runMcpProxy(params: McpProxyParams): Promise<void> {
           "[Deskmates host diagnostic] Two matching target lookups failed, but a fresh screenshot could not be safely attached. The failed action was not retried.";
       }
     }
+    result = await vaultMasked(call.name, result);
     let outgoing = withheld(wrapResultMessage({ ...msg, result }, currentOrigin));
     if (diagnostic)
       outgoing = { ...outgoing, result: appendResultText(outgoing.result, diagnostic) };
@@ -745,6 +769,7 @@ export function runMcpProxy(params: McpProxyParams): Promise<void> {
     toolName: string,
   ): Promise<{ data: string; mimeType: string } | undefined> {
     try {
+      if (await vaultMarked()) return undefined;
       if (coordination && !(await fence(toolName, undefined, true))) return undefined;
       const epoch = coordination?.epoch();
       const target = coordination?.tabId();
@@ -777,6 +802,11 @@ export function runMcpProxy(params: McpProxyParams): Promise<void> {
     const captureSpan = startSpan("browser_capture", toolName);
     let outcome: TimingOutcome = "ok";
     try {
+      if (await vaultMarked()) {
+        outcome = "error";
+        await writeSkipped(action, toolName, VAULT_CAPTURE_SKIPPED);
+        return;
+      }
       const prepared = coordination ? await fenceStatus(toolName, captureSpan?.spanId, true) : "ok";
       if (prepared !== "ok") {
         outcome = "error";

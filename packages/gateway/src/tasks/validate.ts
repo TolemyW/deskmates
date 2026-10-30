@@ -148,6 +148,8 @@ export interface CheckedCreateRequest {
   trigger: TaskTrigger;
   schedule?: TaskScheduleInput;
   idempotencyKey?: string;
+  templateId?: string;
+  fields?: Record<string, string>;
 }
 
 export function idempotencyKey(value: unknown, key = "idempotencyKey"): string {
@@ -164,8 +166,20 @@ export function idempotencyKey(value: unknown, key = "idempotencyKey"): string {
 
 export function createTaskRequest(raw: unknown): CheckedCreateRequest {
   const body = asRecord(raw);
-  const { trigger: rawTrigger, schedule: rawSchedule, idempotencyKey: rawKey, ...rest } = body;
+  const {
+    trigger: rawTrigger,
+    schedule: rawSchedule,
+    idempotencyKey: rawKey,
+    templateId: rawTemplate,
+    fields: rawFields,
+    ...rest
+  } = body;
   const input = createTaskInput(rest);
+  // ADR-0021 A4c: fields belong to a template; the store checks them against its definitions.
+  if (rawFields !== undefined && rawTemplate === undefined)
+    throw new DeskmatesError("validation", "fields are given only with a templateId", {
+      key: "fields",
+    });
   const trigger = rawTrigger === undefined ? "manual" : rawTrigger;
   if (typeof trigger !== "string" || !TASK_TRIGGERS.includes(trigger as TaskTrigger))
     throw new DeskmatesError("validation", "trigger must be immediate, scheduled or manual", {
@@ -184,7 +198,20 @@ export function createTaskRequest(raw: unknown): CheckedCreateRequest {
     trigger: trigger as TaskTrigger,
     ...(rawSchedule === undefined ? {} : { schedule: scheduleInput(rawSchedule) }),
     ...(rawKey === undefined ? {} : { idempotencyKey: idempotencyKey(rawKey) }),
+    ...(rawTemplate === undefined
+      ? {}
+      : { templateId: text(rawTemplate, "templateId", TASK_LIMITS.id, true) }),
+    ...(rawFields === undefined ? {} : { fields: fieldMap(rawFields) }),
   };
+}
+
+/** A `fields` object of strings; keys and bounds are checked against the template (A4c). */
+function fieldMap(value: unknown): Record<string, string> {
+  const record = asRecord(value, "fields");
+  for (const [key, entry] of Object.entries(record))
+    if (typeof entry !== "string")
+      throw new DeskmatesError("validation", `fields.${key} must be a string`, { key: "fields" });
+  return record as Record<string, string>;
 }
 
 /** A schedule's shape; the time zone and the cron text are checked here, the instant too. */
@@ -227,17 +254,29 @@ function validTimeZone(zone: string): boolean {
 
 export function runTaskRequest(raw: unknown): RunTaskRequest {
   const body = asRecord(raw);
-  onlyKeys(body, ["version", "idempotencyKey"]);
+  onlyKeys(body, ["version", "idempotencyKey", "feedback"]);
   return {
     version: taskVersion(body.version),
     idempotencyKey: idempotencyKey(body.idempotencyKey),
+    ...(body.feedback === undefined
+      ? {}
+      : { feedback: text(body.feedback, "feedback", 4000, true) }),
   };
 }
 
 export function updateTaskInput(raw: unknown): UpdateTaskInput {
   const body = asRecord(raw);
-  onlyKeys(body, [...CREATE_KEYS, "version", "status", "blockedReason", "nextAction", "schedule"]);
+  onlyKeys(body, [
+    ...CREATE_KEYS,
+    "version",
+    "status",
+    "blockedReason",
+    "nextAction",
+    "schedule",
+    "fields",
+  ]);
   const result: UpdateTaskInput = { ...fields(body), version: taskVersion(body.version) };
+  if (body.fields !== undefined) result.fields = fieldMap(body.fields);
   if (body.schedule !== undefined)
     result.schedule = body.schedule === null ? null : scheduleInput(body.schedule);
   if (body.status !== undefined) {
@@ -302,7 +341,7 @@ function textList(value: unknown, key: string, maxItems: number, maxLength: numb
 /** `task_checkpoint` (ADR-0021 A3h); evidence paths get the lexical policy in the store. */
 export function checkpointInput(raw: unknown): TaskCheckpointRequest {
   const body = asRecord(raw);
-  onlyKeys(body, ["taskId", "completed", "outstanding", "note"]);
+  onlyKeys(body, ["taskId", "completed", "outstanding", "note", "scopeVersion"]);
   if (!Array.isArray(body.completed) || body.completed.length > TASK_LIMITS.checkpointUnits)
     throw new DeskmatesError(
       "validation",
@@ -324,6 +363,7 @@ export function checkpointInput(raw: unknown): TaskCheckpointRequest {
   return {
     taskId: text(body.taskId, "taskId", TASK_LIMITS.id, true),
     completed,
+    ...(body.scopeVersion === undefined ? {} : { scopeVersion: taskVersion(body.scopeVersion) }),
     outstanding:
       body.outstanding === undefined
         ? []

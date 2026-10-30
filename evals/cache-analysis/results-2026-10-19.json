@@ -1,0 +1,1195 @@
+{
+  "schema": 1,
+  "windows": [
+    {
+      "start": "2026-10-16T00:00:00.000Z",
+      "end": "2026-10-17T00:00:00.000Z",
+      "excludedNonMessages": 99,
+      "excludedJobs": {
+        "activity_summary": 45,
+        "vision_probe": 8,
+        "memory_organize": 7,
+        "soul_proposal": 2,
+        "approval_presentation": 4,
+        "approval_review": 7,
+        "memory_recheck": 12
+      },
+      "allMessages": {
+        "requests": 207,
+        "cacheReadMissing": 64,
+        "cacheReadMissingShare": 0.30917874396135264,
+        "cacheReadReported": 143,
+        "inputTokensMissing": 44,
+        "cacheCreateMissing": 181,
+        "hits": 130,
+        "misses": 13,
+        "hitShareAmongReported": 0.9090909090909091,
+        "completePromptUsageRequests": 26,
+        "tokenWeightedCacheReadShare": 0.13438855701395722,
+        "promptTokens": {
+          "observed": 26,
+          "missing": 181,
+          "p50": 1839,
+          "p95": 11663
+        },
+        "positiveCacheCreates": 25,
+        "staticHashMissing": 0,
+        "distinctStaticHashes": 16,
+        "withCacheControl": 207,
+        "systemChars": {
+          "observed": 207,
+          "missing": 0,
+          "p50": 4968,
+          "p95": 4996
+        },
+        "toolSchemaChars": {
+          "observed": 207,
+          "missing": 0,
+          "p50": 56074,
+          "p95": 56074
+        },
+        "servedModelHashes": {
+          "not_reported": 44,
+          "214bc92f1ec31ba9": 11,
+          "c1ff518ceb375f25": 26,
+          "23e891f8e3a5b932": 126
+        }
+      },
+      "agentMessages": {
+        "requests": 122,
+        "cacheReadMissing": 9,
+        "cacheReadMissingShare": 0.07377049180327869,
+        "cacheReadReported": 113,
+        "inputTokensMissing": 4,
+        "cacheCreateMissing": 122,
+        "hits": 113,
+        "misses": 0,
+        "hitShareAmongReported": 1,
+        "completePromptUsageRequests": 0,
+        "tokenWeightedCacheReadShare": null,
+        "promptTokens": {
+          "observed": 0,
+          "missing": 122,
+          "p50": null,
+          "p95": null
+        },
+        "positiveCacheCreates": 0,
+        "staticHashMissing": 0,
+        "distinctStaticHashes": 8,
+        "withCacheControl": 122,
+        "systemChars": {
+          "observed": 122,
+          "missing": 0,
+          "p50": 4968,
+          "p95": 4996
+        },
+        "toolSchemaChars": {
+          "observed": 122,
+          "missing": 0,
+          "p50": 56074,
+          "p95": 56074
+        },
+        "servedModelHashes": {
+          "not_reported": 4,
+          "214bc92f1ec31ba9": 8,
+          "23e891f8e3a5b932": 110
+        }
+      },
+      "agentFirstObservedRequestPerAttempt": {
+        "requests": 13,
+        "cacheReadMissing": 6,
+        "cacheReadMissingShare": 0.46153846153846156,
+        "cacheReadReported": 7,
+        "inputTokensMissing": 2,
+        "cacheCreateMissing": 13,
+        "hits": 7,
+        "misses": 0,
+        "hitShareAmongReported": 1,
+        "completePromptUsageRequests": 0,
+        "tokenWeightedCacheReadShare": null,
+        "promptTokens": {
+          "observed": 0,
+          "missing": 13,
+          "p50": null,
+          "p95": null
+        },
+        "positiveCacheCreates": 0,
+        "staticHashMissing": 0,
+        "distinctStaticHashes": 8,
+        "withCacheControl": 13,
+        "systemChars": {
+          "observed": 13,
+          "missing": 0,
+          "p50": 4972,
+          "p95": 9899
+        },
+        "toolSchemaChars": {
+          "observed": 13,
+          "missing": 0,
+          "p50": 53611,
+          "p95": 58648
+        },
+        "servedModelHashes": {
+          "not_reported": 2,
+          "214bc92f1ec31ba9": 4,
+          "23e891f8e3a5b932": 7
+        }
+      },
+      "context": {
+        "agentAttemptsWithMessages": 13,
+        "fullSamples": 13,
+        "firstFullTotalTokens": {
+          "observed": 13,
+          "missing": 0,
+          "p50": 32805,
+          "p95": 71150
+        },
+        "firstFullCategories": {
+          "System prompt": {
+            "observed": 13,
+            "missing": 0,
+            "p50": 1611,
+            "p95": 3254
+          },
+          "System tools": {
+            "observed": 13,
+            "missing": 0,
+            "p50": 15233,
+            "p95": 15233
+          },
+          "MCP tools": {
+            "observed": 13,
+            "missing": 0,
+            "p50": 12279,
+            "p95": 14797
+          },
+          "Skills": {
+            "observed": 13,
+            "missing": 0,
+            "p50": 296,
+            "p95": 296
+          },
+          "Messages": {
+            "observed": 13,
+            "missing": 0,
+            "p50": 2156,
+            "p95": 41896
+          }
+        },
+        "sidecarStartedToQueryStartedMs": {
+          "observed": 13,
+          "missing": 0,
+          "p50": 346,
+          "p95": 449
+        },
+        "prequeryMeaning": "Whole sidecar pre-query work, not isolated context construction"
+      },
+      "cohorts": [
+        {
+          "start": "fresh",
+          "session": "new",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "5030d94353cff001",
+          "requests": 71,
+          "cacheReadMissing": 0,
+          "cacheReadMissingShare": 0,
+          "cacheReadReported": 71,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 71,
+          "hits": 71,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 71,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 71,
+          "systemChars": {
+            "observed": 71,
+            "missing": 0,
+            "p50": 4968,
+            "p95": 4968
+          },
+          "toolSchemaChars": {
+            "observed": 71,
+            "missing": 0,
+            "p50": 56074,
+            "p95": 56074
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 71
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "new",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "5844fdf5f2716b42",
+          "requests": 1,
+          "cacheReadMissing": 1,
+          "cacheReadMissingShare": 1,
+          "cacheReadReported": 0,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 1,
+          "hits": 0,
+          "misses": 0,
+          "hitShareAmongReported": null,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 1,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 1,
+          "systemChars": {
+            "observed": 1,
+            "missing": 0,
+            "p50": 4137,
+            "p95": 4137
+          },
+          "toolSchemaChars": {
+            "observed": 1,
+            "missing": 0,
+            "p50": 56163,
+            "p95": 56163
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 1
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "new",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "8ed1e88e42a85932",
+          "requests": 2,
+          "cacheReadMissing": 0,
+          "cacheReadMissingShare": 0,
+          "cacheReadReported": 2,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 2,
+          "hits": 2,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 2,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 2,
+          "systemChars": {
+            "observed": 2,
+            "missing": 0,
+            "p50": 6888,
+            "p95": 6888
+          },
+          "toolSchemaChars": {
+            "observed": 2,
+            "missing": 0,
+            "p50": 53611,
+            "p95": 53611
+          },
+          "servedModelHashes": {
+            "214bc92f1ec31ba9": 2
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "new",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "a3cd6e6197a4a5dc",
+          "requests": 29,
+          "cacheReadMissing": 2,
+          "cacheReadMissingShare": 0.06896551724137931,
+          "cacheReadReported": 27,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 29,
+          "hits": 27,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 29,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 2,
+          "withCacheControl": 29,
+          "systemChars": {
+            "observed": 29,
+            "missing": 0,
+            "p50": 4972,
+            "p95": 4972
+          },
+          "toolSchemaChars": {
+            "observed": 29,
+            "missing": 0,
+            "p50": 56074,
+            "p95": 56074
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 29
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "new",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "b1976a8fbcbd8f44",
+          "requests": 2,
+          "cacheReadMissing": 0,
+          "cacheReadMissingShare": 0,
+          "cacheReadReported": 2,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 2,
+          "hits": 2,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 2,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 2,
+          "systemChars": {
+            "observed": 2,
+            "missing": 0,
+            "p50": 9899,
+            "p95": 9899
+          },
+          "toolSchemaChars": {
+            "observed": 2,
+            "missing": 0,
+            "p50": 56117,
+            "p95": 56117
+          },
+          "servedModelHashes": {
+            "214bc92f1ec31ba9": 2
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "new",
+          "sandbox": "created",
+          "retry": "no-retry",
+          "configHash": "6d49dbf5833b529d",
+          "requests": 2,
+          "cacheReadMissing": 0,
+          "cacheReadMissingShare": 0,
+          "cacheReadReported": 2,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 2,
+          "hits": 2,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 2,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 2,
+          "systemChars": {
+            "observed": 2,
+            "missing": 0,
+            "p50": 4141,
+            "p95": 4141
+          },
+          "toolSchemaChars": {
+            "observed": 2,
+            "missing": 0,
+            "p50": 58648,
+            "p95": 58648
+          },
+          "servedModelHashes": {
+            "214bc92f1ec31ba9": 2
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "new",
+          "sandbox": "created",
+          "retry": "no-retry",
+          "configHash": "ddce04e319f435bf",
+          "requests": 2,
+          "cacheReadMissing": 2,
+          "cacheReadMissingShare": 1,
+          "cacheReadReported": 0,
+          "inputTokensMissing": 2,
+          "cacheCreateMissing": 2,
+          "hits": 0,
+          "misses": 0,
+          "hitShareAmongReported": null,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 2,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 2,
+          "systemChars": {
+            "observed": 2,
+            "missing": 0,
+            "p50": 4996,
+            "p95": 4996
+          },
+          "toolSchemaChars": {
+            "observed": 2,
+            "missing": 0,
+            "p50": 53611,
+            "p95": 53611
+          },
+          "servedModelHashes": {
+            "not_reported": 2
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "resumed",
+          "sandbox": "attached",
+          "retry": "no-retry",
+          "configHash": "da26fecfe50030cf",
+          "requests": 2,
+          "cacheReadMissing": 2,
+          "cacheReadMissingShare": 1,
+          "cacheReadReported": 0,
+          "inputTokensMissing": 2,
+          "cacheCreateMissing": 2,
+          "hits": 0,
+          "misses": 0,
+          "hitShareAmongReported": null,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 2,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 2,
+          "systemChars": {
+            "observed": 2,
+            "missing": 0,
+            "p50": 4996,
+            "p95": 4996
+          },
+          "toolSchemaChars": {
+            "observed": 2,
+            "missing": 0,
+            "p50": 53611,
+            "p95": 53611
+          },
+          "servedModelHashes": {
+            "not_reported": 2
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "resumed",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "5030d94353cff001",
+          "requests": 4,
+          "cacheReadMissing": 0,
+          "cacheReadMissingShare": 0,
+          "cacheReadReported": 4,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 4,
+          "hits": 4,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 4,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 4,
+          "systemChars": {
+            "observed": 4,
+            "missing": 0,
+            "p50": 4968,
+            "p95": 4968
+          },
+          "toolSchemaChars": {
+            "observed": 4,
+            "missing": 0,
+            "p50": 56074,
+            "p95": 56074
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 4
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "resumed",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "51a39755fcd48b7d",
+          "requests": 2,
+          "cacheReadMissing": 1,
+          "cacheReadMissingShare": 0.5,
+          "cacheReadReported": 1,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 2,
+          "hits": 1,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 2,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 2,
+          "systemChars": {
+            "observed": 2,
+            "missing": 0,
+            "p50": 4996,
+            "p95": 4996
+          },
+          "toolSchemaChars": {
+            "observed": 2,
+            "missing": 0,
+            "p50": 53611,
+            "p95": 53611
+          },
+          "servedModelHashes": {
+            "214bc92f1ec31ba9": 2
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "resumed",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "ede4822c1b30ad78",
+          "requests": 1,
+          "cacheReadMissing": 1,
+          "cacheReadMissingShare": 1,
+          "cacheReadReported": 0,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 1,
+          "hits": 0,
+          "misses": 0,
+          "hitShareAmongReported": null,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 1,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 1,
+          "systemChars": {
+            "observed": 1,
+            "missing": 0,
+            "p50": 4996,
+            "p95": 4996
+          },
+          "toolSchemaChars": {
+            "observed": 1,
+            "missing": 0,
+            "p50": 53611,
+            "p95": 53611
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 1
+          }
+        },
+        {
+          "start": "resume",
+          "session": "resumed",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "5030d94353cff001",
+          "requests": 4,
+          "cacheReadMissing": 0,
+          "cacheReadMissingShare": 0,
+          "cacheReadReported": 4,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 4,
+          "hits": 4,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 4,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 4,
+          "systemChars": {
+            "observed": 4,
+            "missing": 0,
+            "p50": 4968,
+            "p95": 4968
+          },
+          "toolSchemaChars": {
+            "observed": 4,
+            "missing": 0,
+            "p50": 53611,
+            "p95": 53611
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 4
+          }
+        }
+      ],
+      "privacy": "No prompt, tool result, model name, workspace identity or credential emitted"
+    },
+    {
+      "start": "2026-10-17T00:00:00.000Z",
+      "end": "2026-10-18T00:00:00.000Z",
+      "excludedNonMessages": 68,
+      "excludedJobs": {
+        "activity_summary": 16,
+        "approval_presentation": 11,
+        "approval_review": 12,
+        "memory_organize": 1,
+        "memory_recheck": 6
+      },
+      "allMessages": {
+        "requests": 251,
+        "cacheReadMissing": 24,
+        "cacheReadMissingShare": 0.09561752988047809,
+        "cacheReadReported": 227,
+        "inputTokensMissing": 0,
+        "cacheCreateMissing": 228,
+        "hits": 217,
+        "misses": 10,
+        "hitShareAmongReported": 0.9559471365638766,
+        "completePromptUsageRequests": 23,
+        "tokenWeightedCacheReadShare": 0.4120804362498795,
+        "promptTokens": {
+          "observed": 23,
+          "missing": 228,
+          "p50": 1584,
+          "p95": 12322
+        },
+        "positiveCacheCreates": 19,
+        "staticHashMissing": 0,
+        "distinctStaticHashes": 11,
+        "withCacheControl": 251,
+        "systemChars": {
+          "observed": 251,
+          "missing": 0,
+          "p50": 4968,
+          "p95": 4972
+        },
+        "toolSchemaChars": {
+          "observed": 251,
+          "missing": 0,
+          "p50": 56423,
+          "p95": 56426
+        },
+        "servedModelHashes": {
+          "23e891f8e3a5b932": 228,
+          "c1ff518ceb375f25": 23
+        }
+      },
+      "agentMessages": {
+        "requests": 205,
+        "cacheReadMissing": 6,
+        "cacheReadMissingShare": 0.02926829268292683,
+        "cacheReadReported": 199,
+        "inputTokensMissing": 0,
+        "cacheCreateMissing": 205,
+        "hits": 199,
+        "misses": 0,
+        "hitShareAmongReported": 1,
+        "completePromptUsageRequests": 0,
+        "tokenWeightedCacheReadShare": null,
+        "promptTokens": {
+          "observed": 0,
+          "missing": 205,
+          "p50": null,
+          "p95": null
+        },
+        "positiveCacheCreates": 0,
+        "staticHashMissing": 0,
+        "distinctStaticHashes": 6,
+        "withCacheControl": 205,
+        "systemChars": {
+          "observed": 205,
+          "missing": 0,
+          "p50": 4968,
+          "p95": 4972
+        },
+        "toolSchemaChars": {
+          "observed": 205,
+          "missing": 0,
+          "p50": 56424,
+          "p95": 56426
+        },
+        "servedModelHashes": {
+          "23e891f8e3a5b932": 205
+        }
+      },
+      "agentFirstObservedRequestPerAttempt": {
+        "requests": 9,
+        "cacheReadMissing": 5,
+        "cacheReadMissingShare": 0.5555555555555556,
+        "cacheReadReported": 4,
+        "inputTokensMissing": 0,
+        "cacheCreateMissing": 9,
+        "hits": 4,
+        "misses": 0,
+        "hitShareAmongReported": 1,
+        "completePromptUsageRequests": 0,
+        "tokenWeightedCacheReadShare": null,
+        "promptTokens": {
+          "observed": 0,
+          "missing": 9,
+          "p50": null,
+          "p95": null
+        },
+        "positiveCacheCreates": 0,
+        "staticHashMissing": 0,
+        "distinctStaticHashes": 6,
+        "withCacheControl": 9,
+        "systemChars": {
+          "observed": 9,
+          "missing": 0,
+          "p50": 4968,
+          "p95": 11938
+        },
+        "toolSchemaChars": {
+          "observed": 9,
+          "missing": 0,
+          "p50": 56423,
+          "p95": 56510
+        },
+        "servedModelHashes": {
+          "23e891f8e3a5b932": 9
+        }
+      },
+      "context": {
+        "agentAttemptsWithMessages": 9,
+        "fullSamples": 9,
+        "firstFullTotalTokens": {
+          "observed": 9,
+          "missing": 0,
+          "p50": 33355,
+          "p95": 38509
+        },
+        "firstFullCategories": {
+          "System prompt": {
+            "observed": 9,
+            "missing": 0,
+            "p50": 1610,
+            "p95": 3933
+          },
+          "System tools": {
+            "observed": 9,
+            "missing": 0,
+            "p50": 15233,
+            "p95": 15233
+          },
+          "MCP tools": {
+            "observed": 9,
+            "missing": 0,
+            "p50": 13685,
+            "p95": 13728
+          },
+          "Skills": {
+            "observed": 9,
+            "missing": 0,
+            "p50": 296,
+            "p95": 296
+          },
+          "Messages": {
+            "observed": 9,
+            "missing": 0,
+            "p50": 2620,
+            "p95": 5319
+          }
+        },
+        "sidecarStartedToQueryStartedMs": {
+          "observed": 9,
+          "missing": 0,
+          "p50": 412,
+          "p95": 455
+        },
+        "prequeryMeaning": "Whole sidecar pre-query work, not isolated context construction"
+      },
+      "cohorts": [
+        {
+          "start": "fresh",
+          "session": "new",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "3750ba5e82664713",
+          "requests": 4,
+          "cacheReadMissing": 1,
+          "cacheReadMissingShare": 0.25,
+          "cacheReadReported": 3,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 4,
+          "hits": 3,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 4,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 4,
+          "systemChars": {
+            "observed": 4,
+            "missing": 0,
+            "p50": 11938,
+            "p95": 11938
+          },
+          "toolSchemaChars": {
+            "observed": 4,
+            "missing": 0,
+            "p50": 56510,
+            "p95": 56510
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 4
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "new",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "5030d94353cff001",
+          "requests": 114,
+          "cacheReadMissing": 2,
+          "cacheReadMissingShare": 0.017543859649122806,
+          "cacheReadReported": 112,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 114,
+          "hits": 112,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 114,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 114,
+          "systemChars": {
+            "observed": 114,
+            "missing": 0,
+            "p50": 4968,
+            "p95": 4968
+          },
+          "toolSchemaChars": {
+            "observed": 114,
+            "missing": 0,
+            "p50": 56424,
+            "p95": 56426
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 114
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "new",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "a3cd6e6197a4a5dc",
+          "requests": 33,
+          "cacheReadMissing": 0,
+          "cacheReadMissingShare": 0,
+          "cacheReadReported": 33,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 33,
+          "hits": 33,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 33,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 33,
+          "systemChars": {
+            "observed": 33,
+            "missing": 0,
+            "p50": 4972,
+            "p95": 4972
+          },
+          "toolSchemaChars": {
+            "observed": 33,
+            "missing": 0,
+            "p50": 56423,
+            "p95": 56423
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 33
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "resumed",
+          "sandbox": "attached",
+          "retry": "no-retry",
+          "configHash": "a3cd6e6197a4a5dc",
+          "requests": 5,
+          "cacheReadMissing": 1,
+          "cacheReadMissingShare": 0.2,
+          "cacheReadReported": 4,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 5,
+          "hits": 4,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 5,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 5,
+          "systemChars": {
+            "observed": 5,
+            "missing": 0,
+            "p50": 4972,
+            "p95": 4972
+          },
+          "toolSchemaChars": {
+            "observed": 5,
+            "missing": 0,
+            "p50": 53611,
+            "p95": 53611
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 5
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "resumed",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "5030d94353cff001",
+          "requests": 10,
+          "cacheReadMissing": 2,
+          "cacheReadMissingShare": 0.2,
+          "cacheReadReported": 8,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 10,
+          "hits": 8,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 10,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 10,
+          "systemChars": {
+            "observed": 10,
+            "missing": 0,
+            "p50": 4137,
+            "p95": 4137
+          },
+          "toolSchemaChars": {
+            "observed": 10,
+            "missing": 0,
+            "p50": 53611,
+            "p95": 53611
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 10
+          }
+        },
+        {
+          "start": "fresh",
+          "session": "resumed",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "5257fff4641a5fca",
+          "requests": 1,
+          "cacheReadMissing": 0,
+          "cacheReadMissingShare": 0,
+          "cacheReadReported": 1,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 1,
+          "hits": 1,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 1,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 1,
+          "systemChars": {
+            "observed": 1,
+            "missing": 0,
+            "p50": 6888,
+            "p95": 6888
+          },
+          "toolSchemaChars": {
+            "observed": 1,
+            "missing": 0,
+            "p50": 53611,
+            "p95": 53611
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 1
+          }
+        },
+        {
+          "start": "resume",
+          "session": "resumed",
+          "sandbox": "cached",
+          "retry": "no-retry",
+          "configHash": "5030d94353cff001",
+          "requests": 38,
+          "cacheReadMissing": 0,
+          "cacheReadMissingShare": 0,
+          "cacheReadReported": 38,
+          "inputTokensMissing": 0,
+          "cacheCreateMissing": 38,
+          "hits": 38,
+          "misses": 0,
+          "hitShareAmongReported": 1,
+          "completePromptUsageRequests": 0,
+          "tokenWeightedCacheReadShare": null,
+          "promptTokens": {
+            "observed": 0,
+            "missing": 38,
+            "p50": null,
+            "p95": null
+          },
+          "positiveCacheCreates": 0,
+          "staticHashMissing": 0,
+          "distinctStaticHashes": 1,
+          "withCacheControl": 38,
+          "systemChars": {
+            "observed": 38,
+            "missing": 0,
+            "p50": 4968,
+            "p95": 4968
+          },
+          "toolSchemaChars": {
+            "observed": 38,
+            "missing": 0,
+            "p50": 56426,
+            "p95": 56426
+          },
+          "servedModelHashes": {
+            "23e891f8e3a5b932": 38
+          }
+        }
+      ],
+      "privacy": "No prompt, tool result, model name, workspace identity or credential emitted"
+    }
+  ],
+  "receipt": {
+    "date": "2026-10-19",
+    "reads": 2,
+    "repeatIdentical": true,
+    "modelCalls": 0,
+    "productionDatabaseWrites": 0
+  }
+}

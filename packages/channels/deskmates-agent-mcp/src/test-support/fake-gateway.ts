@@ -317,10 +317,21 @@ export async function startFakeGateway(
         },
       };
     },
-    "GET /api/workspaces/:workspaceId/tasks": (p) => ({
-      status: 200,
-      json: { tasks: [...tasks.values()].filter((t) => t.workspaceId === p.workspaceId) },
-    }),
+    "GET /api/workspaces/:workspaceId/tasks": (p, q) => {
+      const all = [...tasks.values()].filter((t) => t.workspaceId === p.workspaceId);
+      const filtered = all.filter((t) => !q.status || t.status === q.status);
+      const offset = Number(q.offset ?? 0);
+      const limit = Number(q.limit ?? 25);
+      return {
+        status: 200,
+        json: {
+          tasks: filtered.slice(offset, offset + limit),
+          offset,
+          limit,
+          total: filtered.length,
+        },
+      };
+    },
     "GET /api/workspaces/:workspaceId/tasks/:id": (p) => {
       const task = tasks.get(p.id as string);
       if (!task || task.workspaceId !== p.workspaceId) return notFound("task not found");

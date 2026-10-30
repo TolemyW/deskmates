@@ -209,8 +209,13 @@ export class RuntimeAdapter {
   /** An admin call: 2xx gives the JSON body; a runtime error becomes a typed Gateway error. */
   private async admin(method: string, path: string, body?: unknown): Promise<unknown> {
     const res = await this.send(method, path, this.opts.adminToken, body);
-    const parsed = await this.readJson(res);
-    if (res.ok) return parsed;
+    if (res.ok) return await this.readJson(res);
+    // An error status is mapped by its status: a reverse proxy's HTML 502 is the runtime being
+    // unavailable, not a protocol break, so an unreadable error body is read as no body.
+    const parsed = await this.readJson(res).catch((err: unknown) => {
+      if (err instanceof DeskmatesError && err.code === "integration_protocol") return undefined;
+      throw err;
+    });
     const err = record(record(parsed)?.error);
     const code = typeof err?.code === "string" ? err.code : "error";
     const message = typeof err?.message === "string" ? err.message : `HTTP ${res.status}`;

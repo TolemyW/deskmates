@@ -1,0 +1,1247 @@
+{
+  "checked": 360,
+  "keyboardChecked": 0,
+  "detectorVerified": false,
+  "failures": [
+    {
+      "locale": "en",
+      "theme": "light",
+      "width": 390,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "Upload files"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "About uploads"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Upload files",
+            "About uploads"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "en",
+      "theme": "light",
+      "width": 600,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "Upload files"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "About uploads"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Upload files",
+            "About uploads"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "en",
+      "theme": "light",
+      "width": 720,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "Upload files"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "About uploads"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Upload files",
+            "About uploads"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "en",
+      "theme": "light",
+      "width": 1280,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "Upload files"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "About uploads"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Upload files",
+            "About uploads"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "en",
+      "theme": "dark",
+      "width": 390,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "Upload files"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "About uploads"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Upload files",
+            "About uploads"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "en",
+      "theme": "dark",
+      "width": 600,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "Upload files"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "About uploads"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Upload files",
+            "About uploads"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "en",
+      "theme": "dark",
+      "width": 720,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "Upload files"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "About uploads"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Upload files",
+            "About uploads"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "en",
+      "theme": "dark",
+      "width": 1280,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "Upload files"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Shared apps",
+            "About uploads"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Upload files",
+            "About uploads"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "es",
+      "theme": "light",
+      "width": 390,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Subir archivos"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Acerca de las subidas"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Subir archivos",
+            "Acerca de las subidas"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "es",
+      "theme": "light",
+      "width": 600,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Subir archivos"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Acerca de las subidas"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Subir archivos",
+            "Acerca de las subidas"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "es",
+      "theme": "light",
+      "width": 720,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Subir archivos"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Acerca de las subidas"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Subir archivos",
+            "Acerca de las subidas"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "es",
+      "theme": "light",
+      "width": 1280,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Subir archivos"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Acerca de las subidas"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Subir archivos",
+            "Acerca de las subidas"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "es",
+      "theme": "dark",
+      "width": 390,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Subir archivos"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Acerca de las subidas"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Subir archivos",
+            "Acerca de las subidas"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "es",
+      "theme": "dark",
+      "width": 600,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Subir archivos"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Acerca de las subidas"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Subir archivos",
+            "Acerca de las subidas"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "es",
+      "theme": "dark",
+      "width": 720,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Subir archivos"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Acerca de las subidas"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Subir archivos",
+            "Acerca de las subidas"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "es",
+      "theme": "dark",
+      "width": 1280,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Subir archivos"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "Aplicaciones compartidas",
+            "Acerca de las subidas"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "Subir archivos",
+            "Acerca de las subidas"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "ja",
+      "theme": "light",
+      "width": 390,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "ファイルをアップロード"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "アップロードについて"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "ファイルをアップロード",
+            "アップロードについて"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "ja",
+      "theme": "light",
+      "width": 600,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "ファイルをアップロード"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "アップロードについて"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "ファイルをアップロード",
+            "アップロードについて"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "ja",
+      "theme": "light",
+      "width": 720,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "ファイルをアップロード"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "アップロードについて"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "ファイルをアップロード",
+            "アップロードについて"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "ja",
+      "theme": "light",
+      "width": 1280,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "ファイルをアップロード"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "アップロードについて"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "ファイルをアップロード",
+            "アップロードについて"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "ja",
+      "theme": "dark",
+      "width": 390,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "ファイルをアップロード"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "アップロードについて"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "ファイルをアップロード",
+            "アップロードについて"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "ja",
+      "theme": "dark",
+      "width": 600,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "ファイルをアップロード"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "アップロードについて"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "ファイルをアップロード",
+            "アップロードについて"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "ja",
+      "theme": "dark",
+      "width": 720,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "ファイルをアップロード"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "アップロードについて"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "ファイルをアップロード",
+            "アップロードについて"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "ja",
+      "theme": "dark",
+      "width": 1280,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "ファイルをアップロード"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共有アプリ",
+            "アップロードについて"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "ファイルをアップロード",
+            "アップロードについて"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-CN",
+      "theme": "light",
+      "width": 390,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传文件"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传说明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上传文件",
+            "上传说明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-CN",
+      "theme": "light",
+      "width": 600,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传文件"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传说明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上传文件",
+            "上传说明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-CN",
+      "theme": "light",
+      "width": 720,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传文件"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传说明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上传文件",
+            "上传说明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-CN",
+      "theme": "light",
+      "width": 1280,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传文件"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传说明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上传文件",
+            "上传说明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-CN",
+      "theme": "dark",
+      "width": 390,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传文件"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传说明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上传文件",
+            "上传说明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-CN",
+      "theme": "dark",
+      "width": 600,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传文件"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传说明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上传文件",
+            "上传说明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-CN",
+      "theme": "dark",
+      "width": 720,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传文件"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传说明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上传文件",
+            "上传说明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-CN",
+      "theme": "dark",
+      "width": 1280,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传文件"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享应用",
+            "上传说明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上传文件",
+            "上传说明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-TW",
+      "theme": "light",
+      "width": 390,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳檔案"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳說明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上傳檔案",
+            "上傳說明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-TW",
+      "theme": "light",
+      "width": 600,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳檔案"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳說明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上傳檔案",
+            "上傳說明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-TW",
+      "theme": "light",
+      "width": 720,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳檔案"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳說明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上傳檔案",
+            "上傳說明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-TW",
+      "theme": "light",
+      "width": 1280,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳檔案"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳說明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上傳檔案",
+            "上傳說明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-TW",
+      "theme": "dark",
+      "width": 390,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳檔案"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳說明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上傳檔案",
+            "上傳說明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-TW",
+      "theme": "dark",
+      "width": 600,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳檔案"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳說明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上傳檔案",
+            "上傳說明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-TW",
+      "theme": "dark",
+      "width": 720,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳檔案"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳說明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上傳檔案",
+            "上傳說明"
+          ],
+          "gap": 6
+        }
+      ]
+    },
+    {
+      "locale": "zh-TW",
+      "theme": "dark",
+      "width": 1280,
+      "problems": [
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳檔案"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-center-alignment",
+          "labels": [
+            "共享應用程式",
+            "上傳說明"
+          ],
+          "centerDelta": 6
+        },
+        {
+          "rule": "row-minimum-gap",
+          "labels": [
+            "上傳檔案",
+            "上傳說明"
+          ],
+          "gap": 6
+        }
+      ]
+    }
+  ]
+}

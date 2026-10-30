@@ -1,0 +1,24 @@
+[
+  {
+    "id": "main",
+    "route": "#/network"
+  },
+  {
+    "id": "edit-form",
+    "route": "#/network",
+    "steps": [
+      {
+        "name": "New profile"
+      }
+    ]
+  },
+  {
+    "id": "edit-existing",
+    "route": "#/network",
+    "steps": [
+      {
+        "name": "Edit"
+      }
+    ]
+  }
+]

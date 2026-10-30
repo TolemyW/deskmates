@@ -16,6 +16,7 @@ import {
 import type { DemoFeature, DemoRequest, DemoSeedContext } from "../../demo/feature.js";
 import { type Result, created, notFound, ok } from "../../demo/result.js";
 import { type DemoState, id, minutesAgo } from "../../demo/state.js";
+import { demoStamp } from "../task-kinds/demo.js";
 
 export const demo: DemoFeature = { route, seed: { after: "history", run: seed } };
 
@@ -88,6 +89,11 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
         scopeVersion: 1,
         schedule: input.schedule ? demoSchedule(input.schedule) : null,
       };
+      // ADR-0021 A4c: a template stamps the kind (the demo appends no description section).
+      const stamp = input.templateId
+        ? demoStamp(s, workspaceId, input.templateId, input.fields ?? {})
+        : undefined;
+      if (stamp) task.kind = stamp;
       s.tasks.set(task.id, task);
       // The demo has no runtime: an immediate create records a submission that never starts.
       if (input.trigger === "immediate") {
@@ -107,6 +113,21 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
     }
     if (x[3] === "/run" && method === "POST") {
       if (!task.ownerBotId) return invalid("Running a task needs a responsible (owner) bot");
+      if (b.feedback !== undefined) {
+        if (task.status !== "delivered" || typeof b.feedback !== "string" || !b.feedback.trim())
+          return invalid("A revision needs a delivered task and feedback", 409);
+        const revised: Task = {
+          ...task,
+          status: "in_progress",
+          version: task.version + 1,
+          deliveredAt: null,
+          deliveredBy: null,
+          output: null,
+          updatedAt: at,
+        };
+        s.tasks.set(task.id, revised);
+        return created({ task: revised, submission: demoSubmission(revised, "manual", at) });
+      }
       return created({ task, submission: demoSubmission(task, "manual", at) });
     }
     if (x[3] && method === "POST") {
@@ -203,7 +224,16 @@ function seed(s: DemoState, { now, ws, chief, researcher, qa }: DemoSeedContext)
       deliveredAt: status === "delivered" ? minutesAgo(5, now) : null,
       deliveredBy: status === "delivered" ? "human:operator" : null,
       outputSchema: null,
-      output: null,
+      output:
+        status === "delivered"
+          ? {
+              status: "Ready for review",
+              checks: ["Compared the available KPI exports", "Linked the findings file"],
+              open_issues: [
+                "This demo has no live data connection. Verify the source period before accepting.",
+              ],
+            }
+          : null,
       acceptedAt: null,
       acceptedBy: null,
       scopeVersion: 1,

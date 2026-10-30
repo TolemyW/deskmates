@@ -33,3 +33,15 @@ Rules for new UI text:
 - The four translations are machine-authored pending native review; `src/i18n/TRANSLATIONS.md`
   records their state and the terms used. `src/i18n/locale-render.test.tsx` renders Chats,
   Tasks, Approvals, Management and People in zh-CN and fails on English left on screen.
+
+Product vocabulary follows the owner-approved glossary in `src/i18n/TRANSLATIONS.md`. In
+particular, Bot and SOUL are product terms and stay untranslated in `zh-CN`; people belong to an
+Organization; browsing uses Allowed websites and Internal network; configuration says AI model
+and thinking depth; external triggers say Another app and Repeats; ordinary activity is work,
+while run is reserved for technical history and diagnostics. Primary copy says server, not
+Gateway, and keeps proxy, bearer-token, environment-variable and raw schedule syntax in Details
+or Advanced sections.
+
+The 2026-10-19 `zh-CN` terminology rewrite remains machine-authored. It has not received native
+review and must not be presented as reviewed until a named reviewer records a sign-off in
+`src/i18n/TRANSLATIONS.md` after checking the running UI.

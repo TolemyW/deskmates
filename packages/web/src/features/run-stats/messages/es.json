@@ -1,0 +1,14 @@
+{
+  "runStats.disable": "Desactivar las estadísticas de ejecución",
+  "runStats.enable": "Activar las estadísticas de ejecución",
+  "runStats.frozen": "Las ejecuciones ya iniciadas conservan el ajuste con el que empezaron.",
+  "runStats.intro": "Da a {name} una herramienta de solo lectura, run_stats, que muestra sus propias ejecuciones recientes, causas de fallo, duraciones, gasto, aprobaciones pendientes, ejecuciones en espera y tareas. Solo las cifras de este bot en este espacio de trabajo; nunca las de otro bot ni el contenido del chat privado de nadie.",
+  "runStats.loading": "Cargando estadísticas de ejecución…",
+  "runStats.off": "Desactivada (predeterminado)",
+  "runStats.on": "Activada",
+  "runStats.retry": "Reintentar",
+  "runStats.roleNote": "cambiar las estadísticas de ejecución",
+  "runStats.state": "Herramienta de estadísticas de ejecución",
+  "runStats.strategyNote": "Dar esta herramienta a un bot cambia su forma de trabajar; compárala en ejecuciones emparejadas antes de confiar en ella.",
+  "runStats.title": "Estadísticas de ejecución"
+}

@@ -11,14 +11,23 @@ import type {
   Workspace,
   WorkspaceId,
 } from "@deskmates/contracts";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@deskmates/ui";
-import { useCallback, useEffect, useState } from "react";
+import {
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@deskmates/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { Button } from "../../components/ui/button.js";
 import { errorMessage } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { useWorkspaceForCalls } from "../../state/workspace-scope.js";
 import type { NetworkApi } from "./api.js";
+import { HostResourcesSection } from "./host-resources-section.js";
 import { Expiry, Publications, isExpired, ruleSummary } from "./network-format.js";
 import { type ProfileDraft, ProfileForm, type ProfileInput, draftOf } from "./profile-form.js";
 import { WorkspaceNetworkPanel } from "./workspace-network-panel.js";
@@ -34,11 +43,24 @@ export function NetworkScreen({ api }: { api: Api }) {
   const [note, setNote] = useState<string>();
   const [error, setError] = useState<string>();
   const [draft, setDraft] = useState<ProfileDraft>();
+  const editorTrigger = useRef<HTMLButtonElement | null>(null);
+  const wasEditing = useRef(false);
+  const editing = draft !== undefined;
+  useEffect(() => {
+    if (wasEditing.current && !editing) editorTrigger.current?.focus();
+    wasEditing.current = editing;
+  }, [editing]);
+  const openEditor = (trigger: HTMLButtonElement, profile?: NetworkProfile) => {
+    editorTrigger.current = trigger;
+    setError(undefined);
+    setDraft(draftOf(profile));
+  };
   const [publications, setPublications] = useState<NetworkPublication[]>([]);
   const [busy, setBusy] = useState(false);
   const [overlaps, setOverlaps] = useState<NetworkOverlap[]>([]);
 
   const reload = useCallback(async () => {
+    setError(undefined);
     try {
       const list = await api.listNetworkProfiles();
       setProfiles(list.profiles);
@@ -103,18 +125,24 @@ export function NetworkScreen({ api }: { api: Api }) {
 
   return (
     <section className="workspace-screen resource-page page-container network-page">
-      <header className="resource-heading">
-        <div className="resource-heading-text">
-          <h1>{t("network.title")}</h1>
-          <p>{t("network.intro")}</p>
-        </div>
-        <Button disabled={busy} onClick={() => void reload()}>
-          {t("network.refresh")}
-        </Button>
-        <Button disabled={busy || draft !== undefined} onClick={() => setDraft(draftOf())}>
-          {t("network.new")}
-        </Button>
-      </header>
+      <PageHeader
+        title={t("network.title")}
+        description={t("network.intro")}
+        action={
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => void reload()}>
+              {t("network.refresh")}
+            </Button>
+            <Button
+              variant="primary"
+              disabled={busy || draft !== undefined}
+              onClick={(event) => openEditor(event.currentTarget)}
+            >
+              {t("network.new")}
+            </Button>
+          </>
+        }
+      />
       {error ? (
         <p className="error" role="alert">
           {error}
@@ -127,7 +155,10 @@ export function NetworkScreen({ api }: { api: Api }) {
           busy={busy}
           onChange={setDraft}
           onSave={(input) => void save(draft, input)}
-          onCancel={() => setDraft(undefined)}
+          onCancel={() => {
+            setDraft(undefined);
+            setError(undefined);
+          }}
         />
       ) : null}
       <WorkspaceBlock api={api} extraProfiles={manageAll ? (profiles ?? []) : []} note={note} />
@@ -152,7 +183,9 @@ export function NetworkScreen({ api }: { api: Api }) {
       <section className="card network-all" aria-labelledby="network-all-title">
         <h2 id="network-all-title">{t("network.allProfiles")}</h2>
         {profiles === undefined ? (
-          <p className="muted">{t("network.loading")}</p>
+          error ? null : (
+            <p className="muted">{t("network.loading")}</p>
+          )
         ) : profiles.length === 0 ? (
           <p className="muted">{t("network.empty")}</p>
         ) : (
@@ -203,15 +236,15 @@ export function NetworkScreen({ api }: { api: Api }) {
                         <Button
                           size="sm"
                           variant="ghost"
-                          disabled={busy}
-                          onClick={() => setDraft(draftOf(profile))}
+                          disabled={busy || editing}
+                          onClick={(event) => openEditor(event.currentTarget, profile)}
                         >
                           {t("network.edit")}
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
-                          disabled={busy}
+                          disabled={busy || editing}
                           onClick={() => remove(profile)}
                         >
                           {t("network.delete")}
@@ -225,6 +258,7 @@ export function NetworkScreen({ api }: { api: Api }) {
           </Table>
         )}
       </section>
+      {manageAll ? <HostResourcesSection api={api} /> : null}
     </section>
   );
 }
@@ -244,17 +278,49 @@ function WorkspaceBlock(props: {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [picked, setPicked] = useState<WorkspaceId>();
   const [error, setError] = useState<string>();
+  const [loaded, setLoaded] = useState(false);
+  const [loadRevision, setLoadRevision] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadRevision requests a local retry.
   useEffect(() => {
+    let active = true;
+    setLoaded(false);
+    setError(undefined);
     api.listWorkspaces().then(
-      (list) => setWorkspaces(list),
-      (err) => setError(errorMessage(err)),
+      (list) => {
+        if (active) {
+          setWorkspaces(list);
+          setLoaded(true);
+        }
+      },
+      (err) => {
+        if (active) {
+          setError(errorMessage(err));
+          setLoaded(true);
+        }
+      },
     );
-  }, [api]);
+    return () => {
+      active = false;
+    };
+  }, [api, loadRevision]);
 
   const workspaceId = picked ?? scope.workspaceId ?? workspaces[0]?.id;
   const current = workspaces.find((w) => w.id === workspaceId);
-  if (error) return <p role="alert">{error}</p>;
+  if (error)
+    return (
+      <div role="alert">
+        {error}{" "}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setLoadRevision((value) => value + 1)}
+        >
+          {t("network.refresh")}
+        </Button>
+      </div>
+    );
+  if (!loaded) return <output>{t("network.loading")}</output>;
   if (workspaces.length === 0 || workspaceId === undefined)
     return <p className="muted">{t("network.noWorkspaces")}</p>;
   return (

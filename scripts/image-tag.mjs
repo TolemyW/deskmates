@@ -3,7 +3,7 @@
 // One implementation for the build scripts, the release scripts and humans, so that all three
 // derive the same name from one tree.
 //
-// CLI: node scripts/image-tag.mjs base|workspace|egress|connector-postgres [--arch amd64|arm64] [--hash-only]
+// CLI: node scripts/image-tag.mjs base|workspace|egress|connector-postgres|grafana|searxng [--arch amd64|arm64] [--hash-only]
 //   prints the tag (or the 12-hex hash) for the current tree. Run it after
 //   `npm run build -w packages/contracts -w packages/sidecar`: the workspace hash covers their dist/.
 // node scripts/image-tag.mjs <kind> --source-inputs
@@ -21,11 +21,13 @@ export const IMAGE_REPOS = {
   workspace: "deskmates/workspace",
   egress: "deskmates/egress-proxy",
   "connector-postgres": "deskmates/connector-postgres",
+  grafana: "deskmates/grafana",
+  searxng: "deskmates/searxng",
 };
 
-// The root .dockerignore admits these for images/workspace/Dockerfile; images/workspace-base and
-// images/egress copy only from their own directories. `.dockerignore` itself is an input because it decides
-// what reaches the build context.
+// The root .dockerignore admits these for images/workspace/Dockerfile; images/workspace-base,
+// images/egress and images/grafana copy only from their own directories. `.dockerignore` itself
+// is an input because it decides what reaches the build context.
 const INPUTS = {
   workspace: [
     ".dockerignore",
@@ -38,6 +40,11 @@ const INPUTS = {
   ],
   base: ["images/workspace-base"],
   egress: ["images/egress"],
+  // The official image plus the SQLite datasource plugin (ADR-0046 decision 6); the dashboards
+  // and provisioning are mounted from the release at run time, so they are not inputs.
+  grafana: ["images/grafana"],
+  // The official image plus settings.yml (ADR-0049 decision 14); the secret comes at run time.
+  searxng: ["images/searxng"],
   // images/connector-postgres/Dockerfile.dockerignore admits these; the other workspaces'
   // package.json files are copied only so npm ci sees the lockfile in sync.
   "connector-postgres": [
@@ -53,6 +60,7 @@ const INPUTS = {
     "packages/contracts/dist",
     "packages/gateway/package.json",
     "packages/golden-site/package.json",
+    "packages/observability-dashboards/package.json",
     "packages/sandbox-docker/package.json",
     "packages/sidecar/package.json",
     "packages/testkit/package.json",
@@ -110,7 +118,7 @@ export function imageInputs(root, kind) {
   const roots = INPUTS[kind];
   if (!roots)
     throw new Error(
-      `unknown image kind ${JSON.stringify(kind)}; use base, workspace, egress or connector-postgres`,
+      `unknown image kind ${JSON.stringify(kind)}; use base, workspace, egress, connector-postgres, grafana or searxng`,
     );
   const excluded = [...EXCLUDED, ...(EXTRA_EXCLUDED[kind] ?? [])];
   const files = [];

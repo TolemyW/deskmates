@@ -128,6 +128,7 @@ describe("invite by link (local_signup)", () => {
     expect(joined.json.tenant).toMatchObject({ id: A.tenantId, role: "member" });
     expect(joined.json.user).toMatchObject({ displayName: "Nia New", loginName: "nia.new" });
     expect(joined.json.account).toEqual({ localLoginName: "nia.new", password: "available" });
+    expect(joined.json.passwordChangeRequired).toBeUndefined();
     expect((await joined.jar.fetch("GET", "/api/workspaces")).status).toBe(200);
     // The chosen username and password sign in.
     expect((await new BrowserJar(h.baseUrl).signIn("nia.new")).status).toBe(200);
@@ -368,11 +369,33 @@ describe("administrator-created accounts", () => {
     expect((await jar.signIn("max.member", password)).status).toBe(200);
     const view = await jar.json<AuthenticatedSessionView>("GET", "/auth/session");
     expect(view.json.tenant).toMatchObject({ id: A.tenantId, role: "member" });
+    expect(view.json.passwordChangeRequired).toBe(true);
+    expect(
+      ctx.db
+        .prepare(
+          `SELECT must_change, password_change_reason FROM local_credentials c
+           JOIN user_logins l ON l.id = c.login_id WHERE l.subject = ?`,
+        )
+        .get("max.member"),
+    ).toEqual({ must_change: 1, password_change_reason: "administrator" });
+    const refused = await jar.json<{ details?: { reason?: string } }>("GET", "/api/workspaces");
+    expect(refused.status).toBe(403);
+    expect(refused.json.details?.reason).toBe("password_change_required");
+    expect(
+      (
+        await jar.fetch("PATCH", "/auth/profile", {
+          body: { displayName: "Not yet" },
+        })
+      ).status,
+    ).toBe(403);
     // ...and replaces it in Account settings.
     const changed = await jar.fetch("POST", "/auth/password", {
       body: { currentPassword: password, newPassword: TEST_PASSWORD },
     });
     expect(changed.status).toBe(200);
+    expect(
+      (await jar.json<AuthenticatedSessionView>("GET", "/auth/session")).json,
+    ).not.toHaveProperty("passwordChangeRequired");
     expect((await new BrowserJar(h.baseUrl).signIn("max.member", password)).status).toBe(401);
     expect((await new BrowserJar(h.baseUrl).signIn("max.member")).status).toBe(200);
   });

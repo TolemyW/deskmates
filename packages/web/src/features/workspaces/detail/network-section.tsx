@@ -30,6 +30,7 @@ export function NetworkSection({ api, entry, onChanged }: DetailSectionProps) {
   const editable = can.allowed && !entry.archivedAt;
   const [workspace, setWorkspace] = useState<Workspace>();
   const [loadError, setLoadError] = useState<string>();
+  const [loadRevision, setLoadRevision] = useState(0);
   const [locked, setLocked] = useState(!entry.openInternet);
   const [draft, setDraft] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -44,7 +45,7 @@ export function NetworkSection({ api, entry, onChanged }: DetailSectionProps) {
     setDraft(open ? "" : next.egressAllowlist.join("\n"));
     setConfirming(false);
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reload only for another workspace
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reload for another workspace or an explicit retry
   useEffect(() => {
     let cancelled = false;
     setLoadError(undefined);
@@ -60,7 +61,7 @@ export function NetworkSection({ api, entry, onChanged }: DetailSectionProps) {
     return () => {
       cancelled = true;
     };
-  }, [api, entry.id]);
+  }, [api, entry.id, loadRevision]);
 
   const next = useMemo(() => (locked ? hostnames(draft) : [EGRESS_OPEN_INTERNET]), [draft, locked]);
   const current = workspace?.egressAllowlist ?? [];
@@ -93,7 +94,7 @@ export function NetworkSection({ api, entry, onChanged }: DetailSectionProps) {
   return (
     <section className="card workspace-detail-section" aria-labelledby="workspace-network-title">
       <h3 id="workspace-network-title">{t("workspaceManage.network.title")}</h3>
-      <p>
+      <p className="network-mode-line">
         {open ? (
           <>
             <Globe size={14} aria-hidden="true" /> {t("workspaceManage.network.open")}
@@ -105,9 +106,16 @@ export function NetworkSection({ api, entry, onChanged }: DetailSectionProps) {
         )}
       </p>
       {loadError ? (
-        <p role="alert" className="error small">
-          {t("workspaceManage.network.loadFailed", { error: loadError })}
-        </p>
+        <div role="alert" className="error small">
+          {t("workspaceManage.network.loadFailed", { error: loadError })}{" "}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setLoadRevision((value) => value + 1)}
+          >
+            {t("workspaceManage.retry")}
+          </Button>
+        </div>
       ) : workspace === undefined ? (
         <output className="muted small">{t("workspaceManage.network.loading")}</output>
       ) : editable ? (

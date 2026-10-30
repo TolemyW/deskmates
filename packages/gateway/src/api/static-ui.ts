@@ -5,8 +5,8 @@
 // The files are the public JavaScript bundle and hold no secret, so they need no credential. The
 // handler is a GET wildcard on the root app, outside the authenticated `/api` scope: Fastify
 // matches a registered route before a wildcard, so every `/api/*` route keeps its operator-auth
-// hook, and a request that reaches this handler for an `/api`, `/hooks` or sandbox-listener path
-// gets the ordinary 404 rather than the UI.
+// hook, and a request that reaches this handler for an `/api`, `/analytics` (the Grafana relay),
+// `/hooks` or sandbox-listener path gets the ordinary 404 rather than the UI.
 
 import { realpathSync, statSync } from "node:fs";
 import { readFile, realpath, stat } from "node:fs/promises";
@@ -15,7 +15,7 @@ import { DeskmatesError } from "@deskmates/contracts";
 import type { FastifyInstance, FastifyReply } from "fastify";
 
 /** Paths that belong to an API family (either listener). They are never answered with the UI. */
-const RESERVED_PATH = /^\/(?:api|hooks|internal|v1|healthz)(?:\/|$)/;
+const RESERVED_PATH = /^\/(?:analytics|api|hooks|internal|v1|healthz)(?:\/|$)/;
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".html": "text/html; charset=utf-8",

@@ -285,13 +285,13 @@ describe("New chat", () => {
     );
     // Bot inboxes are the default way in once bots exist, so opening the creation form is explicit.
     fireEvent.click(screen.getByRole("button", { name: "New chat" }));
-    return screen.findByRole("form", { name: "New thread" });
+    return screen.findByRole("form", { name: "New chat" });
   }
 
   it("offers a Member no New at all: it creates only Admin things (ADR-0022 amendment 7 S6)", () => {
     as(MEMBER, <ThreadRail workspace={workspace} bots={bots} threads={none} onCreated={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "New chat" })).toBeNull();
-    expect(screen.queryByRole("form", { name: "New thread" })).toBeNull();
+    expect(screen.queryByRole("form", { name: "New chat" })).toBeNull();
   });
 
   it("an Admin picks several bots for a group chat", async () => {
@@ -299,7 +299,7 @@ describe("New chat", () => {
     const boxes = within(form).getAllByRole("checkbox");
     expect(boxes[0]).toBeChecked();
     expect(boxes[1]).toBeChecked();
-    expect(within(form).getByRole("button", { name: "Create thread" })).toBeEnabled();
+    expect(within(form).getByRole("button", { name: "Create chat" })).toBeEnabled();
     expect(within(form).getByRole("link", { name: "New bot" })).toHaveAttribute(
       "href",
       "#/contacts/new",
@@ -348,7 +348,7 @@ describe("run cancel and continuation (A11, A12)", () => {
 
   function renderRun(roles: SessionRoles, sideChatActor?: string) {
     const parked = run({ status: "waiting_continuation" });
-    const { fetch } = fakeFetch({
+    const { fetch, calls } = fakeFetch({
       "GET /api/runs/run_1": { run: parked, usage: [] },
       "GET /api/runs/run_1/events": { events: [] },
       "GET /api/threads/thr_1": {
@@ -356,7 +356,10 @@ describe("run cancel and continuation (A11, A12)", () => {
         members,
       },
     });
-    return as(roles, <RunScreen runId={parked.id} api={createApiClient({ fetch })} />);
+    return {
+      ...as(roles, <RunScreen runId={parked.id} api={createApiClient({ fetch })} />),
+      calls,
+    };
   }
 
   it("a Member outside their own side chat may neither cancel nor continue the run", async () => {
@@ -381,6 +384,19 @@ describe("run cancel and continuation (A11, A12)", () => {
     expect(await screen.findByRole("button", { name: "Cancel run" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue run" })).toBeInTheDocument();
     expect(screen.queryByText(/^Only .+ can .+\.$/)).toBeNull();
+  });
+
+  it("does not borrow an Owner role elsewhere to manage a Member workspace run", async () => {
+    const view = renderRun({
+      ...ADMIN,
+      workspaceRoles: { [thread.workspaceId]: "member", ws_elsewhere: "owner" },
+    });
+    await screen.findByLabelText("Run events");
+    await waitFor(() =>
+      expect(view.calls.some((call) => call.path === "/api/threads/thr_1")).toBe(true),
+    );
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Cancel run" })).toBeNull());
+    expect(screen.queryByRole("button", { name: "Continue run" })).toBeNull();
   });
 
   it("an Admin cancels and continues any run", async () => {

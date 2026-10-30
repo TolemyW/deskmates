@@ -12,6 +12,7 @@ import {
   type BotId,
   DeskmatesError,
 } from "@deskmates/contracts";
+import type { GatewayContext } from "../context.js";
 import { type DelegationOutcomeDeps, wakeChain } from "../threads/delegation-outcomes.js";
 
 /**
@@ -57,4 +58,30 @@ export function assertBotMayDecide(
       { ...details, refusal: "delegator_approval" },
     );
   }
+}
+
+/**
+ * Issue #89: a bot's refused decision is said in the thread, as a decided one is. A live bot was
+ * refused as a delegator and still told the thread the request was approved; the request stayed
+ * pending and nobody reading the transcript could tell. The line wakes nobody, like the broker's
+ * echo of a decision, and carries no approval attachment: the card has not changed.
+ */
+export function announceRefusedBotDecision(
+  deps: Pick<GatewayContext, "messages" | "bus" | "bots">,
+  approval: Approval,
+  decidingBotId: BotId,
+  decision: ApprovalDecision,
+  error: DeskmatesError,
+): void {
+  if (!approval.threadId) return;
+  const name = deps.bots.get(decidingBotId)?.name ?? decidingBotId;
+  const verb = decision === "deny" ? "deny" : "approve";
+  const message = deps.messages.append({
+    threadId: approval.threadId,
+    authorKind: "system",
+    authorId: "",
+    body: `Not recorded: ${name} tried to ${verb} ${approval.botId === decidingBotId ? "its own request" : "this request"}, but ${error.message}. The request is still waiting for a decision.`,
+    relayCount: 0,
+  });
+  deps.bus.publish({ type: "thread_message", threadId: approval.threadId, message });
 }

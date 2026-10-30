@@ -69,7 +69,11 @@ describe("FilesUploadControl", () => {
     const api = fakeApi({ failFirstPart: new ApiError("storage_exhausted", "full", 507) });
     const onUploaded = vi.fn();
     render(<FilesUploadControl api={api} workspace={workspace} onUploaded={onUploaded} />);
-    expect(screen.getByText(/does not message a bot or start any work/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "About uploads" }));
+    expect(await screen.findByRole("tooltip")).toHaveProperty(
+      "textContent",
+      expect.stringContaining("does not message a Bot"),
+    );
     choose("files-upload-input", "report.csv");
     expect(await screen.findByText(/The workspace disk is full/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Retry/ }));

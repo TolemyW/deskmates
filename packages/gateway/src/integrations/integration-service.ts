@@ -9,7 +9,9 @@
 // in the ledger with `source: "integration_proxy"` (item 7).
 
 import {
+  APP_NOT_ENABLED_FOR_BOT,
   type AdoptedIntegrationProvider,
+  type BotIntegrationAppsScope,
   type CreateApiKeyConnectionRequest,
   DeskmatesError,
   type IntegrationActionOverride,
@@ -43,6 +45,7 @@ import type { EventStore } from "../ledger/events.js";
 import type { RunRecord, RunStore } from "../ledger/runs.js";
 import type { SecretsStore } from "../secrets/secrets-store.js";
 import type { WorkspaceStore } from "../workspaces/workspaces.js";
+import { appAllowed, frozenAppScope } from "./bot-app-scope.js";
 import {
   type IntegrationStore,
   type PendingOAuthState,
@@ -115,6 +118,8 @@ export type OAuthCompletion =
 interface RunScope {
   run: RunRecord;
   workspaceId: WorkspaceId;
+  /** ADR-0055: the apps the run froze; undefined for a run from before it (every app). */
+  apps: BotIntegrationAppsScope | undefined;
 }
 
 function authKindsOf(types: readonly string[]): IntegrationAuthKind[] {
@@ -573,7 +578,15 @@ export class IntegrationService {
       });
     const revoked = this.deps.store.revokeConnection(connectionId, actor);
     await this.sync(workspaceId);
-    await runtime.deleteConnection(revoked.service, revoked.runtimeConnectionName);
+    // Runtime names are deterministic per (workspace, name) and a revoked name may be reused; a
+    // repeated revoke of the old row must not remove the live connection's credential.
+    const reused = this.deps.store.liveConnectionNamed(
+      workspaceId,
+      revoked.service,
+      revoked.connectionName,
+    );
+    if (reused?.runtimeConnectionName !== revoked.runtimeConnectionName)
+      await runtime.deleteConnection(revoked.service, revoked.runtimeConnectionName);
     return publicConnection(revoked);
   }
 
@@ -721,7 +734,34 @@ export class IntegrationService {
   private scope(runId: RunId): RunScope {
     this.runtime();
     const run = this.deps.runs.mustGet(runId);
-    return { run, workspaceId: this.deps.bots.mustGet(run.botId).workspaceId };
+    return {
+      run,
+      workspaceId: this.deps.bots.mustGet(run.botId).workspaceId,
+      apps: frozenAppScope(run.config),
+    };
+  }
+
+  /** The workspace's usable connections of the apps this run may use (ADR-0055 decision 4). */
+  private usableFor(s: RunScope): StoredIntegrationConnection[] {
+    return this.deps.store
+      .usableConnections(s.workspaceId)
+      .filter((c) => appAllowed(s.apps, c.service));
+  }
+
+  /** Decision 4: a service the run may not use is refused before the runtime is asked. */
+  private mustBeAllowed(s: RunScope, service: string): void {
+    if (appAllowed(s.apps, service)) return;
+    throw new DeskmatesError(
+      "forbidden",
+      `${service} is not enabled for this bot; an Owner or Admin can turn it on in the bot's settings, or ask a teammate that may use it`,
+      { reason: APP_NOT_ENABLED_FOR_BOT, service },
+    );
+  }
+
+  /** How many usable connections a run limited to `apps` would see; the tools need one. */
+  usableConnectionCountFor(workspaceId: WorkspaceId, apps: BotIntegrationAppsScope): number {
+    return this.deps.store.usableConnections(workspaceId).filter((c) => appAllowed(apps, c.service))
+      .length;
   }
 
   /**
@@ -857,6 +897,7 @@ export class IntegrationService {
     requested: unknown,
   ): StoredIntegrationConnection {
     try {
+      this.mustBeAllowed(s, service);
       return this.resolveConnection(s.workspaceId, service, requested);
     } catch (err) {
       const ids = {
@@ -872,7 +913,10 @@ export class IntegrationService {
   apps(runId: RunId): Promise<IntegrationAppsResult> {
     const s = this.scope(runId);
     return this.attributed(s, "apps", {}, async () =>
-      shapeApps(this.deps.store.listProviders(), this.deps.store.usableConnections(s.workspaceId)),
+      shapeApps(
+        this.deps.store.listProviders().filter((p) => appAllowed(s.apps, p.service)),
+        this.usableFor(s),
+      ),
     );
   }
 
@@ -881,7 +925,8 @@ export class IntegrationService {
     if (service !== undefined && !isIntegrationService(service))
       throw new DeskmatesError("validation", "service must be a runtime service id");
     return this.attributed(s, "connections", service ? { service } : {}, async () => {
-      const own = this.deps.store.usableConnections(s.workspaceId);
+      if (service !== undefined) this.mustBeAllowed(s, service);
+      const own = this.usableFor(s);
       if (own.length === 0) return { connections: [] };
       const token = await this.tokenFor(s.workspaceId);
       let listed: Awaited<ReturnType<RuntimeAdapter["listConnections"]>>;
@@ -901,6 +946,7 @@ export class IntegrationService {
     if (!isIntegrationService(service))
       throw new DeskmatesError("validation", "service is required", { field: "service" });
     this.mustBeAdopted(service);
+    this.mustBeAllowed(s, service);
     if (body.query !== undefined && typeof body.query !== "string")
       throw new DeskmatesError("validation", "query must be a string");
     const limit = searchLimit(body.limit);
@@ -962,6 +1008,7 @@ export class IntegrationService {
   ): Promise<IntegrationActionTier> {
     const s = this.scope(runId);
     const { actionId, service } = this.serviceOfAction(actionIdRaw);
+    this.mustBeAllowed(s, service);
     const connection = this.resolveConnection(s.workspaceId, service, connectionName);
     const action = await this.catalogAction(await this.tokenFor(s.workspaceId), actionId);
     const override = this.deps.store.override(actionId);

@@ -3,7 +3,7 @@
 // no tool rule; allow_once is refused for it; deny leaves the list alone.
 
 import type { Approval, BotDefinition, RunSummary, Thread, Workspace } from "@deskmates/contracts";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RunRecord } from "../ledger/runs.js";
 import { type Harness, startHarness, waitFor } from "../test-support/harness.js";
 
@@ -14,6 +14,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await h.close();
 });
 
@@ -129,6 +130,56 @@ describe("egress approvals (decision 2)", () => {
     expect(rules.json.rules).toEqual([]);
   });
 
+  it("resumes on allow this site with a trigger naming the egress kind (issue #62 H3)", async () => {
+    // The resumed sidecar must not take "allow this site" as the approval of the call's own L2
+    // ask, so the trigger says which kind of approval the decision answered.
+    const { thread } = await h.seed();
+    const triggers: unknown[] = [];
+    h.provider.onRun(async (req, gw) => {
+      if (req.trigger.kind === "approval") {
+        triggers.push(req.trigger);
+        await gw.post("ended", {
+          type: "run_ended",
+          runId: req.runId,
+          outcome: "completed",
+          summary: summary("done"),
+          usage: [],
+        });
+        return;
+      }
+      await gw.post("approvals", egressRequest("apr-kind", "shop.example.org", req.runId));
+      await gw.post("ended", {
+        type: "run_ended",
+        runId: req.runId,
+        outcome: "deferred",
+        sdkSessionId: "sess-egress",
+        usage: [],
+        pendingApprovalId: "apr-kind",
+        pendingToolUseId: "toolu_apr-kind",
+      });
+    });
+    const run = await wake(thread.id, "read shop.example.org");
+    await waitFor(
+      () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "waiting_approval",
+      2000,
+      "parked",
+    );
+    await h.api("POST", "/api/approvals/apr-kind/decide", { decision: "allow_always" });
+    await waitFor(() => triggers.length === 1, 2000, "resume");
+    expect(triggers[0]).toMatchObject({
+      kind: "approval",
+      approvalId: "apr-kind",
+      decision: "allow_always",
+      toolUseId: "toolu_apr-kind",
+      approvalKind: "egress",
+      deferredAction: {
+        toolName: "mcp__browser__browser_navigate",
+        targetOrigin: "https://shop.example.org",
+        argumentPattern: "shop.example.org",
+      },
+    });
+  });
+
   it("refuses allow_once for an egress ask, and a deny leaves the list unchanged", async () => {
     const { workspace, approvalId } = await askedFor("news.example.org");
     const once = await h.api("POST", `/api/approvals/${approvalId}/decide`, {
@@ -144,5 +195,23 @@ describe("egress approvals (decision 2)", () => {
     expect(denied.status).toBe(200);
     const after = await h.api<{ workspace: Workspace }>("GET", `/api/workspaces/${workspace.id}`);
     expect(after.json.workspace.egressAllowlist).toEqual(["*.example.test"]);
+  });
+
+  it("a deny that lands while the site is being allowed leaves the list unchanged", async () => {
+    const { workspace, approvalId } = await askedFor("race.example.org");
+    const { ctx } = h.app.deskmates;
+    const original = ctx.sandboxes.withPolicyUpdate.bind(ctx.sandboxes);
+    // Another person denies while the proxy takes the new list.
+    vi.spyOn(ctx.sandboxes, "withPolicyUpdate").mockImplementationOnce(async (id, update) => {
+      ctx.broker.decide(approvalId as never, "deny", "human:other", "no");
+      return original(id, update);
+    });
+    const allowed = await h.api<{ code: string }>("POST", `/api/approvals/${approvalId}/decide`, {
+      decision: "allow_always",
+      authorId: "ops",
+    });
+    expect(allowed.status).toBe(409);
+    expect(ctx.approvals.mustGet(approvalId as never).decision).toBe("deny");
+    expect(ctx.workspaces.mustGet(workspace.id).egressAllowlist).toEqual(["*.example.test"]);
   });
 });

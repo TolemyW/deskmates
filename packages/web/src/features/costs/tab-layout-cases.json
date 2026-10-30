@@ -1,0 +1,14 @@
+[
+  {
+    "id": "view",
+    "route": "#/costs",
+    "container": ".costs-controls",
+    "strip": ".costs-controls > [data-choice-group]:nth-child(1)"
+  },
+  {
+    "id": "period",
+    "route": "#/costs",
+    "container": ".costs-controls",
+    "strip": ".costs-controls > [data-choice-group]:nth-child(2)"
+  }
+]

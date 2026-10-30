@@ -22,6 +22,8 @@ export interface RunFeedScope {
 
 export interface RunFeed {
   runs: readonly RunView[];
+  loading: boolean;
+  reload: () => Promise<void>;
   /** Older finished runs exist beyond what is loaded. */
   hasOlder: boolean;
   loadingOlder: boolean;
@@ -64,6 +66,11 @@ export function useRunFeed(
   const [runs, setRuns] = useState<RunView[]>([]);
   const [cursor, setCursor] = useState<string>();
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [loading, setLoading] = useState(Boolean(botId || threadId));
+  const refreshCurrent = useRef<(() => Promise<void>) | undefined>(undefined);
+  const reload = useCallback(async () => {
+    await refreshCurrent.current?.();
+  }, []);
   const [error, setError] = useState<string>();
   // Bumped on every scope change; a response that started under another generation is dropped.
   const generation = useRef(0);
@@ -73,16 +80,21 @@ export function useRunFeed(
     setRuns([]);
     setCursor(undefined);
     setError(undefined);
+    setLoadingOlder(false);
+    setLoading(Boolean(botId || threadId));
     if (!botId && !threadId) return;
     const feedScope: RunFeedScope = {
       ...(botId ? { botId } : {}),
       ...(threadId ? { threadId } : {}),
     };
     let request = 0;
+    let initialized = false;
     // A live frame newer than a snapshot request wins over the snapshot's copy of that run.
     const revisions = new Map<string, number>();
     const refresh = async (keepCursor: boolean) => {
       const id = ++request;
+      setLoading(true);
+      setError(undefined);
       const before = new Map(revisions);
       try {
         const page = await firstRunPages(api, feedScope);
@@ -90,12 +102,16 @@ export function useRunFeed(
         setRuns((loaded) =>
           merge(loaded, page.runs, (run) => revisions.get(run.id) === before.get(run.id)),
         );
-        if (!keepCursor) setCursor(page.nextCursor);
+        if (!keepCursor || !initialized) setCursor(page.nextCursor);
+        initialized = true;
         setError(undefined);
       } catch (err) {
         if (generation.current === current && id === request) setError(errorMessage(err));
+      } finally {
+        if (generation.current === current && id === request) setLoading(false);
       }
     };
+    refreshCurrent.current = () => refresh(true);
     // A screen rendered without an event stream (no EventSource) still loads its first page.
     const stop =
       live && globalThis.EventSource
@@ -117,6 +133,7 @@ export function useRunFeed(
     void refresh(false);
     return () => {
       generation.current += 1;
+      refreshCurrent.current = undefined;
       stop();
     };
   }, [api, botId, threadId, live]);
@@ -134,6 +151,7 @@ export function useRunFeed(
       if (generation.current !== current) return;
       setRuns((loaded) => merge(loaded, page.runs));
       setCursor(page.nextCursor);
+      setError(undefined);
     } catch (err) {
       if (generation.current === current) setError(errorMessage(err));
     } finally {
@@ -141,5 +159,5 @@ export function useRunFeed(
     }
   }, [api, botId, threadId, cursor, loadingOlder]);
 
-  return { runs, hasOlder: cursor !== undefined, loadingOlder, loadOlder, error };
+  return { runs, loading, reload, hasOlder: cursor !== undefined, loadingOlder, loadOlder, error };
 }

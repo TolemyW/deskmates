@@ -1,0 +1,13 @@
+{
+  "checked": 1760,
+  "keyboardChecked": 20,
+  "detectorVerified": true,
+  "failures": [
+    {
+      "locale": "zh-TW",
+      "theme": "dark",
+      "name": "workspaces",
+      "rule": "keyboard-selection-clipped"
+    }
+  ]
+}

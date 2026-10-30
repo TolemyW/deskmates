@@ -46,7 +46,7 @@ export function postDirectMessage(
     if (
       source.kind === "chat" &&
       (source.status === "paused" ||
-        (budget !== null && ctx.messages.botCountSinceLastHuman(source.id) >= budget))
+        (budget !== null && ctx.messages.botCountSinceOrigin(source.id) >= budget))
     ) {
       throw new DeskmatesError(
         "validation",

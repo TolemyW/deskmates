@@ -1,0 +1,8 @@
+{"section":"seed","request":"GET /api/workspaces/ws_0001/vault","status":200,"json":{"vault":{"workspaceId":"ws_0001","available":true,"approvalMode":"automatic","entries":[]}}}
+{"section":"seed","request":"GET /api/workspaces/ws_001q/vault","status":200,"json":{"vault":{"workspaceId":"ws_001q","available":true,"approvalMode":"automatic","entries":[]}}}
+{"section":"seed","request":"GET /api/workspaces/ws_001w/vault","status":200,"json":{"vault":{"workspaceId":"ws_001w","available":true,"approvalMode":"automatic","entries":[]}}}
+{"section":"after session","request":"GET /api/workspaces/ws_0001/vault","status":200,"json":{"vault":{"workspaceId":"ws_0001","available":true,"approvalMode":"automatic","entries":[]}}}
+{"section":"after session","request":"GET /api/workspaces/ws_001q/vault","status":200,"json":{"vault":{"workspaceId":"ws_001q","available":true,"approvalMode":"automatic","entries":[]}}}
+{"section":"after session","request":"GET /api/workspaces/ws_001w/vault","status":200,"json":{"vault":{"workspaceId":"ws_001w","available":true,"approvalMode":"automatic","entries":[]}}}
+{"section":"after session","request":"GET /api/workspaces/ws_003u/vault","status":200,"json":{"vault":{"workspaceId":"ws_003u","available":true,"approvalMode":"automatic","entries":[]}}}
+{"section":"after session","request":"GET /api/workspaces/ws_003x/vault","status":200,"json":{"vault":{"workspaceId":"ws_003x","available":true,"approvalMode":"automatic","entries":[]}}}

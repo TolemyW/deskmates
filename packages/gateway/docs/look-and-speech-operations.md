@@ -23,10 +23,10 @@ Installation level only, in the Gateway's `.env` (see `.env.example`):
 The stable deployment's local services (owner, 2026-10-14):
 
 ```
-VISION_OPERATION_URL=http://10.20.50.16:8005
+VISION_OPERATION_URL=http://10.0.0.5:8005
 VISION_OPERATION_MODEL=qwen3.5-9b-vl
 VISION_OPERATION_PRICE_USD=0
-ASR_OPERATION_URL=http://10.20.50.16:8007/v1/audio/transcriptions
+ASR_OPERATION_URL=http://10.0.0.5:8007/v1/audio/transcriptions
 ASR_OPERATION_MODEL=<the model id the faster-whisper service expects>
 ASR_OPERATION_PRICE_USD=0
 ```
@@ -58,8 +58,17 @@ when the workspace budget is spent; `operation_unavailable` (502) with `details.
 endpoint hash, status, error code, unit (`image`, `page`, `audio_second`), quantity and whether
 it was `computed`, `provider`-reported or `unknown`, input size and hash, tokens when reported,
 latency and cost. No input bytes, output text or credential. Each call also writes a `log` event
-(`source: "operation"`) on the run. Operation cost is not yet part of `budget_charges` or the Costs
-page (ADR-0040 decision 9).
+(`source: "operation"`) on the run.
+
+## Budget and Costs (ADR-0040 amendment A)
+
+Each forwarded call is charged to the workspace budget as soon as its row is written, from the same
+row: its `cost_usd` is known spend, an unknown quantity counts as unmeasured and a quantity with no
+price as unestimated. Nothing is estimated for an operation unit, and a refusal charges nothing.
+Weekly spend and the ceiling therefore include operations, and an exhausted workspace refuses the
+next call with `budget_exhausted`. The Costs page adds the same rows to its money totals, the daily
+chart and the bot and workspace rankings, lists them in a `by=operation` ranking (money only) and
+shows one usage tile per unit; an operation without a price is shown as unpriced, never as zero.
 
 ## Sidecar tools
 

@@ -1,0 +1,2090 @@
+{
+  "states": 108,
+  "failures": [
+    {
+      "state": "files-main-390-light",
+      "problems": [
+        {
+          "row": "files-toolbar",
+          "rule": "height",
+          "labels": [
+            "Type",
+            "Filters"
+          ],
+          "heights": [
+            38.5,
+            40
+          ]
+        },
+        {
+          "row": "files-toolbar",
+          "rule": "height",
+          "labels": [
+            "Type",
+            "List"
+          ],
+          "heights": [
+            38.5,
+            40
+          ]
+        },
+        {
+          "row": "files-toolbar",
+          "rule": "height",
+          "labels": [
+            "Type",
+            "Grid"
+          ],
+          "heights": [
+            38.5,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-channels-390-light",
+      "problems": [
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Telegram",
+            "Guide for Telegram"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect WhatsApp",
+            "Guide for WhatsApp"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Slack",
+            "Guide for Slack"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Discord",
+            "Guide for Discord"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-apps-390-light",
+      "problems": [
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Google Drive",
+            "Unadopt googledrive"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Gmail",
+            "Unadopt gmail"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Google Calendar",
+            "Unadopt googlecalendar"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Slack",
+            "Unadopt slack"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Notion",
+            "Unadopt notion"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Jira",
+            "Unadopt jira"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Confluence",
+            "Unadopt confluence"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Linear",
+            "Unadopt linear"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Airtable",
+            "Unadopt airtable"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect HubSpot",
+            "Unadopt hubspot"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Stripe",
+            "Unadopt stripe"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        }
+      ]
+    },
+    {
+      "state": "files-main-760-light",
+      "problems": [
+        {
+          "row": "files-toolbar",
+          "rule": "height",
+          "labels": [
+            "Type",
+            "Filters"
+          ],
+          "heights": [
+            38.5,
+            40
+          ]
+        },
+        {
+          "row": "files-toolbar",
+          "rule": "height",
+          "labels": [
+            "Type",
+            "List"
+          ],
+          "heights": [
+            38.5,
+            40
+          ]
+        },
+        {
+          "row": "files-toolbar",
+          "rule": "height",
+          "labels": [
+            "Type",
+            "Grid"
+          ],
+          "heights": [
+            38.5,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-apps-760-light",
+      "problems": [
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Google Drive",
+            "Unadopt googledrive"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Gmail",
+            "Unadopt gmail"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Google Calendar",
+            "Unadopt googlecalendar"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Slack",
+            "Unadopt slack"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Notion",
+            "Unadopt notion"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Jira",
+            "Unadopt jira"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Confluence",
+            "Unadopt confluence"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Linear",
+            "Unadopt linear"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Airtable",
+            "Unadopt airtable"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect HubSpot",
+            "Unadopt hubspot"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Stripe",
+            "Unadopt stripe"
+          ],
+          "heights": [
+            40,
+            19.5
+          ]
+        }
+      ]
+    },
+    {
+      "state": "workspaces-list-760-light",
+      "problems": [
+        {
+          "row": "workspace-manage-filters",
+          "rule": "center",
+          "labels": [
+            "Search workspaces by name or ID",
+            "Any roleOwnerAdminMemberGuest"
+          ],
+          "delta": 14.25
+        },
+        {
+          "row": "workspace-manage-filters",
+          "rule": "center",
+          "labels": [
+            "All",
+            "Any roleOwnerAdminMemberGuest"
+          ],
+          "delta": 14.25
+        },
+        {
+          "row": "workspace-manage-filters",
+          "rule": "center",
+          "labels": [
+            "Pinned",
+            "Any roleOwnerAdminMemberGuest"
+          ],
+          "delta": 14.25
+        },
+        {
+          "row": "workspace-manage-filters",
+          "rule": "center",
+          "labels": [
+            "Archived",
+            "Any roleOwnerAdminMemberGuest"
+          ],
+          "delta": 14.25
+        }
+      ]
+    },
+    {
+      "state": "chats-group-1280-light",
+      "problems": [
+        {
+          "row": "chat-header-actions",
+          "rule": "height",
+          "labels": [
+            "🧭🔭🧪3 bots",
+            "Show chat info"
+          ],
+          "heights": [
+            30,
+            36
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-channels-1280-light",
+      "problems": [
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Telegram",
+            "Guide for Telegram"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect WhatsApp",
+            "Guide for WhatsApp"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Slack",
+            "Guide for Slack"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Discord",
+            "Guide for Discord"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-apps-1280-light",
+      "problems": [
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Google Drive",
+            "Unadopt googledrive"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Gmail",
+            "Unadopt gmail"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Google Calendar",
+            "Unadopt googlecalendar"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Slack",
+            "Unadopt slack"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Notion",
+            "Unadopt notion"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Jira",
+            "Unadopt jira"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Confluence",
+            "Unadopt confluence"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Linear",
+            "Unadopt linear"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Airtable",
+            "Unadopt airtable"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect HubSpot",
+            "Unadopt hubspot"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Stripe",
+            "Unadopt stripe"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        }
+      ]
+    },
+    {
+      "state": "workspaces-list-1280-light",
+      "problems": [
+        {
+          "row": "workspace-manage-filters",
+          "rule": "center",
+          "labels": [
+            "Search workspaces by name or ID",
+            "Any roleOwnerAdminMemberGuest"
+          ],
+          "delta": 14.25
+        },
+        {
+          "row": "workspace-manage-filters",
+          "rule": "center",
+          "labels": [
+            "All",
+            "Any roleOwnerAdminMemberGuest"
+          ],
+          "delta": 14.25
+        },
+        {
+          "row": "workspace-manage-filters",
+          "rule": "center",
+          "labels": [
+            "Pinned",
+            "Any roleOwnerAdminMemberGuest"
+          ],
+          "delta": 14.25
+        },
+        {
+          "row": "workspace-manage-filters",
+          "rule": "center",
+          "labels": [
+            "Archived",
+            "Any roleOwnerAdminMemberGuest"
+          ],
+          "delta": 14.25
+        }
+      ]
+    },
+    {
+      "state": "integrations-apps-1280-dark",
+      "problems": [
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Google Drive",
+            "Unadopt googledrive"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Gmail",
+            "Unadopt gmail"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Google Calendar",
+            "Unadopt googlecalendar"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Slack",
+            "Unadopt slack"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Notion",
+            "Unadopt notion"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Jira",
+            "Unadopt jira"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Confluence",
+            "Unadopt confluence"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Linear",
+            "Unadopt linear"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Airtable",
+            "Unadopt airtable"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect HubSpot",
+            "Unadopt hubspot"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "rule": "height",
+          "labels": [
+            "Connect Stripe",
+            "Unadopt stripe"
+          ],
+          "heights": [
+            36,
+            19.5
+          ]
+        }
+      ]
+    },
+    {
+      "state": "workspaces-list-1280-dark",
+      "problems": [
+        {
+          "row": "workspace-manage-filters",
+          "rule": "center",
+          "labels": [
+            "Search workspaces by name or ID",
+            "Any roleOwnerAdminMemberGuest"
+          ],
+          "delta": 14.25
+        },
+        {
+          "row": "workspace-manage-filters",
+          "rule": "center",
+          "labels": [
+            "All",
+            "Any roleOwnerAdminMemberGuest"
+          ],
+          "delta": 14.25
+        },
+        {
+          "row": "workspace-manage-filters",
+          "rule": "center",
+          "labels": [
+            "Pinned",
+            "Any roleOwnerAdminMemberGuest"
+          ],
+          "delta": 14.25
+        },
+        {
+          "row": "workspace-manage-filters",
+          "rule": "center",
+          "labels": [
+            "Archived",
+            "Any roleOwnerAdminMemberGuest"
+          ],
+          "delta": 14.25
+        }
+      ]
+    }
+  ],
+  "coverage": [
+    {
+      "state": "account-personal-390-light",
+      "rows": [
+        {
+          "row": "account-actions",
+          "controls": [
+            "Sign out",
+            "Sign out on every device"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "account-access-390-light",
+      "rows": []
+    },
+    {
+      "state": "approvals-main-390-light",
+      "rows": []
+    },
+    {
+      "state": "board-main-390-light",
+      "rows": []
+    },
+    {
+      "state": "chats-list-390-light",
+      "rows": []
+    },
+    {
+      "state": "chats-group-390-light",
+      "rows": []
+    },
+    {
+      "state": "computer-main-390-light",
+      "rows": []
+    },
+    {
+      "state": "contacts-list-390-light",
+      "rows": []
+    },
+    {
+      "state": "contacts-new-390-light",
+      "rows": []
+    },
+    {
+      "state": "contacts-profile-390-light",
+      "rows": []
+    },
+    {
+      "state": "costs-main-390-light",
+      "rows": [
+        {
+          "row": "costs-controls",
+          "controls": [
+            "Money",
+            "Usage",
+            "Today (UTC)",
+            "7 days (UTC)",
+            "30 days (UTC)",
+            "All time",
+            "Custom"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "files-main-390-light",
+      "rows": [
+        {
+          "row": "files-heading-actions",
+          "controls": [
+            "Shared apps",
+            "Upload files",
+            "About uploads"
+          ]
+        },
+        {
+          "row": "files-toolbar",
+          "controls": [
+            "Type",
+            "AllDocumentsImagesWebOther",
+            "Search files",
+            "Filters",
+            "List",
+            "Grid"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-channels-390-light",
+      "rows": [
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Telegram",
+            "Guide for Telegram"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect WhatsApp",
+            "Guide for WhatsApp"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Slack",
+            "Guide for Slack"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Discord",
+            "Guide for Discord"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-apps-390-light",
+      "rows": [
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Google Drive",
+            "Unadopt googledrive"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Gmail",
+            "Unadopt gmail"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Google Calendar",
+            "Unadopt googlecalendar"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Slack",
+            "Unadopt slack"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Notion",
+            "Unadopt notion"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Jira",
+            "Unadopt jira"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Confluence",
+            "Unadopt confluence"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Linear",
+            "Unadopt linear"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Airtable",
+            "Unadopt airtable"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect HubSpot",
+            "Unadopt hubspot"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Stripe",
+            "Unadopt stripe"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-databases-390-light",
+      "rows": []
+    },
+    {
+      "state": "knowledge-documents-390-light",
+      "rows": []
+    },
+    {
+      "state": "knowledge-observations-390-light",
+      "rows": [
+        {
+          "row": "review-row-actions",
+          "controls": [
+            "Approve",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "knowledge-memory-390-light",
+      "rows": [
+        {
+          "row": "knowledge-editor-actions",
+          "controls": [
+            "Approve and publish",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "members-main-390-light",
+      "rows": [
+        {
+          "row": "onboarding-actions",
+          "controls": [
+            "Invite by link",
+            "Create account"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "network-main-390-light",
+      "rows": [
+        {
+          "row": "network-actions",
+          "controls": [
+            "Edit",
+            "Delete"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "skills-main-390-light",
+      "rows": [
+        {
+          "row": "review-row-actions",
+          "controls": [
+            "Confirm",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "tasks-list-390-light",
+      "rows": []
+    },
+    {
+      "state": "tasks-detail-390-light",
+      "rows": []
+    },
+    {
+      "state": "trash-main-390-light",
+      "rows": []
+    },
+    {
+      "state": "vault-main-390-light",
+      "rows": []
+    },
+    {
+      "state": "workspaces-list-390-light",
+      "rows": [
+        {
+          "row": "workspace-manage-filters",
+          "controls": [
+            "Search workspaces by name or ID",
+            "All",
+            "Pinned",
+            "Archived",
+            "Any roleOwnerAdminMemberGuest"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "workspaces-settings-390-light",
+      "rows": []
+    },
+    {
+      "state": "account-personal-760-light",
+      "rows": [
+        {
+          "row": "account-actions",
+          "controls": [
+            "Sign out",
+            "Sign out on every device"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "account-access-760-light",
+      "rows": []
+    },
+    {
+      "state": "approvals-main-760-light",
+      "rows": []
+    },
+    {
+      "state": "board-main-760-light",
+      "rows": []
+    },
+    {
+      "state": "chats-list-760-light",
+      "rows": []
+    },
+    {
+      "state": "chats-group-760-light",
+      "rows": []
+    },
+    {
+      "state": "computer-main-760-light",
+      "rows": []
+    },
+    {
+      "state": "contacts-list-760-light",
+      "rows": []
+    },
+    {
+      "state": "contacts-new-760-light",
+      "rows": []
+    },
+    {
+      "state": "contacts-profile-760-light",
+      "rows": []
+    },
+    {
+      "state": "costs-main-760-light",
+      "rows": [
+        {
+          "row": "costs-controls",
+          "controls": [
+            "Money",
+            "Usage",
+            "Today (UTC)",
+            "7 days (UTC)",
+            "30 days (UTC)",
+            "All time",
+            "Custom"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "files-main-760-light",
+      "rows": [
+        {
+          "row": "files-heading-actions",
+          "controls": [
+            "Shared apps",
+            "Upload files",
+            "About uploads"
+          ]
+        },
+        {
+          "row": "files-toolbar",
+          "controls": [
+            "Type",
+            "AllDocumentsImagesWebOther",
+            "Search files",
+            "Filters",
+            "List",
+            "Grid"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-channels-760-light",
+      "rows": []
+    },
+    {
+      "state": "integrations-apps-760-light",
+      "rows": [
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Google Drive",
+            "Unadopt googledrive"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Gmail",
+            "Unadopt gmail"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Google Calendar",
+            "Unadopt googlecalendar"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Slack",
+            "Unadopt slack"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Notion",
+            "Unadopt notion"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Jira",
+            "Unadopt jira"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Confluence",
+            "Unadopt confluence"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Linear",
+            "Unadopt linear"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Airtable",
+            "Unadopt airtable"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect HubSpot",
+            "Unadopt hubspot"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Stripe",
+            "Unadopt stripe"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-databases-760-light",
+      "rows": []
+    },
+    {
+      "state": "knowledge-documents-760-light",
+      "rows": []
+    },
+    {
+      "state": "knowledge-observations-760-light",
+      "rows": [
+        {
+          "row": "review-row-actions",
+          "controls": [
+            "Approve",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "knowledge-memory-760-light",
+      "rows": [
+        {
+          "row": "knowledge-editor-actions",
+          "controls": [
+            "Approve and publish",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "members-main-760-light",
+      "rows": [
+        {
+          "row": "onboarding-actions",
+          "controls": [
+            "Invite by link",
+            "Create account"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "network-main-760-light",
+      "rows": [
+        {
+          "row": "network-actions",
+          "controls": [
+            "Edit",
+            "Delete"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "skills-main-760-light",
+      "rows": [
+        {
+          "row": "review-row-actions",
+          "controls": [
+            "Confirm",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "tasks-list-760-light",
+      "rows": []
+    },
+    {
+      "state": "tasks-detail-760-light",
+      "rows": []
+    },
+    {
+      "state": "trash-main-760-light",
+      "rows": []
+    },
+    {
+      "state": "vault-main-760-light",
+      "rows": []
+    },
+    {
+      "state": "workspaces-list-760-light",
+      "rows": [
+        {
+          "row": "workspace-manage-filters",
+          "controls": [
+            "Search workspaces by name or ID",
+            "All",
+            "Pinned",
+            "Archived",
+            "Any roleOwnerAdminMemberGuest"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "workspaces-settings-760-light",
+      "rows": []
+    },
+    {
+      "state": "account-personal-1280-light",
+      "rows": [
+        {
+          "row": "account-actions",
+          "controls": [
+            "Sign out",
+            "Sign out on every device"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "account-access-1280-light",
+      "rows": []
+    },
+    {
+      "state": "approvals-main-1280-light",
+      "rows": [
+        {
+          "row": "approval-actions.approval-decisions",
+          "controls": [
+            "Allow once",
+            "Deny",
+            "More approval options"
+          ]
+        },
+        {
+          "row": "approval-actions.approval-decisions",
+          "controls": [
+            "Deny",
+            "More approval options"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "board-main-1280-light",
+      "rows": []
+    },
+    {
+      "state": "chats-list-1280-light",
+      "rows": []
+    },
+    {
+      "state": "chats-group-1280-light",
+      "rows": [
+        {
+          "row": "chat-header-actions",
+          "controls": [
+            "🧭🔭🧪3 bots",
+            "Show chat info"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "computer-main-1280-light",
+      "rows": []
+    },
+    {
+      "state": "contacts-list-1280-light",
+      "rows": []
+    },
+    {
+      "state": "contacts-new-1280-light",
+      "rows": []
+    },
+    {
+      "state": "contacts-profile-1280-light",
+      "rows": []
+    },
+    {
+      "state": "costs-main-1280-light",
+      "rows": [
+        {
+          "row": "costs-controls",
+          "controls": [
+            "Money",
+            "Usage",
+            "Today (UTC)",
+            "7 days (UTC)",
+            "30 days (UTC)",
+            "All time",
+            "Custom"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "files-main-1280-light",
+      "rows": [
+        {
+          "row": "files-heading-actions",
+          "controls": [
+            "Shared apps",
+            "Upload files",
+            "About uploads"
+          ]
+        },
+        {
+          "row": "files-toolbar",
+          "controls": [
+            "All",
+            "Documents",
+            "Images",
+            "Web",
+            "Other",
+            "Search files",
+            "Filters",
+            "List",
+            "Grid"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-channels-1280-light",
+      "rows": [
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Telegram",
+            "Guide for Telegram"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect WhatsApp",
+            "Guide for WhatsApp"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Slack",
+            "Guide for Slack"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Discord",
+            "Guide for Discord"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-apps-1280-light",
+      "rows": [
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Google Drive",
+            "Unadopt googledrive"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Gmail",
+            "Unadopt gmail"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Google Calendar",
+            "Unadopt googlecalendar"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Slack",
+            "Unadopt slack"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Notion",
+            "Unadopt notion"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Jira",
+            "Unadopt jira"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Confluence",
+            "Unadopt confluence"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Linear",
+            "Unadopt linear"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Airtable",
+            "Unadopt airtable"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect HubSpot",
+            "Unadopt hubspot"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Stripe",
+            "Unadopt stripe"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-databases-1280-light",
+      "rows": []
+    },
+    {
+      "state": "knowledge-documents-1280-light",
+      "rows": [
+        {
+          "row": "knowledge-editor-actions",
+          "controls": [
+            "Approve and publish",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "knowledge-observations-1280-light",
+      "rows": [
+        {
+          "row": "review-row-actions",
+          "controls": [
+            "Approve",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "knowledge-memory-1280-light",
+      "rows": [
+        {
+          "row": "knowledge-editor-actions",
+          "controls": [
+            "Approve and publish",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "members-main-1280-light",
+      "rows": [
+        {
+          "row": "onboarding-actions",
+          "controls": [
+            "Invite by link",
+            "Create account"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "network-main-1280-light",
+      "rows": [
+        {
+          "row": "network-actions",
+          "controls": [
+            "Edit",
+            "Delete"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "skills-main-1280-light",
+      "rows": [
+        {
+          "row": "review-row-actions",
+          "controls": [
+            "Confirm",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "tasks-list-1280-light",
+      "rows": []
+    },
+    {
+      "state": "tasks-detail-1280-light",
+      "rows": []
+    },
+    {
+      "state": "trash-main-1280-light",
+      "rows": []
+    },
+    {
+      "state": "vault-main-1280-light",
+      "rows": []
+    },
+    {
+      "state": "workspaces-list-1280-light",
+      "rows": [
+        {
+          "row": "workspace-manage-filters",
+          "controls": [
+            "Search workspaces by name or ID",
+            "All",
+            "Pinned",
+            "Archived",
+            "Any roleOwnerAdminMemberGuest"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "workspaces-settings-1280-light",
+      "rows": []
+    },
+    {
+      "state": "account-personal-1280-dark",
+      "rows": [
+        {
+          "row": "account-actions",
+          "controls": [
+            "Sign out",
+            "Sign out on every device"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "account-access-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "approvals-main-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "board-main-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "chats-list-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "chats-group-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "computer-main-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "contacts-list-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "contacts-new-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "contacts-profile-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "costs-main-1280-dark",
+      "rows": [
+        {
+          "row": "costs-controls",
+          "controls": [
+            "Money",
+            "Usage",
+            "Today (UTC)",
+            "7 days (UTC)",
+            "30 days (UTC)",
+            "All time",
+            "Custom"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "files-main-1280-dark",
+      "rows": [
+        {
+          "row": "files-heading-actions",
+          "controls": [
+            "Shared apps",
+            "Upload files",
+            "About uploads"
+          ]
+        },
+        {
+          "row": "files-toolbar",
+          "controls": [
+            "All",
+            "Documents",
+            "Images",
+            "Web",
+            "Other",
+            "Search files",
+            "List",
+            "Grid"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-channels-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "integrations-apps-1280-dark",
+      "rows": [
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Google Drive",
+            "Unadopt googledrive"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Gmail",
+            "Unadopt gmail"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Google Calendar",
+            "Unadopt googlecalendar"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Slack",
+            "Unadopt slack"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Notion",
+            "Unadopt notion"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Jira",
+            "Unadopt jira"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Confluence",
+            "Unadopt confluence"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Linear",
+            "Unadopt linear"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Airtable",
+            "Unadopt airtable"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect HubSpot",
+            "Unadopt hubspot"
+          ]
+        },
+        {
+          "row": "integration-card-actions",
+          "controls": [
+            "Connect Stripe",
+            "Unadopt stripe"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "integrations-databases-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "knowledge-documents-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "knowledge-observations-1280-dark",
+      "rows": [
+        {
+          "row": "review-row-actions",
+          "controls": [
+            "Approve",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "knowledge-memory-1280-dark",
+      "rows": [
+        {
+          "row": "knowledge-editor-actions",
+          "controls": [
+            "Approve and publish",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "members-main-1280-dark",
+      "rows": [
+        {
+          "row": "onboarding-actions",
+          "controls": [
+            "Invite by link",
+            "Create account"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "network-main-1280-dark",
+      "rows": [
+        {
+          "row": "network-actions",
+          "controls": [
+            "Edit",
+            "Delete"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "skills-main-1280-dark",
+      "rows": [
+        {
+          "row": "review-row-actions",
+          "controls": [
+            "Confirm",
+            "Reject"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "tasks-list-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "tasks-detail-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "trash-main-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "vault-main-1280-dark",
+      "rows": []
+    },
+    {
+      "state": "workspaces-list-1280-dark",
+      "rows": [
+        {
+          "row": "workspace-manage-filters",
+          "controls": [
+            "Search workspaces by name or ID",
+            "All",
+            "Pinned",
+            "Archived",
+            "Any roleOwnerAdminMemberGuest"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "workspaces-settings-1280-dark",
+      "rows": []
+    }
+  ]
+}

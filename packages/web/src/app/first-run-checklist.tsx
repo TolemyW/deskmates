@@ -1,6 +1,6 @@
 // The first-run checklist on the home screen (issue #22): four steps for an Owner or Admin,
-// each checked from what exists in the team rather than from clicks, shown until the person
-// dismisses it. Dismissal is their stored preference (`PATCH /auth/preferences`), so it holds on
+// three when the workspace has a default bot to talk to (ADR-0051), each checked from what exists
+// in the team rather than from clicks, shown until the person dismisses it. Dismissal is their stored preference (`PATCH /auth/preferences`), so it holds on
 // every browser. The shell provides the context; a screen rendered without it shows nothing.
 
 import { Circle, CircleCheck } from "lucide-react";
@@ -35,10 +35,17 @@ export function FirstRunProvider({
   return <FirstRunContext.Provider value={guide}>{children}</FirstRunContext.Provider>;
 }
 
+/** The workspace's default bot (ADR-0051) and where its private chat opens. */
+export interface FirstRunAssistant {
+  name: string;
+  href: string;
+}
+
 export function FirstRunChecklist(props: {
   workspaces: number;
   bots: number;
   threads: number;
+  assistant?: FirstRunAssistant | undefined;
 }) {
   const guide = useContext(FirstRunContext);
   // Owners and Admins: the roles that may take the steps (inviting needs an Admin or Owner).
@@ -52,11 +59,13 @@ function Checklist({
   workspaces,
   bots,
   threads,
+  assistant,
 }: {
   guide: FirstRunGuide;
   workspaces: number;
   bots: number;
   threads: number;
+  assistant?: FirstRunAssistant | undefined;
 }) {
   const t = useT();
   const [invited, setInvited] = useState(false);
@@ -91,12 +100,31 @@ function Checklist({
     };
   }, [people, userId, workspaceId, pending]);
 
-  const steps: Array<{ label: MessageKey; done: boolean; href: string }> = [
-    { label: "firstRunChecklist.step.createWorkspace", done: workspaces > 0, href: "#/computer" },
-    { label: "firstRunChecklist.step.createBot", done: bots > 0, href: "#/contacts" },
-    { label: "firstRunChecklist.step.openChat", done: threads > 0, href: "#/threads" },
-    { label: "firstRunChecklist.step.invitePerson", done: invited, href: "#/members" },
-  ];
+  const step = (label: MessageKey, done: boolean, href: string) => ({
+    key: label,
+    text: t(label),
+    done,
+    href,
+  });
+  // ADR-0051: a workspace with a default bot starts by talking to it, which also opens a chat;
+  // the step is done once the assistant has set up a teammate.
+  const steps = assistant
+    ? [
+        step("firstRunChecklist.step.createWorkspace", workspaces > 0, "#/computer"),
+        {
+          key: "firstRunChecklist.step.talkToAssistant",
+          text: t("firstRunChecklist.step.talkToAssistant", { name: assistant.name }),
+          done: bots > 1,
+          href: assistant.href,
+        },
+        step("firstRunChecklist.step.invitePerson", invited, "#/members"),
+      ]
+    : [
+        step("firstRunChecklist.step.createWorkspace", workspaces > 0, "#/computer"),
+        step("firstRunChecklist.step.createBot", bots > 0, "#/contacts"),
+        step("firstRunChecklist.step.openChat", threads > 0, "#/threads"),
+        step("firstRunChecklist.step.invitePerson", invited, "#/members"),
+      ];
 
   const dismiss = async (): Promise<void> => {
     setBusy(true);
@@ -113,17 +141,17 @@ function Checklist({
     <section className="first-run-checklist" aria-label={t("firstRunChecklist.title")}>
       <h2>{t("firstRunChecklist.title")}</h2>
       <ul aria-label={t("firstRunChecklist.title")}>
-        {steps.map((step) => (
-          <li key={step.label} className={step.done ? "done" : undefined}>
-            {step.done ? (
+        {steps.map((item) => (
+          <li key={item.key} className={item.done ? "done" : undefined}>
+            {item.done ? (
               <CircleCheck size={16} aria-hidden="true" />
             ) : (
               <Circle size={16} aria-hidden="true" />
             )}
             <span className="sr-only">
-              {step.done ? t("firstRunChecklist.done") : t("firstRunChecklist.toDo")}
+              {item.done ? t("firstRunChecklist.done") : t("firstRunChecklist.toDo")}
             </span>
-            {step.done ? <span>{t(step.label)}</span> : <a href={step.href}>{t(step.label)}</a>}
+            {item.done ? <span>{item.text}</span> : <a href={item.href}>{item.text}</a>}
           </li>
         ))}
       </ul>

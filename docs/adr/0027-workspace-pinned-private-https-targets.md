@@ -17,7 +17,7 @@ cached sandbox handle is revalidated with attach's topology rules before reuse (
 ## Context
 
 The owner authorized testing console.vendordb.lan and account.vendordb.lan at
-10.20.36.35:443. The public-only proxy rejects this RFC1918 address even with
+10.88.36.35:443. The public-only proxy rejects this RFC1918 address even with
 an exact hostname allowlist. Docker routing also overlaps the corporate address;
 that host routing issue is separately corrected without changing other networks.
 The owner approved a workspace-scoped private-target capability, normal certificate
@@ -88,7 +88,7 @@ Scripts and receipts are in `spikes/vendordb-kb-campaign-20261011/`.
 
 ## Amendment 1 (2026-10-14, owner-decided 2026-10-14): online LAN network profiles
 
-Issue #124. Functional testing against a LAN service such as `http://10.20.30.24:23001`
+Issue #124. Functional testing against a LAN service such as `http://10.88.30.24:23001`
 needed host forwarding, a synthetic HTTPS wrapper, temporary certificate trust, a deployment
 environment edit and a global Gateway restart. Decisions 1 to 4 explain why: grants were a
 startup-only environment setting limited to exact DNS names, HTTPS on port 443 and mandatory

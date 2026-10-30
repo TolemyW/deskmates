@@ -5,13 +5,42 @@ import type { AgentRuntime } from "./agent-runtime.js";
 import type { BotId, IsoTimestamp, WorkspaceId } from "./ids.js";
 import type { EffortLevel, ThinkingConfig } from "./reasoning.js";
 
+/** A bot's mention handle and directory name: ASCII letters, numbers, `_` and `-`. */
+export const BOT_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+/** Whether a value is a valid bot mention handle. */
+export function isBotName(value: string): boolean {
+  return BOT_NAME_PATTERN.test(value);
+}
+
+/**
+ * Turn free text into a valid, readable `@name` suggestion. Runs of unsupported characters
+ * become one hyphen; an input with no supported characters falls back to `bot`.
+ */
+export function suggestBotName(value: string): string {
+  const suggestion = value
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/^[-_]+|[-_]+$/g, "");
+  return suggestion || "bot";
+}
+
 /** Cron entry as stored in `bots.cron_json`. Scheduling itself is M1. */
 export interface CronEntry {
   /** Five-field cron expression, evaluated in the Gateway's timezone. */
   schedule: string;
   /** Text delivered as the trigger payload when the entry fires. */
   prompt: string;
+  /**
+   * What a minute that passed while the Gateway was stopped does (ADR-0029 decision 11). Absent
+   * or `skip`, the default: nothing fires later, and the next start logs the skipped minutes.
+   * `run_once`: the next start fires one catch-up round for the latest missed minute, never more.
+   */
+  misfire?: CronMisfirePolicy;
 }
+
+export type CronMisfirePolicy = "skip" | "run_once";
 
 /** The named colours an avatar may use; the UI maps each to a light and a dark value. */
 export const AVATAR_COLORS = [
@@ -89,6 +118,11 @@ export interface BotDefinition {
   connectors: readonly string[];
   /** Bots this one may `message_bot`. Routing configuration, not access control (ADR-0005 item 5). */
   messageAllowlist: readonly string[];
+  /**
+   * The connected apps (integration service ids) this bot's runs may use; absent means every app
+   * the workspace connected (ADR-0055). A soft distinction: a teammate with access can be asked.
+   */
+  integrationApps?: readonly string[];
   cron: readonly CronEntry[];
   createdAt: IsoTimestamp;
   /**
@@ -116,3 +150,9 @@ export function botHomeDir(botName: string): string {
 export function botWorkDir(botName: string): string {
   return `/work/bots/${botName}`;
 }
+
+/** ADR-0055 decision 4: a run refused an app its bot may not use (`details.reason`). */
+export const APP_NOT_ENABLED_FOR_BOT = "app_not_enabled_for_bot";
+
+/** ADR-0055 decision 3: what a run froze, `"all"` or a list of service ids. */
+export type BotIntegrationAppsScope = "all" | readonly string[];

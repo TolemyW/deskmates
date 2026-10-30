@@ -8,17 +8,24 @@ import {
   Card,
   ChatViewport,
   Checkbox,
+  ChoiceGroup,
+  ControlPopover,
+  EmptyState,
+  HelpTip,
   Icon,
   Input,
   Label,
   MessageComposer,
+  PageHeader,
   Pager,
   Pill,
   ResizeHandle,
+  SectionTabs,
   Select,
   Slider,
   Spinner,
   Switch,
+  TabNavigation,
   Table,
   TableBody,
   TableCell,
@@ -32,6 +39,7 @@ import {
 import { TasksPreview } from "./tasks-preview.js";
 
 export function Studio() {
+  const [section, setSection] = useState("activity");
   const [dark, setDark] = useState(false);
   const [panelWidth, setPanelWidth] = useState(260);
   const [pagerPage, setPagerPage] = useState(0);
@@ -107,6 +115,52 @@ export function Studio() {
             </ButtonLink>
           </div>
         </section>
+        <Card>
+          <h2>
+            Responsive section tabs{" "}
+            <HelpTip label="About this example">
+              Short explanations stay beside their control.
+            </HelpTip>
+          </h2>
+          <ControlPopover label="Example filters" trigger="Filters">
+            <Input aria-label="Filter name" />
+          </ControlPopover>
+          <ChoiceGroup
+            label="Example filter"
+            value={section}
+            onChange={setSection}
+            items={[
+              { key: "activity", label: "Activity", count: 12 },
+              { key: "notes", label: "Long-term instructions", count: 2 },
+              { key: "settings", label: "Unavailable", disabled: true },
+            ]}
+          />
+          <SectionTabs
+            label="Bot sections"
+            value={section}
+            onChange={setSection}
+            keepMounted
+            items={[
+              { key: "activity", label: "Activity" },
+              { key: "experience", label: "Experience" },
+              { key: "notes", label: "Long-term instructions" },
+              { key: "settings", label: "Settings" },
+            ]}
+            renderPanel={(key) => (
+              <div>
+                <Input aria-label={`${key} draft`} placeholder={`${key} draft`} />
+              </div>
+            )}
+          />
+          <TabNavigation
+            label="Example destinations"
+            value="personal"
+            items={[
+              { key: "personal", label: "Personal settings", href: "#personal" },
+              { key: "workspaces", label: "Workspaces and permissions", href: "#workspaces" },
+            ]}
+          />
+        </Card>
         <Tabs defaultSelectedKey="components" id="component-gallery">
           <Tabs.ListContainer>
             <Tabs.List aria-label="Studio sections">
@@ -129,6 +183,22 @@ export function Studio() {
             </Tabs.List>
           </Tabs.ListContainer>
           <Tabs.Panel id="components">
+            <section className="studio-page-states" aria-label="Page compositions">
+              <PageHeader
+                title="Tasks"
+                description="Plan work for the selected workspace and review what was delivered."
+                action={<Button variant="primary">New task</Button>}
+              />
+              <Card>
+                <EmptyState
+                  icon={<Icon name="file" />}
+                  title="No files yet"
+                  action={<Button variant="primary">Upload files</Button>}
+                >
+                  Files created by your bots and files you upload appear here.
+                </EmptyState>
+              </Card>
+            </section>
             <Gallery />
             <section style={{ marginTop: 32 }} aria-label="Table example">
               <h2 style={{ marginBottom: 16 }}>People</h2>
@@ -645,7 +715,7 @@ function Workbench() {
                   </section>
                 </div>
                 <details className="source-preview">
-                  <summary>
+                  <summary data-chat-disclosure>
                     3 sources <Icon name="chevron" size={16} />
                   </summary>
                   <ul>

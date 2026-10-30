@@ -35,16 +35,21 @@ Each feature documents itself in its own file under `docs/`. A new feature adds 
 a section to this README.
 
 - [Agent runtimes (ADR-0044)](docs/agent-runtimes.md): `DEFAULT_RUNTIME`, a bot's `runtime`, the OpenAI upstream protocol
+- [Analytics relay to Grafana (ADR-0046 amendment 1)](docs/analytics-relay.md): `/analytics/*`, the root's session only
 - [App sharing: published workspace apps (ADR-0035)](docs/app-shares.md)
 - [Approvals](docs/approvals.md)
+- [Channel connections (ADR-0047)](docs/channel-connections.md): ABI-2 host, identity uniqueness, rebind, blocklist, inbound images
 - [Configuration](docs/configuration.md)
 - [Connectors (ADR-0012)](docs/connectors.md)
 - [Context and prompt-cache observability (ADR-0023 amendment 5)](docs/context-and-cache-observability.md): request shapes, CLI surface knobs
 - [Database and migrations (ADR-0031)](docs/database.md)
+- [Desktop tools: opt-in native LCU (ADR-0048)](docs/desktop-tools.md): opt-in LCU, no per-call approvals, the grouping exception
 - [Final-reply idempotency and recipient context](docs/final-reply-idempotency.md)
 - [Group routing and direct handoffs (M2 foundation)](docs/group-routing.md)
 - [HTTP API (M0)](docs/http-api.md): operator routes, events, sidecar-facing routes, model proxy
+- [Host resources: detect, show, repair, clean (ADR-0006 amendment 5)](docs/host-resources.md): `GET /api/runtime/resources`, Remove, Re-attach, pool headroom
 - [Hybrid Knowledge and memory search (ADR-0041)](docs/hybrid-retrieval.md)
+- [Image generation operation (ADR-0040 amendment B)](docs/image-generation-operation.md): `IMAGE_OPERATION_*`, `image_generate`
 - [Implemented foundation (M0/M1 and M2 F1–F4)](docs/implemented-foundation.md): run flow, sandbox recreation
 - [Integrations (ADR-0013)](docs/integrations.md)
 - [Interaction development update (2026-09-30)](docs/interaction-update-2026-09-30.md)
@@ -65,11 +70,18 @@ a section to this README.
 - [Reviewed knowledge and memory administration (B5)](docs/knowledge-and-memory-administration.md)
 - [Run audit and ledger retention (ADR-0042)](docs/run-audit.md): failure classes, marks, `RUN_EVENTS_RETENTION_DAYS`
 - [Run liveness: stall detection and live progress data (issue #9)](docs/run-liveness.md)
+- [Run observability: collector, spool and the obs model (ADR-0046)](docs/run-observability.md): `OBSERVABILITY_*`, the sqlite sink
 - [Run startup timeline and reply preview (ADR-0037)](docs/run-startup-timeline.md)
+- [Run statistics for the bot itself (ADR-0050)](docs/run-stats.md): `run_stats`, per-bot opt-in, scoped by the run token
 - [Run usage summaries for Costs (ADR-0032 amendment 1)](docs/run-usage-summaries.md)
 - [Snapshot delivery experiment](docs/snapshot-delivery-experiment.md)
 - [Takeover (M1)](docs/takeover.md)
+- [Task templates, kinds, the kind view and related tasks (ADR-0021 amendment 4)](docs/task-kinds.md)
+- [Thread pauses: reason, reset window and Resume (ADR-0005 amendment 3)](docs/thread-pauses.md)
 - [Triggers (M1)](docs/triggers.md)
+- [Upgrade drain and restart recovery (ADR-0029)](docs/upgrade-drain-and-restart-recovery.md): `waiting_platform`, the restart breaker, proxy-sourced usage, cron misfires
+- [Web search on a self-hosted SearXNG (ADR-0049)](docs/web-search.md): `SEARCH_URL`, the per-workspace switch, the proxy, filtering and records
+- [Workspace credential vault (ADR-0045)](docs/vault.md): references, not retrieval; fill, bounded requests, approval modes
 - [Workspace execution limits (ADR-0005 amendment 5, ADR-0016 amendment 2)](docs/workspace-limits.md)
 - [Workspace file download (ADR-0014)](docs/workspace-file-download.md)
 - [Workspace file uploads (ADR-0014 amendment A5)](docs/workspace-file-uploads.md)

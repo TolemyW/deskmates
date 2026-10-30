@@ -3,18 +3,20 @@
 
 import { UserCog } from "lucide-react";
 import { defineFeature } from "../../app/feature.js";
+import { readableBy } from "../../app/routes.js";
 import { MembersScreen } from "./members.js";
 import { membersHref, routes } from "./route.js";
 
 export const feature = defineFeature(routes, {
   nav: {
     group: "operate",
+    audience: "tune",
     order: 40,
     icon: <UserCog size={18} />,
     label: "app.nav.people",
     href: membersHref,
     active: (route) => route.name === "members",
-    visible: (roles) => roles.manager,
+    visible: readableBy("people.manage"),
   },
   render: (_route, { members, session }) => (
     <MembersScreen

@@ -66,13 +66,16 @@ export function usageReceiptsForRuns(
         )
         .all(...chunk) as RunRow[]),
     );
-    for (const row of db
+    // ADR-0029 decision 8: a proxy-sourced row with a request the upstream never reported is a
+    // measured lower bound, so it is partial, never complete.
+    for (const { usageComplete, ...row } of db
       .prepare(`SELECT run_id AS runId, attempt, model, input_tokens AS inputTokens,
       output_tokens AS outputTokens, cache_read_tokens AS cacheReadTokens,
-      cache_create_tokens AS cacheCreateTokens, cost_usd AS costUsd FROM run_usage
+      cache_create_tokens AS cacheCreateTokens, cost_usd AS costUsd,
+      usage_complete AS usageComplete FROM run_usage
       WHERE run_id IN (${marks}) ORDER BY id`)
-      .all(...chunk) as AttemptReceipt[])
-      push(finals, row.runId, row);
+      .all(...chunk) as (AttemptReceipt & { usageComplete: number })[])
+      push(finals, row.runId, usageComplete === 1 ? row : { ...row, coverage: "partial" });
     for (const e of db
       .prepare(
         `SELECT run_id, attempt, kind, payload_json FROM run_events WHERE run_id IN (${marks}) AND (kind = 'turn_usage' OR (kind = 'log' AND source IN ('sdk', 'usage_final', 'usage_session_baseline'))) ORDER BY run_id, seq`,
@@ -324,7 +327,7 @@ function project(
   );
   const coverage: UsageCoverage =
     observed.size ||
-    finals.some((f) => f.attributionUncertain) ||
+    finals.some((f) => f.attributionUncertain || f.coverage === "partial") ||
     unfinalized ||
     (run.started_at !== null && finals.length > 0 && !finals.some((f) => f.attempt === run.attempt))
       ? measured

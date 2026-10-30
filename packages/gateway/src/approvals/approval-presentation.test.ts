@@ -73,6 +73,7 @@ it("queues one isolated default-model summary, accounts usage and leaves the app
     expect(approval.instruction).toBe("Show a message");
     const summaryRun = ctx.runs.mustGet(approval.displaySummary?.runId as RunId);
     expect(summaryRun.config.runType).toBe("approval_presentation");
+    expect(summaryRun.triggerKind).toBe("model_job");
     expect(ctx.usage.list(summaryRun.id)[0]).toMatchObject({
       inputTokens: 20,
       outputTokens: 10,

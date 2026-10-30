@@ -45,7 +45,7 @@ export function RuleVersions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const canRestore = useCan("bot.restoreRuleVersion").allowed;
+  const canRestore = useCan("bot.restoreRuleVersion", bot.workspaceId).allowed;
   const t = useT();
   const label = file === "soul" ? "SOUL.md" : "MEMORY.md";
 
@@ -203,7 +203,11 @@ export function RuleVersions({
           ) : null}
         </>
       )}
-      <RoleNote action="bot.restoreRuleVersion" does={t("ruleVersions.roleNote")} />
+      <RoleNote
+        allowed={canRestore}
+        action="bot.restoreRuleVersion"
+        does={t("ruleVersions.roleNote")}
+      />
     </details>
   );
 }

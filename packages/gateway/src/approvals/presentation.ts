@@ -19,7 +19,7 @@ export function queueApprovalPresentation(
   return runs.create({
     botId: approval.botId,
     lane: "background",
-    triggerKind: "cron",
+    triggerKind: "model_job",
     triggerRef: `approval_presentation:${approval.id}`,
     triggerPayload: { prompt: source.slice(0, 12000) },
     config: {

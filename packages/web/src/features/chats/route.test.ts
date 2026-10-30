@@ -1,5 +1,5 @@
 // @vitest-environment node
-// T0: the chats routes, and the landing screen every unknown address falls back to.
+// T0: the chats routes. Unknown addresses are owned by the missing-page feature.
 
 import { describeRoutes } from "../../app/testing/route-expectations.js";
 import { routes, threadHref, threadsHref } from "./route.js";
@@ -14,7 +14,7 @@ describeRoutes({
     ["#/", { name: "home" }],
     ["#//threads", { name: "threads" }],
     ["threads", { name: "threads" }],
-    ["#/nope", { name: "home" }],
+    ["#/nope", { name: "notFound", path: "nope" }],
     ["#/threads", { name: "threads" }],
     ["#/threads/", { name: "threads" }],
     ["#/threads/thr_1", { name: "threads", id: "thr_1" }],
@@ -23,7 +23,7 @@ describeRoutes({
     ["#/threads/thr_1?message=msg_2", { name: "threads", id: "thr_1", messageId: "msg_2" }],
     ["#/threads/thr_1?other=1", { name: "threads", id: "thr_1" }],
     ["#/threads/thr_1?message=", { name: "threads", id: "thr_1" }],
-    ["#/threads?message=1", { name: "home" }],
+    ["#/threads?message=1", { name: "notFound", path: "threads?message=1" }],
   ],
   hrefs: [
     [threadsHref(), "#/threads", { name: "threads" }],

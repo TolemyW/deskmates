@@ -3,13 +3,20 @@ import {
   type CompactBoundaryPayload,
   type ModelRetryPayload,
   type ModelSwitchPayload,
+  PARKED_RUN_STATUSES,
+  PLATFORM_RESUME_LIMIT,
+  RUN_ERROR_CRON_MISFIRE,
+  RUN_ERROR_GATEWAY_RESTARTED,
   RUN_EVENT_KINDS,
+  RUN_TRIGGER_KINDS,
   type RunEventKind,
   type RunStatus,
   type TurnUsagePayload,
   canTransition,
   deriveRunVisibility,
   isExecuting,
+  isRunTriggerKind,
+  isSilentOutcome,
   isTerminal,
   occupiesLane,
 } from "./run.js";
@@ -22,6 +29,7 @@ const ALL: RunStatus[] = [
   "waiting_approval",
   "waiting_browser",
   "waiting_continuation",
+  "waiting_platform",
   "succeeded",
   "silent",
   "failed",
@@ -66,6 +74,31 @@ describe("run state machine (design v0.3 §4)", () => {
     expect(occupiesLane("stalled")).toBe(true);
     expect(isExecuting("stalled")).toBe(true);
     expect(isExecuting("waiting_approval")).toBe(false);
+  });
+
+  it("parks a platform-interrupted run and continues it (ADR-0029 decisions 2 and 4)", () => {
+    for (const from of ["running", "stalled", "waiting_approval_live"] as const) {
+      expect(canTransition(from, "waiting_platform")).toBe(true);
+      // A restart requeues a live run that never reached the SDK as a new attempt.
+      expect(canTransition(from, "queued")).toBe(true);
+    }
+    expect(canTransition("waiting_platform", "running")).toBe(true);
+    // A drained live approval wait waits on its approval once the drain is over.
+    expect(canTransition("waiting_platform", "waiting_approval")).toBe(true);
+    expect(canTransition("waiting_platform", "failed")).toBe(true);
+    expect(canTransition("waiting_platform", "cancelled")).toBe(true);
+    expect(canTransition("waiting_platform", "succeeded")).toBe(false);
+    expect(canTransition("queued", "waiting_platform")).toBe(false);
+    expect(PARKED_RUN_STATUSES.has("waiting_platform")).toBe(true);
+    expect(isTerminal("waiting_platform")).toBe(false);
+    expect(occupiesLane("waiting_platform")).toBe(false);
+    expect(isExecuting("waiting_platform")).toBe(false);
+    expect(PLATFORM_RESUME_LIMIT).toBe(3);
+  });
+
+  it("names the platform's own run errors as stable codes (ADR-0029 decisions 7 and 11)", () => {
+    expect(RUN_ERROR_GATEWAY_RESTARTED).toBe("gateway_restarted");
+    expect(RUN_ERROR_CRON_MISFIRE).toBe("cron_misfire");
   });
 
   it("never leaves a terminal state", () => {
@@ -159,34 +192,37 @@ describe("run visibility (issue #70)", () => {
     kind: "log" as const,
     payload: { tool, threadId: "thr_1", messageId: "msg_1" },
   });
+  const ended = { status: "succeeded" as const, threadId: "thr_1" };
 
   it("is all false for a run that replied nothing and left no Gateway-written trace", () => {
-    expect(deriveRunVisibility({ reply: "", events: [] })).toEqual({
+    expect(deriveRunVisibility({ ...ended, status: "failed", reply: "", events: [] })).toEqual({
       finalReply: false,
       postedToThread: false,
       decidedApproval: false,
       deliveredTask: false,
       visibleOutcome: false,
+      silent: false,
     });
-    expect(deriveRunVisibility({ events: [] }).visibleOutcome).toBe(false);
-    expect(deriveRunVisibility({ reply: "  \n", events: [] }).finalReply).toBe(false);
+    expect(deriveRunVisibility({ ...ended, events: [] }).visibleOutcome).toBe(false);
+    expect(deriveRunVisibility({ ...ended, reply: "  \n", events: [] }).finalReply).toBe(false);
   });
 
   it("counts a non-empty final reply", () => {
-    const v = deriveRunVisibility({ reply: "done", events: [] });
+    const v = deriveRunVisibility({ ...ended, reply: "done", events: [] });
     expect(v.finalReply).toBe(true);
     expect(v.visibleOutcome).toBe(true);
   });
 
   it("counts thread_post and message_bot posts the Gateway recorded", () => {
     for (const tool of ["thread_post", "message_bot"]) {
-      const v = deriveRunVisibility({ reply: "", events: [post(tool)] });
+      const v = deriveRunVisibility({ ...ended, reply: "", events: [post(tool)] });
       expect(v).toMatchObject({ postedToThread: true, finalReply: false, visibleOutcome: true });
     }
   });
 
   it("counts an approval decided through approval_decide", () => {
     const v = deriveRunVisibility({
+      ...ended,
       reply: "",
       events: [
         {
@@ -200,6 +236,7 @@ describe("run visibility (issue #70)", () => {
 
   it("counts a task delivered through task_deliver", () => {
     const v = deriveRunVisibility({
+      ...ended,
       reply: "",
       events: [{ kind: "log", payload: { tool: "task_deliver", taskId: "task_1", summary: "x" } }],
     });
@@ -208,6 +245,7 @@ describe("run visibility (issue #70)", () => {
 
   it("ignores look-alikes that are not the Gateway's own record", () => {
     const v = deriveRunVisibility({
+      ...ended,
       reply: "",
       events: [
         // A tool call the model made is not proof the Gateway accepted it.
@@ -221,5 +259,61 @@ describe("run visibility (issue #70)", () => {
       ],
     });
     expect(v.visibleOutcome).toBe(false);
+  });
+});
+
+describe("silent (owner definition, 2026-10-17)", () => {
+  const post = { kind: "log", payload: { tool: "thread_post", messageId: "msg_1" } };
+
+  it("is a thread run that ended successfully without posting a message", () => {
+    for (const status of ["succeeded", "silent"] as const)
+      expect(deriveRunVisibility({ status, threadId: "thr_1", reply: "", events: [] }).silent).toBe(
+        true,
+      );
+  });
+
+  it("is never a failed, cancelled or stopped run, whatever it posted", () => {
+    for (const status of ["failed", "cancelled", "stopped"] as const) {
+      expect(deriveRunVisibility({ status, threadId: "thr_1", reply: "", events: [] }).silent).toBe(
+        false,
+      );
+    }
+  });
+
+  it("is not a run that posted through thread_post or replied, even one stored silent", () => {
+    const v = deriveRunVisibility({
+      status: "silent",
+      threadId: "thr_1",
+      reply: "",
+      events: [post],
+    });
+    expect(v.silent).toBe(false);
+    expect(
+      deriveRunVisibility({ status: "succeeded", threadId: "thr_1", reply: "ok", events: [] })
+        .silent,
+    ).toBe(false);
+  });
+
+  it("is not a run without a thread, nor a run still going", () => {
+    expect(deriveRunVisibility({ status: "succeeded", reply: "", events: [] }).silent).toBe(false);
+    expect(
+      isSilentOutcome({
+        status: "running",
+        threadId: "t",
+        finalReply: false,
+        postedToThread: false,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("run trigger kinds (issue #39 item 7)", () => {
+  it("names model jobs apart from cron", () => {
+    expect(RUN_TRIGGER_KINDS).toContain("model_job");
+    expect(RUN_TRIGGER_KINDS).toContain("cron");
+    expect(new Set(RUN_TRIGGER_KINDS).size).toBe(RUN_TRIGGER_KINDS.length);
+    expect(isRunTriggerKind("model_job")).toBe(true);
+    expect(isRunTriggerKind("job")).toBe(false);
+    expect(isRunTriggerKind(undefined)).toBe(false);
   });
 });

@@ -102,6 +102,8 @@ function summary(event: RunEvent): string {
     case "tool_result":
       return p.isError === true ? t("runEventRow.summary.error") : "";
     case "log":
+      if (p.source === "desktop" && p.op === "egress_denied")
+        return t("runEventRow.summary.desktopEgressDenied", { host: str(p.host) ?? "?" });
       if (p.source === "stall" && typeof p.idleMs === "number")
         return p.op === "resumed"
           ? t("runEventRow.summary.stallResumed", { idle: formatElapsed(p.idleMs) })

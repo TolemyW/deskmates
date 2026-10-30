@@ -33,6 +33,9 @@ export class UnavailableProvider implements SandboxProvider {
   async exec(): Promise<never> {
     return this.fail();
   }
+  async killRun(): Promise<void> {
+    this.fail();
+  }
   async injectEnv(): Promise<void> {
     this.fail();
   }

@@ -46,6 +46,8 @@ export function seedTeam(s: DemoState, now: number): DemoSeedContext {
     "# qa\n\nYou verify the state of tickets and tests. Exporting or changing anything outside the workspace needs an approval; ask, do not work around it.",
     minutesAgo(60 * 24 * 8, now),
   );
+  // ADR-0051: the bot people talk to first in this workspace.
+  ws.defaultBotId = chief.id;
   chief.avatar = { emoji: "🧭", color: "indigo" };
   researcher.avatar = { emoji: "🔭", color: "teal" };
   qa.avatar = { emoji: "🧪", color: "amber" };
@@ -590,6 +592,23 @@ export function seedHistory(s: DemoState, ctx: DemoSeedContext): void {
       88,
     );
   }
+  // ADR-0051: chief is the workspace's default bot; its notice of a change it made to a teammate.
+  // A fixed id, so the ids of every later seed stay as they were.
+  const notices = s.messages.get(group.id) ?? [];
+  notices.push({
+    id: "msg_default_bot_notice" as MessageId,
+    threadId: group.id,
+    seq: notices.length + 1,
+    authorKind: "system",
+    authorId: "",
+    body: `@${chief.name} updated @${qa.name}: schedules.`,
+    attachments: [],
+    mentions: [],
+    relayCount: 0,
+    ts: minutesAgo(1, now),
+  });
+  s.messages.set(group.id, notices);
+  group.updatedAt = minutesAgo(1, now);
   // Keep chats ordered by recency in the rail.
   s.threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }

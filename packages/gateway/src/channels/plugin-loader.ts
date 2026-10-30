@@ -4,10 +4,15 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   CHANNEL_NAME_PATTERN,
-  CHANNEL_PLUGIN_API_VERSION,
+  CHANNEL_PLUGIN_API_VERSION_2,
   type ChannelPlugin,
-  type ChannelPluginModule,
+  type ChannelPluginV2,
+  SUPPORTED_CHANNEL_PLUGIN_API_VERSIONS,
+  channelManifestV2Problems,
 } from "@deskmates/contracts";
+
+/** A loaded plugin of either ABI: 1 (plugin-wide host) or 2 (connection-scoped, ADR-0047). */
+export type AnyChannelPlugin = ChannelPlugin | ChannelPluginV2;
 
 export interface ReleaseChannelPluginEntry {
   id: string;
@@ -30,7 +35,7 @@ export interface ChannelPluginLoadFailure {
 }
 
 export interface LoadedChannelPlugins {
-  plugins: Map<string, ChannelPlugin>;
+  plugins: Map<string, AnyChannelPlugin>;
   failures: ChannelPluginLoadFailure[];
 }
 
@@ -73,7 +78,7 @@ export async function loadReleaseChannelPlugins(
   manifestPath: string,
 ): Promise<LoadedChannelPlugins> {
   const failures: ChannelPluginLoadFailure[] = [];
-  const plugins = new Map<string, ChannelPlugin>();
+  const plugins = new Map<string, AnyChannelPlugin>();
   let parsed: unknown;
   try {
     parsed = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -97,7 +102,7 @@ export async function loadReleaseChannelPlugins(
     const id = raw && typeof raw === "object" && "id" in raw ? String(raw.id) : "invalid";
     try {
       if (!validEntry(raw)) throw new Error("invalid release plugin entry");
-      if (raw.apiVersion !== CHANNEL_PLUGIN_API_VERSION)
+      if (!SUPPORTED_CHANNEL_PLUGIN_API_VERSIONS.includes(raw.apiVersion))
         throw new Error("incompatible plugin API version");
       const file = resolve(root, raw.entry);
       if (!inside(root, file)) throw new Error("plugin entry leaves the release plugin root");
@@ -118,10 +123,16 @@ export async function loadReleaseChannelPlugins(
       const hash = createHash("sha256").update(bytes).digest("hex");
       if (hash !== raw.sha256)
         throw new Error("plugin entry hash does not match the release manifest");
-      const module = (await import(pathToFileURL(file).href)) as Partial<ChannelPluginModule>;
+      const module = (await import(pathToFileURL(file).href)) as {
+        channelPlugin?: AnyChannelPlugin;
+      };
       const plugin = module.channelPlugin;
-      if (!plugin || plugin.manifest.apiVersion !== CHANNEL_PLUGIN_API_VERSION) {
+      if (!plugin || plugin.manifest.apiVersion !== raw.apiVersion) {
         throw new Error("plugin export has an incompatible API version");
+      }
+      if (plugin.manifest.apiVersion === CHANNEL_PLUGIN_API_VERSION_2) {
+        const problems = channelManifestV2Problems(plugin.manifest);
+        if (problems.length > 0) throw new Error(`invalid ABI-2 manifest: ${problems.join("; ")}`);
       }
       if (plugin.manifest.id !== raw.id || plugin.manifest.version !== raw.version) {
         throw new Error("plugin export does not match its release manifest");

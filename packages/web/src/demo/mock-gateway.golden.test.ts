@@ -30,6 +30,12 @@ interface Entry {
 
 type Json = Record<string, unknown>;
 
+// New features own their read probes instead of extending the legacy shared sweep list.
+const featureProbes = import.meta.glob<{ paths: readonly string[] }>(
+  "../features/*/demo-probes.ts",
+  { eager: true },
+);
+
 /** One JSON line per record keeps the snapshot compact and its diffs readable. */
 const lines = (records: unknown[]): string => records.map((r) => JSON.stringify(r)).join("\n");
 
@@ -61,6 +67,9 @@ const ids = (list: unknown, key = "id"): string[] =>
 
 /** GET every list and detail route the UI uses; `deep` adds every run and approval detail. */
 async function sweep(call: Call, deep: boolean): Promise<void> {
+  for (const path of Object.keys(featureProbes).sort()) {
+    for (const endpoint of featureProbes[path]?.paths ?? []) await call("GET", endpoint);
+  }
   const workspaces = ids((await call("GET", "/api/workspaces")).workspaces);
   for (const path of [
     "/api/config",
@@ -115,11 +124,15 @@ async function sweep(call: Call, deep: boolean): Promise<void> {
     await call("GET", `/api/workspaces/${ws}/limits`);
     await call("GET", `/api/workspaces/${ws}/network`);
     await call("GET", `/api/workspaces/${ws}/workdir`);
+    await call("GET", `/api/workspaces/${ws}/desktop-tools`);
+    await call("GET", `/api/workspaces/${ws}/vault`);
+    await call("GET", `/api/workspaces/${ws}/task-templates`);
+    await call("GET", `/api/workspaces/${ws}/web-search`);
     for (const file of ["/work/notes.md", "/work/kpis.md", "/work/ops-brief.md", "/nope"])
       await call("GET", `/api/workspaces/${ws}/files?path=${encodeURIComponent(file)}`);
   }
   for (const bot of bots)
-    for (const leaf of ["soul", "memory", "screen", "approval-rules"])
+    for (const leaf of ["soul", "memory", "screen", "approval-rules", "run-stats"])
       await call("GET", `/api/bots/${bot}/${leaf}`);
   await call("GET", `/api/runs?botId=${bots[1]}`);
   for (const thread of threads) {
@@ -411,6 +424,18 @@ async function scriptedSession(call: Call, advance: (ms: number) => Promise<void
     egressAllowlist: ["example.test"],
   });
   await call("GET", "/api/workspaces/ws_missing");
+
+  // Task templates (ADR-0021 amendment 4); last, so no other record's ids move.
+  const templates = `/api/workspaces/${ws}/task-templates`;
+  const madeTemplate = await call("POST", templates, {
+    kind: "invoice-check",
+    name: "Invoice check",
+    stages: [{ key: "check", name: "Check", criteria: ["Totals match"] }],
+  });
+  await call("POST", templates, { kind: "support-ticket", name: "Clash", stages: [] });
+  const template = `${templates}/${String((madeTemplate.template as Json).id)}`;
+  await call("PATCH", template, { version: 1, name: "Invoice check v2", stages: [] });
+  await call("DELETE", template, { version: 2 });
   await advance(60_000);
 }
 

@@ -172,6 +172,7 @@ describe("SOUL proposals", () => {
     );
     expect(soul(harness, bot)?.body).toBe(BASE);
     const run = harness.app.deskmates.ctx.runs.mustGet(ready.runId as RunId);
+    expect(run.triggerKind).toBe("model_job");
     expect(run.config).toMatchObject({
       runType: "soul_proposal",
       model: "test-model-cheap",

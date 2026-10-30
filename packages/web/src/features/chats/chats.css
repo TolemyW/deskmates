@@ -33,6 +33,9 @@
   top: 12px;
   left: 26px;
 }
+.rail-scroll > .gb-empty-state {
+  padding: 28px 14px;
+}
 .rail-group-label {
   font-size: var(--app-text-xs);
   letter-spacing: 0;
@@ -40,13 +43,13 @@
   padding: 16px 12px 8px;
 }
 .thread-list {
-  gap: 8px;
+  gap: 2px;
 }
 .thread-list li a,
 .thread-list li .thread-row {
-  padding: 14px 12px;
-  border-radius: 20px;
-  gap: 8px 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  gap: 3px 8px;
 }
 .thread-list li.selected a {
   background: var(--default);
@@ -76,9 +79,10 @@
   letter-spacing: -.4px;
 }
 .chat-members-summary {
-  border: 0;
-  background: transparent 0 0;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 .transcript {
   overflow: visible;
@@ -149,6 +153,11 @@
 }
 .message.system {
   max-width: 100%;
+}
+/* A failure above the composer is a `.message` with side margins; `width: 100%` would push it
+   past the column by those margins. */
+.message.send-failure {
+  width: auto;
 }
 .message.system .body {
   font-size: var(--app-text-base);
@@ -267,6 +276,9 @@
   }
   .composer {
     padding: 12px 16px 16px;
+  }
+  .message.send-failure {
+    margin-inline: 16px;
   }
   .message.human {
     max-width: 94%;
@@ -437,8 +449,7 @@
   background: var(--app-surface);
 }
 .chat-composer-region {
-  background: var(--bg);
-  border-top: 1px solid var(--app-border);
+  background: var(--background);
 }
 .composer-box {
   border: 1px solid var(--app-border);
@@ -737,6 +748,13 @@
   .bot-picker label {
     font-size: var(--app-text-sm);
     color: var(--text);
+  }
+  /* The New chat dialog's buttons: the main one first, the rest beside it on one row. */
+  .new-chat-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
   }
   /* Chat pane */
   .chat {
@@ -1235,8 +1253,9 @@
     display: grid;
     gap: 8px;
   }
+  /* Lines up with the composer box below it: 856 px less the composer's 28 px insets. */
   .send-failure {
-    margin: 8px 24px;
+    margin: 8px max(24px, calc((100% - 800px) / 2));
     max-height: 12rem;
     overflow: auto;
     display: grid;
@@ -1414,21 +1433,8 @@
   .chat-members-summary {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    align-self: flex-start;
-    padding: 4px 10px 4px 6px;
-    border: 1px solid transparent;
-    border-radius: var(--app-radius-full);
-    background: transparent 0 0;
-    cursor: pointer;
-    text-align: left;
-  }
-  .chat-members-summary:hover {
-    background: var(--app-surface-hover);
-    border-color: var(--app-border);
-  }
-  .chat-members-summary:disabled {
-    cursor: default;
+    gap: 6px;
+    white-space: nowrap;
   }
   /* Chats rail extras */
   .thread-preview {
@@ -1917,10 +1923,762 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* ADR-0014 A7: the card's way to the same file in Files. */
+.attachment-card-files {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: 0.85em;
+}
 /* The attach button's badge for a member that cannot see images (vision-notice.tsx). */
 .vision-badge {
   display: inline-flex;
   align-items: center;
   margin-left: 2px;
   color: var(--warning-text);
+}
+
+/* The chat's name keeps its room in the header; the "no screen yet" note gives way first and is
+   dropped on a phone, where it pushed the info button onto a line of its own. Its title keeps the
+   full text. */
+.chat-header-row {
+  flex-wrap: nowrap;
+}
+.thread-heading {
+  flex: 0 1 auto;
+  min-width: min(100%, 12ch);
+}
+.chat-header-actions {
+  flex: 1 1 0;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  min-width: 36px;
+}
+.chat-header-actions > .takeover-controls {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.chat-header-actions > .takeover-controls > .gb-button {
+  flex-shrink: 0;
+}
+.takeover-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .takeover-note {
+    display: none;
+  }
+}
+
+/* Message identity and reading controls; all values use the application's native theme. */
+.transcript .message.bot:not(.reply-preview) {
+  box-sizing: border-box;
+  padding: 16px 18px;
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  background: var(--surface);
+  gap: 10px;
+}
+.transcript .message.bot[data-latest="true"] {
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--app-border));
+}
+.transcript .message.bot.continued {
+  margin-top: 0;
+}
+.transcript .message.bot.continued > .avatar {
+  display: inline-grid;
+  visibility: visible;
+}
+.transcript .message.bot.continued > .meta {
+  display: flex;
+}
+.transcript .message .meta {
+  flex-wrap: wrap;
+}
+.transcript .message .meta > a {
+  margin-inline-start: auto;
+  font-size: var(--app-text-xs);
+}
+.message-latest,
+.message-addressed {
+  max-width: 100%;
+  font-size: var(--app-text-xs);
+  font-weight: 500;
+  border-radius: 999px;
+  padding: 2px 8px;
+  overflow-wrap: anywhere;
+}
+.message-latest {
+  color: var(--accent-soft-foreground);
+  background: var(--accent-soft);
+}
+.message-addressed {
+  color: var(--muted);
+  background: var(--surface-secondary);
+}
+.message .message-content {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.message .message-disclosure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--app-border);
+}
+.message .message-disclosure button {
+  flex-shrink: 0;
+}
+@media (max-width: 720px) {
+  .transcript .message.bot:not(.reply-preview) {
+    padding: 12px;
+    border-radius: 14px;
+  }
+}
+
+/* Product-facing handoff facts; raw protocol and errors stay behind an explicit disclosure. */
+.message .handoff-notice {
+  color: var(--app-text-2);
+  text-align: start;
+}
+.handoff-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+.handoff-reply {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.handoff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.handoff-actions .handoff-link {
+  margin: 0;
+  width: auto;
+}
+.message.handoff > .handoff-link {
+  grid-column: 2;
+  justify-self: start;
+  max-width: 100%;
+}
+.message .history-original {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: start;
+  max-height: 24rem;
+  overflow: auto;
+  margin-top: 10px;
+  font-size: var(--app-text-xs);
+}
+
+/* Routine receipts are a disclosure, with no warning avatar or chat bubble. */
+.chat-activity-notice {
+  list-style: none;
+  color: var(--muted);
+  font-size: var(--app-text-sm);
+}
+.chat-activity-notice > details > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.chat-activity-notice summary::-webkit-details-marker {
+  display: none;
+}
+.chat-activity-notice summary:hover {
+  color: var(--foreground);
+}
+.chat-activity-notice summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+.chat-activity-notice details[open] > summary .chat-activity-chevron {
+  transform: rotate(90deg);
+}
+.chat-activity-detail {
+  margin-top: 6px;
+  padding: 16px 20px;
+  max-width: 60ch;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--foreground);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.chat-activity-detail p {
+  margin: 0 0 8px;
+}
+.chat-activity-detail a {
+  color: var(--primary-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.chat-activity-detail > details {
+  margin-top: 12px;
+  font-size: var(--app-text-xs);
+}
+.chat-activity-detail pre {
+  white-space: pre-wrap;
+}
+
+/* Conversation hierarchy: one identity, one activity disclosure, one approval receipt. */
+.chat-run-bot-summary {
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--app-text-3);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+.chat-run-bot-summary:hover {
+  color: var(--text);
+}
+.chat-run-bot-summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+.chat-run-bot-summary .typing-dots,
+.chat-run-bot-summary .chat-run-bot-icon {
+  padding: 0;
+  background: transparent;
+  flex-shrink: 0;
+}
+.chat-run-bot-summary .typing-dots i {
+  width: 4px;
+  height: 4px;
+}
+.chat-run-chevron {
+  flex-shrink: 0;
+  transition: transform .15s ease;
+}
+.chat-run-bot-summary[aria-expanded="true"] .chat-run-chevron {
+  transform: rotate(180deg);
+}
+.chat-run-details {
+  margin-left: 20px;
+}
+.transcript .message.bot:not(.reply-preview) {
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.transcript .message.bot.continued > .avatar,
+.transcript .message.bot.continued:not(:has(.message-addressed)) > .meta {
+  display: none;
+}
+.transcript .message.human {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+.transcript .message.human > .meta {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 100%;
+  min-height: 0;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+.transcript .message.human:hover > .meta,
+.transcript .message.human:focus-within > .meta {
+  opacity: 1;
+}
+.transcript .message.human > .message-content {
+  grid-row: 1;
+}
+.transcript .chat-approval {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+.chat-approval-receipt {
+  min-width: 0;
+  color: var(--app-text-3);
+  font-size: var(--app-text-sm);
+}
+.chat-approval-receipt > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 0;
+  overflow-wrap: anywhere;
+}
+.chat-approval-tool {
+  margin-inline-start: 10px;
+  font-size: var(--app-text-xs);
+}
+.chat-approval-receipt > .approval-card {
+  margin-top: 10px;
+}
+.chat-approval-audit {
+  margin-top: 10px;
+}
+.chat-approval-audit .approval-decision-text {
+  margin-top: 8px;
+}
+@media (hover: none) {
+  .transcript .message.human > .meta {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-run-bot-summary .typing-dots i {
+    animation: none;
+  }
+}
+
+.chat-approval-receipt > summary::-webkit-details-marker {
+  display: none;
+}
+.chat-approval-receipt > summary > svg {
+  flex-shrink: 0;
+  align-self: center;
+}
+.chat-approval-receipt[open] > summary > svg {
+  transform: rotate(90deg);
+}
+.chat-approval-receipt > summary > span:first-of-type {
+  flex: 1;
+  min-width: 0;
+}
+.chat-approval-tool {
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Keep the conversation, not its controls, as the dominant reading surface. */
+.chat .chat-header {
+  padding: 14px 24px 12px;
+  gap: 8px;
+}
+.chat .gb-chat-content {
+  padding: 20px 28px 28px;
+}
+.chat .transcript {
+  gap: 20px;
+}
+.chat .composer {
+  padding: 8px 24px 16px;
+}
+.chat .composer-box {
+  padding: 12px 14px 10px;
+  border-radius: 20px;
+}
+.chat .composer-footer {
+  padding-top: 4px;
+}
+.chat .composer-key-hint {
+  display: none;
+}
+.chat .approval-card {
+  padding: 14px 16px;
+  gap: 8px;
+  border-radius: 12px;
+}
+.chat .approval-card p {
+  margin-block: 0;
+}
+.chat .approval-decision-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: auto;
+}
+.chat .approval-decision-buttons > button {
+  width: auto;
+  height: auto;
+  min-height: 34px;
+  padding: 6px 14px;
+}
+.chat .approval-decision-buttons > .gb-action-menu-trigger {
+  padding: 6px;
+}
+.chat .approval-actions > .approval-redirect {
+  min-height: 24px;
+  font-size: var(--app-text-xs);
+}
+.chat .approval-source {
+  font-size: var(--app-text-xs);
+}
+.chat .workspace-file-inline {
+  display: inline-flex;
+  vertical-align: baseline;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 0 2px;
+  margin: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+}
+.chat .workspace-file-inline .workspace-file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary-text);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.chat .workspace-file-inline .workspace-file-link > svg {
+  flex-shrink: 0;
+}
+.chat .workspace-file-inline > .gb-button {
+  min-width: 24px;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 3px;
+  background: transparent;
+}
+.chat .attachment-cards .workspace-file-card {
+  padding: 8px 10px;
+  gap: 8px;
+  border-radius: 10px;
+}
+.chat .attachment-cards > li {
+  flex-basis: 260px;
+}
+@media (max-width: 720px) {
+  .chat .chat-header {
+    padding: 10px 16px;
+  }
+  .chat .gb-chat-content {
+    padding: 16px 16px 24px;
+  }
+  .chat .composer {
+    padding: 8px 12px 12px;
+  }
+}
+
+/* Reading hierarchy: keep titles and prose primary, metadata available on demand. */
+.thread-list .thread-row-shell > a {
+  padding-right: 12px !important;
+}
+.thread-list .thread-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 4px;
+}
+.thread-list .thread-title > span:first-child {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  line-height: 1.35;
+}
+.thread-list .thread-time {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--app-text-4);
+}
+.thread-list .thread-row-menu {
+  top: auto;
+  bottom: 4px;
+  transform: none;
+  background: var(--app-surface);
+}
+.thread-list .thread-group-avatar {
+  background: var(--surface-secondary);
+  color: var(--app-text-3);
+}
+.chat .chat-members-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.chat .chat-members-summary .avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+}
+.chat .chat-header-row {
+  align-items: center;
+}
+.chat .chat-header {
+  min-height: 64px;
+}
+.chat .connection-status {
+  flex-shrink: 0;
+}
+.transcript .message .message-time {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-4);
+}
+.transcript .message .message-run-link {
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+.transcript .message:hover .message-run-link,
+.transcript .message:focus-within .message-run-link {
+  opacity: 1;
+}
+.chat .workspace-file-inline .workspace-file-link {
+  text-decoration: none;
+}
+.chat .workspace-file-inline .workspace-file-link:hover {
+  text-decoration: underline;
+}
+.chat .workspace-file-link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+@media (hover: none) {
+  .transcript .message .message-run-link {
+    opacity: 1;
+  }
+}
+@media (max-width: 520px) {
+  .chat .chat-members-summary .avatar-stack {
+    display: none;
+  }
+  .chat .chat-header-row {
+    gap: 4px;
+  }
+}
+
+/* Inline approvals keep the decision beside its context; audit facts live in a pane. */
+.transcript .approval-card.approval-inline {
+  position: relative;
+  padding: 14px 0 14px 18px;
+  border: 0;
+  border-left: 2px solid var(--app-border, #ddd);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  gap: 8px;
+}
+.transcript .approval-inline .approval-head {
+  padding-right: 70px;
+  font-size: 13px;
+  color: var(--app-text-3);
+}
+.transcript .approval-inline .approval-summary {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.transcript .approval-inline .approval-details-trigger {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  color: var(--app-text-3);
+  font-size: 12px;
+}
+.transcript .approval-inline .approval-decision-buttons {
+  gap: 8px;
+  margin-top: 4px;
+}
+.approval-detail-drawer .approval-facts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin: 20px 0;
+}
+.approval-detail-drawer .approval-facts dt {
+  color: var(--app-text-3);
+  margin-top: 12px;
+}
+.approval-detail-drawer .approval-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.approval-detail-drawer .approval-input {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-secondary);
+  font-size: 12px;
+}
+
+/* Explicit placement survives removal of the preceding avatar on consecutive replies. */
+.transcript .message.bot.continued > .meta {
+  grid-column: 1 / -1;
+}
+.chat-header-options {
+  min-width: 0;
+  flex: 0 0 auto;
+}
+.chat .chat-header-more {
+  display: none;
+}
+@media (max-width: 960px) {
+  .chat .thread-heading {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .chat .thread-heading h2 {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+  .chat .chat-back {
+    flex-shrink: 0;
+  }
+  .chat .chat-header-options {
+    position: relative;
+  }
+  .chat .chat-header-more {
+    display: inline-flex;
+  }
+  .chat .chat-header-actions {
+    display: none;
+  }
+  .chat .chat-header-actions[data-open="true"] {
+    display: flex;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 30;
+    flex-direction: column;
+    align-items: stretch;
+    width: min(280px, calc(100vw - 32px));
+    padding: 12px;
+    border: 1px solid var(--app-border);
+    border-radius: 12px;
+    background: var(--app-surface);
+    box-shadow: 0 4px 16px #0002;
+  }
+  .chat .chat-header-actions .takeover-controls {
+    flex-wrap: wrap;
+  }
+  .transcript .message.bot > .meta {
+    display: flex;
+    align-items: center;
+    gap: 4px 8px;
+  }
+  .transcript .message.bot .author {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    flex: 1 1 50%;
+  }
+  .transcript .message.bot .message-time {
+    white-space: nowrap;
+    margin-left: auto;
+  }
+  .transcript .message.bot .message-addressed {
+    order: 2;
+    flex: 0 1 auto;
+    max-width: 100%;
+  }
+  .transcript .message.bot .message-run-link {
+    order: 3;
+  }
+  .chat .message-disclosure > span {
+    display: none;
+  }
+  .chat .message-disclosure {
+    justify-content: flex-start;
+  }
+  .chat .composer-box textarea {
+    min-height: 36px;
+    padding: 4px 0;
+  }
+  .chat .composer-box {
+    padding: 8px 12px;
+  }
+}
+
+/* Keep each speaker, reply and delivered files together as one reading group. */
+.chat .transcript {
+  width: 100%;
+  max-width: 800px;
+  margin-inline: auto;
+  gap: 18px;
+}
+.transcript .message.bot:not(.reply-preview) {
+  gap: 6px 8px;
+  grid-template-columns: 24px minmax(0, 1fr);
+}
+.transcript .message.bot > .avatar {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+.transcript .message.bot .meta {
+  min-height: 24px;
+}
+.transcript .message.bot .author {
+  font-size: var(--app-text-sm);
+}
+.transcript .message.bot > .body,
+.transcript .message.bot > .message-content {
+  padding: 10px 14px;
+  border-radius: 4px 14px 14px;
+  background: var(--surface-secondary);
+  min-width: 0;
+}
+.transcript .message.bot > .message-content .body {
+  padding: 0;
+  background: transparent;
+}
+.transcript .message.bot .body > :first-child {
+  margin-top: 0;
+}
+.transcript .message.bot .body > :last-child {
+  margin-bottom: 0;
+}
+.transcript .message.bot .message-disclosure {
+  margin-top: 6px;
+  padding-top: 0;
+  border: 0;
+  justify-content: flex-start;
+}
+.transcript .message.bot .message-disclosure > span {
+  display: none;
+}
+.transcript .message.bot > .attachment-cards {
+  grid-column: 1 / -1;
+  margin-top: 0;
+  gap: 8px;
+}
+.transcript .message.bot.continued {
+  margin-top: -10px;
+}
+@media (max-width: 720px) {
+  .chat .gb-chat-content {
+    padding-inline: 12px;
+  }
+  .transcript .message.bot > .body,
+  .transcript .message.bot > .message-content {
+    padding: 10px 12px;
+  }
 }

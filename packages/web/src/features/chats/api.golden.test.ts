@@ -25,6 +25,7 @@ const CASES: GoldenCases<ChatsApi> = {
   resolvePrivateChat: (a) => a.resolvePrivateChat(BOT),
   retryBotWelcome: (a) => a.retryBotWelcome(BOT),
   retryRoundMember: (a) => a.retryRoundMember(THR, "msg_1", BOT),
+  setThreadStatus: (a) => a.setThreadStatus(THR, "paused"),
   unpinThread: (a) => a.unpinThread(THR),
 };
 

@@ -27,12 +27,14 @@ export function WorkspaceNameField({
   label,
   placeholder,
   autoFocus,
+  disabled,
 }: {
   value: string;
   onChange: (value: string) => void;
   label: string;
   placeholder?: string;
   autoFocus?: boolean;
+  disabled?: boolean;
 }) {
   const t = useT();
   const counterId = useId();
@@ -50,6 +52,7 @@ export function WorkspaceNameField({
     <label className="workspace-name-field">
       {label}
       <input
+        disabled={disabled}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}

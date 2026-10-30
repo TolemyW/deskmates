@@ -13,6 +13,7 @@ import {
 import { errorMessage } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { DesktopView } from "./desktop-view.js";
+import { TakeoverDisplay } from "./takeover-display.js";
 
 export interface DesktopMember {
   botId: BotId;
@@ -181,6 +182,7 @@ export function DesktopCard({
       ) : null}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
+          className="desktop-dialog"
           onEscapeKeyDown={(event) => {
             if (control) event.preventDefault();
           }}
@@ -200,12 +202,11 @@ export function DesktopCard({
               </DialogDescription>
             </div>
           </div>
-          <DesktopView
-            key={control ? "control" : "view"}
-            api={api}
-            botId={member.botId}
-            mode={control ? "control" : "view"}
-          />
+          {control ? (
+            <TakeoverDisplay api={api} workspaceId={workspaceId} members={[member]} />
+          ) : (
+            <DesktopView api={api} botId={member.botId} />
+          )}
           <div className="desktop-dialog-footer">
             <span>
               <ShieldCheck size={15} />

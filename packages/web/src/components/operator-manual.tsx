@@ -113,9 +113,12 @@ export function OperatorManual({
   build = WEB_BUILD,
   onClose,
   id,
+  start,
 }: {
   /** The page for the screen the shell showed when Help was opened. */
   screenPage: GuidePage;
+  /** Where to open, when a screen asked for a section; the index otherwise. */
+  start?: { page: GuidePageId; anchor?: string | undefined } | undefined;
   /** The release the Gateway reports, or null when it reports none. */
   runningRelease: string | null;
   build?: WebBuild;
@@ -124,9 +127,15 @@ export function OperatorManual({
 }) {
   const t = useT();
   const locale = useLocale();
-  const [view, setView] = useState<View>({ page: GUIDE_INDEX });
+  const [view, setView] = useState<View>(() =>
+    start
+      ? start.anchor
+        ? { page: start.page, anchor: start.anchor }
+        : { page: start.page }
+      : { page: GUIDE_INDEX },
+  );
   // Narrow screens show one pane at a time: the topic list or the selected page.
-  const [pane, setPane] = useState<"topics" | "content">("topics");
+  const [pane, setPane] = useState<"topics" | "content">(start ? "content" : "topics");
   const [query, setQuery] = useState("");
   const title = useRef<HTMLHeadingElement>(null);
   const content = useRef<HTMLElement>(null);

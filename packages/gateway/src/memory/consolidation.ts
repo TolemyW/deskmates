@@ -151,7 +151,7 @@ export class ConsolidationService {
     return this.deps.runs.create({
       botId,
       lane: "background",
-      triggerKind: "cron",
+      triggerKind: "model_job",
       triggerRef: `${CONSOLIDATION_TRIGGER_PREFIX}${botId}:${nowIso()}`,
       triggerPayload: { prompt, runType: CONSOLIDATION_RUN_TYPE, sources: ids },
       config: {
@@ -178,7 +178,7 @@ export class ConsolidationService {
         .prepare(
           `SELECT
            MAX(created_at) AS attempted_at,
-           SUM(CASE WHEN status IN ('queued','running','stalled','waiting_approval_live','waiting_approval','waiting_browser','waiting_continuation') THEN 1 ELSE 0 END) AS pending
+           SUM(CASE WHEN status IN ('queued','running','stalled','waiting_approval_live','waiting_approval','waiting_browser','waiting_continuation','waiting_platform') THEN 1 ELSE 0 END) AS pending
          FROM runs WHERE bot_id = ? AND run_type = ?`,
         )
         .get(bot.id, CONSOLIDATION_RUN_TYPE) as {
@@ -265,7 +265,8 @@ export class ConsolidationService {
         `SELECT 1 FROM runs r JOIN bots b ON b.id = r.bot_id
          WHERE b.workspace_id = ? AND r.id <> ?
            AND r.run_type = ?
-           AND r.status IN ('running', 'stalled', 'waiting_approval_live', 'waiting_approval', 'waiting_browser', 'waiting_continuation')
+           AND r.status IN ('running', 'stalled', 'waiting_approval_live', 'waiting_approval', 'waiting_browser', 'waiting_continuation',
+             'waiting_platform')
          LIMIT 1`,
       )
       .get(workspaceId, exceptRunId, CONSOLIDATION_RUN_TYPE);

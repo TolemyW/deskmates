@@ -30,6 +30,7 @@ const CASES: GoldenCases<ContactsApi> = {
   readDiaryDay: (a) => a.readDiaryDay(BOT, "2026-10-15"),
   restoreRuleVersion: (a) => a.restoreRuleVersion(BOT, "soul", 1, "v3"),
   runCronNow: (a) => a.runCronNow(BOT, 0),
+  setDefaultBot: (a) => a.setDefaultBot(WS, BOT),
   startWelcome: (a) => a.startWelcome(BOT),
   updateApprovalRule: (a) => a.updateApprovalRule("rule/1", { decision: "deny" }),
   updateBot: (a) => a.updateBot(BOT, { model: null, cron: [], name: "ada", paused: true }),

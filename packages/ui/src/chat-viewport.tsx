@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "./button.js";
 import { Icon } from "./icon.js";
 
@@ -25,6 +25,9 @@ export function ChatViewport({
   const following = useRef(true);
   const anchored = useRef<string | undefined>(undefined);
   const dimensions = useRef({ height: 0, content: 0 });
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [scrolling, setScrolling] = useState(false);
+  useEffect(() => () => clearTimeout(idleTimer.current), []);
   const [away, setAway] = useState(false);
   const latest = useCallback(() => {
     const element = viewport.current;
@@ -71,10 +74,20 @@ export function ChatViewport({
           ref={viewport}
           className="gb-chat-viewport"
           aria-label={label}
+          data-scrolling={scrolling ? "true" : undefined}
+          onClickCapture={(event) => {
+            // A disclosure is an explicit reading action. Release follow mode before its
+            // resize, including keyboard activation, so expansion cannot snap to the tail.
+            if (event.target instanceof Element && event.target.closest("[data-chat-disclosure]"))
+              following.current = false;
+          }}
           // biome-ignore lint/a11y/noNoninteractiveTabindex: The scrollable transcript must accept keyboard scrolling.
           tabIndex={0}
           onScroll={(event) => {
             const element = event.currentTarget;
+            setScrolling(true);
+            clearTimeout(idleTimer.current);
+            idleTimer.current = setTimeout(() => setScrolling(false), 900);
             // Layout-induced scroll events can precede ResizeObserver delivery. Let the
             // observer preserve the previous follow mode before treating a scroll as reading.
             if (

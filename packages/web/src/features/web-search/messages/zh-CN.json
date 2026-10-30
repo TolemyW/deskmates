@@ -1,0 +1,19 @@
+{
+  "webSearch.disable": "关闭网页搜索",
+  "webSearch.enable": "开启网页搜索",
+  "webSearch.flow": "开启网页搜索后，每次搜索的文字都会离开本安装、发送到公共搜索引擎；即使工作区的浏览已锁定为名单，也是如此。打开搜索结果仍遵循本工作区的出站规则：名单之外的网站会先询问。",
+  "webSearch.frozen": "已经开始的运行保留开始时的设置。",
+  "webSearch.intro": "服务器已连接搜索服务时，网页搜索默认开启。工作区所有者或管理员可在此关闭。",
+  "webSearch.loading": "正在加载网页搜索…",
+  "webSearch.notConfigured": "此服务器尚未接入搜索服务。请让 Deskmates 运维人员完成接入，再开启网页搜索。",
+  "webSearch.off": "关闭",
+  "webSearch.on": "开启",
+  "webSearch.reset": "恢复默认",
+  "webSearch.retry": "重试加载网页搜索设置",
+  "webSearch.roleNote": "更改网页搜索",
+  "webSearch.setting.chosen": "在此页面设置",
+  "webSearch.setting.default": "默认",
+  "webSearch.strategyNote": "网页搜索与本工作区的网络连接一起设置。如工作区数据不应进入公共搜索查询，请关闭此功能。",
+  "webSearch.title": "网页搜索",
+  "webSearch.workspaceLabel": "本工作区"
+}

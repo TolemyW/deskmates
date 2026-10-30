@@ -63,7 +63,7 @@ The v0.3 machinery was built to answer a question nobody asked: how to stop bot 
 
 ## Amendment 1 — an opt-in per-bot working directory (2026-10-12)
 
-Status: Proposed (needs product-owner sign-off). Decisions 8, 9 and 12 are superseded by ADR-0038 (owner-decided 2026-10-14): `per-bot` is the default, the hook refuses writes into another bot's directory, and no campaign gates the default. Decisions 1 to 7 are unchanged. This amendment gives decision 3's "working directory" a concrete, optional form. Source: issue #88. ADR-0036 (proposed) extends decision 8 with a per-workspace setting and would replace decisions 10 and 13.
+Status: Accepted under owner delegation (2026-10-17) for decisions 10, 11 and 13, the ones still in force, as ADR-0038 decision 10 reads them (the platform creates no worktree; the mode is recorded per run and survives resume; lane awareness is ADR-0036 decision 6). Decisions 8, 9 and 12 are superseded by ADR-0038 (owner-decided 2026-10-14): `per-bot` is the default, the hook refuses writes into another bot's directory, and no campaign gates the default. Still unverified: the session-transcript risk under Consequences, which ADR-0038 decision 9 answers with a best-effort copy that has not run on a live host. Decisions 1 to 7 are unchanged. This amendment gives decision 3's "working directory" a concrete, optional form. Source: issue #88. ADR-0036 (proposed) extends decision 8 with a per-workspace setting and would replace decisions 10 and 13.
 
 ### Context
 

@@ -252,6 +252,11 @@ export function WorkspaceSwitcher({
       </button>
       {open ? (
         <div className="workspace-menu">
+          {scope.error ? (
+            <p role="alert" className="workspace-menu-hint error small">
+              {scope.error}
+            </p>
+          ) : null}
           <p className="workspace-menu-hint muted small">{t("workspaceSwitcher.hint")}</p>
           {directory ? (
             <label className="workspace-menu-search">
@@ -331,6 +336,7 @@ export function WorkspaceSwitcher({
               className="workspace-menu-item new"
               onClick={() => {
                 setOpen(false);
+                trigger.current?.focus();
                 scope.openCreate();
               }}
             >

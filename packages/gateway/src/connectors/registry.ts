@@ -153,13 +153,23 @@ export class ConnectorRegistry {
     tenantId: string | undefined,
     offset: number,
     limit: number,
+    readable?: ReadonlySet<string>,
   ): { connectors: ConnectorRegistration[]; total: number } {
+    // `readable` narrows the list to the workspaces the caller may read (ADR-0022 amendment 6 W1).
+    const ids = readable === undefined ? undefined : [...readable];
+    const scoped =
+      ids === undefined
+        ? ""
+        : ids.length === 0
+          ? " AND 0"
+          : ` AND workspace_id IN (${ids.map(() => "?").join(", ")})`;
     const where = `${workspaceId === undefined ? "workspace_id IS NOT NULL" : "workspace_id = ?"}
-      AND (? IS NULL OR workspace_id IN (SELECT id FROM workspaces WHERE tenant_id = ?))`;
+      AND (? IS NULL OR workspace_id IN (SELECT id FROM workspaces WHERE tenant_id = ?))${scoped}`;
     const params = [
       ...(workspaceId === undefined ? [] : [workspaceId]),
       tenantId ?? null,
       tenantId ?? null,
+      ...(ids ?? []),
     ];
     const { total } = this.db
       .prepare(`SELECT COUNT(*) AS total FROM connectors WHERE ${where}`)

@@ -14,9 +14,12 @@ import { Activity, FileText, Info, Monitor, ShieldCheck, Sparkles, Users } from 
 import { useMemo, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import type { NamedThreadMember, ThreadDetailView } from "../../api/types.js";
+import { Button } from "../../components/ui/button.js";
 import { DialogTitle } from "../../components/ui/dialog.js";
 import { Pill } from "../../components/ui/pill.js";
+import { formatTime } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
+import { useTuneView } from "../../lib/interface-view.js";
 import { decisionLabel } from "../approvals/approval-card.js";
 import { DesktopRail } from "../computer/desktop-rail.js";
 import { splitWorkspacePaths } from "../files/path-links.js";
@@ -36,6 +39,24 @@ export interface ChatInfoProps {
   activity?: React.ReactNode;
   shown: boolean;
   onClose?: (() => void) | undefined;
+  /**
+   * Pause or Resume the conversation (ADR-0005 amendment 3, decision 23); given only to a session
+   * that may, an Owner or Admin. Absent hides the control.
+   */
+  onSetStatus?: (status: "paused" | "active") => void;
+  statusBusy?: boolean;
+}
+
+/** The paused state in the header note: why, and until when for a turn-budget pause. */
+function pausedNote(
+  thread: ThreadDetailView["thread"],
+  t: ReturnType<typeof useT>,
+): string | undefined {
+  if (thread.status !== "paused") return undefined;
+  if (thread.pauseReason === "operator") return t("chatInfo.status.pausedOperator");
+  if (thread.resumeAt)
+    return t("chatInfo.status.pausedUntil", { time: formatTime(thread.resumeAt) });
+  return t("chatInfo.status.paused");
 }
 
 /**
@@ -54,6 +75,8 @@ export function ChatInfo(props: ChatInfoProps) {
   const { api, detail, members, messages, approvals, workspaceId, membership, onClose } = props;
   const [open, setOpen] = useState<Section | null>("members");
   const t = useT();
+  // The per-run activity cards and the routing facts are for tuning (use-and-tune-views.md).
+  const tune = useTuneView();
 
   // Files a message mentioned: declared attachments and absolute workspace paths in the text.
   const files = useMemo(() => {
@@ -90,12 +113,17 @@ export function ChatInfo(props: ChatInfoProps) {
     </button>
   );
 
-  // Only what is unusual: a turn limit when one is on, paused when the chat is paused.
+  // Only what is unusual: a turn limit when one is on, paused when the chat is paused, and for a
+  // group the installation's routing mode (issue #15), which no per-chat control changes.
   const budget = shownTurnBudget(detail, t("limits.off"));
+  const paused = pausedNote(detail.thread, t);
+  const routing =
+    tune && detail.thread.kind === "chat" && members.length > 1 ? detail.groupRouting : undefined;
   const headerNote = [
-    ...(typeof budget === "number" ? [t("chatInfo.turnLimit", { budget })] : []),
-    ...(detail.thread.status === "paused" ? [t("chatInfo.status.paused")] : []),
+    ...(tune && typeof budget === "number" ? [t("chatInfo.turnLimit", { budget })] : []),
+    ...(paused ? [paused] : []),
   ].join(" · ");
+  const isPaused = detail.thread.status === "paused";
 
   return (
     <DetailPane
@@ -126,13 +154,33 @@ export function ChatInfo(props: ChatInfoProps) {
                   : t("chatInfo.kind.private")}
             </span>
             <h2>{detail.thread.title || nameOf(members[0]?.botId ?? "")}</h2>
-            {headerNote ? <p className="muted small">{headerNote}</p> : null}
+            {headerNote || routing ? (
+              <p className="muted small">
+                {headerNote}
+                {headerNote && routing ? " · " : null}
+                {routing ? (
+                  <span data-testid="chat-routing" title={t("chatInfo.routing.title")}>
+                    {t(`chatInfo.routing.${routing}`)}
+                  </span>
+                ) : null}
+              </p>
+            ) : null}
+            {props.onSetStatus && detail.thread.kind === "chat" ? (
+              <Button
+                type="button"
+                className="chat-info-pause"
+                disabled={props.statusBusy}
+                onClick={() => props.onSetStatus?.(isPaused ? "active" : "paused")}
+              >
+                {isPaused ? t("chatInfo.resume") : t("chatInfo.pause")}
+              </Button>
+            ) : null}
           </header>
 
           {section("members", <Users size={15} />, t("chatInfo.section.members"), members.length)}
           <div className={open === "members" ? "info-body" : "info-body hidden"}>{membership}</div>
 
-          {props.activity ? (
+          {tune && props.activity ? (
             <>
               {section("activity", <Activity size={15} />, t("chatInfo.section.activity"))}
               {open === "activity" ? <div className="info-body">{props.activity}</div> : null}

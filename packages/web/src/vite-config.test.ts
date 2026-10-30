@@ -11,13 +11,14 @@ import type { ConfigEnv, UserConfig } from "vite";
 import { expect, it } from "vitest";
 import config, { readWebBuild } from "../vite.config.js";
 
-it("proxies /api, /auth and /hooks to the Gateway's operator listener without rewriting Host", () => {
+it("proxies /api, /auth, /analytics and /hooks to the operator listener without rewriting Host", () => {
   const resolved = (config as (env: ConfigEnv) => UserConfig)({
     command: "serve",
     mode: "development",
   });
   const proxy = resolved.server?.proxy as Record<string, { target: string; changeOrigin: boolean }>;
-  for (const prefix of ["/api", "/auth", "/hooks"]) {
+  // `/analytics` is the Grafana relay (ADR-0046 amendment 1 decision 16).
+  for (const prefix of ["/api", "/auth", "/analytics", "/hooks"]) {
     expect(proxy[prefix], prefix).toBeDefined();
     expect(proxy[prefix]?.target, prefix).toMatch(/^http:\/\/localhost:\d+$/);
     // Same-origin checks compare Origin with Host; the proxy must keep the browser's Host.

@@ -49,6 +49,8 @@ export const ROLE_ACTIONS = {
   // Workspaces and bots (W8: an Owner or Admin of any workspace creates one)
   "workspace.create": { route: "POST /api/workspaces", role: "admin", scope: "any" },
   "workspace.configure": { route: "PATCH /api/workspaces/:id", role: "admin" },
+  // ADR-0051 decision 1: which bot is the workspace's default bot.
+  "workspace.setDefaultBot": { route: "PUT /api/workspaces/:id/default-bot", role: "admin" },
   "trash.view": { route: "GET /api/trash", role: "admin" },
   "workspace.archive": { route: "POST /api/workspaces/:id/archive", role: "admin" },
   "workspace.restore": { route: "POST /api/workspaces/:id/restore", role: "admin" },
@@ -63,6 +65,8 @@ export const ROLE_ACTIONS = {
   },
   "bot.editDiary": { route: "POST /api/bots/:id/diary/:day/delete-line", role: "admin" },
   "bot.runCronNow": { route: "POST /api/bots/:id/cron/:entry/run", role: "admin" },
+  // ADR-0050 decision 6: the bot's own read-only run_stats tool, off by default.
+  "bot.setRunStats": { route: "PUT /api/bots/:id/run-stats", role: "admin" },
   "bot.archive": { route: "POST /api/bots/:id/archive", role: "admin" },
   "bot.restore": { route: "POST /api/bots/:id/restore", role: "admin" },
   "bot.delete": { route: "DELETE /api/bots/:id", role: "admin" },
@@ -95,11 +99,18 @@ export const ROLE_ACTIONS = {
   "thread.addMember": { route: "POST /api/threads/:id/members", role: "admin" },
   "thread.removeMember": { route: "DELETE /api/threads/:id/members/:botId", role: "admin" },
   "thread.setDeadline": { route: "PATCH /api/threads/:id", role: "admin" },
+  // ADR-0005 amendment 3, decision 23: pause and Resume are the status half of the same patch.
+  "thread.pause": { route: "PATCH /api/threads/:id", role: "admin" },
   "thread.closeTask": { route: "POST /api/threads/:id/close-task", role: "admin" },
   "task.create": { route: "POST /api/workspaces/:workspaceId/tasks", role: "admin" },
   "task.edit": { route: "PATCH /api/workspaces/:workspaceId/tasks/:id", role: "admin" },
   "task.accept": { route: "POST /api/workspaces/:workspaceId/tasks/:id/accept", role: "admin" },
   "task.submit": { route: "POST /api/workspaces/:id/submit", role: "member" },
+  // Task templates: Owners and Admins manage them (ADR-0021 amendment 4, A4a)
+  "taskTemplate.manage": {
+    route: "POST /api/workspaces/:workspaceId/task-templates",
+    role: "admin",
+  },
   // Memory curation is configuration (C2)
   "memory.editFile": { route: "PATCH /api/bots/:id/memory", role: "admin" },
   "memory.consolidate": { route: "POST /api/bots/:id/memory/consolidate", role: "admin" },
@@ -162,6 +173,14 @@ export const ROLE_ACTIONS = {
   "limits.set": { route: "PUT /api/workspaces/:id/limits", role: "admin" },
   // Working-directory settings (ADR-0036)
   "workdir.set": { route: "PUT /api/workspaces/:id/workdir", role: "admin" },
+  // Opt-in native desktop tools (ADR-0048 decision 1)
+  "desktopTools.set": { route: "PUT /api/workspaces/:id/desktop-tools", role: "admin" },
+  // The web_search switch, off by default (ADR-0049 decision 4)
+  "webSearch.set": { route: "PUT /api/workspaces/:id/web-search", role: "admin" },
+  // The workspace credential vault: every Member reads metadata, an Owner or Admin maintains it
+  // (ADR-0045 decision 2)
+  "vault.read": { route: "GET /api/workspaces/:id/vault", role: "member" },
+  "vault.manage": { route: "POST /api/workspaces/:id/vault", role: "admin" },
   // Published apps: every Member shares and stops sharing (ADR-0035, owner-decided 2026-10-14)
   "appShare.publish": { route: "POST /api/workspaces/:id/app-shares", role: "member" },
   "appShare.stop": { route: "DELETE /api/workspaces/:id/app-shares/:shareId", role: "member" },
@@ -209,11 +228,16 @@ export const ROLE_ACTIONS = {
   "network.select": { route: "PUT /api/workspaces/:id/network-profiles", role: "admin" },
   "network.settings": { route: "PUT /api/workspaces/:id/network-settings", role: "admin" },
   "runs.read": { route: "GET /api/runs", role: "member" },
+  "skills.manage": { route: "POST /api/workspaces/:id/skills", role: "admin" },
   "skills.read": { route: "GET /api/workspaces/:id/skills", role: "member" },
   "tasks.read": { route: "GET /api/workspaces/:workspaceId/tasks", role: "member" },
+  "taskKinds.read": { route: "GET /api/workspaces/:workspaceId/task-kinds", role: "member" },
   "threads.list": { route: "GET /api/threads", role: "guest" },
   // Service principals and tenant SSO are the root's (ADR-0031 Q2)
   "servicePrincipal.manage": { route: "POST /api/service-principals", role: "root" },
+  // Run observability spans every workspace, so it is the root's: the pipeline's status, the
+  // Analytics entry and the run drawer's Analytics link (ADR-0046 decision 8)
+  "observability.read": { route: "GET /api/observability/status", role: "root" },
 } as const satisfies Record<string, RoleActionRule>;
 
 export type RoleAction = keyof typeof ROLE_ACTIONS;

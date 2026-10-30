@@ -1,10 +1,14 @@
 import {
   type BotId,
+  CHAT_PREVIEW_MAX,
   DeskmatesError,
+  HANDOFF_EXCERPT_MAX,
   type IncomingHandoff,
   type MessageId,
   type RunId,
   type ThreadId,
+  messageExcerpt,
+  messageExcerptSourceChars,
 } from "@deskmates/contracts";
 import type { BotStore } from "../bots/bots.js";
 import { nowIso } from "../db/ids.js";
@@ -99,7 +103,7 @@ export class PrivateChatStore {
       ? ` AND h.seq < ${Math.trunc(page.beforeSeq ?? Number.MAX_SAFE_INTEGER)} ORDER BY h.seq DESC LIMIT ${Math.trunc(page.limit) + 1}`
       : " ORDER BY h.seq DESC";
     return this.db
-      .prepare(`SELECT h.seq, b.name AS callerName, substr(m.body, 1, 600) AS excerpt,
+      .prepare(`SELECT h.seq, b.name AS callerName, substr(m.body, 1, ${messageExcerptSourceChars(HANDOFF_EXCERPT_MAX)}) AS excerpt,
         s.thread_id AS sourceThreadId, s.id AS sourceMessageId, m.thread_id AS handoffThreadId,
         h.run_id AS runId, r.status, h.created_at AS createdAt,
         h.seq > coalesce(rd.seen_seq, 0) AS unread
@@ -112,7 +116,11 @@ export class PrivateChatStore {
       .all(actor, threadId)
       .map((row) => {
         const item = row as IncomingHandoff;
-        return { ...item, unread: Boolean(item.unread) };
+        return {
+          ...item,
+          excerpt: messageExcerpt(item.excerpt, HANDOFF_EXCERPT_MAX),
+          unread: Boolean(item.unread),
+        };
       });
   }
 
@@ -130,12 +138,15 @@ export class PrivateChatStore {
   latest(
     threadId: ThreadId,
   ): Pick<IncomingHandoff, "callerName" | "excerpt" | "createdAt"> | undefined {
-    return this.db
-      .prepare(`SELECT b.name AS callerName, substr(m.body, 1, 160) AS excerpt, h.created_at AS createdAt
+    const row = this.db
+      .prepare(`SELECT b.name AS callerName, substr(m.body, 1, ?) AS excerpt, h.created_at AS createdAt
       FROM private_chats p JOIN incoming_handoffs h ON h.recipient_bot_id = p.bot_id
       JOIN thread_messages m ON m.id = h.message_id JOIN bots b ON b.id = m.author_id
       WHERE p.thread_id = ? ORDER BY h.seq DESC LIMIT 1`)
-      .get(threadId) as Pick<IncomingHandoff, "callerName" | "excerpt" | "createdAt"> | undefined;
+      .get(messageExcerptSourceChars(CHAT_PREVIEW_MAX), threadId) as
+      | Pick<IncomingHandoff, "callerName" | "excerpt" | "createdAt">
+      | undefined;
+    return row ? { ...row, excerpt: messageExcerpt(row.excerpt, CHAT_PREVIEW_MAX) } : undefined;
   }
 
   markRead(threadId: ThreadId, actor: string, through: number): void {

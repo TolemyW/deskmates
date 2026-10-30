@@ -26,6 +26,12 @@ export interface OpenAiQueryParams {
   skills?: { dir: string; names: readonly string[]; readFile: (path: string) => Promise<string> };
   /** Compaction threshold in prompt tokens (`DESKMATES_OPENAI_MAX_CONTEXT_TOKENS`); absent: off. */
   maxContextTokens?: number;
+  /**
+   * The tool-use ids the resume's `approval` trigger carries decisions for, in its order (issue
+   * #62 M8). The hook's replay ends at the first call without a decision, so these interruptions
+   * are judged before the others.
+   */
+  resumeToolUseIds?: readonly string[];
 }
 
 export type OpenAiQueryFn = (params: OpenAiQueryParams) => AsyncIterable<SDKMessage>;

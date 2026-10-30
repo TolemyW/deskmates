@@ -7,6 +7,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../../api/client.js";
+import { type InterfaceView, InterfaceViewProvider } from "../../lib/interface-view.js";
 import {
   bot,
   fakeFetch,
@@ -20,7 +21,11 @@ import {
 import { shownTurnBudget } from "./chat-info.js";
 import { ThreadScreen } from "./thread.js";
 
-function renderChat(detailExtra: Record<string, unknown> = {}) {
+function renderChat(
+  detailExtra: Record<string, unknown> = {},
+  routeExtra: Record<string, unknown> = {},
+  view: InterfaceView = "tune",
+) {
   const { fetch } = fakeFetch({
     "GET /api/bots/bot_1/screen": { state: "stopped", humanHeld: false },
     "GET /api/workspaces": { workspaces: [workspace] },
@@ -32,8 +37,13 @@ function renderChat(detailExtra: Record<string, unknown> = {}) {
     "GET /api/runs?threadId=thr_1": { runs: [] },
     "GET /api/approvals?status=pending&threadId=thr_1": { approvals: [] },
     "GET /api/approvals?status=decided&threadId=thr_1": { approvals: [] },
+    ...routeExtra,
   });
-  return render(<ThreadScreen threadId={thread.id} api={createApiClient({ fetch })} />);
+  return render(
+    <InterfaceViewProvider view={view}>
+      <ThreadScreen threadId={thread.id} api={createApiClient({ fetch })} />
+    </InterfaceViewProvider>,
+  );
 }
 
 const toggle = () => document.getElementById(`chat-info-toggle-${thread.id}`) as HTMLElement;
@@ -98,8 +108,8 @@ describe("ChatInfo turn budget (ADR-0005 amendment 5 decision 38)", () => {
   it("shows the workspace's effective budget, not the thread row's", async () => {
     renderChat({ effectiveTurnBudget: { value: 20, source: "workspace" } });
     const dialog = await screen.findByRole("dialog", { name: "Chat info" });
-    expect(within(dialog).getByText(/Turn limit 20/)).toBeTruthy();
-    expect(within(dialog).queryByText(/Turn limit 8/)).toBeNull();
+    expect(within(dialog).getByText(/Message limit 20/)).toBeTruthy();
+    expect(within(dialog).queryByText(/Message limit 8/)).toBeNull();
   });
 
   it("says off when the workspace turned the budget off, and falls back to the row", () => {
@@ -114,5 +124,82 @@ describe("ChatInfo turn budget (ADR-0005 amendment 5 decision 38)", () => {
       shownTurnBudget({ ...detail, effectiveTurnBudget: { value: 8, source: "thread" } }, "Off"),
     ).toBe(8);
     expect(shownTurnBudget(detail, "Off")).toBe(thread.turnBudget);
+  });
+});
+
+describe("ChatInfo routing mode (issue #15)", () => {
+  const first = members[0];
+  if (!first) throw new Error("missing member fixture");
+  const qaId = "bot_2" as typeof first.botId;
+  const group = [first, { ...first, botId: qaId, name: "qa" }];
+  const groupRoutes = {
+    "GET /api/bots": { bots: [bot, { ...bot, id: qaId, name: "qa" }] },
+    "GET /api/bots/bot_2/screen": { state: "stopped", humanHeld: false },
+  };
+
+  beforeEach(() => {
+    localStorage.setItem("deskmates.showChatInfo", "1");
+    installFakeEventSource();
+  });
+  afterEach(() => {
+    cleanup();
+    localStorage.removeItem("deskmates.showChatInfo");
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["walk-v1", "Routing: walk"],
+    ["owner-v1", "Routing: owner"],
+    ["round-v1", "Routing: round"],
+  ])("names %s on a group chat's header line, as an installation setting", async (mode, text) => {
+    renderChat(
+      {
+        members: group,
+        groupRouting: mode,
+        effectiveTurnBudget: { value: 20, source: "workspace" },
+      },
+      groupRoutes,
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Chat info" });
+    const routing = within(dialog).getByTestId("chat-routing");
+    expect(routing.textContent).toBe(text);
+    expect(routing.getAttribute("title")).toMatch(/whole installation \(DESKMATES_GROUP_ROUTING\)/);
+    // It shares the header line with the turn limit.
+    expect(routing.parentElement?.textContent).toBe(`Message limit 20 · ${text}`);
+  });
+
+  it("shows no routing for a one-member chat", async () => {
+    renderChat({ groupRouting: "round-v1" });
+    const dialog = await screen.findByRole("dialog", { name: "Chat info" });
+    expect(within(dialog).queryByTestId("chat-routing")).toBeNull();
+    expect(within(dialog).queryByText(/Routing:/)).toBeNull();
+  });
+
+  it("leaves the routing, the message limit and the activity cards out of the use view", async () => {
+    renderChat(
+      {
+        members: group,
+        groupRouting: "round-v1",
+        effectiveTurnBudget: { value: 20, source: "workspace" },
+      },
+      groupRoutes,
+    );
+    const tuned = await screen.findByRole("dialog", { name: "Chat info" });
+    expect(within(tuned).getByRole("button", { name: "Activity" })).toBeTruthy();
+    cleanup();
+    renderChat(
+      {
+        members: group,
+        groupRouting: "round-v1",
+        effectiveTurnBudget: { value: 20, source: "workspace" },
+      },
+      groupRoutes,
+      "use",
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Chat info" });
+    expect(within(dialog).getByRole("button", { name: /Members/ })).toBeTruthy();
+    expect(within(dialog).queryByTestId("chat-routing")).toBeNull();
+    expect(within(dialog).queryByText(/Message limit/)).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Activity" })).toBeNull();
   });
 });

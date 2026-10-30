@@ -17,9 +17,15 @@ export function DialogContent({
   closeLabel,
   placement = "center",
   dock,
+  scroll = false,
   ...props
 }: ComponentProps<typeof DialogPrimitive.Content> & {
   closeLabel?: string;
+  /**
+   * Scroll a body taller than the dialog inside it. The content keeps `overflow-hidden`, so the
+   * close control stays in its corner instead of scrolling away with the body.
+   */
+  scroll?: boolean;
   placement?: "center" | "right";
   dock?: { host: HTMLElement; hidden: boolean; width: ReturnType<typeof usePanelWidth> };
 }) {
@@ -66,7 +72,11 @@ export function DialogContent({
             reverse
           />
         ) : null}
-        {children}
+        {scroll ? (
+          <div className="-mx-6 -mb-6 min-h-0 flex-1 overflow-y-auto px-6 pb-6">{children}</div>
+        ) : (
+          children
+        )}
         <DialogPrimitive.Close
           className="absolute right-4 top-4 rounded-md border-transparent bg-transparent p-1 text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={closeLabel ?? t("dialog.closeDesktop")}

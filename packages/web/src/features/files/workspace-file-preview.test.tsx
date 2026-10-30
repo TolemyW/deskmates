@@ -245,7 +245,7 @@ describe("safe renderers", () => {
     )) as HTMLIFrameElement;
     expect(frame.getAttribute("sandbox")).toBe("");
     expect(frame.getAttribute("srcdoc")).toContain("sandbox; default-src 'none'");
-    expect(frame.getAttribute("srcdoc")).toContain("<script>");
+    expect(frame.getAttribute("srcdoc")).not.toContain("<script>");
     expect(document.querySelector("script")).toBeNull();
   });
 
@@ -283,6 +283,26 @@ describe("safe renderers", () => {
     expect(document.querySelector("script")).toBeNull();
   });
 
+  it("reports an undecodable image and keeps its native download available", async () => {
+    render(
+      <WorkspaceFilePreview
+        api={apiFor("not an image")}
+        workspaceId={WS_ID}
+        path="/work/broken.png"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+    fireEvent.error(await screen.findByRole("img", { name: "broken.png" }));
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "broken.png: image unavailable",
+    );
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:preview");
+    expect(
+      (screen.getByRole("button", { name: "Download /work/broken.png" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
   it("keeps native streaming download available when preview fails", async () => {
     const api = apiFor("x");
     vi.mocked(api.readWorkspaceFileRange).mockRejectedValue(new Error("Workspace is not running"));
@@ -290,7 +310,7 @@ describe("safe renderers", () => {
     render(<WorkspaceFilePreview api={api} workspaceId={WS_ID} path="/work/report.txt" />);
     fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
     expect((await screen.findByRole("alert")).textContent).toContain(
-      "Preview unavailable: Workspace is not running",
+      "The preview could not be opened. Download the file instead. Details: Workspace is not running",
     );
     fireEvent.click(screen.getByRole("button", { name: "Download /work/report.txt" }));
     expect(click).toHaveBeenCalledTimes(1);
@@ -480,6 +500,30 @@ describe("viewing controls (ADR-0014 amendment A6)", () => {
     expect(zoomIn.disabled).toBe(true);
   });
 
+  it("opens more than 16 previews in sequence, each with its own finished identity (#61 L2)", async () => {
+    const body = "# Title\n\nbody";
+    const api = apiFor(body);
+    render(<WorkspaceFilePreview api={api} workspaceId={WS_ID} path="/work/report.md" />);
+    const opens = 20;
+    for (let i = 0; i < opens; i++) {
+      fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+      await screen.findByRole("heading", { name: "Title" });
+      fireEvent.click(screen.getByRole("button", { name: "Hide preview" }));
+      await waitFor(() => expect(screen.queryByRole("heading", { name: "Title" })).toBeNull());
+    }
+    const calls = vi.mocked(api.readWorkspaceFileRange).mock.calls.map((call) => call[2]);
+    const ids = new Set(calls.map((input) => input.previewId));
+    // A fresh identity per open, so no reopen inherits a spent or expired budget; the Gateway
+    // evicts the finished ones of this caller instead of refusing the next open.
+    expect(ids.size).toBe(opens);
+    for (const id of ids) expect(id).toMatch(/^[A-Za-z0-9_-]{16,80}$/);
+    // Each open reads its file to the last byte, which is what marks an identity finished.
+    for (const id of ids) {
+      const last = calls.filter((input) => input.previewId === id).at(-1);
+      expect(last?.end).toBeGreaterThanOrEqual(new TextEncoder().encode(body).byteLength - 1);
+    }
+  });
+
   it("returns focus to the opener when the drawer closes", async () => {
     render(<WorkspaceFilePreview api={apiFor("x")} workspaceId={WS_ID} path="/work/a.txt" />);
     const opener = screen.getByRole("button", { name: "Preview file" });
@@ -488,4 +532,33 @@ describe("viewing controls (ADR-0014 amendment A6)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Hide preview" }));
     await waitFor(() => expect(document.activeElement).toBe(opener));
   });
+});
+
+it("retries a failed preview in the open drawer", async () => {
+  const api = apiFor("Recovered file contents");
+  vi.mocked(api.readWorkspaceFileRange).mockRejectedValueOnce(new Error("Temporary read failure"));
+  render(<WorkspaceFilePreview api={api} workspaceId={WS_ID} path="/work/retry.txt" />);
+  fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+  await screen.findByRole("alert");
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await screen.findByText("Recovered file contents");
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(api.readWorkspaceFileRange).toHaveBeenCalledTimes(2);
+});
+
+it("resets the open preview when its file identity changes", async () => {
+  const api = apiFor("Old file contents");
+  const view = render(<WorkspaceFilePreview api={api} workspaceId={WS_ID} path="/work/old.txt" />);
+  fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+  await screen.findByText("Old file contents");
+  view.rerender(
+    <WorkspaceFilePreview
+      api={apiFor("New file contents")}
+      workspaceId={WS_ID}
+      path="/work/new.txt"
+    />,
+  );
+  expect(screen.queryByText("Old file contents")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
+  await screen.findByText("New file contents");
 });

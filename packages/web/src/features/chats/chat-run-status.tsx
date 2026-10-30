@@ -13,7 +13,7 @@
 // events (`features/runs/run-activity.ts`): the open tool and how long it has run, or how long
 // the model has not answered, and how long the run has been going. The times tick.
 
-import type { RunStatus, Thread } from "@deskmates/contracts";
+import { type RunStatus, type Thread, messageExcerpt } from "@deskmates/contracts";
 import {
   AlertTriangle,
   ChevronDown,
@@ -26,7 +26,6 @@ import {
 import { useId, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import type { RunView } from "../../api/types.js";
-import { Avatar } from "../../components/ui/avatar.js";
 import { Button } from "../../components/ui/button.js";
 import { formatTime } from "../../format.js";
 import type { MessageKey } from "../../i18n/catalogs.js";
@@ -138,11 +137,15 @@ const STATE_ICONS = {
   queued: Clock,
 } as const;
 
-/** A one-line excerpt of a message body for the trigger context. */
+/**
+ * A one-line excerpt of a message body for the trigger context: the same derivation as the chat
+ * list's preview (issue #16), with an ellipsis when it was cut.
+ */
 function excerpt(text: string, max = 80): string {
-  const flat = text.replace(/\s+/g, " ").trim();
-  const chars = Array.from(flat);
-  return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : flat;
+  const fits = messageExcerpt(text, max);
+  return fits === messageExcerpt(text, Number.POSITIVE_INFINITY)
+    ? fits
+    : `${messageExcerpt(text, max - 1)}…`;
 }
 
 export interface ChatRunStatusProps {
@@ -159,6 +162,8 @@ export interface ChatRunStatusProps {
   onRunUpdated: (run: RunView) => void;
   /** What each live run is doing now, by run id (issue #9); absent rows say only the status. */
   activity?: RunActivityMap;
+  /** Runs whose visible approval card already explains the waiting state. */
+  approvalRunIds?: ReadonlySet<string>;
 }
 
 export function ChatRunStatus(props: ChatRunStatusProps) {
@@ -226,8 +231,8 @@ export function ChatRunStatus(props: ChatRunStatusProps) {
         return t("chatRunStatus.trigger.welcome");
       case "manual":
         return t("chatRunStatus.trigger.manual");
-      default:
-        return run.triggerKind;
+      case "model_job":
+        return t("chatRunStatus.trigger.modelJob");
     }
   };
 
@@ -259,8 +264,16 @@ export function ChatRunStatus(props: ChatRunStatusProps) {
                 data-testid="typing"
                 data-state={group.state}
               >
-                <div className="chat-run-bot-summary">
-                  <Avatar name={name} />
+                <button
+                  type="button"
+                  className="chat-run-bot-summary"
+                  data-chat-disclosure
+                  aria-expanded={open}
+                  aria-controls={listId}
+                  aria-describedby={`${listId}-summary`}
+                  aria-label={t("chatRunStatus.toggleLabel", { name, count: group.runs.length })}
+                  onClick={() => toggle(group.botId)}
+                >
                   {Icon ? (
                     <span className="chat-run-bot-icon" aria-hidden="true">
                       <Icon size={14} />
@@ -272,14 +285,16 @@ export function ChatRunStatus(props: ChatRunStatusProps) {
                       <i />
                     </span>
                   )}
-                  <span className="muted chat-run-bot-text">
+                  <span id={`${listId}-summary`} className="muted chat-run-bot-text">
                     <span>
-                      {t.rich(SUMMARY_KEYS[group.state], {
-                        name,
-                        author: (text) => <span className="author bot">{text}</span>,
-                      })}
+                      {group.state === "approval" && props.approvalRunIds?.has(group.current.id)
+                        ? `${name} · ${t("chatRunStatus.details")}`
+                        : t.rich(SUMMARY_KEYS[group.state], {
+                            name,
+                            author: (text) => <span className="author bot">{text}</span>,
+                          })}
                     </span>
-                    {activity.map((text, index) => (
+                    {activity.slice(0, 1).map((text, index) => (
                       <span
                         key={text}
                         className="chat-run-bot-extra chat-run-bot-activity"
@@ -294,21 +309,8 @@ export function ChatRunStatus(props: ChatRunStatusProps) {
                       </span>
                     ))}
                   </span>
-                  <button
-                    type="button"
-                    className="chat-run-toggle"
-                    aria-expanded={open}
-                    aria-controls={listId}
-                    aria-label={t("chatRunStatus.toggleLabel", {
-                      name,
-                      count: group.runs.length,
-                    })}
-                    onClick={() => toggle(group.botId)}
-                  >
-                    {t("chatRunStatus.toggle", { count: group.runs.length })}
-                    <ChevronDown size={14} aria-hidden="true" />
-                  </button>
-                </div>
+                  <ChevronDown className="chat-run-chevron" size={14} aria-hidden="true" />
+                </button>
                 <div id={listId} className="chat-run-details" hidden={!open}>
                   <ul className="chat-run-list" aria-label={t("chatRunStatus.runsOf", { name })}>
                     {group.runs.map((run) => {
@@ -318,6 +320,13 @@ export function ChatRunStatus(props: ChatRunStatusProps) {
                       return (
                         <li key={run.id} className="chat-run-item" data-run-id={run.id}>
                           <div className="chat-run-item-facts">
+                            {doing(run)
+                              .slice(1)
+                              .map((text) => (
+                                <span key={text} className="muted small">
+                                  {text}
+                                </span>
+                              ))}
                             <span className={`status ${run.status}`}>{status}</span>
                             <span className="muted small">
                               {run.lane === "background"

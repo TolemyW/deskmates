@@ -4,7 +4,12 @@
 // Nothing here asks a human. One transaction decides; the unique index on current notes is the
 // guarantee that a fact never has two current values.
 
-import { type MemorySupersessionReason, compareRecency, memoryFact } from "@deskmates/contracts";
+import {
+  type MemorySupersessionReason,
+  compareRecency,
+  memoryFact,
+  memoryValuesEquivalent,
+} from "@deskmates/contracts";
 import { newId } from "../db/ids.js";
 import type { MemoryEntryStore, NewEntry, StoredEntry } from "./entries.js";
 
@@ -168,7 +173,7 @@ export function writeFact(
       return { kind: "current", entry, superseded: [current.id] };
     };
 
-    if (memoryFact(current.body).value === fact.value) {
+    if (memoryValuesEquivalent(current.body, input.body)) {
       if (current.trust === input.trust) return source(current);
       return input.trust === "trusted"
         ? replace("equivalent_higher_trust")

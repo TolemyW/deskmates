@@ -9,9 +9,10 @@ import { useEffect, useState } from "react";
 import type { AuthClient } from "../api/auth-client.js";
 import type { SessionFlows } from "../api/members-client.js";
 import { ApiError } from "../api/types.js";
+import { PasswordField } from "../components/password-field.js";
 import { Button } from "../components/ui/button.js";
 import { Input } from "../components/ui/input.js";
-import { PasswordField } from "../features/account/account-settings.js";
+import { formatDateTime } from "../format.js";
 import { useT } from "../i18n/i18n-provider.js";
 import { startSso } from "./start-sso.js";
 
@@ -22,7 +23,11 @@ import { startSso } from "./start-sso.js";
  * login name; an existing-account invitation is accepted from that account's own session; an SSO
  * invitation continues at the provider. The Gateway decides whether this browser may accept it.
  */
-export function InviteScreen({
+export function InviteScreen(props: Parameters<typeof InvitationForm>[0]) {
+  return <InvitationForm key={props.token} {...props} />;
+}
+
+function InvitationForm({
   flows,
   auth,
   token,
@@ -52,21 +57,35 @@ export function InviteScreen({
   const [signingIn, setSigningIn] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ field?: "username" | "password"; text: string }>();
+  const [readFailed, setReadFailed] = useState(false);
+  const [readRevision, setReadRevision] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: readRevision requests a local retry.
   useEffect(() => {
     let live = true;
+    setPreview(undefined);
+    setUnusable(undefined);
+    setReadFailed(false);
     flows
       .previewInvitation(token)
       .then((next) => live && setPreview(next))
       .catch((err) => {
         if (!live) return;
-        if (err instanceof ApiError && err.status === 410)
+        if (err instanceof ApiError && err.status === 410) {
           setUnusable(unusableReason(err.details.reason));
+        } else if (
+          !(
+            err instanceof ApiError &&
+            (err.status === 404 || err.status === 400 || err.status === 401)
+          )
+        ) {
+          setReadFailed(true);
+        }
         setPreview(null);
       });
     return () => {
       live = false;
     };
-  }, [flows, token]);
+  }, [flows, token, readRevision]);
   const clearSecrets = (): void => {
     setPassword("");
     setConfirm("");
@@ -146,6 +165,18 @@ export function InviteScreen({
         </div>
       </main>
     );
+  if (preview === null && readFailed)
+    return (
+      <main className="credential-screen">
+        <div className="credential-card">
+          <p role="alert">{t("app.invite.loadFailed")}</p>
+          <Button type="button" onClick={() => setReadRevision((value) => value + 1)}>
+            {t("app.invite.retry")}
+          </Button>
+          <a href="#/threads">{t("app.invite.goToSignIn")}</a>
+        </div>
+      </main>
+    );
   if (preview === null)
     return (
       <main className="credential-screen">
@@ -206,6 +237,7 @@ export function InviteScreen({
           <button
             type="button"
             className="link-button"
+            disabled={busy}
             onClick={() => {
               setSigningIn(false);
               setError(undefined);
@@ -231,7 +263,7 @@ export function InviteScreen({
         {preview.expiresAt ? (
           <small>
             {t("app.invite.expiresAt", {
-              when: new Date(preview.expiresAt).toLocaleString(),
+              when: formatDateTime(preview.expiresAt),
             })}
           </small>
         ) : null}
@@ -285,6 +317,7 @@ export function InviteScreen({
                 <button
                   type="button"
                   className="link-button"
+                  disabled={busy}
                   onClick={() => {
                     setSigningIn(true);
                     setError(undefined);
@@ -346,15 +379,21 @@ export function InviteScreen({
             variant="default"
             type="button"
             disabled={busy}
-            onClick={() =>
+            onClick={() => {
+              if (busy) return;
+              setBusy(true);
+              setError(undefined);
               void startSso(
                 flows,
                 preview.provider as SsoProviderView,
                 { purpose: "login", invitation: token },
                 loginCsrf,
-                (text) => setError({ text }),
-              )
-            }
+                (text) => {
+                  setError({ text });
+                  setBusy(false);
+                },
+              );
+            }}
           >
             {t("app.invite.continueWith", { provider: preview.provider.displayName })}
           </Button>

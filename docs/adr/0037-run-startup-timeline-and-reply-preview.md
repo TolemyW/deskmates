@@ -1,7 +1,7 @@
 # ADR-0037: Run startup timeline and streamed reply preview
 
 Date: 2026-10-14
-Status: Proposed (issue #108 stages 1 and 2; the owner has not yet confirmed the measurement and text-delta slice or its evidence gates). No live model or Docker measurement was run; persistent sidecar/query hosts (stage 4) and caching (stage 3) are out of scope.
+Status: Accepted (under owner delegation, 2026-10-17; issue #108 stages 1 and 2). The marks and previews are observations and change no prompt, summary order or retry owner (decision 8). Checked on acceptance: a private chat's timeline and reply preview reach only its person, like the rest of its run (AGENTS.md; `api/private-audience-routes.test.ts`). Stage 3 investigation is accepted under amendment 1; no product cache is enabled. Persistent sidecar/query hosts (stage 4) remain out of scope. The original implementation did not run live model or Docker measurement; amendment 1 records the later read-only observations and their limits.
 
 ## Context
 
@@ -55,7 +55,50 @@ The visible reply is not the model's raw text. The model ends its run with a fen
 | 2 | slow-start, slow-first-token, retry, resume, cancel and disconnect fixtures yield the waiting stage; missing marks are `observed: false` with null durations | `contracts/src/run-timeline.test.ts` | share of attempts with each stage not observed |
 | 3 | attempts carry start, session, sandbox warmth and retry count; the report groups by them | `contracts/src/run-timeline.test.ts`; `evals/latency-report.test.ts` | attempts per class |
 | 4 | marks carry wall time from their own process; the report prints the clock caveat | `evals/latency-report.test.ts` | none |
-| 5 | the route returns the timeline from the whole ledger (404 for an unknown run) under the same Member policy as the context route; the run detail renders every stage, "not observed" and the longest wait | `gateway/src/scheduler/run-timeline-marks.test.ts`; `gateway/src/api/permission-matrix.test.ts`; web `runs/run-timeline.test.tsx` | none |
+| 5 | the route returns the timeline from the whole ledger (404 for an unknown run) under the same Member policy as the context route; the run detail renders every stage, "not observed" and the longest wait | `gateway/src/scheduler/run-timeline-marks.test.ts`; `gateway/src/api/permission-matrix.test.ts`; `gateway/src/api/private-audience-routes.test.ts` (404 for anyone but a private chat's person); web `runs/run-timeline.test.tsx` | none |
 | 6 | the report reads a database read-only and prints p50/p95 per class, retry, failure and cache distributions | `evals/latency-report.test.ts` | e2e, TTFT and first-visible-text p50/p95 |
-| 7 | only the decoded `reply` string is posted, redacted, throttled, cumulative; the Gateway publishes without a ledger row and marks the first frame; the chat replaces the preview with the final message and drops it on end, park or cancel; stale seq ignored | `sidecar/src/reply-preview.test.ts`; `gateway/src/api/reply-preview-routes.test.ts`; web `chats/reply-preview.test.tsx` | time from first text to first visible preview |
+| 7 | only the decoded `reply` string is posted, redacted, throttled, cumulative; the Gateway publishes without a ledger row and marks the first frame; the chat replaces the preview with the final message and drops it on end, park or cancel; stale seq ignored | `sidecar/src/reply-preview.test.ts`; `gateway/src/api/reply-preview-routes.test.ts`; `gateway/src/api/private-audience-routes.test.ts` (a private chat's preview reaches only its person); web `chats/reply-preview.test.tsx` | time from first text to first visible preview |
 | 8 | a failing recorder or preview post leaves the run's outcome unchanged; no retry added | `sidecar/src/run-timeline.test.ts`; `sidecar/src/reply-preview.test.ts` | runs failed by observation (0) |
+
+## Amendment 1 (2026-10-19): investigate local construction and provider cache separately
+
+Status: Accepted under the owner's direction to finish the non-interactive work on
+issue #5 and the consolidated acceptance issue #33. This authorizes zero-token
+analysis of existing receipts and controlled local construction measurements;
+it does not enable a strategy knob or a persistent host.
+
+9. **Stage 3 starts with two separate measurements.** Local construction is the
+   CPU/file work that assembles a run's context; provider prompt caching is an
+   upstream usage fact. A local hash or an SDK session resume cannot establish
+   a provider cache hit. Report only `request_kind = 'messages'` for inference,
+   with model jobs separate from agent requests. Show missing cache fields and
+   their share. A missing cache-create count makes the total-input denominator
+   unknown even when the cache-read count is known. Compare two declared,
+   half-open windows and preserve fresh/resume, SDK-session, sandbox, retry and
+   frozen-configuration cohorts. Such windows are observational unless they
+   satisfy the paired protocol of measurement section 4.
+
+10. **A local cache must earn its complexity before implementation.** The
+    2026-10-19 investigation found sub-millisecond synthetic context CPU work,
+    346/412 ms median whole-sidecar pre-query spans in the two observed windows,
+    and a new process for every attempt. A process-local static cache therefore
+    cannot persist across attempts; sharing one needs a lifecycle/freshness
+    design. SOUL revision, guidance/build version, working-directory policy,
+    thread/group kind, enabled tools, desktop guidance and vision guidance can
+    all change the system prompt. Memory, diary, task identity and delivered
+    messages must stay current per run. No cache is selected from these
+    observations. A future implementation must show a material measured
+    reduction, byte-identical context on controlled inputs, and immediate
+    invalidation on every relevant version change.
+
+The result and unresolved context-reduction claim are recorded in
+[the Stage 3 receipt](../design/context-cache-investigation-2026-10-19.md).
+No new inference request was made for this amendment. ADR-0023 amendment 5's
+paired context-size/cache improvement gate remains pending.
+
+### Verification (amendment 1)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 9 | The zero-token reader opens SQLite read-only, excludes count-token requests, separates jobs, preserves NULL usage and empty populations, and reports hashed frozen-config cohorts in two windows | `evals/cache-analysis/report_test.py`; twice-read receipt `evals/cache-analysis/results-2026-10-19.json` | requests per cohort; NULL cache-read/cache-create share; positive-cache-read request share; complete-usage token-weighted share |
+| 10 | The actual context builder runs on synthetic files without a cache; dynamic notes refresh without changing the static hash and a SOUL revision changes it; whole pre-query time is labelled as an envelope, not isolated construction time | `evals/cache-analysis/context-construction.ts`; Stage 3 receipt | construction p50/p95; pre-query p50/p95; no context or policy change |

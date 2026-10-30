@@ -105,3 +105,41 @@ describe("EventSink batch retry", () => {
     expect(errors).toHaveLength(1);
   });
 });
+
+describe("EventSink acknowledgements (ADR-0029 decision 2)", () => {
+  it("hands every acknowledgement to onAck, which is how a live run hears of a drain", async () => {
+    const acks: unknown[] = [];
+    let drain = false;
+    const sink = new EventSink({
+      runId: "run-1" as RunId,
+      attempt: 1,
+      post: async (batch) => ({ stored: batch.length, ...(drain ? { drain: true as const } : {}) }),
+      onAck: (ack) => acks.push(ack),
+      redact: (payload) => payload,
+      now: () => new Date(0),
+      batchDelayMs: 60_000,
+    });
+    sink.emit("log", { n: 1 });
+    await sink.flush();
+    drain = true;
+    sink.emit("log", { n: 2 });
+    await sink.flush();
+    expect(acks).toEqual([{ stored: 1 }, { stored: 1, drain: true }]);
+  });
+
+  it("an older Gateway that acknowledges nothing is not a drain", async () => {
+    const acks: unknown[] = [];
+    const sink = new EventSink({
+      runId: "run-1" as RunId,
+      attempt: 1,
+      post: async () => undefined,
+      onAck: (ack) => acks.push(ack),
+      redact: (payload) => payload,
+      now: () => new Date(0),
+      batchDelayMs: 60_000,
+    });
+    sink.emit("log", { n: 1 });
+    await sink.flush();
+    expect(acks).toEqual([]);
+  });
+});

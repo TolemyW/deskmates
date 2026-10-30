@@ -16,15 +16,26 @@ function describeTask(task: DeliverableTask): string {
   return `- ${task.id}: ${task.title}.${schema}`;
 }
 
-/** Refusal text for the model: the Gateway's message plus each error on its own line. */
+/**
+ * Refusal text for the model: the Gateway's message, each error on its own line, the run's work
+ * directory and the Gateway's example of a valid call (issue #39 item 5), so the next call can be
+ * right without guessing the shape.
+ */
 export function deliveryRefusal(err: unknown, verb = "delivered"): string {
   const lines = [`The task was not ${verb}: ${err instanceof Error ? err.message : String(err)}`];
-  if (isDeskmatesError(err) && Array.isArray(err.details.errors))
-    lines.push(...err.details.errors.map((e) => `- ${String(e)}`));
+  if (!isDeskmatesError(err)) return lines.join("\n");
+  const { errors, workDir, example } = err.details;
+  if (Array.isArray(errors)) lines.push(...errors.map((e) => `- ${String(e)}`));
+  if (typeof workDir === "string")
+    lines.push(`Your work directory is ${workDir}; relative paths are resolved against it.`);
+  if (example !== undefined && example !== null)
+    lines.push(`Example of a valid call: ${JSON.stringify(example)}`);
   return lines.join("\n");
 }
 
 const PATH = z.string().min(1).max(4096);
+const PATH_RULE =
+  "Paths: a file under /work/ or /home/<you>/; a relative path is resolved against your work directory; /tmp, directories and URLs are refused.";
 
 // biome-ignore lint/suspicious/noExplicitAny: the SDK erases schema generics in its tool registry
 export function taskTools(ctx: ThreadToolsContext): SdkMcpToolDefinition<any>[] {
@@ -35,13 +46,17 @@ export function taskTools(ctx: ThreadToolsContext): SdkMcpToolDefinition<any>[] 
     ctx.tool(
       "task_deliver",
       [
-        "Formally deliver a task you were given: a short summary, the result files (label and path under /work/ or a /home/<bot>/ directory of this workspace) and, when the task has an output schema, the structured output. The Gateway verifies every file in the workspace and publishes verified files to Files; a missing or unreadable file refuses the whole delivery. List anything not finished in `outstanding`: then the delivery is partial and the task stays open. A task whose result is not a file needs no artifact. Intermediate drafts are not deliveries: use task_checkpoint for progress. A human accepts; you cannot. If the Gateway refuses, fix what it names and call again.",
+        "Formally deliver a task you were given: a short summary, the result files (label and path) and, when the task has an output schema, the structured output. The Gateway verifies every file in the workspace and publishes verified files to Files; a missing or unreadable file refuses the whole delivery. List anything not finished in `outstanding`: then the delivery is partial and the task stays open. A task whose result is not a file needs no artifact. Intermediate drafts are not deliveries: use task_checkpoint for progress. A human accepts; you cannot. If the Gateway refuses, fix what it names and call again.",
+        "Required: taskId and summary; output too when the task lists an output schema; artifacts only for file results.",
+        `${PATH_RULE} Put a commit hash or URL in the summary.`,
         "Tasks you may deliver:",
         ...tasks.map(describeTask),
       ].join("\n"),
       {
         taskId: z.string().min(1).max(200),
-        summary: z.string().min(1).max(2000),
+        // Required by the Gateway; optional here so a call without it gets the Gateway's refusal
+        // with an example of a valid call instead of a bare schema error (issue #39 item 5).
+        summary: z.string().max(2000).optional(),
         artifacts: z
           .array(z.object({ label: z.string().min(1).max(200), path: PATH }))
           .max(50)
@@ -55,7 +70,7 @@ export function taskTools(ctx: ThreadToolsContext): SdkMcpToolDefinition<any>[] 
           const scopeVersion = scopeOf(args.taskId);
           const { task, delivery } = await ctx.client.deliverTask({
             taskId: args.taskId,
-            summary: args.summary,
+            summary: args.summary ?? "",
             artifacts,
             ...(args.outstanding?.length ? { outstanding: args.outstanding } : {}),
             ...(scopeVersion === undefined ? {} : { scopeVersion }),
@@ -91,7 +106,11 @@ export function taskTools(ctx: ThreadToolsContext): SdkMcpToolDefinition<any>[] 
     ),
     ctx.tool(
       "task_checkpoint",
-      "Record durable progress on a task you were given, after each completed unit and before long steps: the units you completed with their outcome and evidence paths, and what is still outstanding. It changes no task state and publishes nothing; the next wake or continuation shows the latest checkpoint.",
+      [
+        "Record durable progress on a task you were given, after each completed unit and before long steps: the units you completed with their outcome and evidence, and what is still outstanding. It changes no task state and publishes nothing; the next wake or continuation shows the latest checkpoint.",
+        "Required: taskId and completed (each unit with unit and outcome; evidence optional).",
+        "Evidence: a file path (under /work/ or /home/<you>/; a relative path is resolved against your work directory; /tmp is refused), a git commit hash or an http(s) URL.",
+      ].join("\n"),
       {
         taskId: z.string().min(1).max(200),
         completed: z
@@ -108,8 +127,10 @@ export function taskTools(ctx: ThreadToolsContext): SdkMcpToolDefinition<any>[] 
       },
       async (args) => {
         try {
+          const scopeVersion = scopeOf(args.taskId);
           const { checkpoint } = await ctx.client.checkpointTask({
             taskId: args.taskId,
+            ...(scopeVersion === undefined ? {} : { scopeVersion }),
             completed: args.completed.map((u) => ({ ...u, evidence: u.evidence ?? [] })),
             ...(args.outstanding ? { outstanding: args.outstanding } : {}),
             ...(args.note === undefined ? {} : { note: args.note }),

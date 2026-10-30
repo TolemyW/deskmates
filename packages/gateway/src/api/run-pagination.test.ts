@@ -64,6 +64,19 @@ async function get(url: string) {
 }
 
 describe("run pagination (#113 R)", () => {
+  it("reports latest user work even after a newer failed internal cron job", async () => {
+    const [work] = seedRuns(1);
+    const [maintenance] = seedRuns(1, { config: { runType: "memory_recheck" }, status: "failed" });
+    sandbox.deskmates.ctx.db
+      .prepare(
+        "UPDATE runs SET created_at = '2026-10-20T12:00:00Z', trigger_kind = 'cron' WHERE id = ?",
+      )
+      .run(maintenance);
+    const latest = (await get(`/api/runs/latest-by-bot?workspaceId=${workspaceId}`)).json();
+    expect(latest.runs.map((run: { id: string }) => run.id)).toEqual([work]);
+    const history = (await get(`/api/runs?botId=${botId}`)).json();
+    expect(history.runs.map((run: { id: string }) => run.id)).toContain(maintenance);
+  });
   it("pages a thread's runs newest first across three pages with a stable tie-breaker", async () => {
     const ids = seedRuns(45);
     const seen: string[] = [];

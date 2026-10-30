@@ -112,6 +112,7 @@ describe.skipIf(!available)("M3 workspace file download (real image)", () => {
 
   it("reports a workspace with no running container and does not start one", async () => {
     const created = await stack.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+      defaultBot: false,
       name: "m3-file-download-stopped",
       egressAllowlist: [],
     });

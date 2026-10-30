@@ -3,7 +3,7 @@
 Date: 2026-09-29
 Status: Accepted (product owner, 2026-10-11; download, the Files collection and the rich-preview policy are accepted). Originally proposed from the owner's 2026-09-29 note "先做下载器"; A1 specifies the original bounded text preview, A2 the collection and A3 supersedes the original transfer and preview limits.
 Builds on: ADR-0004 (the workspace is the trust boundary), ADR-0006 (operator routes on the operator listener)
-Amendment A2 (workspace Files collection, issue #27 phase B): accepted by the owner on 2026-10-11. Amendment A3 (issues #44 and #45) is accepted design. Amendment A5 (issue #52, authenticated uploads) is owner-decided: its upload roles and its absence of a per-file size cap are the owner's 2026-10-13 decisions; the chat composer as the primary upload path with drag-and-drop and paste, structured attachments shown as cards, deletion by any Admin, no server-side scanning and the 24-hour resumable-session expiry are the owner's 2026-10-14 decisions (decisions 31, 32, 34 and 41 to 43). Who may cancel a receiving session and the optional workspace quota remain engineering design. Amendment A6 (issue #45, preview viewing controls and entry points) is proposed engineering design within A3's accepted policy.
+Amendment A2 (workspace Files collection, issue #27 phase B): accepted by the owner on 2026-10-11. Amendment A3 (issues #44 and #45) is accepted design. Amendment A5 (issue #52, authenticated uploads) is owner-decided: its upload roles and its absence of a per-file size cap are the owner's 2026-10-13 decisions; the chat composer as the primary upload path with drag-and-drop and paste, structured attachments shown as cards, deletion by any Admin, no server-side scanning and the 24-hour resumable-session expiry are the owner's 2026-10-14 decisions (decisions 31, 32, 34 and 41 to 43). Who may cancel a receiving session (the uploader, an Admin or an Owner) and the optional workspace quota (off unless configured) were engineering design and are Accepted under owner delegation (2026-10-17). Amendment A4 (issue #74, verified formal results and human inputs) was proposed from the owner-confirmed contract and is Accepted under owner delegation (2026-10-17). Amendment A6 (issue #45, preview viewing controls and entry points) was proposed engineering design within A3's accepted policy and is Accepted under owner delegation (2026-10-17); its desktop and 390 px visual checks remain pending. Amendment A7 (issue #16, chat attachments and Files link both ways) is owner-specified (issue text, 2026-10-17); decisions 44 and 46, the engineering parts, are Accepted under owner delegation (2026-10-17): decision 46's redaction of other people's private-chat references applies AGENTS.md and ADR-0022 amendment 6 for every caller, the root and the operator credential included, and decision 44's unlisted-file panel shows a path the collection does not list without publishing it and offers only the download decision 1 already allows.
 
 ## Context
 
@@ -67,8 +67,14 @@ The Gateway streams a full download range by range and waits for downstream dema
 the next range; cancellation stops further reads. The browser starts a same-origin attachment
 download instead of first building a Blob. A single file download is limited to 1 GiB. A range
 preview may inspect a file larger than that limit, but one preview identity may read at most 64 MiB
-over at most 64 requests and expires after the preview timeout. The Gateway and sidecar never hold
-the whole file merely to transfer it.
+over at most 64 requests and expires after the preview timeout. A preview identity is keyed by the
+workspace and the caller, so no caller spends another's budget, and one caller holds at most 64
+live preview identities in one workspace. The client opens a fresh identity per preview, so at
+that cap a new identity evicts the caller's identity there that read its file to the end, or else
+the one idle longest; it is refused as `rate_limited` only while every held identity has a range
+read in flight. The cap bounds a caller's concurrent previews and the Gateway's preview state, not
+the bytes a caller previews over time (issue #61 L2, 2026-10-19). The Gateway and sidecar never
+hold the whole file merely to transfer it.
 
 18. **Type-specific preview remains untrusted.** Text, Markdown, CSV and TSV may show a bounded
 prefix with a visible truncation marker. Markdown uses the React-element renderer and keeps raw
@@ -94,7 +100,7 @@ has no `allow-same-origin`, scripts, forms or navigation. A document policy equi
 `sandbox; default-src 'none'` disables every network fetch and access to app credentials, storage,
 the parent or the operator API. Source and download remain available.
 
-### Amendment A4: Files lists verified formal results and human inputs (2026-10-13, proposed from the owner-confirmed contract of issue #74)
+### Amendment A4: Files lists verified formal results and human inputs (2026-10-13, proposed from the owner-confirmed contract of issue #74; accepted under owner delegation 2026-10-17)
 
 The owner confirmed on 2026-10-13 that Files is for formally delivered Bot results: intermediate
 drafts, checkpoints and stage outputs stay in their chat, and naming or attaching a path must not
@@ -204,8 +210,8 @@ would go past that size, and completes only when the received bytes equal the de
 operator may set `FILE_UPLOAD_WORKSPACE_QUOTA_BYTES`, which is unset by default, so no quota
 applies. When it is set, the sum of declared sizes of a workspace's receiving and completed
 uploads may not exceed it, and the refusal is `payload_too_large` with
-`reason: "workspace_upload_quota"` and the configured number. This disclosed quota is proposed,
-not an owner decision. A full disk in the container (`ENOSPC`, `EDQUOT`) truncates the partial
+`reason: "workspace_upload_quota"` and the configured number. This disclosed quota was proposed,
+not an owner decision, and is accepted under owner delegation (2026-10-17) as an opt-in bound. A full disk in the container (`ENOSPC`, `EDQUOT`) truncates the partial
 file back to its previous length and answers `storage_exhausted` (HTTP 507). The session stays
 resumable. Transport constraint: one part is at most 4 MiB
 (`WORKSPACE_FILE_UPLOAD_PART_BYTES`), and that is the Gateway's body limit for the part route. A
@@ -327,7 +333,7 @@ files (ADR-0004).
 | 43 (amendment A5) | An Admin deletes another person's upload: the command gets `remove` with the path, the row is deleted, one `file.delete` event, Files drops it; a Member gets 403; a second delete, a receiving upload and a stopped workspace are refused; the command refuses paths outside `/work/uploads/<date>/`, links and directories on a real filesystem | T1 `file-upload-routes.test.ts` ("Admin deletes"); T0 sidecar `file-write.test.ts` ("remove"); T0 Web `features/files/files.test.tsx` ("Admin deletes an upload") | deleted uploads (audit) |
 | 28 to 32 end to end | A file uploaded through the routes into a real workspace image downloads byte-identical. A planted `uploads` symbolic link into `/profile` is refused | T2 `acceptance/m4-file-upload.container.test.ts` (needs a workspace image with this sidecar) | none |
 
-### Amendment A6: preview viewing controls and every file-link entry point (2026-10-14, proposed; issue #45)
+### Amendment A6: preview viewing controls and every file-link entry point (2026-10-14, proposed; accepted under owner delegation 2026-10-17; issue #45)
 
 Amendment A3 settled what may be rendered and how many bytes a preview may read. Issue #45 also
 asks for a paged PDF viewer with zoom, images that fit the panel with zoom, a Markdown source
@@ -385,6 +391,56 @@ discards the read bytes, the view choice and any Blob URL.
 | 39 (amendment A6) | YAML, Python and XML preview as text; XML is not parsed; AVIF previews as a Blob image; DOCX, XLSX, ZIP and EXE stay download-only | T0 Web `features/files/workspace-file-preview.test.tsx` ("preview type policy") | preview failures by type (reported) |
 | 40 (amendment A6) | A published file in a task's delivery history offers Preview and Download, which open the drawer; a chat path opens the drawer without expanding the message, and closing returns focus to the opener | T0 Web `features/tasks/tasks.test.tsx` ("delivery preview"); `features/files/workspace-file-preview.test.tsx` ("returns focus"); desktop and 390 px visual check | Manual Testbox acceptance pending |
 
+### Amendment A7: chat deliveries and Files link both ways (2026-10-17, owner-specified in issue #16)
+
+The owner's acceptance walk of the Files preview matrix could not get from a chat attachment to
+its file without typing the path, and Files gave no way back to the chat that sent a file. Issue
+#16 (owner-written, 2026-10-17) specifies both links. A7 changes no route, no path rule, no byte
+budget and no source of the collection: decision 22's sources stay, so a bot's attachment in chat
+is still not published by being attached. Decisions 1 to 43 are unchanged except where a decision
+below adds a control or a field.
+
+44. **Show in Files.** Decision 42's attachment card gains a third control, Show in Files, next to
+Preview and Download. It opens `#/resources/files?workspace=<id>&path=<path>`: Files switches to
+that workspace when it is one of the caller's, searches the file's directory (the path up to its
+last `/`, when it fits decision 13's 200-character search) so the list shows the file's
+neighbours, and opens the detail panel of the item whose path is exactly the linked path. A
+linked path the collection does not list (a bot's chat delivery, decision 22) opens a detail panel
+with the location, the type, a note that the file is not in the Files list and why, and decision
+40's preview and download of the current bytes. It never adds the path to the collection.
+
+45. **Sent in chat.** A collection item carries `sentInChat` (thread id and title, message id,
+author kind, time): the newest message whose `attachments` name the item's exact path, from a
+person or a bot, in a thread the caller may read. The Gateway computes it with one query over
+`thread_messages.attachments_json` for the paths of the returned page only, reading at most
+decision 13's scan limit of the newest messages that carry attachments. There is no new table and
+no migration. The Files list row and grid tile of such an item show a "Sent in chat" link to that
+message (`#/threads/<id>?message=<id>`).
+
+46. **Private chats stay private in Files.** A thread the caller may read is a shared chat, a bus
+thread unless the caller is a Guest, or the caller's own private chat (ADR-0022 amendment 6). No
+other person's private chat is ever named by `sentInChat`, whatever the caller's role: a workspace
+Owner, the root account and the operator credential (which is no person) included. The same rule
+now applies to decision 22's `message_attachment` references: a reference from another person's
+private chat keeps its kind, time and label but carries no thread id, thread title or message id.
+The file itself stays listed, since it lives in the workspace's shared filesystem (ADR-0004).
+
+The same issue derives every chat preview from one pure function, `messageExcerpt` in
+`contracts`: a leading code fence line and its closing fence (and the one-line form) are removed,
+whitespace collapses and the cut lands on a grapheme boundary. The Gateway applies it to a bounded
+prefix of the stored body for the chat list's `lastMessage` and the private-chat handoff excerpts
+(ADR-0024), and the web uses it for the previews it builds itself. Stored bodies are not
+rewritten. This changes no file rule and is recorded here only because it ships with A7.
+
+### Verification (amendment A7)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 44 (amendment A7) | A workspace-path attachment card links `#/resources/files` with its workspace and path; Files opens with the directory as its search and the exact item selected; an unlisted path opens a panel that says it is not listed and offers Download | T0 Web `features/chats/attachment-cards.test.tsx` ("links the card"); `features/files/files.test.tsx` ("opens a linked file", "states honestly"); `features/files/route.test.ts` | none |
+| 45 (amendment A7) | A listed file attached by a bot message names that message; the list row and grid tile link `#/threads/<id>?message=<id>`; an item no readable message attached has no link | T1 `packages/gateway/src/api/file-collection-routes.test.ts` ("links the message that sent a file"); T0 Web `features/files/files.test.tsx` ("links a file sent in chat") | none |
+| 46 (amendment A7) | A file attached in Pat's private chat links that chat for Pat only; for the workspace Owner and the operator credential the file is listed, `sentInChat` is absent, its reference carries no thread or message id, and neither id appears in the response | T1 `file-collection-routes.test.ts` ("links the message that sent a file in chat, and names a private chat only to its person") | none |
+| Excerpt (amendment A7) | A one-line fence, a fence on its own line, no fence and a CJK or emoji cut give the expected preview; a fenced last message lists as its object text while the stored body is unchanged; handoff excerpts use the same rule | T0 `packages/contracts/src/message-excerpt.test.ts`; T1 `api/thread-list-routes.test.ts` ("previews a fenced last message"); T1 `threads/private-handoffs.test.ts` ("derives handoff excerpts") | none |
+
 ## Alternatives
 
 - Serve files through a static route on the workspace container: rejected; it would need a listener in the workspace and would expose the profile volume by default.
@@ -441,3 +497,41 @@ This section is a proposal for review. None of the upload items is implemented, 
 
 Verification clarification (2026-10-04): the preview row is labeled decision 7
 (amendment A1), matching its numbered decision; no acceptance result changed.
+
+### Amendment A8: styled static HTML reading on the operator address (2026-10-22)
+
+Status: accepted by the owner on 2026-10-22 while reporting unstyled previews and an app URL
+that could not be opened. The owner has no domain/certificate to configure and selected static
+HTML reading on the existing Deskmates address first. This refines decision 21's presentation;
+it does not allow scripts, an active sandbox capability, automatic network access or operator
+API authority in generated HTML.
+
+47. **Preserve embedded styling in a static frame.** Parse the bounded HTML using parse5 without
+    a live DOM; retain document/body attributes, embedded styles, local anchors and embedded
+    raster images. Remove active markup, refresh/base directives, event handlers and external
+    resource/navigation attributes before rendering. The iframe keeps `sandbox=""` and
+    `referrerPolicy="no-referrer"`. Its first policy denies everything except inline styles
+    and data images: `sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:;
+    base-uri 'none'; form-action 'none'`. External stylesheet imports, CSS URLs, fonts, scripts,
+    frames and forms remain blocked. The original source/download is unchanged. At most 100
+    external HTTP(S) source references without credentials are exposed as parent-owned links
+    with noopener, noreferrer and no-referrer, requiring a deliberate click; file HTML itself
+    cannot navigate or open a window. Local document anchors remain usable.
+
+48. **A report has a full-page reading address on the existing operator origin.**
+    `#/resources/files?workspace=<id>&path=<path>&view=read` opens a static HTML reader using the
+    authenticated range API, the same 4 MiB HTML bound, truncation disclosure and offline frame.
+    Switching Rendered/Source rereads nothing; Download saves the original. The chat file card
+    and preview toolbar offer Open full page in a new tab. Fit width and Desktop width (1120px)
+    let the person read responsive reports or scroll a wide layout without squeezing its table.
+    The reader fetches no app endpoint, needs no wildcard DNS or certificate beyond the current
+    operator site, and retains all existing workspace role/path checks. This is a URL for
+    current file bytes, not anonymous sharing or a frozen publication. Interactive apps remain
+    on ADR-0035's separate origins; their nip.io certificate issue is not waived or bypassed.
+
+### Verification (amendment A8)
+
+| Decision | Concrete meaning | Test | Metric |
+| --- | --- | --- | --- |
+| 47 | inline/body styling and anchors survive; scripts, refresh/base, external resource attributes and SVG mutation do not; external source links are explicit and credential-free; sandbox and CSP remain enforced | T0 `web/src/features/files/static-html.test.ts`, `html-reader.test.tsx`, `workspace-file-preview.test.tsx`; private lab browser security/visual check "Static HTML reading — 2026-10-22" | automatic external requests, script execution or parent access from preview = 0 |
+| 48 | reader address parses under the existing origin; bounded authorized reads, unchanged source switching and errors; full-page entry from card/drawer; responsive and desktop widths | T0 `web/src/features/files/route.test.ts`, `html-reader.test.tsx`, `workspace-file-preview.test.tsx`; same private lab record | report-reading flows requiring app-domain DNS/trust = 0; mobile overflow outside preview = 0 |

@@ -3,8 +3,10 @@
 
 import {
   CONNECTOR_TOOL_NAMES,
+  DEFAULT_BOT_TOOL_NAMES,
   INTEGRATION_TOOL_NAMES,
   type SidecarToolName,
+  VAULT_TOOL_NAMES,
 } from "@deskmates/contracts";
 
 /** ADR-0040 decision 2: a tool per operation the run config names. */
@@ -14,6 +16,8 @@ function operationTools(stamp: unknown): SidecarToolName[] {
   return [
     ...(ops.look ? (["image_describe"] as const) : []),
     ...(ops.asr ? (["audio_transcribe"] as const) : []),
+    // ADR-0040 amendment B, decision 17.
+    ...(ops.image_generation ? (["image_generate"] as const) : []),
   ];
 }
 
@@ -27,7 +31,10 @@ function operationTools(stamp: unknown): SidecarToolName[] {
  * `task_deliver` comes only with an open task linked to the run or its thread (ADR-0021
  * amendment 2), so a run with no task to deliver sees no new tool. `app_publish` comes with a
  * run whose config carries `appShareVersion: 1`, stamped only where app sharing is configured
- * (ADR-0035 decision 1).
+ * (ADR-0035 decision 1). `run_stats` comes only with a run that froze `runStats: "self-v1"`
+ * (ADR-0050 decision 7), so a bot without the setting is not told the tool exists.
+ * `bot_create`, `bot_update` and `group_create` come only with a run in a thread that froze
+ * `workspaceAssistant: "assistant-v1"`: a run of the workspace's default bot (ADR-0051 decision 4).
  */
 export function sidecarToolsFor(
   hasThread: boolean,
@@ -35,6 +42,9 @@ export function sidecarToolsFor(
   hasConnectors = false,
   hasIntegrationConnections = false,
   hasDeliverableTasks = false,
+  hasVault = false,
+  runStats = false,
+  assistant = false,
 ): SidecarToolName[] {
   return [
     ...(hasThread
@@ -51,5 +61,11 @@ export function sidecarToolsFor(
     ...(hasDeliverableTasks ? (["task_deliver"] as const) : []),
     ...(config.appShareVersion === 1 ? (["app_publish"] as const) : []),
     ...operationTools(config.operations),
+    // ADR-0049 decision 12: offered exactly when the run row froze `webSearch: "on"`.
+    ...(config.webSearch === "on" ? (["web_search"] as const) : []),
+    // ADR-0045 decision 1: offered where the workspace Vault has a usable entry.
+    ...(hasVault ? VAULT_TOOL_NAMES : []),
+    ...(runStats ? (["run_stats"] as const) : []),
+    ...(assistant && hasThread ? DEFAULT_BOT_TOOL_NAMES : []),
   ];
 }

@@ -304,6 +304,7 @@ describe("defer and resume (ADR-0002 amendment 2, '2, resume')", () => {
         targetOrigin: ACTION.targetOrigin,
         argumentPattern: ACTION.argumentPattern,
       },
+      approvalKind: "tool",
     });
     expect("currentOrigin" in resumed.trigger).toBe(false);
     expect(resumed.tools).toEqual(
@@ -374,6 +375,191 @@ describe("defer and resume (ADR-0002 amendment 2, '2, resume')", () => {
         targetOrigin: ACTION.targetOrigin,
         argumentPattern: ACTION.argumentPattern,
       },
+      approvalKind: "tool",
+    });
+  });
+
+  it("marks every approval the process parked on as deferred (issue #62 M8)", async () => {
+    // The OpenAI runtime gates one turn's calls in parallel, so one process can park on two.
+    const { thread } = await h.seed();
+    h.provider.onRun(async (req, gw) => {
+      await gw.post("approvals", requestBody("apr-one", "call_a"));
+      await gw.post("approvals", requestBody("apr-two", "call_b"));
+      await gw.post("ended", {
+        type: "run_ended",
+        runId: req.runId,
+        outcome: "deferred",
+        sdkSessionId: "sess-parked",
+        usage: [],
+        pendingApprovalId: "apr-two",
+        pendingApprovalIds: ["apr-one", "apr-two"],
+        pendingToolUseId: "call_b",
+      });
+    });
+    const run = await wake(h, thread.id, "push both");
+    await waitFor(
+      () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "waiting_approval",
+      2000,
+      "parked",
+    );
+    for (const id of ["apr-one", "apr-two"]) {
+      expect(h.app.deskmates.ctx.approvals.mustGet(id as Approval["id"]).waitMode).toBe("deferred");
+    }
+    expect(h.app.deskmates.ctx.runs.mustGet(run.id).resumePayload).toMatchObject({
+      approvalId: "apr-two",
+      approvalIds: ["apr-one", "apr-two"],
+      toolUseId: "call_b",
+    });
+  });
+
+  describe("two parked approvals, decided one at a time (issue #62 M8)", () => {
+    const parkOn = (gw: FakeSidecarClient, req: StartRunRequest, ids: string[], named: string) =>
+      gw.post("ended", {
+        type: "run_ended",
+        runId: req.runId,
+        outcome: "deferred",
+        sdkSessionId: "sess-parked",
+        usage: [],
+        pendingApprovalId: named,
+        pendingApprovalIds: ids,
+        pendingToolUseId: named === "apr-one" ? "call_a" : "call_b",
+      });
+    const decisionOf = (approvalId: string, toolUseId: string, decision: string) => ({
+      approvalId,
+      decision,
+      toolUseId,
+      approvalKind: "tool",
+      deferredAction: {
+        toolName: ACTION.toolName,
+        targetOrigin: ACTION.targetOrigin,
+        argumentPattern: ACTION.argumentPattern,
+      },
+    });
+
+    it("the approval the process did not name resumes the run; a second decision during the resumed process waits for its next park", async () => {
+      const { thread } = await h.seed();
+      const requests: StartRunRequest[] = [];
+      const secondDecided = deferred();
+      h.provider.onRun(async (req, gw) => {
+        requests.push(req);
+        if (req.attempt === 1) {
+          await gw.post("approvals", requestBody("apr-one", "call_a"));
+          await gw.post("approvals", requestBody("apr-two", "call_b"));
+          await parkOn(gw, req, ["apr-one", "apr-two"], "apr-two");
+          return;
+        }
+        if (req.attempt === 2) {
+          // call_a ran on its decision; call_b has none in this process, so it asks afresh.
+          await secondDecided.promise;
+          await gw.post("approvals", requestBody("apr-three", "call_b"));
+          await parkOn(gw, req, ["apr-three"], "apr-three");
+          return;
+        }
+        await gw.post("ended", {
+          type: "run_ended",
+          runId: req.runId,
+          outcome: "completed",
+          summary: summary("pushed both"),
+          usage: [],
+        });
+      });
+
+      const run = await wake(h, thread.id, "push both");
+      await waitFor(
+        () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "waiting_approval",
+        2000,
+        "parked",
+      );
+      // A person decides the call the process did not name: before, nothing resumed.
+      await h.api("POST", "/api/approvals/apr-one/decide", { decision: "allow_once" });
+      await waitFor(() => requests.length === 2, 2000, "resume on the other approval");
+      expect((requests[1] as StartRunRequest).trigger).toEqual({
+        kind: "approval",
+        ...decisionOf("apr-one", "call_a", "allow_once"),
+        decidedApprovals: [decisionOf("apr-one", "call_a", "allow_once")],
+      });
+
+      // The second decision lands while the resumed process runs: no second process.
+      await h.api("POST", "/api/approvals/apr-two/decide", { decision: "deny" });
+      h.app.deskmates.scheduler.tick();
+      h.app.deskmates.scheduler.tick();
+      expect(requests).toHaveLength(2);
+      expect(h.app.deskmates.ctx.runs.mustGet(run.id)).toMatchObject({
+        status: "running",
+        attempt: 2,
+      });
+      secondDecided.resolve();
+
+      // The process parks call_b again; the decision already on its first card resumes it.
+      await waitFor(
+        () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "succeeded",
+        3000,
+        "resumed end",
+      );
+      expect(requests).toHaveLength(3);
+      expect((requests[2] as StartRunRequest).attempt).toBe(3);
+      expect((requests[2] as StartRunRequest).trigger).toEqual({
+        kind: "approval",
+        ...decisionOf("apr-two", "call_b", "deny"),
+        decidedApprovals: [decisionOf("apr-two", "call_b", "deny")],
+      });
+      const resumed = h.app.deskmates.ctx.events
+        .list(run.id)
+        .filter((e) => e.kind === "approval" && e.payload.phase === "resumed")
+        .map((e) => [e.payload.approvalId, e.payload.attempt]);
+      expect(resumed).toEqual([
+        ["apr-one", 2],
+        ["apr-two", 3],
+      ]);
+    });
+
+    it("both decided before the scheduler's pass: one resume hands over both, the named one first", async () => {
+      const { thread } = await h.seed();
+      const requests: StartRunRequest[] = [];
+      h.provider.onRun(async (req, gw) => {
+        requests.push(req);
+        if (req.attempt === 1) {
+          await gw.post("approvals", requestBody("apr-one", "call_a"));
+          await gw.post("approvals", requestBody("apr-two", "call_b"));
+          await parkOn(gw, req, ["apr-one", "apr-two"], "apr-two");
+          return;
+        }
+        await gw.post("ended", {
+          type: "run_ended",
+          runId: req.runId,
+          outcome: "completed",
+          summary: summary("pushed both"),
+          usage: [],
+        });
+      });
+      const run = await wake(h, thread.id, "push both");
+      await waitFor(
+        () => h.app.deskmates.ctx.runs.mustGet(run.id).status === "waiting_approval",
+        2000,
+        "parked",
+      );
+      const parked = h.app.deskmates.ctx.runs.mustGet(run.id);
+      // On the store, so no route kicks the scheduler between the two decisions.
+      const { broker } = h.app.deskmates.ctx;
+      broker.decide("apr-one" as Approval["id"], "deny", "human:operator");
+      broker.decide("apr-two" as Approval["id"], "allow_once", "human:operator");
+      h.app.deskmates.scheduler.tick();
+      h.app.deskmates.scheduler.tick();
+      await h.app.deskmates.scheduler.drain();
+
+      expect(requests).toHaveLength(2);
+      expect((requests[1] as StartRunRequest).trigger).toEqual({
+        kind: "approval",
+        ...decisionOf("apr-two", "call_b", "allow_once"),
+        decidedApprovals: [
+          decisionOf("apr-two", "call_b", "allow_once"),
+          decisionOf("apr-one", "call_a", "deny"),
+        ],
+      });
+      expect(h.app.deskmates.ctx.runs.mustGet(run.id).status).toBe("succeeded");
+      // A snapshot taken before the resume never starts another process.
+      expect(() => h.app.deskmates.lifecycle.start(parked)).toThrow(/resumed already/);
+      expect(h.app.deskmates.ctx.runs.mustGet(run.id).attempt).toBe(2);
     });
   });
 

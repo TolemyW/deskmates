@@ -6,6 +6,13 @@ import { useNavigationWidth } from "./navigation-width.js";
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+});
+it("starts compact to reserve space for the conversation", () => {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 850 });
+  const { result } = renderHook(useNavigationWidth);
+  expect(result.current.width).toBe(64);
+  expect(result.current.compact).toBe(true);
 });
 it("snaps with hysteresis and restores the expanded width through keyboard and reload", () => {
   localStorage.setItem("deskmates.panel.navigation", "260");
@@ -55,4 +62,28 @@ it("collapses through repeated ArrowLeft presses and expands again without losin
   fireEvent.keyDown(handle, { key: "ArrowRight" });
   expect(handle.getAttribute("aria-valuenow")).toBe("200");
   expect(document.activeElement).toBe(handle);
+});
+
+it("keeps labels at an expanded width on narrow desktops and restores the preferred width", () => {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+  localStorage.setItem("deskmates.panel.navigation", "280");
+  localStorage.setItem("deskmates.navigation.compact", "false");
+  const { result } = renderHook(useNavigationWidth);
+  expect(result.current.width).toBe(280);
+  act(() => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 850 });
+    window.dispatchEvent(new Event("resize"));
+  });
+  expect(result.current.width).toBe(230);
+  expect(result.current.compact).toBe(false);
+  expect(localStorage.getItem("deskmates.navigation.compact")).toBe("false");
+  act(() => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    window.dispatchEvent(new Event("resize"));
+  });
+  expect(result.current.width).toBe(280);
+  act(() => result.current.toggle());
+  expect(result.current.width).toBe(64);
+  act(() => result.current.toggle());
+  expect(result.current.width).toBe(280);
 });

@@ -124,9 +124,11 @@ describe("Files screen", () => {
     expect(within(table).getByText("report.md")).toBeTruthy();
     expect(within(table).getByText("Unknown")).toBeTruthy();
     expect(within(table).getByText("Bot-created")).toBeTruthy();
-    expect(
-      screen.getByText(/Files lists formally delivered bot results the server verified/),
-    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "What appears here" }));
+    expect(await screen.findByRole("tooltip")).toHaveProperty(
+      "textContent",
+      expect.stringContaining("Files lists formally delivered"),
+    );
     expect(listWorkspaceFiles).toHaveBeenCalledWith(WS_ID, {
       offset: 0,
       limit: 25,
@@ -162,11 +164,20 @@ describe("Files screen", () => {
     expect(screen.getByRole("button", { name: "Images" }).getAttribute("aria-pressed")).toBe(
       "true",
     );
+    // A recorded request is not a rendered page: Next stays disabled until the response applies.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Next" }).hasAttribute("disabled")).toBe(false),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => expect(lastQuery(listWorkspaceFiles)?.offset).toBe(25));
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
     await selectOption("Source", "Bot-created");
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Filters" }), { key: "Escape" });
     await waitFor(() =>
       expect(lastQuery(listWorkspaceFiles)).toMatchObject({ source: "bot", offset: 0 }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Next" }).hasAttribute("disabled")).toBe(false),
     );
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => expect(lastQuery(listWorkspaceFiles)?.offset).toBe(25));
@@ -257,7 +268,9 @@ describe("Files screen", () => {
     );
     const detail = screen.getByRole("complementary", { name: "Details for report.md" });
     expect(document.activeElement).toBe(detail);
-    expect(within(detail).getByText("/work/report.md", { selector: "dd code" })).toBeTruthy();
+    expect(
+      within(detail).getByText("/work/report.md", { selector: "code.files-detail-path" }),
+    ).toBeTruthy();
     expect(within(detail).getAllByText("Used in delivery")).toHaveLength(1);
     expect(
       within(detail).getByRole("link", { name: "Task: Weekly report" }).getAttribute("href"),
@@ -370,6 +383,16 @@ describe("Files screen", () => {
     fireEvent.click(screen.getByRole("button", { name: /Delete uploaded file/ }));
     expect(screen.getByText(/Delete notes.txt from the workspace/)).toBeTruthy();
     expect(deleteWorkspaceUploadFile).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: /Delete uploaded file/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Delete uploaded file/ }));
+    deleteWorkspaceUploadFile.mockRejectedValueOnce(new Error("Delete temporarily unavailable"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await screen.findByText(/Delete temporarily unavailable/);
+    expect(screen.getByRole("complementary", { name: "Details for notes.txt" })).toBeTruthy();
     const calls = listWorkspaceFiles.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(deleteWorkspaceUploadFile).toHaveBeenCalledWith(WS_ID, "upl_1"));
@@ -418,7 +441,9 @@ describe("Files screen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Preview file" }));
     await screen.findByText(/No file exists at this path now/);
     // The metadata stays visible while content is unavailable.
-    expect(screen.getByText("/work/notes.txt", { selector: "dd code" })).toBeTruthy();
+    expect(
+      screen.getByText("/work/notes.txt", { selector: "code.files-detail-path" }),
+    ).toBeTruthy();
   });
 
   it("shows empty, filtered-empty, loading and error states", async () => {
@@ -456,5 +481,64 @@ describe("Files screen", () => {
     await act(async () => releaseOld(page([item("/work/old.md")])));
     expect(screen.queryByText("old.md")).toBeNull();
     expect(screen.getByText("new.png")).toBeTruthy();
+  });
+});
+
+// ADR-0014 amendment A7 (issue #16): chat deliveries and Files link both ways.
+describe("Files links to and from chat", () => {
+  const sentInChat = {
+    threadId: "thr_9" as never,
+    threadTitle: "Weekly report",
+    messageId: "msg_9" as never,
+    authorKind: "bot" as const,
+    at: AT,
+  };
+
+  it("links a file sent in chat to that message, in the list and the grid", async () => {
+    const { api } = fakeApi(() =>
+      page([item("/work/report.md", { sentInChat }), item("/work/other.md")]),
+    );
+    render(<WorkspaceFiles api={api} workspace={workspace} />);
+    await screen.findByText("report.md");
+    const links = screen.getAllByRole("link", { name: "Sent in chat: Weekly report" });
+    expect(links).toHaveLength(1);
+    expect(links[0]?.getAttribute("href")).toBe("#/threads/thr_9?message=msg_9");
+    fireEvent.click(screen.getByRole("button", { name: "Grid" }));
+    const grid = await screen.findByRole("list", { name: "Files as a grid" });
+    expect(
+      within(grid).getByRole("link", { name: "Sent in chat: Weekly report" }).getAttribute("href"),
+    ).toBe("#/threads/thr_9?message=msg_9");
+    expect(within(grid).getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("opens a linked file at its directory with the file selected", async () => {
+    const target = "/work/uploads/2026-10-14/brief.md";
+    const { api, listWorkspaceFiles } = fakeApi((query) =>
+      query.q === target
+        ? page([item(target)])
+        : page([item(target), item("/work/uploads/2026-10-14/notes.md")]),
+    );
+    render(<WorkspaceFiles api={api} workspace={workspace} focusPath={target} />);
+    const detail = await screen.findByRole("complementary", { name: "Details for brief.md" });
+    expect(within(detail).getAllByText(target).length).toBeGreaterThan(0);
+    expect(screen.getByText("notes.md")).toBeTruthy();
+    expect((screen.getByRole("textbox", { name: "Search files" }) as HTMLInputElement).value).toBe(
+      "/work/uploads/2026-10-14/",
+    );
+    const queries = listWorkspaceFiles.mock.calls.map((call) => call[1]?.q);
+    expect(queries).toContain("/work/uploads/2026-10-14/");
+    expect(queries).toContain(target);
+    expect(screen.queryByText(/not in the Files list/)).toBeNull();
+  });
+
+  it("states honestly that a linked bot delivery is not listed, and still offers its bytes", async () => {
+    const target = "/home/nova/chart.png";
+    const { api } = fakeApi(() => page([]));
+    render(<WorkspaceFiles api={api} workspace={workspace} focusPath={target} />);
+    const detail = await screen.findByRole("complementary", { name: "Details for chart.png" });
+    expect(within(detail).getByText(/not in the Files list/)).toBeTruthy();
+    expect(within(detail).getByRole("button", { name: `Download ${target}` })).toBeTruthy();
+    fireEvent.click(within(detail).getByRole("button", { name: "Close details" }));
+    expect(screen.queryByRole("complementary")).toBeNull();
   });
 });

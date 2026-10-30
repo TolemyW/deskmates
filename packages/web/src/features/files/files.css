@@ -98,37 +98,11 @@
 .files-when {
   white-space: nowrap;
 }
-.files-type-filter,
-.files-view-toggle {
-  display: flex;
-  margin: 0;
-  min-inline-size: 0;
-  border-bottom: 0;
-}
-.files-type-filter button,
-.files-view-toggle button {
-  margin-bottom: 0;
-  border-bottom: 0;
-  font-weight: 500;
-}
-.files-facet-count {
-  min-width: 1.5em;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, currentColor 10%, transparent);
-  font-size: var(--app-text-sm);
-  text-align: center;
-}
-.files-type-filter button:focus-visible,
-.files-view-toggle button:focus-visible,
 .files-name:focus-visible,
 .files-grid button:focus-visible,
 .files-detail:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-.files-view-toggle button {
-  padding: 8px 10px;
 }
 .files-toolbar-row {
   display: flex;
@@ -443,42 +417,73 @@
     align-items: stretch;
     flex-direction: column;
   }
-  .files-type-filter {
-    width: 100%;
-    flex-wrap: wrap;
-    border-radius: 22px;
+  .files-toolbar-primary {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
   }
-  .files-type-filter button {
-    padding-inline: 12px;
+  .files-toolbar-row:not(.files-toolbar-primary) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 140px);
+    align-items: end;
+  }
+  .files-toolbar-row:not(.files-toolbar-primary) > :only-child {
+    grid-column: 1 / -1;
   }
   .files-search,
   .files-toolbar-row [data-gb-ui="select"] {
     width: 100%;
   }
-  .files-view-toggle {
-    align-self: flex-start;
+  .files-toolbar-row [data-gb-ui="select"] {
+    min-width: 0;
   }
-  /* Secondary columns collapse into labelled metadata under the name. */
+  /* Mobile rows keep identity first, then source and time on one metadata line. */
   .files-table thead {
     display: none;
   }
   .files-table tr {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 4px;
-    padding: 10px 0;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--app-border);
   }
   .files-table td {
     display: flex;
     gap: 8px;
     padding: 0 12px;
     border: 0;
+    border-radius: 0;
+    background: transparent;
   }
-  .files-table td[data-label]::before {
-    content: attr(data-label);
-    min-width: 110px;
-    color: var(--muted);
-    font-size: var(--app-text-sm);
+  .files-table tr.selected {
+    background: var(--default);
+  }
+  .files-table td:first-child {
+    grid-column: 1 / -1;
+  }
+  .files-table td:nth-child(2) {
+    display: none;
+  }
+  .files-table td:nth-child(3) {
+    padding-left: 36px;
+    align-items: center;
+  }
+  .files-table td:last-child {
+    justify-content: end;
+    align-items: center;
+  }
+  .files-table .files-name-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+  .files-table .files-name-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .files-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -662,5 +667,251 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     font-size: var(--app-text-sm);
+  }
+}
+
+/* ADR-0014 A7: a file sent in a chat the viewer may read links that message. */
+.files-sent-in-chat {
+  display: inline-block;
+  margin-top: 2px;
+}
+.files-grid .files-sent-in-chat {
+  margin-left: 8px;
+}
+
+/* Static HTML uses the document's own CSS in an offline frame. Give it real reading space. */
+.html-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+.html-preview-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.html-preview-stage {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: white;
+}
+.html-preview-stage .workspace-file-html {
+  display: block;
+  width: 100%;
+  height: max(520px, calc(100dvh - 300px));
+  border: 0;
+  border-radius: 0;
+}
+.html-preview-stage[data-desktop="true"] .workspace-file-html {
+  min-width: 1120px;
+}
+.html-preview-note {
+  margin: 0;
+}
+.html-preview-links {
+  flex-shrink: 0;
+  font-size: var(--app-text-sm);
+}
+.html-preview-links summary {
+  cursor: pointer;
+}
+.html-preview-links ul {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 12px 20px;
+}
+.html-preview-links li {
+  overflow-wrap: anywhere;
+}
+.html-preview-links li span {
+  display: block;
+}
+.html-preview-links a {
+  color: var(--primary-text);
+  text-decoration: underline;
+}
+.html-reader {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  overflow: auto;
+}
+.html-reader-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+.html-reader-header h1 {
+  font-size: var(--app-text-lg);
+  overflow-wrap: anywhere;
+}
+.html-reader-header p {
+  margin: 4px 0 0;
+}
+.html-reader-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.html-reader > .html-preview {
+  flex: 1;
+}
+.html-reader .html-preview-stage {
+  flex: 1;
+}
+.html-reader .workspace-file-html {
+  height: 100%;
+  min-height: 480px;
+}
+.html-reader-source {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  background: var(--surface);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 650px) {
+  .html-reader {
+    padding: 12px;
+  }
+  .html-reader-header {
+    flex-wrap: wrap;
+  }
+}
+
+/* Keep collection rules available without putting documentation before every file. */
+.files-scope summary,
+.files-upload-help summary {
+  cursor: pointer;
+  color: var(--app-text-3);
+}
+.files-scope p,
+.files-upload-help p {
+  margin: 8px 0 0;
+  max-width: 680px;
+}
+.files-upload-help {
+  text-align: start;
+}
+.files-upload-help p {
+  max-width: 340px;
+}
+.files-heading {
+  align-items: start;
+}
+
+.files-detail-path {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: var(--app-text-sm);
+}
+.files-metadata > summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.files-metadata[open] > summary {
+  margin-bottom: 14px;
+}
+
+.files-detail .workspace-file-actions {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.files-back {
+  display: none;
+}
+@media (max-width: 640px) {
+  .files-screen.has-detail > :not(.files-layout, .files-back),
+  .files-screen.has-detail .files-results {
+    display: none;
+  }
+  .files-screen.has-detail > .files-back {
+    display: inline-flex;
+    align-self: flex-start;
+  }
+}
+
+/* One collection toolbar: compress classification before introducing a second row. */
+.files-toolbar {
+  container: file-tools / inline-size;
+}
+.files-toolbar-primary {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+}
+.files-kind-expanded {
+  flex: 0 0 auto;
+}
+.files-kind-compact {
+  display: none;
+}
+.files-toolbar-primary .files-search {
+  flex: 1 1 220px;
+  width: auto;
+  min-width: 140px;
+}
+.files-toolbar-primary > button,
+.files-toolbar-primary > [data-choice-group] {
+  flex-shrink: 0;
+}
+.files-heading-actions,
+.files-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.files-upload {
+  gap: 8px;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.files-upload-jobs {
+  flex-basis: 100%;
+}
+@container file-tools (max-width: 66rem) {
+  .files-kind-expanded {
+    display: none;
+  }
+  .files-kind-compact {
+    display: block;
+    flex: 0 1 160px;
+    min-width: 100px;
+  }
+  .files-kind-compact [data-gb-ui="select"] {
+    min-width: 0;
+  }
+}
+@container file-tools (max-width: 30rem) {
+  .files-toolbar-primary {
+    flex-wrap: wrap;
+  }
+  .files-toolbar-primary .files-search {
+    order: -1;
+    flex-basis: 100%;
+    min-width: 0;
+  }
+  .files-kind-compact {
+    flex: 1 1 100px;
   }
 }

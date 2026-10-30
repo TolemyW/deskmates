@@ -15,6 +15,7 @@ import {
   type SubmitResponse,
   TASK_STATUSES,
   type Task,
+  type TaskListPage,
   type TaskStatus,
   isTerminal,
 } from "@deskmates/contracts";
@@ -350,10 +351,19 @@ export const TOOLS: readonly ToolDefinition[] = [
       const status = optStr(args, "status");
       if (status !== undefined && !(TASK_STATUSES as readonly string[]).includes(status))
         throw new ToolInputError(`status must be one of ${TASK_STATUSES.join(", ")}`);
-      const { tasks } = await ctx.client.get<{ tasks: Task[] }>(
-        `/api/workspaces/${enc(workspaceOf(args, ctx))}/tasks`,
-      );
-      return { tasks: status === undefined ? tasks : tasks.filter((t) => t.status === status) };
+      const tasks = new Map<string, Task>();
+      let offset = 0;
+      while (true) {
+        const query = new URLSearchParams({ offset: String(offset), limit: "100" });
+        if (status !== undefined) query.set("status", status);
+        const page = await ctx.client.get<TaskListPage>(
+          `/api/workspaces/${enc(workspaceOf(args, ctx))}/tasks?${query}`,
+        );
+        for (const task of page.tasks) tasks.set(task.id, task);
+        offset += page.tasks.length;
+        if (offset >= page.total) return { tasks: [...tasks.values()] };
+        if (page.tasks.length === 0) throw new Error("Gateway task pagination did not advance");
+      }
     },
   },
   {

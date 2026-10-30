@@ -12,7 +12,7 @@
 
 import { posix } from "node:path";
 import { WORKSPACE_UPLOAD_ROOT, botWorkDir } from "@deskmates/contracts";
-import { WORK_DIR } from "./risk-tier.js";
+import { CURL_SHORT_WITH_VALUE, WORK_DIR } from "./risk-tier.js";
 import { basename, shellArgvs, unwrapArgv } from "./shell-words.js";
 
 const BOTS_ROOT = `${WORK_DIR}/bots`;
@@ -49,6 +49,192 @@ const RECURSIVE_DESTROYERS = new Set(["rm", "rmdir", "mv", "chmod", "chown", "ch
 
 /** Commands that write in place only with `-i` (`sed -i`, `perl -pi -e`). */
 const IN_PLACE_EDITORS = new Set(["sed", "perl"]);
+
+/**
+ * Commands that write where an option points: which short letters and long names name the
+ * destination, and every short letter and long name that takes a value, so the scan skips values.
+ */
+interface OutputOptions {
+  writes: ReadonlySet<string>;
+  shortWithValue: string;
+  longWithValue: ReadonlySet<string>;
+}
+
+const OUTPUT_OPTIONS: Readonly<Record<string, OutputOptions>> = {
+  curl: {
+    writes: new Set(["o", "--output", "--output-dir"]),
+    shortWithValue: [...CURL_SHORT_WITH_VALUE].join(""),
+    longWithValue: new Set(["--output", "--output-dir"]),
+  },
+  wget: {
+    writes: new Set(["O", "P", "--output-document", "--directory-prefix"]),
+    shortWithValue: "OoaPietTwQlUBDIXAR",
+    longWithValue: new Set(["--output-document", "--directory-prefix"]),
+  },
+  sort: {
+    writes: new Set(["o", "--output"]),
+    shortWithValue: "kotST",
+    longWithValue: new Set(["--output"]),
+  },
+  unzip: { writes: new Set(["d"]), shortWithValue: "dP", longWithValue: new Set() },
+};
+
+/** `tar` short options that take a value. */
+const TAR_SHORT_WITH_VALUE = "bCfFgHIKLNTVX";
+const TAR_LONG_WITH_VALUE = new Set(["--directory", "--file"]);
+
+/** Short letters and long names a command was given, and the value of each that takes one. */
+function scanOptions(
+  args: readonly string[],
+  shortWithValue: string,
+  longWithValue: ReadonlySet<string>,
+): { flags: Set<string>; values: [string, string][] } {
+  const flags = new Set<string>();
+  const values: [string, string][] = [];
+  for (let i = 0; i < args.length; i++) {
+    const w = args[i] ?? "";
+    if (w === "--") break;
+    if (w.startsWith("--")) {
+      const eq = w.indexOf("=");
+      const name = eq === -1 ? w : w.slice(0, eq);
+      flags.add(name);
+      if (!longWithValue.has(name)) continue;
+      const value = eq === -1 ? args[++i] : w.slice(eq + 1);
+      if (value !== undefined) values.push([name, value]);
+      continue;
+    }
+    if (!w.startsWith("-") || w.length < 2) continue;
+    for (let j = 1; j < w.length; j++) {
+      const letter = w[j] ?? "";
+      flags.add(letter);
+      if (!shortWithValue.includes(letter)) continue;
+      const rest = w.slice(j + 1);
+      const value = rest === "" ? args[++i] : rest;
+      if (value !== undefined) values.push([letter, value]);
+      break;
+    }
+  }
+  return { flags, values };
+}
+
+/** `curl -o f`, `wget -O f`, `sort -o f`, `unzip -d dir`: the destinations, stdout (`-`) left out. */
+function outputDestinations(options: OutputOptions, args: readonly string[]): string[] {
+  return scanOptions(args, options.shortWithValue, options.longWithValue)
+    .values.filter(([key, value]) => options.writes.has(key) && value !== "-")
+    .map(([, value]) => value);
+}
+
+/**
+ * The working directory, as a word to resolve, when a command with no output option writes its
+ * files there (#62): `wget URL` without `-O`/`-P`/`--spider`, `curl -O URL` without
+ * `--output-dir`, `unzip a.zip` without `-d` or a listing option. So a `cd` into a teammate's
+ * directory earlier in the same command counts.
+ */
+function workingDirectoryWrites(name: string, args: readonly string[]): string[] {
+  const options = OUTPUT_OPTIONS[name];
+  if (options === undefined) return [];
+  const { flags, values } = scanOptions(args, options.shortWithValue, options.longWithValue);
+  const named = values.some(([key]) => options.writes.has(key));
+  const hasOperand = positionals(args).length > 0;
+  if (name === "wget") return named || flags.has("--spider") || !hasOperand ? [] : ["."];
+  if (name === "curl")
+    return !named && ["O", "--remote-name", "--remote-name-all"].some((f) => flags.has(f))
+      ? ["."]
+      : [];
+  if (name === "unzip")
+    return named || !hasOperand || ["l", "t", "p", "v", "Z", "z"].some((f) => flags.has(f))
+      ? []
+      : ["."];
+  return [];
+}
+
+/**
+ * `tar`: the `-C` directory when it extracts (the working directory when there is none and it
+ * does not extract to stdout), the `-f` archive when it creates or appends.
+ */
+function tarDestinations(args: readonly string[]): string[] {
+  // `tar xzf a.tgz`: a first word without a dash is a cluster of letters too.
+  const first = args[0];
+  const words =
+    first !== undefined && /^[A-Za-z]+$/.test(first) ? [`-${first}`, ...args.slice(1)] : args;
+  const { flags, values } = scanOptions(words, TAR_SHORT_WITH_VALUE, TAR_LONG_WITH_VALUE);
+  const extracts = flags.has("x") || flags.has("--extract") || flags.has("--get");
+  const creates = ["c", "r", "u", "A", "--create", "--append", "--update", "--concatenate"].some(
+    (f) => flags.has(f),
+  );
+  const destinations = values
+    .filter(
+      ([key, value]) =>
+        value !== "-" &&
+        (((key === "C" || key === "--directory") && extracts) ||
+          ((key === "f" || key === "--file") && creates)),
+    )
+    .map(([, value]) => value);
+  const toStdout = flags.has("O") || flags.has("--to-stdout");
+  const hasDirectory = values.some(([key]) => key === "C" || key === "--directory");
+  if (extracts && !toStdout && !hasDirectory) destinations.push(".");
+  return destinations;
+}
+
+/** `zip` options that take a separate value, so the value is not taken for the archive. */
+const ZIP_VALUE_OPTIONS = new Set([
+  "-b",
+  "-n",
+  "-t",
+  "-tt",
+  "-P",
+  "-s",
+  "-Z",
+  "--temp-path",
+  "--suffixes",
+  "--password",
+  "--split-size",
+  "--compression-method",
+]);
+
+/** `zip`: the archive (its first operand) and an `-O`/`--output-file` copy, stdout left out. */
+function zipDestinations(args: readonly string[]): string[] {
+  const out: string[] = [];
+  let archive = false;
+  for (let i = 0; i < args.length; i++) {
+    const w = args[i] ?? "";
+    if (w === "-O" || w === "--output-file") {
+      const value = args[++i];
+      if (value !== undefined && value !== "-") out.push(value);
+      continue;
+    }
+    if (w.startsWith("--output-file=")) {
+      out.push(w.slice("--output-file=".length));
+      continue;
+    }
+    if (ZIP_VALUE_OPTIONS.has(w)) {
+      i++;
+      continue;
+    }
+    // `-` alone is the archive written to stdout; later operands are inputs.
+    if (w.startsWith("-") && w !== "-") continue;
+    if (!archive) out.push(w);
+    archive = true;
+  }
+  return out.filter((w) => w !== "-");
+}
+
+/** 7-Zip program names. */
+const SEVEN_ZIP = new Set(["7z", "7za", "7zr", "7zz"]);
+
+/**
+ * `7z`: the `-o<dir>` directory (or the working directory) when it extracts with `x` or `e`, the
+ * archive when it adds, updates, deletes or renames with `a`, `u`, `d` or `rn`.
+ */
+function sevenZipDestinations(args: readonly string[]): string[] {
+  const operands = args.filter((w) => !w.startsWith("-"));
+  const output = args.find((w) => w.startsWith("-o"))?.slice(2);
+  const command = operands[0]?.toLowerCase();
+  if (command === "x" || command === "e") return [output || "."];
+  if (command === "a" || command === "u" || command === "d" || command === "rn")
+    return operands[1] === undefined ? [] : [operands[1]];
+  return [];
+}
 
 /** `git` subcommands that only read the repository. Anything else counts as a write. */
 const GIT_READ_ONLY = new Set([
@@ -253,6 +439,15 @@ function commandWrites(
       words.push(...positionals(args));
   } else if (name === "dd") {
     for (const arg of args) if (arg.startsWith("of=")) words.push(arg.slice(3));
+  } else if (OUTPUT_OPTIONS[name] !== undefined) {
+    words.push(...outputDestinations(OUTPUT_OPTIONS[name], args));
+    words.push(...workingDirectoryWrites(name, args));
+  } else if (name === "tar") {
+    words.push(...tarDestinations(args));
+  } else if (name === "zip") {
+    words.push(...zipDestinations(args));
+  } else if (SEVEN_ZIP.has(name)) {
+    words.push(...sevenZipDestinations(args));
   } else if (name === "git") {
     return { cwd, ...gitWrites(args, cwd), ancestors };
   }
@@ -355,7 +550,9 @@ export function shellRefusal(command: string, run: GuardRun): BotDirectoryRefusa
       if (hit) return hit;
     }
     for (const word of writes.ancestors) {
-      const path = resolvePath(word, cwd);
+      // `rm -rf /work/*` removes what `rm -rf /work` would: `<dir>/*` counts as `<dir>`.
+      const dir = word === "*" ? "." : word.endsWith("/*") ? word.slice(0, -2) || "/" : word;
+      const path = resolvePath(dir, cwd);
       const hit = path === undefined ? undefined : ancestorRefusal(path, run);
       if (hit) return hit;
     }

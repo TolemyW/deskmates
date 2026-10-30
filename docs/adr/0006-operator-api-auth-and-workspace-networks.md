@@ -1,7 +1,7 @@
 # ADR-0006: The operator API is authenticated, and every workspace has its own network
 
 Date: 2026-09-21
-Status: Implementation in progress (B4 activated 2026-09-23; amendment 1 of 2026-09-23 adds decisions 6 and 7; amendment 2 of 2026-09-29 adds decision 8; amendment 3 of 2026-09-29 adds decision 9); acceptance pending
+Status: Accepted (decisions 1 to 5 activated for implementation by the owner on 2026-09-23 as B4, with amendment 1 of 2026-09-23 adding decisions 6 and 7, amendment 2 of 2026-09-29 decision 8 and amendment 3 of 2026-09-29 decision 9; amendment 4 (decision 10) and amendment 5 of 2026-10-17 (decisions 11 to 15) accepted under owner delegation on 2026-10-17). Milestone acceptance of the network isolation claims and the stable-host acceptance of amendment 5 remain pending.
 Source: M0 code review, 2026-09-21; amends ADR-0004 decision 5 and the sandbox-docker README
 
 ## Activation note (2026-09-23)
@@ -116,7 +116,7 @@ shorter still; record it here if a deployment needs it.
 
 ## Amendment 4 (2026-10-05, proposed with ADR-0022 P1): people sign in; no credential in a URL
 
-Status: implemented on the ADR-0022 P1 branch; takes effect when the owner accepts ADR-0022.
+Status: Accepted under owner delegation (2026-10-17), with ADR-0022's single-tenant session design (ADR-0022 status). Implemented and shipped since the P1 sessions; the operator token remains the single-tenant maintenance bridge and must lose tenant access before a second tenant exists, which ADR-0022 keeps closed.
 
 ADR-0022 replaces daily token entry with revocable user sessions. Decision 1's browser half
 (the UI asks for the operator token, `?token=` on `/api/events`) and amendment 2 (the token in
@@ -138,6 +138,86 @@ confinement (decision 5) and the noVNC decisions are unchanged.
 | Item | Means | Test | Metric |
 |---|---|---|---|
 | 10 | `?token=` is 401 on every route including `/api/events`; the bearer header and a session cookie both work; every unsafe `/api/*` route refuses a cookie without CSRF; the UI stores nothing and its EventSource URL carries no credential | T1 `operator-auth.test.ts` (URL credential), `auth-routes.test.ts` (route walk, cookie/CSRF/Origin, SSE); T0 Web `app-auth.test.tsx`, `events.test.ts`, `client.test.ts`; T2 `m2-boundaries.container.test.ts`; browser check `spikes/m4-p1-browser-session-20261005` | none |
+
+## Amendment 5 (2026-10-17, proposed with issue #14): host resources are listed, repaired and cleaned
+
+Status: Accepted under owner delegation (2026-10-17); implemented with T0/T1 tests on the issue #14
+branch. Stable-host acceptance (the former-name networks and T2 leftovers listed and removed
+through the UI, the live workspaces untouched) and the T2 rows remain pending the first release
+that carries it. Remove deletes an orphan's volumes and cannot be undone; it stays the root's
+alone, confirmed in the UI, refused while a sidecar runs in the container, and the docs say to
+remove only what is known to be stale (Consequences).
+
+### What was found
+
+Workspace resources on the Docker host outlive the rows that own them, and nothing in the
+product sees them. Observed on the stable host during the v0.7.2/v0.7.3 work: bridge networks of
+the former product name that a workspace container still sat on (every run then fails with
+"workspace is attached to a legacy or mismatched network", decision 16 of ADR-0027 amendment 2);
+containers, proxies, networks and volumes of T2 workspaces for ids no database knows; and the
+daemon's default address pools exhausted at about 31 networks, which made every new workspace
+fail with a Docker 404 on network creation (`docs/releases/2026-10-16-v0.7.2.md`). Decision 3
+already labels everything the provider creates, so ownership is decidable from the host alone.
+This amendment makes the lifecycle of decision 3 visible and repairable; it does not change it.
+A shared network for all workspaces stays out of scope.
+
+### Decisions
+
+11. **The provider lists what it owns, read only.** `SandboxProvider.listHostResources`
+    returns every container, network and volume carrying the managed label with the workspace
+    it names, each workspace container's topology verdict (the rule `attach` applies), how many
+    sidecar processes run in it, and the networks of a former product name. A former-name
+    network is recognised by the provider's own naming and labelling rule with another prefix:
+    the name `<prefix>-net-<id>` together with `<prefix>.managed=true` and `<prefix>.workspace`
+    labels; no product name is written in the code. It also returns the daemon's configured
+    default address pools (Docker's documented defaults when it reports none) and the subnets
+    of every network.
+12. **The Gateway classifies, on start and on request.** A workspace id not in `workspaces` is
+    an orphan; an archived workspace with resources present is reported as such; a workspace
+    container the topology rule refuses is a mismatch; a former-name network is reported as
+    legacy. Pool headroom counts the pool chunks the daemon's networks occupy against the
+    pools' capacity. The report is `GET /api/runtime/resources`, the root's alone, and the
+    Network page shows it under "Host resources". Listing changes nothing.
+13. **One action per finding, the root's alone, each an `audit_events` row.** Remove deletes an
+    orphan's containers (the workspace container, then its egress proxy), its network and its
+    volumes, in that order; for an archived workspace it removes the runtime only and keeps the
+    volumes, which a restore needs and a purge from Trash deletes; for a former-name network it
+    removes the network only while no container is attached. Re-attach repairs a mismatch by
+    generalising the proxy re-pin: disconnect the container from every other network, create its
+    own network if missing, connect the container and its proxy with their aliases, and inspect
+    again; the result says whether the topology is now accepted. The Gateway classifies again
+    before it acts, acts only on a finding that is still present, and refuses (409,
+    `reason: "run_live"`) while a run of this Gateway is live in the workspace or a sidecar
+    process runs in the container.
+14. **Pool headroom is a startup warning and a status field.** The Gateway warns at start, like
+    the LAN overlap warning, when free pool chunks fall under a tenth of the capacity (or to
+    none), and reports the last check as `pool.status` in the report and `addressPools` in
+    `GET /api/runtime`.
+15. **T2 cleans up after itself.** `stopStack` removes every managed resource of each workspace
+    the stack created, through the provider's exact-label delete, also when the test or the
+    stack's start failed. `DESKMATES_T2_KEEP_WORKSPACE=1` keeps them for inspection and prints
+    what it kept.
+
+### Consequences of the amendment
+
+- Two Gateways on one daemon (the stable instance and a T2 run) see each other's workspaces as
+  orphans. The sidecar-process check refuses a removal while the other Gateway runs something
+  there; between runs nothing can tell, so the doc says to remove only what is known to be
+  stale.
+- Whether `docker network connect`/`disconnect` moves a container's `HostConfig.NetworkMode`
+  with it is a daemon fact this amendment does not assume: Re-attach reports the topology the
+  daemon shows afterwards, and a container whose mode still names another network stays a
+  mismatch, repaired by recreating its sandbox.
+
+### Verification (amendment 5)
+
+| Item | Means | Test | Metric |
+|---|---|---|---|
+| 11 | managed containers, networks and volumes are listed with their workspace; former-name networks are matched by the naming and labelling rule, never by a product name; pools come from `/info` or Docker's defaults; listing issues only GET requests | T0 `host-resources.test.ts` (sandbox-docker, stubbed Engine API); T0 contracts `host-resources.test.ts` (pool arithmetic); T2 `host-resources.container.test.ts` | none |
+| 12 | each flag is produced by exactly its condition; the route is the root's alone | T0 `network-topology.test.ts` (one case per topology flag); T0 contracts `host-resources.test.ts` (classification); T1 `host-resource-routes.test.ts` with the testkit fake provider (report, root only) | findings in the startup log |
+| 13 | Remove deletes in order and only what the finding names; Re-attach restores the topology; both are refused while a run is live; each writes one audit row | T0 `host-resources.test.ts` (call order); T1 `host-resource-routes.test.ts` (both actions, refusal, audit); T2 `host-resources.container.test.ts` (an orphan leaves nothing behind; a container moved by hand is repaired and attaches again) | `host_resource.*` audit rows |
+| 14 | a low or exhausted pool prints one warning at start; the report and `GET /api/runtime` carry the status | T0 contracts `host-resources.test.ts`; T1 `host-resource-routes.test.ts` | pool warnings in the startup log |
+| 15 | after `stopStack` no resource labelled with the stack's workspace ids remains, after a failed start too; the keep flag skips the removal | T0 `acceptance/support/stop-stack-cleanup.test.ts`; T2 `host-resources.container.test.ts` | none |
 
 ## Verification
 

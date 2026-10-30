@@ -170,8 +170,9 @@ auth-cli unlink-tenant-sso --tenant <id> --provider corp
 
 - `sso_required` admits only a sign-in from a provider the tenant links, no older than its maximum
   authentication age (default 12 h). A password, another tenant's provider or a matching email
-  never substitutes. A person already signed in with a password uses **Open <team> with <provider>**
-  in the team switcher.
+  never substitutes. The operator UI no longer has a team switcher (owner decision 2026-10-10:
+  multi-tenancy is not a product feature), so such a person signs out and signs in with the
+  provider.
 - A policy change, an unlink or a disabled provider ends existing grants on the next request.
 - An external login is identified by issuer + subject only. It is never merged with an account by
   email; a signed-in person links it from a fresh session (the identity provider is asked to

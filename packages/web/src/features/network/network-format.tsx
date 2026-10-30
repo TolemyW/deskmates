@@ -13,7 +13,7 @@ const OUTCOME: Record<NetworkPublication["status"], MessageKey> = {
   failed: "network.outcome.failed",
 };
 
-/** `http 10.20.30.0/24 :23001` or `https console.example.lan→10.0.0.5 :443`. */
+/** `http 10.88.30.0/24 :23001` or `https console.example.lan→10.0.0.5 :443`. */
 export function ruleSummary(rule: NetworkRule): string {
   const target = rule.kind === "subnet" ? rule.cidr : `${rule.hostname}→${rule.address}`;
   return `${rule.schemes.join("/")} ${target} :${rule.ports.join(",")}`;

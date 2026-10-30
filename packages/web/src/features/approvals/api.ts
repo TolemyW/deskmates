@@ -7,6 +7,8 @@ import type {
   ApprovalId,
   ApprovalMode,
   ApprovalRule,
+  ApprovalRuleMatcher,
+  ApprovalRuleWarning,
   BotId,
   ThreadId,
   WorkspaceAutoApproval,
@@ -32,19 +34,42 @@ export interface PendingApprovalsPage {
   total?: number;
 }
 
+export interface PendingApprovalGroup {
+  key: string;
+  approval: Approval;
+  count: number;
+}
+
+export interface PendingApprovalGroupsPage {
+  groups: PendingApprovalGroup[];
+  nextCursor?: string;
+  totalGroups: number;
+  totalApprovals: number;
+}
+
 export interface ApprovalsApi {
+  /** `matcher`: the human's edit of the proposed Always scope (ADR-0002 amendment 3, A6). */
   decideApproval(
     id: ApprovalId,
     decision: ApprovalDecision,
     reason?: string,
-  ): Promise<{ approval: Approval; rule?: ApprovalRule }>;
+    matcher?: ApprovalRuleMatcher,
+  ): Promise<{ approval: Approval; rule?: ApprovalRule; warnings?: ApprovalRuleWarning[] }>;
   getApproval(id: ApprovalId): Promise<Approval>;
   getAutoApproval(workspaceId: string): Promise<WorkspaceAutoApproval>;
+  decideApprovalGroup(
+    key: string,
+    decision: "allow_all" | "deny_all",
+  ): Promise<{ approvals: Approval[] }>;
   listApprovals(filter?: ApprovalFilter): Promise<Approval[]>;
   listPendingApprovalsPage(request?: {
     cursor?: string;
     limit?: number;
   }): Promise<PendingApprovalsPage>;
+  listPendingApprovalGroupsPage(request?: {
+    cursor?: string;
+    limit?: number;
+  }): Promise<PendingApprovalGroupsPage>;
   /** ADR-0002 amendment 3, A7: minutes an undecided request waits before it expires. */
   setApprovalExpiry(workspaceId: string, expiryMinutes: number): Promise<WorkspaceAutoApproval>;
   /** ADR-0002 amendment 6, D1: manual, automatic review or approve all. */
@@ -53,11 +78,16 @@ export interface ApprovalsApi {
 
 export function createApprovalsApi(t: HttpTransport): ApprovalsApi {
   return {
-    decideApproval(id, decision, reason) {
+    decideApprovalGroup(key, decision) {
+      return t.json("POST", `/api/approval-groups/${encodeURIComponent(key)}/decide`, {
+        decision,
+      });
+    },
+    decideApproval(id, decision, reason, matcher) {
       return t.json(
         "POST",
         `/api/approvals/${encodeURIComponent(id)}/decide`,
-        stripUndefined({ decision, reason }),
+        stripUndefined({ decision, reason, matcher }),
       );
     },
     async getApproval(id) {
@@ -97,6 +127,19 @@ export function createApprovalsApi(t: HttpTransport): ApprovalsApi {
         approvals: r.approvals,
         ...(r.nextCursor ? { nextCursor: r.nextCursor } : {}),
         ...(typeof r.total === "number" ? { total: r.total } : {}),
+      };
+    },
+    async listPendingApprovalGroupsPage(request = {}) {
+      const limit = request.limit === undefined || request.limit === 25 ? undefined : request.limit;
+      const r = await t.json<PendingApprovalGroupsPage>(
+        "GET",
+        `/api/approval-groups${query({ cursor: request.cursor, limit })}`,
+      );
+      return {
+        groups: r.groups,
+        totalGroups: r.totalGroups,
+        totalApprovals: r.totalApprovals,
+        ...(r.nextCursor ? { nextCursor: r.nextCursor } : {}),
       };
     },
     async setApprovalExpiry(workspaceId, expiryMinutes) {

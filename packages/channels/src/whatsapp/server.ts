@@ -3,7 +3,7 @@
 
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from "node:http";
 import type { AdapterLog } from "./adapter.js";
-import { SIGNATURE_HEADER, verifySignature } from "./signature.js";
+import { SIGNATURE_HEADER, verifySignature, verifyTokenMatches } from "./signature.js";
 
 export const WEBHOOK_PATH = "/whatsapp/webhook";
 export const WEBHOOK_BODY_MAX_BYTES = 1024 * 1024;
@@ -75,7 +75,11 @@ export function createWhatsAppServer(opts: ServerOptions): Server {
       const mode = url.searchParams.get("hub.mode");
       const token = url.searchParams.get("hub.verify_token");
       const challenge = url.searchParams.get("hub.challenge");
-      if (mode === "subscribe" && token === opts.verifyToken && challenge !== null) {
+      if (
+        mode === "subscribe" &&
+        verifyTokenMatches(token, opts.verifyToken) &&
+        challenge !== null
+      ) {
         text(res, 200, challenge);
       } else {
         text(res, 403, "verification failed");

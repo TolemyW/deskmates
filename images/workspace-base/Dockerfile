@@ -32,14 +32,22 @@ RUN if [ -n "$APT_MIRROR" ]; then \
         [ -f "$f" ] && sed -i -E "s#https?://(archive|security)\.ubuntu\.com/ubuntu/?#${APT_MIRROR%/}/#g" "$f"; \
       done; \
     fi; true
+# python3-pip and python3-venv (issue #91): a bot that installs a project's own Python packages
+# needs the installer; without it a live run spent a third of its turns bootstrapping pip.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     xvfb fluxbox x11vnc novnc websockify xdotool imagemagick \
-    postgresql-client git gh python3 make g++ curl ca-certificates procps \
+    postgresql-client git gh python3 python3-pip python3-venv make g++ curl ca-certificates procps \
     poppler-utils \
  && rm -rf /var/lib/apt/lists/* \
  && ln -sf vnc.html /usr/share/novnc/index.html
 
-RUN npm install -g --no-fund --no-audit \
+# An npm registry mirror for the same hosts (stable.sh passes the npm_config_registry it is run
+# with, e.g. https://registry.npmmirror.com): from the stable host the official registry reset the
+# connection on the large SDK packages every time (2026-10-27). Empty keeps the official registry,
+# which is what the release workflow builds. The pins below decide the versions either way, and
+# the mirror is not kept in the image.
+ARG NPM_REGISTRY=
+RUN npm install -g --no-fund --no-audit ${NPM_REGISTRY:+--registry "$NPM_REGISTRY"} \
     "node-pty@${NODE_PTY_VERSION}" \
     "playwright@${PLAYWRIGHT_VERSION}" \
     "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" \
@@ -53,7 +61,8 @@ RUN npm install -g --no-fund --no-audit \
 RUN node -e 'const {createRequire}=require("node:module"); const {execFileSync}=require("node:child_process"); const root=execFileSync("npm",["root","-g"],{encoding:"utf8"}).trim(); const sdkRequire=createRequire(root+"/@anthropic-ai/claude-agent-sdk/package.json"); const cli=sdkRequire.resolve("@anthropic-ai/claude-agent-sdk-linux-"+process.arch+"/claude"); process.stdout.write(execFileSync(cli,["--version"],{encoding:"utf8",timeout:30000}));'
 
 ARG UNDICI_VERSION=7.29.1
-RUN npm install -g --no-fund --no-audit "undici@${UNDICI_VERSION}" \
+RUN npm install -g --no-fund --no-audit ${NPM_REGISTRY:+--registry "$NPM_REGISTRY"} \
+    "undici@${UNDICI_VERSION}" \
     "@openai/agents@${OPENAI_AGENTS_VERSION}" \
     "@modelcontextprotocol/sdk@${MCP_SDK_VERSION}" \
  && npm cache clean --force

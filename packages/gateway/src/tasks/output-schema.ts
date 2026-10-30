@@ -188,3 +188,73 @@ export function outputErrors(schema: TaskOutputSchema, value: unknown): string[]
   shown.push(`${errors.length - shown.length} more errors not shown`);
   return shown;
 }
+
+/**
+ * A validated illustrative value, or undefined when the supported constraints cannot be
+ * satisfied. Never send a correction example that the same validator would reject.
+ */
+export function exampleOutput(schema: TaskOutputSchema, depth = 0): TaskJson | undefined {
+  if (depth > OUTPUT_LIMITS.depth) return undefined;
+  if (Array.isArray(schema.enum))
+    return schema.enum.find((value) => outputErrors(schema, value).length === 0) as
+      | TaskJson
+      | undefined;
+  const properties = isObject(schema.properties) ? schema.properties : undefined;
+  const items = isObject(schema.items) ? (schema.items as TaskOutputSchema) : undefined;
+  const types =
+    schema.type === undefined
+      ? [properties || schema.required ? "object" : items ? "array" : "string", "null"]
+      : Array.isArray(schema.type)
+        ? schema.type
+        : [schema.type];
+  for (const type of types) {
+    let value: TaskJson | undefined;
+    switch (type) {
+      case "object": {
+        const required = new Set(
+          Array.isArray(schema.required) ? (schema.required as string[]) : [],
+        );
+        const object: { [key: string]: TaskJson } = {};
+        let possible = true;
+        for (const name of required.size > 0 ? required : Object.keys(properties ?? {})) {
+          const sub = properties?.[name] ?? schema.additionalProperties;
+          const child = isObject(sub)
+            ? exampleOutput(sub as TaskOutputSchema, depth + 1)
+            : sub === false
+              ? undefined
+              : "<value>";
+          if (child !== undefined)
+            Object.defineProperty(object, name, {
+              value: child,
+              enumerable: true,
+              writable: true,
+              configurable: true,
+            });
+          else if (required.has(name)) possible = false;
+        }
+        if (possible) value = object;
+        break;
+      }
+      case "array": {
+        const item = items ? exampleOutput(items, depth + 1) : undefined;
+        value = item === undefined ? [] : [item];
+        break;
+      }
+      case "string":
+        value = "<text>";
+        break;
+      case "number":
+      case "integer":
+        value = 0;
+        break;
+      case "boolean":
+        value = true;
+        break;
+      case "null":
+        value = null;
+        break;
+    }
+    if (value !== undefined && outputErrors(schema, value).length === 0) return value;
+  }
+  return undefined;
+}

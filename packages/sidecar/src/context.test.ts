@@ -31,7 +31,9 @@ function request(trigger: TriggerPayload): StartRunRequest {
     runId: "run-context" as RunId,
     botId: "bot-nova" as BotId,
     botName: "nova",
+    botRole: "ops bot",
     workspaceId: "workspace-context" as WorkspaceId,
+    workspaceName: "Ops",
     threadId: "thread-1" as ThreadId,
     botHomeDir: "/home/nova",
     attempt: 1,
@@ -85,6 +87,31 @@ describe("execution identity and continuation checkpoints (ADR-0021 A3i, A3k)", 
     }
   });
 
+  it("marks checkpoints from a previous scope as historical evidence to revalidate", async () => {
+    const context = await buildContext(
+      {
+        ...request({
+          kind: "continuation",
+          approvalId: "c1",
+          decision: "continue",
+        } as TriggerPayload),
+        deliverableTasks: tasks({
+          runId: "run-old" as RunId,
+          attempt: 1,
+          scopeVersion: 1,
+          createdAt: "2026-10-13T10:00:00.000Z",
+          completed: [{ unit: "old outline", outcome: "ready", evidence: ["/work/outline.md"] }],
+          outstanding: [],
+        }),
+      },
+      createMemoryFs({}),
+      new Date(),
+    );
+    expect(context.prompt).toContain("checkpoint scope v1 differs from current scope v2");
+    expect(context.prompt).toContain("historical evidence");
+    expect(context.prompt).not.toContain("- completed: old outline");
+  });
+
   it("renders the continuation checkpoint: completed, missing evidence, outstanding", async () => {
     const req = {
       ...request({
@@ -94,6 +121,7 @@ describe("execution identity and continuation checkpoints (ADR-0021 A3i, A3k)", 
         handoffPath: "/work/handoffs/run-context-attempt-2.md",
       } as TriggerPayload),
       deliverableTasks: tasks({
+        scopeVersion: 2,
         runId: "run-old" as RunId,
         attempt: 2,
         createdAt: "2026-10-13T10:00:00.000Z",
@@ -499,6 +527,34 @@ describe("buildContext thread delivery guidance", () => {
     expect(closing.prompt).not.toContain("Do your part only.");
   });
 
+  it("tells a run delivered messages of a paused thread, and keeps the system prompt (ADR-0005 amendment 3, decision 27)", async () => {
+    const trigger = (paused?: { reason: "turn_budget" | "operator"; resumeAt?: string }) =>
+      ({
+        kind: "thread_message",
+        thread: { id: "thread-1" as ThreadId, title: "group", kind: "chat" },
+        relayCount: 0,
+        messages: [message({ authorKind: "human", authorName: "web" })],
+        routing: {
+          version: 1,
+          recipientBotId: "bot-nova" as BotId,
+          recipientName: "nova",
+          ...(paused ? { paused } : {}),
+        },
+      }) as TriggerPayload;
+    const fs = createMemoryFs({ "/home/nova/SOUL.md": "You are nova." });
+    const build = (t: TriggerPayload) => buildContext(request(t), fs, new Date(0));
+    const [active, budget, operator] = await Promise.all([
+      build(trigger()),
+      build(trigger({ reason: "turn_budget", resumeAt: "2026-10-17T13:00:00.000Z" })),
+      build(trigger({ reason: "operator" })),
+    ]);
+    expect(budget.systemPrompt).toBe(active.systemPrompt);
+    expect(active.prompt).not.toContain("The thread is paused");
+    expect(budget.prompt).toContain("paused because it reached its turn budget");
+    expect(budget.prompt).toContain("resumes by itself at 2026-10-17T13:00:00.000Z");
+    expect(operator.prompt).toContain("paused by an operator");
+  });
+
   it("keeps the same system prompt on thread approval and turn continuation resumes", async () => {
     const fs = createMemoryFs({ "/home/nova/SOUL.md": "An old physical rule." });
     const files = { soul: { body: "Canonical rule.", version: "v1" } };
@@ -537,13 +593,13 @@ describe("buildContext thread delivery guidance", () => {
     expect(fresh.systemPrompt).toContain("Canonical rule.");
   });
 
-  it("uses the cautious default when canonical SOUL is empty", async () => {
+  it("uses the neutral role-based default when canonical SOUL is empty", async () => {
     const context = await buildContext(
       { ...request(threadTrigger), canonicalFiles: { soul: { body: "   ", version: "empty" } } },
       createMemoryFs({ "/home/nova/SOUL.md": "Stale physical rule." }),
       new Date("2026-09-23T00:00:00Z"),
     );
-    expect(context.systemPrompt).toContain("Your SOUL.md is missing; act carefully");
+    expect(context.systemPrompt).toContain("You work as ops bot for the people in this workspace.");
     expect(context.systemPrompt).not.toContain("Stale physical rule.");
   });
 });
@@ -568,8 +624,9 @@ describe("buildContext section sizes and system prompt hash", () => {
     expect(s.diary).toBe("## Recent diary\n### 2026-09-23\n- 09:00 run r1 (cron) completed".length);
     expect(s.knowledge).toBeGreaterThan(0);
     expect(s.guidance).toBeGreaterThan(0);
-    // The system prompt is SOUL and guidance, joined by one blank line; nothing else is in it.
-    expect(s.soul + 2 + s.guidance).toBe(context.systemPrompt.length);
+    // The system prompt is the identity line, SOUL and guidance, joined by blank lines; `guidance`
+    // counts the identity line (issue #39 item 4); nothing else is in it.
+    expect(s.soul + 4 + s.guidance).toBe(context.systemPrompt.length);
     expect(context.systemPromptSha256).toBe(
       createHash("sha256").update(context.systemPrompt, "utf8").digest("hex"),
     );
@@ -749,8 +806,8 @@ describe("buildContext working directory", () => {
 
   it("leaves the shared-mode system prompt byte-identical to the one before issue #88", async () => {
     const context = await buildContext(request(trigger), fs(), at);
-    // sha256 of the system prompt this exact request produced on main before issue #88. A
-    // deliberate guidance change elsewhere updates it; the per-bot mode must never move it.
+    // Golden after the intentional current-fact memory guidance change (ADR-0052, 2026-10-21).
+    // The per-bot working-directory mode must never move this shared-mode golden.
     expect(context.systemPromptSha256).toBe(DEFAULT_PROMPT_SHA256);
     expect(context.systemPrompt).toContain(
       "Your shared working directory is /work. Your home is /home/nova.",
@@ -851,4 +908,149 @@ describe("buildContext lane notice", () => {
   });
 });
 
-const DEFAULT_PROMPT_SHA256 = "7b088abf9167716025fae17f04d563b9dfeffcc1be5017eddae906cb23da9808";
+// Issue #39 item 4: the bot's name, role and workspace open the static system prompt, an empty
+// SOUL.md falls back to a neutral role-based line, and the task tools are described when offered.
+// A prompt change: these tests prove the text and its cache stability, not that bots do better.
+describe("buildContext identity line, SOUL fallback and task tools (issue #39 item 4)", () => {
+  const cron: TriggerPayload = { kind: "cron", prompt: "Review the queue." };
+  const chat: TriggerPayload = {
+    kind: "thread_message",
+    thread: { id: "thread-1" as ThreadId, title: "chat", kind: "chat" },
+    relayCount: 0,
+    messages: [message({ authorKind: "human", authorName: "web", body: "hi" })],
+  };
+  const soul = () => createMemoryFs({ "/home/nova/SOUL.md": "You are Nova." });
+  const at = new Date("2026-10-19T00:00:00Z");
+  const task: DeliverableTask = {
+    id: "task_1",
+    title: "Count rows",
+    outputSchema: { type: "object" },
+    scopeVersion: 1,
+  };
+  const IDENTITY = 'You are nova, ops bot, a Deskmates bot in the workspace "Ops".';
+
+  it("opens the static prompt with the bot's name, role and workspace", async () => {
+    const context = await buildContext(request(chat), soul(), at);
+    expect(context.systemPromptParts.static.startsWith(`${IDENTITY}\n\nYou are Nova.`)).toBe(true);
+    expect(context.systemPrompt.startsWith(IDENTITY)).toBe(true);
+  });
+
+  it("omits the role clause when the bot has no role, and keeps the line on one line", async () => {
+    const none = await buildContext({ ...request(chat), botRole: "  " }, soul(), at);
+    expect(none.systemPrompt.split("\n")[0]).toBe(
+      'You are nova, a Deskmates bot in the workspace "Ops".',
+    );
+    const multi = await buildContext(
+      { ...request(chat), botRole: "ops\nbot", workspaceName: 'Ops "east"' },
+      soul(),
+      at,
+    );
+    expect(multi.systemPrompt.split("\n")[0]).toBe(
+      'You are nova, ops bot, a Deskmates bot in the workspace "Ops \\"east\\"".',
+    );
+  });
+
+  it("keeps the identity line, and so the static prompt, byte-stable from run to run", async () => {
+    const first = await buildContext(request(chat), soul(), at);
+    const later = await buildContext(
+      { ...request(chat), runId: "run-later" as RunId, attempt: 2 },
+      createMemoryFs({ "/home/nova/SOUL.md": "You are Nova.", "/home/nova/MEMORY.md": "New." }),
+      new Date("2026-10-20T00:00:00Z"),
+    );
+    expect(later.systemPromptStaticSha256).toBe(first.systemPromptStaticSha256);
+    expect(later.systemPrompt).toBe(first.systemPrompt);
+  });
+
+  it("falls back to a neutral role-based default that does not report the missing file or push to ask", async () => {
+    const context = await buildContext(request(cron), createMemoryFs({}), at);
+    expect(context.systemPromptParts.static.split("\n\n")[1]).toBe(
+      "You work as ops bot for the people in this workspace. Go ahead with cheap, reversible work; check with a person first only before a costly, external or irreversible action.",
+    );
+    expect(context.systemPrompt).not.toContain("SOUL.md is missing");
+    expect(context.systemPrompt).not.toMatch(/ask before/i);
+    const roleless = await buildContext({ ...request(cron), botRole: "" }, createMemoryFs({}), at);
+    expect(roleless.systemPrompt).toContain("You work for the people in this workspace.");
+    expect(roleless.systemPrompt).not.toMatch(/ask before/i);
+  });
+
+  it("describes task_checkpoint and task_deliver only when the run offers them", async () => {
+    const offered = await buildContext(
+      { ...request(chat), tools: ["thread_post", "task_deliver"], deliverableTasks: [task] },
+      soul(),
+      at,
+    );
+    const lines = offered.systemPrompt.split("\n");
+    const checkpoint = lines.find((l) => l.startsWith("- mcp__deskmates__task_checkpoint("));
+    const deliver = lines.find((l) => l.startsWith("- mcp__deskmates__task_deliver("));
+    expect(checkpoint).toContain(
+      "(taskId, completed: [{unit, outcome, evidence?}], outstanding?, note?)",
+    );
+    expect(checkpoint).toContain(
+      "Evidence is a file under your own working directory, /work, a git commit hash or an http(s) URL.",
+    );
+    expect(deliver).toContain(
+      "(taskId, summary, artifacts?: [{label, path}], outstanding?, output?)",
+    );
+    expect(deliver).toContain("`summary` is required");
+    expect(deliver).toContain("artifact paths are files under your own working directory, /work;");
+    expect(deliver).toContain("`output` is required when the task has an output schema");
+    // Per-run task ids and titles stay out of the system prompt.
+    expect(offered.systemPrompt).not.toContain("task_1");
+    expect(offered.systemPrompt).not.toContain("Count rows");
+
+    const perBot = await buildContext(
+      {
+        ...request(chat),
+        workdirMode: "per-bot",
+        tools: ["thread_post", "task_deliver"],
+        deliverableTasks: [task],
+      },
+      soul(),
+      at,
+    );
+    expect(perBot.systemPrompt).toContain(
+      "Evidence is a file under your own working directory, /work/bots/nova, a git commit hash or an http(s) URL.",
+    );
+
+    const without: Partial<StartRunRequest>[] = [
+      { tools: ["thread_post"], deliverableTasks: [task] },
+      { tools: ["thread_post", "task_deliver"], deliverableTasks: [] },
+      { tools: ["thread_post", "task_deliver"] },
+    ];
+    for (const variant of without) {
+      const context = await buildContext({ ...request(chat), ...variant }, soul(), at);
+      expect(context.systemPrompt).not.toContain("task_checkpoint");
+      expect(context.systemPrompt).not.toContain("task_deliver");
+    }
+  });
+});
+
+// Issue #39 item 4 moved it: the identity line now opens the prompt; the text after it is unchanged.
+const DEFAULT_PROMPT_SHA256 = "c224e8e43b5267daf2675b816074ae9c15ba49e11b9c0440d29d1436bb5f54dd";
+
+it("adds versioned research verification guidance without changing prompts of older runs", async () => {
+  const trigger: TriggerPayload = { kind: "cron", prompt: "What is an unfamiliar decision model?" };
+  const old = await buildContext(request(trigger), createMemoryFs(), new Date(0));
+  const next = await buildContext(
+    { ...request(trigger), researchGuidance: "verify-v1" },
+    createMemoryFs(),
+    new Date(0),
+  );
+  expect(old.systemPrompt).not.toContain("Research and unfamiliar names:");
+  expect(next.systemPrompt).toContain("do not silently substitute a familiar similar name");
+  expect(next.systemPrompt).toContain("Otherwise search through the browser");
+  expect(next.systemPrompt).toContain("primary sources");
+  const resume = await buildContext(
+    {
+      ...request({
+        kind: "approval",
+        approvalId: "apr_research" as ApprovalId,
+        decision: "allow_once",
+      }),
+      researchGuidance: "verify-v1",
+    },
+    createMemoryFs(),
+    new Date(1),
+  );
+  expect(resume.systemPrompt).toBe(next.systemPrompt);
+});

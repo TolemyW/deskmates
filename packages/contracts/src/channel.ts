@@ -4,6 +4,7 @@
 // carried across a process boundary.
 
 import type { Approval, ApprovalDecision } from "./approval.js";
+import type { ChannelOpenLink, ChannelSetupGuide } from "./channel-setup-guide.js";
 import type { BotId, WorkspaceId } from "./ids.js";
 import type { Run } from "./run.js";
 import type { Thread, ThreadMember, ThreadMessage } from "./thread.js";
@@ -64,7 +65,11 @@ export function isChannelAuthorId(authorId: string, channel: string): boolean {
   return authorId.startsWith(`${channel}:`);
 }
 
-/** The only plugin ABI accepted by this Gateway release. */
+/**
+ * ABI 1: one plugin-wide host (`ChannelPluginHost`), one connection per workspace. WhatsApp uses
+ * it until its own ABI-2 change. ABI 2, the connection-scoped host, is in `channel-connection.ts`
+ * (ADR-0047); `SUPPORTED_CHANNEL_PLUGIN_API_VERSIONS` lists both.
+ */
 export const CHANNEL_PLUGIN_API_VERSION = 1 as const;
 
 export type ChannelConfigFieldKind = "text" | "password" | "select" | "bot" | "phone-list";
@@ -78,6 +83,8 @@ export interface ChannelConfigField {
   secret?: boolean;
   placeholder?: string;
   options?: readonly { value: string; label: string }[];
+  /** Where to find the value, in plain text (ADR-0047 amendment 2 G2). */
+  help?: string;
 }
 
 export interface ChannelConnectionMethod {
@@ -85,6 +92,10 @@ export interface ChannelConnectionMethod {
   label: string;
   description: string;
   fields: readonly ChannelConfigField[];
+  /** Numbered steps on the provider's side (ADR-0047 amendment 2 G1). */
+  setup?: ChannelSetupGuide;
+  /** A link to the verified account (ADR-0047 amendment 2 G3). */
+  open?: ChannelOpenLink;
 }
 
 export interface ChannelPluginManifest {
@@ -102,6 +113,13 @@ export interface ChannelPluginManifest {
   /** Stable provider-defined phases whose labels are safe to show to an operator. */
   statusVocabulary: readonly string[];
 }
+
+/**
+ * The phase the Gateway itself reports for a connection whose workspace is in Trash (ADR-0017
+ * amendment 1 P6, ADR-0026 decision 2): the provider session is closed and the connection's
+ * private state and secrets are kept; restoring the workspace opens it again. No plugin reports it.
+ */
+export const CHANNEL_PHASE_ARCHIVED = "archived";
 
 export interface ChannelConnectionStatus {
   phase: string;
@@ -122,6 +140,19 @@ export interface ChannelConnection {
   botId: BotId;
   config: Readonly<Record<string, unknown>>;
   status: ChannelConnectionStatus;
+  /** The plugin ABI that owns the connection; absent means 1. */
+  apiVersion?: number;
+  /** ABI 2: the verified identity (ADR-0047 decision 6). Never a credential. */
+  identityKey?: string;
+  identityLabel?: string;
+  /** ABI 2: increments on every rebind (ADR-0047 decision 8). */
+  bindingGeneration?: number;
+  /**
+   * When the plugin's sender admission changed under this existing connection (ADR-0017
+   * amendment 3: WhatsApp now admits every sender unless blocked). The Integrations card says so
+   * once; absent for a connection created after the change.
+   */
+  admissionChangedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

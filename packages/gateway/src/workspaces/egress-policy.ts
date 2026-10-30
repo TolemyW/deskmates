@@ -76,17 +76,18 @@ export function egressHostOf(approval: Approval): string | undefined {
 /**
  * ADR-0020 decision 2: before an egress approval is settled with `allow_always`, its host joins
  * the workspace allowlist, so the proxy already admits the site when the run continues. A deny,
- * a tool approval or an already-decided approval changes nothing here.
+ * a tool approval or an already-decided approval changes nothing here. Returns the host and
+ * workspace when this call added the host.
  */
 export async function applyEgressDecision(
   ctx: GatewayContext,
   approvalId: ApprovalId,
   decision: ApprovalDecision,
   by: string,
-): Promise<void> {
+): Promise<{ workspaceId: WorkspaceId; host: string } | undefined> {
   const approval = ctx.approvals.mustGet(approvalId);
-  if (approval.kind !== "egress" || approval.decision !== undefined) return;
-  if (decision !== "allow_always") return;
+  if (approval.kind !== "egress" || approval.decision !== undefined) return undefined;
+  if (decision !== "allow_always") return undefined;
   const host = egressHostOf(approval);
   if (host === undefined) {
     throw new DeskmatesError("validation", "the egress approval names no host", { approvalId });
@@ -94,6 +95,38 @@ export async function applyEgressDecision(
   const workspaceId = ctx.bots.mustGet(approval.botId).workspaceId;
   const current = ctx.workspaces.mustGet(workspaceId).egressAllowlist;
   if (current.includes(EGRESS_OPEN_INTERNET) || current.some((p) => p.toLowerCase() === host))
-    return;
-  await replaceEgressAllowlist(ctx, workspaceId, [...current, host], by);
+    return undefined;
+  const { added } = await replaceEgressAllowlist(ctx, workspaceId, [...current, host], by);
+  return added.includes(host) ? { workspaceId, host } : undefined;
+}
+
+/**
+ * Settle an approval with its egress side: the host of an "allow this site" joins the list
+ * first (decision 2), then `decide` records the answer. When `decide` fails, for instance because
+ * another answer landed while the proxy was being updated, a host this call added is taken out
+ * again unless the approval ended allowed, so a deny never leaves the site admitted.
+ */
+export async function decideWithEgress<T>(
+  ctx: GatewayContext,
+  approvalId: ApprovalId,
+  decision: ApprovalDecision,
+  by: string,
+  decide: () => T,
+): Promise<T> {
+  const added = await applyEgressDecision(ctx, approvalId, decision, by);
+  try {
+    return decide();
+  } catch (error) {
+    if (added !== undefined && ctx.approvals.get(approvalId)?.decision !== "allow_always") {
+      const current = ctx.workspaces.mustGet(added.workspaceId).egressAllowlist;
+      if (current.includes(added.host))
+        await replaceEgressAllowlist(
+          ctx,
+          added.workspaceId,
+          current.filter((p) => p !== added.host),
+          by,
+        );
+    }
+    throw error;
+  }
 }

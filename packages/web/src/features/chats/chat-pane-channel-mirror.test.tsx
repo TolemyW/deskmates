@@ -9,6 +9,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApiClient } from "../../api/client.js";
 import { I18nProvider } from "../../i18n/i18n-provider.js";
+import { type InterfaceView, InterfaceViewProvider } from "../../lib/interface-view.js";
 import {
   type RouteTable,
   THREAD_ID,
@@ -69,16 +70,18 @@ function routes(subject: Thread, extra: RouteTable = {}): RouteTable {
   };
 }
 
-function renderPane(subject: Thread, locale: "en" | "ja" = "en") {
+function renderPane(subject: Thread, locale: "en" | "ja" = "en", view: InterfaceView = "tune") {
   const { fetch } = fakeFetch(routes(subject));
   return render(
     <I18nProvider locale={locale}>
-      <ChatPane
-        threadId={THREAD_ID}
-        api={createApiClient({ fetch })}
-        infoShown={true}
-        onToggleInfo={() => undefined}
-      />
+      <InterfaceViewProvider view={view}>
+        <ChatPane
+          threadId={THREAD_ID}
+          api={createApiClient({ fetch })}
+          infoShown={true}
+          onToggleInfo={() => undefined}
+        />
+      </InterfaceViewProvider>
     </I18nProvider>,
   );
 }
@@ -125,4 +128,20 @@ describe("a channel-bound thread is a read-only mirror", () => {
     expect(screen.queryByTestId("thread-channel")).toBeNull();
     expect(await screen.findByRole("button", { name: "Allow once", hidden: true })).toBeTruthy();
   });
+
+  it.each(["use", "tune"] as const)(
+    "keeps internal bot collaboration and approvals read-only in %s",
+    async (view) => {
+      renderPane({ ...thread, kind: "bus", channel: "internal" }, "en", view);
+      expect(await screen.findByText("A conversation between bots")).toBeTruthy();
+      expect(screen.getByTestId("thread-channel").textContent).toBe("Bot collaboration");
+      expect(screen.getByTestId("channel-mirror-notice").textContent).not.toContain("Integrations");
+      expect(screen.getByTestId("channel-mirror-notice").textContent).toContain("private chat");
+      expect(screen.queryByRole("textbox", { name: "Message", hidden: true })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Allow once", hidden: true })).toBeNull();
+      const note = (await screen.findByTestId("approval-read-only")).textContent;
+      expect(note).toContain("Approvals");
+      expect(note).not.toContain("channel");
+    },
+  );
 });

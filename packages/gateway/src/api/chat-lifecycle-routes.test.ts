@@ -192,13 +192,14 @@ describe("Bot inbox welcome lifecycle", () => {
     const welcomeRuns = (botId: string) =>
       h.app.deskmates.ctx.runs.list({ botId: botId as BotDefinition["id"] });
 
-    it("treats a silent welcome that greeted through thread_post as delivered", async () => {
+    it("treats a welcome that greeted through thread_post as delivered", async () => {
       h.provider.onRun(endWelcome({ post: "Hello from greeter" }));
-      const created = await createSettled("silent");
+      // It posted, so it ended `succeeded`, not silent (ADR-0005, "Definition of `silent`").
+      const created = await createSettled("succeeded");
 
       const listed = await h.api<Listed>("GET", `/api/runs?threadId=${created.privateChat.id}`);
       expect(listed.json.runs.find((r) => r.id === created.welcomeRun.id)).toMatchObject({
-        status: "silent",
+        status: "succeeded",
         welcomeDelivery: "delivered",
       });
       const detail = await h.api<{ run: { welcomeDelivery?: string } }>(

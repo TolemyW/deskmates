@@ -1,13 +1,13 @@
 # ADR-0039: Multi-upstream model registry
 
 Date: 2026-10-14
-Status: Accepted for decisions 1-6 (owner-decided 2026-10-14, OWNER-DECISIONS items 9 and 15: credentials installation-level in Deskmates `.env`, no automatic fallback, local GPU-host models priced as known zero, `qwen3.8-27b` as `CHEAP_MODEL`). Decisions 7 and 8 are proposed. Implements phase P1 of `docs/design/multimodal-models-2026-10-14.md` for the chat operation only; specialist operations (OCR, ASR, generation) are later phases and are not decided here. No real upstream was contacted; tests use fake upstreams.
+Status: Accepted for decisions 1-6 (owner-decided 2026-10-14, OWNER-DECISIONS items 9 and 15: credentials installation-level in Deskmates `.env`, no automatic fallback, local GPU-host models priced as known zero, `qwen3.8-27b` as `CHEAP_MODEL`). Decisions 7 and 8 were proposed and are accepted under owner delegation (2026-10-17): free models leave the unknown-price estimate's population, so adding local models cannot cut every estimate, and the config route names upstream ids only, never a URL or token. Implements phase P1 of `docs/design/multimodal-models-2026-10-14.md` for the chat operation only; specialist operations (OCR, ASR, generation) are later phases and are not decided here. No real upstream was contacted; tests use fake upstreams.
 
 ## Context
 
 Until this ADR the Gateway had one model upstream: `MODEL_BASE_URL` with its Bearer `MODEL_AUTH_TOKEN` (`config/model.ts`). The model proxy (`model-proxy/model-proxy.ts`, ADR-0002 item 4) checked a run's request against its frozen models (ADR-0023 decision 1), admitted it against the workspace budget (ADR-0032 decision 5), swapped the run token for the upstream token and forwarded it to that one URL. Every model id therefore had to be served by the same endpoint.
 
-The owner set up local vLLM servers on the GPU host (`10.20.50.16`, reachable from the stable host, no authentication) that speak the Anthropic `/v1/messages` protocol: port 8003 `qwen3.5-9b`, 8004 `qwen3.8-27b` (intended `CHEAP_MODEL`), 8005 `qwen3.5-9b-vl` (vision). They are separate endpoints, so they cannot sit behind the existing single upstream, and they cost nothing per token. The owner approved a multi-upstream model registry (#115 P1) on 2026-10-14 and ruled that credentials stay installation-level in `.env`, that there is no automatic fallback across destinations, and that local models are priced as a known zero.
+The owner set up local vLLM servers on the GPU host (on the LAN, reachable from the stable host, no authentication) that speak the Anthropic `/v1/messages` protocol: port 8003 `qwen3.5-9b`, 8004 `qwen3.8-27b` (intended `CHEAP_MODEL`), 8005 `qwen3.5-9b-vl` (vision). They are separate endpoints, so they cannot sit behind the existing single upstream, and they cost nothing per token. The owner approved a multi-upstream model registry (#115 P1) on 2026-10-14 and ruled that credentials stay installation-level in `.env`, that there is no automatic fallback across destinations, and that local models are priced as a known zero.
 
 ## Decision
 
@@ -23,9 +23,9 @@ The owner set up local vLLM servers on the GPU host (`10.20.50.16`, reachable fr
 
 6. **Vision evidence is per upstream.** The vision probe cache key's `endpoint_sha256` (ADR-0023 amendment 1 decision 8) is the hash of the base URL of the model's own upstream. Keys of models on `default` are unchanged, so existing probe rows stay current; the same model id on two upstreams has separate evidence.
 
-7. **Free models do not lower the unknown-price estimate.** (Proposed.) The `avg-unit-price-v1` estimate (ADR-0032 decision 4) averages over priced models whose rows are not all zero. A free local model says nothing about what an unpriced paid model costs; without this, adding three free local models would cut every estimate by most of its value. When every priced model is free, there is no estimate (unknown), as with an empty price table.
+7. **Free models do not lower the unknown-price estimate.** (Proposed; accepted under owner delegation 2026-10-17.) The `avg-unit-price-v1` estimate (ADR-0032 decision 4) averages over priced models whose rows are not all zero. A free local model says nothing about what an unpriced paid model costs; without this, adding three free local models would cut every estimate by most of its value. When every priced model is free, there is no estimate (unknown), as with an empty price table.
 
-8. **The UI lists registered models with their upstream.** (Proposed shape.) `GET /api/config` adds `models`: the models the registry names explicitly plus `DEFAULT_MODEL`, `CHEAP_MODEL` and `FALLBACK_MODEL`, each as `{model, upstream}` with the upstream id only (never the URL or token), sorted by model id. The bot model and cheap-model pickers offer these as choices labelled with the upstream, and keep a free-text "another model" field for a model the `default` upstream serves without listing it.
+8. **The UI lists registered models with their upstream.** (Proposed shape; accepted under owner delegation 2026-10-17.) `GET /api/config` adds `models`: the models the registry names explicitly plus `DEFAULT_MODEL`, `CHEAP_MODEL` and `FALLBACK_MODEL`, each as `{model, upstream}` with the upstream id only (never the URL or token), sorted by model id. The bot model and cheap-model pickers offer these as choices labelled with the upstream, and keep a free-text "another model" field for a model the `default` upstream serves without listing it.
 
 ## Alternatives considered
 

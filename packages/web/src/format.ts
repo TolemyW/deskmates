@@ -2,10 +2,14 @@
 // locale the UI renders in, and words come from the message catalog (issue #23).
 
 import {
+  RUN_ERROR_CRON_MISFIRE,
   RUN_ERROR_DEADLINE,
+  RUN_ERROR_GATEWAY_RESTARTED,
   RUN_ERROR_NO_REPLY,
+  RUN_ERROR_OPERATOR_PAUSE,
   RUN_ERROR_TURN_BUDGET,
 } from "@deskmates/contracts";
+import { ApiError } from "./api/types.js";
 import { currentI18n } from "./i18n/intl.js";
 
 function locale(): string {
@@ -74,18 +78,25 @@ export function splitList(text: string): string[] {
 }
 
 export function errorMessage(err: unknown): string {
+  if (err instanceof ApiError && (err.code === "network" || err.status === 0))
+    return currentI18n().t("app.gateway.unreachable");
   return err instanceof Error ? err.message : String(err);
 }
 
 /**
- * A run's `error` as the run view shows it. Reasons the Gateway records itself (issue #21) get a
- * sentence and keep the code; anything else is free text and is shown as it is.
+ * A run's `error` as the run view shows it. Reasons the server records itself get an actionable
+ * sentence; internal codes belong in technical details, not in the user-facing notice.
  */
 export function describeRunError(error: string): string {
   const { t } = currentI18n();
-  if (error === RUN_ERROR_NO_REPLY) return t("format.runError.noReply", { code: error });
-  if (error === RUN_ERROR_DEADLINE) return t("format.runError.deadline", { code: error });
-  if (error === RUN_ERROR_TURN_BUDGET) return t("format.runError.turnBudget", { code: error });
+  if (error === RUN_ERROR_NO_REPLY) return t("format.runError.noReply");
+  if (error === RUN_ERROR_DEADLINE) return t("format.runError.deadline");
+  if (error === RUN_ERROR_TURN_BUDGET) return t("format.runError.turnBudget");
+  if (error === RUN_ERROR_OPERATOR_PAUSE) return t("format.runError.operatorPause");
+  if (error === RUN_ERROR_GATEWAY_RESTARTED) return t("format.runError.gatewayRestarted");
+  if (error === RUN_ERROR_CRON_MISFIRE) return t("format.runError.cronMisfire");
+  if (/issue with the selected model|it may not exist or you may not have access/i.test(error))
+    return t("format.runError.modelUnavailable");
   return error;
 }
 

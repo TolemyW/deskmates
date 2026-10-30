@@ -1,0 +1,19 @@
+{
+  "webSearch.disable": "Desactivar la búsqueda web",
+  "webSearch.enable": "Activar la búsqueda web",
+  "webSearch.flow": "Con la búsqueda web activada, el texto de cada búsqueda sale de esta instalación hacia buscadores públicos, también desde un espacio de trabajo cuya navegación está limitada a una lista. Abrir un resultado sigue las reglas de salida de este espacio de trabajo: un sitio fuera de la lista pide permiso primero.",
+  "webSearch.frozen": "Las ejecuciones ya iniciadas conservan la configuración con la que empezaron.",
+  "webSearch.intro": "La búsqueda web está activada por defecto si el servidor tiene un servicio de búsqueda. Un propietario o administrador puede desactivarla.",
+  "webSearch.loading": "Cargando la búsqueda web…",
+  "webSearch.notConfigured": "Esta instalación no tiene configurado un servicio de búsqueda, así que aquí no se puede activar la búsqueda web.",
+  "webSearch.off": "Desactivada",
+  "webSearch.on": "Activada",
+  "webSearch.reset": "Volver al valor predeterminado",
+  "webSearch.retry": "Reintentar los ajustes de búsqueda web",
+  "webSearch.roleNote": "cambiar la búsqueda web",
+  "webSearch.setting.chosen": "establecido en esta página",
+  "webSearch.setting.default": "por defecto",
+  "webSearch.strategyNote": "La búsqueda web se configura junto a la red del espacio. Desactívala si sus datos no deben aparecer en consultas públicas.",
+  "webSearch.title": "Búsqueda web",
+  "webSearch.workspaceLabel": "Este espacio de trabajo"
+}

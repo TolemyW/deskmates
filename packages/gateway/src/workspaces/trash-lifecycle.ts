@@ -38,16 +38,25 @@ export class TrashLifecycle {
     tenantId: string,
     offset: number,
     limit: number,
+    readable?: ReadonlySet<string>,
   ): { workspaces: Workspace[]; total: number } {
-    const where = "tenant_id = ? AND archived_at IS NOT NULL";
+    // `readable` narrows the page to the workspaces the caller manages (ADR-0022 amendment 6 W1).
+    const scopedIds = readable === undefined ? [] : [...readable];
+    const scoped =
+      readable === undefined
+        ? ""
+        : scopedIds.length === 0
+          ? " AND 0"
+          : ` AND id IN (${scopedIds.map(() => "?").join(", ")})`;
+    const where = `tenant_id = ? AND archived_at IS NOT NULL${scoped}`;
     const { total } = this.ctx.db
       .prepare(`SELECT COUNT(*) AS total FROM workspaces WHERE ${where}`)
-      .get(tenantId) as { total: number };
+      .get(tenantId, ...scopedIds) as { total: number };
     const ids = this.ctx.db
       .prepare(
         `SELECT id FROM workspaces WHERE ${where} ORDER BY archived_at DESC, id LIMIT ? OFFSET ?`,
       )
-      .all(tenantId, limit, offset) as { id: WorkspaceId }[];
+      .all(tenantId, ...scopedIds, limit, offset) as { id: WorkspaceId }[];
     return {
       workspaces: ids.map(({ id }) => this.ctx.workspaces.mustGetIncludingArchived(id)),
       total,
@@ -70,11 +79,13 @@ export class TrashLifecycle {
     }
     this.ctx.locks.humanRelease(id);
     this.ctx.bus.publish({ type: "workspace_lock", workspaceId: id, browserLock: null });
+    // ADR-0017 amendment 1 P6: stopped, with their state and secrets kept for a restore.
+    await this.ctx.channels.archiveWorkspace(id);
     await this.ctx.sandboxes.stop(id);
     return workspace;
   }
 
-  restoreWorkspace(id: WorkspaceId, actor: string): Workspace {
+  async restoreWorkspace(id: WorkspaceId, actor: string): Promise<Workspace> {
     const current = this.ctx.workspaces.mustGetIncludingArchived(id);
     const tenantId = this.ctx.ownership.tenantOf("workspace", id);
     if (!tenantId)
@@ -85,6 +96,8 @@ export class TrashLifecycle {
       return restored;
     })();
     this.ctx.bus.publish({ type: "workspace", workspaceId: id, workspace });
+    // Decision 3: the channel runtime starts again through its normal connection lifecycle.
+    if (current.archivedAt) await this.ctx.channels.restoreWorkspace(id);
     return workspace;
   }
 
@@ -124,6 +137,7 @@ export class TrashLifecycle {
     const workspace = this.ctx.workspaces.mustGetIncludingArchived(id);
     requirePermanentDelete(workspace.archivedAt, workspace.name, typedName, "workspace", id);
     await this.ctx.integrations.permanentlyDeleteWorkspace(id);
+    await this.ctx.channels.permanentlyDeleteWorkspace(id);
     await this.ctx.sandboxes.permanentlyDelete(id);
     this.ctx.db.transaction(() => {
       authorizePermanentDelete(this.ctx, "workspace", id);

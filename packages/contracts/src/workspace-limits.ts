@@ -13,6 +13,7 @@ export const WORKSPACE_LIMIT_KEYS = [
   "maxTurns",
   "relayCountMax",
   "turnBudget",
+  "turnBudgetResetMinutes",
 ] as const;
 export type WorkspaceLimitKey = (typeof WORKSPACE_LIMIT_KEYS)[number];
 
@@ -67,6 +68,12 @@ export type LoopBreakerRule = "depth" | "volume" | "repetition";
 /** ADR-0016 decisions 4 and 5: the defaults the settings inherit from. */
 export const CONTINUATION_LIMIT_DEFAULT = 2;
 export const CONTINUATION_WINDOW_HOURS_DEFAULT = 24;
+/**
+ * ADR-0005 amendment 3, rewritten decision 22: a turn-budget pause ends by itself this many
+ * minutes after it began. The default is a guess, justified in the ADR and calibrated by
+ * `budget_pause_rate` and re-breaches after an automatic resume.
+ */
+export const TURN_BUDGET_RESET_MINUTES_DEFAULT = 60;
 
 export const WORKSPACE_LIMIT_RANGES: Readonly<Record<WorkspaceLimitKey, WorkspaceLimitRange>> = {
   continuationLimit: { min: 0, max: 20, off: true },
@@ -74,6 +81,8 @@ export const WORKSPACE_LIMIT_RANGES: Readonly<Record<WorkspaceLimitKey, Workspac
   maxTurns: { min: 1, max: 1000, off: true },
   relayCountMax: { min: 1, max: LOOP_BREAKER_RELAY_MAX, off: true },
   turnBudget: { min: 1, max: LOOP_BREAKER_BOT_MESSAGES, off: true },
+  // Never off: a turn-budget pause always ends by itself (owner, 2026-10-17).
+  turnBudgetResetMinutes: { min: 5, max: 1440, off: false },
 };
 
 /**
@@ -89,6 +98,7 @@ export function workspaceLimitDefaults(
     maxTurns: gatewayMaxTurns,
     relayCountMax: RELAY_COUNT_MAX,
     turnBudget: null,
+    turnBudgetResetMinutes: TURN_BUDGET_RESET_MINUTES_DEFAULT,
   };
 }
 

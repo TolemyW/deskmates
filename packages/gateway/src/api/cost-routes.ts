@@ -13,11 +13,12 @@ import {
   type PageLimitPolicy,
   type WorkspaceId,
 } from "@deskmates/contracts";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { GatewayContext } from "../context.js";
-import { CostQueryStore } from "../ledger/costs.js";
+import { CostQueryStore, type CostScope } from "../ledger/costs.js";
 import { keysetPage, parseCursorQuery, parseOffsetQuery } from "./pagination.js";
 import { requestTenant } from "./route-policy.js";
+import { readableWorkspaceIds } from "./workspace-access.js";
 
 /** A ranking: ten entries a page (ADR-0032 decision 9), at most 100 (#113). */
 export const COST_RANKING_PAGE: PageLimitPolicy = {
@@ -83,14 +84,20 @@ function costQuery(q: CostQuerystring): CostQuery {
   };
 }
 
-const DIMENSIONS: readonly CostRankingDimension[] = ["model", "bot", "workspace"];
+const DIMENSIONS: readonly CostRankingDimension[] = ["model", "bot", "workspace", "operation"];
 const METRICS: readonly CostRankingMetric[] = ["money", "usage"];
 
 export function registerCostRoutes(app: FastifyInstance, ctx: GatewayContext): void {
   const costs = new CostQueryStore(ctx.db);
+  // Spend of a workspace reaches its Members only (ADR-0022 amendment 6 W1).
+  const costScope = (request: FastifyRequest): CostScope => {
+    const workspaceIds = readableWorkspaceIds(ctx, request, "member");
+    const tenantId = requestTenant(request);
+    return workspaceIds === undefined ? tenantId : { tenantId, workspaceIds };
+  };
   // The summary: totals and days over the whole filtered range, never rows (#113).
   app.get<{ Querystring: CostQuerystring }>("/api/costs", async (request) =>
-    costs.summary(requestTenant(request), costQuery(request.query)),
+    costs.summary(costScope(request), costQuery(request.query)),
   );
   // The Activity rows, one keyset page at a time (#113). The cursor is bound to the tenant and
   // the filters, so it cannot be replayed under another range.
@@ -116,7 +123,7 @@ export function registerCostRoutes(app: FastifyInstance, ctx: GatewayContext): v
         ["string", "string", "string", "string"],
       );
       const page = costs.rowPage(
-        tenantId,
+        costScope(request),
         filters,
         limit,
         after as [string, string, string, string] | undefined,
@@ -140,15 +147,24 @@ export function registerCostRoutes(app: FastifyInstance, ctx: GatewayContext): v
       ...rest
     } = request.query;
     if (!DIMENSIONS.includes(by as CostRankingDimension))
-      throw new DeskmatesError("validation", "by must be model, bot or workspace", { by });
+      throw new DeskmatesError("validation", "by must be model, bot, workspace or operation", {
+        by,
+      });
     if (!METRICS.includes(metric as CostRankingMetric))
       throw new DeskmatesError("validation", "metric must be money or usage", { metric });
+    // ADR-0040 amendment A, decision 14: operations are ranked by money only; their units are
+    // not tokens and are never ranked against each other.
+    if (by === "operation" && metric !== "money")
+      throw new DeskmatesError("validation", "the operation ranking is money only", {
+        by,
+        metric,
+      });
     const { offset, limit } = parseOffsetQuery(
       { offset: rawOffset, limit: rawLimit },
       COST_RANKING_PAGE,
     );
     return costs.ranking(
-      requestTenant(request),
+      costScope(request),
       costQuery(rest),
       by as CostRankingDimension,
       metric as CostRankingMetric,

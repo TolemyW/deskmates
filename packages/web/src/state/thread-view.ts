@@ -202,6 +202,7 @@ const RUN_STATUS_LABELS: Readonly<Record<RunStatus, MessageKey>> = {
   waiting_approval: "chatPane.runStatus.waiting_approval",
   waiting_browser: "chatPane.runStatus.waiting_browser",
   waiting_continuation: "chatPane.runStatus.waiting_continuation",
+  waiting_platform: "chatPane.runStatus.waiting_platform",
   succeeded: "chatPane.runStatus.succeeded",
   silent: "chatPane.runStatus.silent",
   failed: "chatPane.runStatus.failed",

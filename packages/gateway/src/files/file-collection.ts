@@ -13,6 +13,7 @@ import {
   type BotId,
   FILE_COLLECTION_ITEM_REFERENCES,
   FILE_COLLECTION_SCAN_LIMIT,
+  type FileChatDelivery,
   type FileCollectionQuery,
   type FilePublication,
   type FileReference,
@@ -64,9 +65,20 @@ interface AttachmentRow {
   message_id: string;
   thread_id: string;
   thread_title: string;
+  /** The person whose private chat this is; null for a shared chat. */
+  private_to: string | null;
   ts: string;
   ref: unknown;
   name: unknown;
+}
+
+interface ChatDeliveryRow {
+  path: string;
+  message_id: string;
+  thread_id: string;
+  thread_title: string;
+  author_kind: "human" | "bot";
+  ts: string;
 }
 
 // The current (not superseded) publication of each task and path, newest first. The bot is
@@ -103,7 +115,8 @@ const LEGACY_ARTIFACTS_SQL = `
 
 // Inputs a person supplied: workspace-path attachments on human-authored messages.
 const INPUT_ATTACHMENTS_SQL = `
-  SELECT m.id AS message_id, m.thread_id, th.title AS thread_title, m.ts,
+  SELECT m.id AS message_id, m.thread_id, th.title AS thread_title,
+         th.private_to_user_id AS private_to, m.ts,
          json_extract(a.value, '$.ref') AS ref, json_extract(a.value, '$.name') AS name
     FROM thread_messages m JOIN threads th ON th.id = m.thread_id, json_each(m.attachments_json) a
    WHERE th.workspace_id = ? AND m.author_kind = 'human' AND m.attachments_json <> '[]'
@@ -113,6 +126,26 @@ const INPUT_ATTACHMENTS_SQL = `
                         AND u.deleted_at IS NOT NULL)
    ORDER BY m.ts DESC, m.id
    LIMIT ?`;
+
+// ADR-0014 A7 (issue #16): for each listed path, the newest message whose attachments name it,
+// from a person or a bot, in a thread the caller may read. Another person's private chat is never
+// a candidate, and a Guest reads no bus thread (ADR-0022 amendment 6). One query per page, over at
+// most the scan limit of the newest messages that carry attachments.
+const CHAT_DELIVERIES_SQL = `
+  SELECT path, message_id, thread_id, thread_title, author_kind, ts FROM (
+    SELECT json_extract(a.value, '$.ref') AS path, m.id AS message_id, m.thread_id,
+           th.title AS thread_title, m.author_kind, m.ts,
+           row_number() OVER (PARTITION BY json_extract(a.value, '$.ref')
+                              ORDER BY m.ts DESC, m.id DESC) AS n
+      FROM (SELECT m.* FROM thread_messages m JOIN threads t ON t.id = m.thread_id
+             WHERE t.workspace_id = @workspaceId AND m.author_kind IN ('human', 'bot')
+               AND m.attachments_json <> '[]'
+               AND (t.private_to_user_id IS NULL OR t.private_to_user_id = @userId)
+               AND (@includeBus = 1 OR t.kind <> 'bus')
+             ORDER BY m.ts DESC, m.id DESC LIMIT @limit) m
+      JOIN threads th ON th.id = m.thread_id, json_each(m.attachments_json) a
+     WHERE json_extract(a.value, '$.ref') IN (SELECT value FROM json_each(@paths)))
+   WHERE n = 1`;
 
 interface UploadRow {
   id: string;
@@ -138,6 +171,15 @@ export interface FileCollectionOptions {
   scanLimit?: number;
 }
 
+/**
+ * Who is listing (ADR-0022 amendment 6): the signed-in person, if any, and whether their role
+ * reads bus threads. The operator credential is no person, so it reads no private chat.
+ */
+export interface FileCollectionViewer {
+  userId?: string;
+  includeBus: boolean;
+}
+
 interface Collected {
   path: string;
   refs: FileReference[];
@@ -155,6 +197,7 @@ export class FileCollection {
     workspaceId: WorkspaceId,
     query: FileCollectionQuery,
     options: FileCollectionOptions = {},
+    viewer: FileCollectionViewer = { includeBus: true },
   ): WorkspaceFileCollectionPage {
     const limit = options.scanLimit ?? FILE_COLLECTION_SCAN_LIMIT;
     const botNames = (
@@ -236,12 +279,19 @@ export class FileCollection {
     for (const row of inputs) {
       const target = entry(row.ref);
       if (!target) continue;
+      // Another person's private chat is never named, whatever the caller's role (A7): the
+      // reference keeps its time and label, not the chat or the message.
+      const readable = row.private_to === null || row.private_to === viewer.userId;
       target.refs.push({
         kind: "message_attachment",
         at: row.ts as IsoTimestamp,
-        threadId: row.thread_id as ThreadId,
-        threadTitle: row.thread_title,
-        messageId: row.message_id as MessageId,
+        ...(readable
+          ? {
+              threadId: row.thread_id as ThreadId,
+              threadTitle: row.thread_title,
+              messageId: row.message_id as MessageId,
+            }
+          : {}),
         authorKind: "human",
         ...(typeof row.name === "string" && row.name !== "" ? { label: row.name } : {}),
       });
@@ -288,15 +338,52 @@ export class FileCollection {
         (a, b) =>
           b.lastReferencedAt.localeCompare(a.lastReferencedAt) || a.path.localeCompare(b.path),
       );
+    const items = matches.slice(query.offset, query.offset + query.limit);
+    const deliveries = this.chatDeliveries(
+      workspaceId,
+      items.map((item) => item.path),
+      viewer,
+      limit,
+    );
     return {
       scope: "published-results-and-inputs",
-      items: matches.slice(query.offset, query.offset + query.limit),
+      items: items.map((item) => {
+        const sentInChat = deliveries.get(item.path);
+        return sentInChat ? { ...item, sentInChat } : item;
+      }),
       total: matches.length,
       offset: query.offset,
       limit: query.limit,
       truncated,
       facets: { types, sources },
     };
+  }
+
+  /** The newest readable chat message attaching each path (A7), for one page of paths. */
+  private chatDeliveries(
+    workspaceId: WorkspaceId,
+    paths: readonly string[],
+    viewer: FileCollectionViewer,
+    limit: number,
+  ): Map<string, FileChatDelivery> {
+    const found = new Map<string, FileChatDelivery>();
+    if (paths.length === 0) return found;
+    const rows = this.db.prepare(CHAT_DELIVERIES_SQL).all({
+      workspaceId,
+      userId: viewer.userId ?? null,
+      includeBus: viewer.includeBus ? 1 : 0,
+      limit,
+      paths: JSON.stringify(paths),
+    }) as ChatDeliveryRow[];
+    for (const row of rows)
+      found.set(row.path, {
+        threadId: row.thread_id as ThreadId,
+        threadTitle: row.thread_title,
+        messageId: row.message_id as MessageId,
+        authorKind: row.author_kind,
+        at: row.ts as IsoTimestamp,
+      });
+    return found;
   }
 }
 

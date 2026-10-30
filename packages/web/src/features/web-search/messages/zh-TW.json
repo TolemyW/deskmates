@@ -1,0 +1,19 @@
+{
+  "webSearch.disable": "關閉網頁搜尋",
+  "webSearch.enable": "開啟網頁搜尋",
+  "webSearch.flow": "開啟網頁搜尋後，每次搜尋的文字都會離開本安裝、傳送到公共搜尋引擎；即使工作區的瀏覽已鎖定為名單，也是如此。開啟搜尋結果仍遵循本工作區的對外連線規則：名單之外的網站會先詢問。",
+  "webSearch.frozen": "已經開始的執行保留開始時的設定。",
+  "webSearch.intro": "伺服器已連接搜尋服務時，網頁搜尋預設開啟。工作區擁有者或管理員可在此關閉。",
+  "webSearch.loading": "正在載入網頁搜尋…",
+  "webSearch.notConfigured": "本安裝未設定搜尋服務，因此無法在此開啟網頁搜尋。",
+  "webSearch.off": "關閉",
+  "webSearch.on": "開啟",
+  "webSearch.reset": "恢復預設",
+  "webSearch.retry": "重試載入網頁搜尋設定",
+  "webSearch.roleNote": "變更網頁搜尋",
+  "webSearch.setting.chosen": "在此頁面設定",
+  "webSearch.setting.default": "預設",
+  "webSearch.strategyNote": "網頁搜尋與本工作區的網路連線一起設定。如工作區資料不應進入公共搜尋查詢，請關閉此功能。",
+  "webSearch.title": "網頁搜尋",
+  "webSearch.workspaceLabel": "本工作區"
+}

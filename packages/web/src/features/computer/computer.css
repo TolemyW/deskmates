@@ -220,12 +220,12 @@
     background: var(--surface-3);
     overflow: hidden;
     border-radius: var(--app-radius-sm);
-    aspect-ratio: 8 / 5;
+    aspect-ratio: var(--desktop-ratio, 16 / 9);
   }
   .desktop-frame.expanded {
-    min-height: 200px;
-    max-height: 68dvh;
-    width: 100%;
+    flex-shrink: 0;
+    width: min(100%, calc(58dvh * var(--desktop-ratio, 1.777778)));
+    margin-inline: auto;
   }
   .rfb-surface {
     width: 100%;
@@ -341,7 +341,6 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    max-width: 760px;
   }
   .workspace-settings .card:not([data-gb-ui]) > p + * {
     margin-top: 12px;
@@ -367,5 +366,69 @@
     .desktops-screen {
       padding: 20px;
     }
+  }
+}
+
+.desktop-dialog {
+  overflow-y: auto;
+}
+.desktop-screen-picker {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  margin-block: 12px;
+  font-size: var(--app-text-sm);
+}
+.desktop-screen-picker select {
+  min-width: 0;
+  max-width: 100%;
+  flex: 1;
+}
+.desktop-target-status {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  min-height: 200px;
+}
+
+.computer-content {
+  display: grid;
+  gap: 24px;
+}
+.computer-page .workspace-lifecycle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-top: 32px;
+  padding: 20px 0 0;
+  border: 0;
+  border-top: 1px solid var(--app-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.computer-page .workspace-lifecycle h2 {
+  margin: 0;
+  font-size: var(--app-text-base);
+}
+.computer-page .management-card > [data-gb-ui="button"] {
+  display: flex;
+  margin: 16px 0 0 auto;
+}
+
+/* Put desktop access first and keep its action within the reading column. */
+.computer-page {
+  max-width: 960px;
+}
+.computer-page .workspace-settings .card {
+  box-shadow: none;
+}
+@media (max-width: 720px) {
+  .computer-page .workspace-settings .card {
+    padding: 16px;
   }
 }

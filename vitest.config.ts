@@ -28,6 +28,7 @@ export default defineConfig({
     ],
   },
   test: {
+    setupFiles: [fileURLToPath(new URL("./packages/ui/test-setup.ts", import.meta.url))],
     exclude: [
       "**/node_modules/**",
       "**/dist/**",

@@ -20,6 +20,7 @@ import type {
   SoulProposal,
   ThinkingConfig,
   VisionProbeView,
+  Workspace,
   WorkspaceId,
 } from "@deskmates/contracts";
 import type { MemoryView, RunView } from "../../api/types.js";
@@ -44,6 +45,8 @@ export interface BotUpdate {
   role?: string;
   connectors?: string[];
   messageAllowlist?: string[];
+  /** ADR-0055: the connected apps this bot may use; `null` is every app. */
+  integrationApps?: string[] | null;
   model?: string | null;
   cheapModel?: string | null;
   effort?: EffortLevel | null;
@@ -114,6 +117,8 @@ export interface ContactsApi {
   ): Promise<RestoredRuleFile>;
   /** "Run now" on one cron entry: a background run with trigger `manual`. */
   runCronNow(botId: BotId, entry: number): Promise<RunView>;
+  /** Make a bot its workspace's default bot (ADR-0051); answers the updated workspace. */
+  setDefaultBot(workspaceId: WorkspaceId, botId: BotId): Promise<Workspace>;
   startWelcome(botId: BotId): Promise<void>;
   updateApprovalRule(
     id: string,
@@ -277,6 +282,15 @@ export function createContactsApi(t: HttpTransport): ContactsApi {
           {},
         )
       ).run;
+    },
+    async setDefaultBot(workspaceId, botId) {
+      return (
+        await t.json<{ workspace: Workspace }>(
+          "PUT",
+          `/api/workspaces/${encodeURIComponent(workspaceId)}/default-bot`,
+          { botId },
+        )
+      ).workspace;
     },
     async startWelcome(botId) {
       await t.json<unknown>("POST", `${bot(botId)}/welcome`);

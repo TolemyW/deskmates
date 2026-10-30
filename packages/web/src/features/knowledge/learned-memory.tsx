@@ -1,3 +1,4 @@
+import { SectionTabs } from "@deskmates/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@deskmates/ui";
 import { Select } from "@deskmates/ui";
 // "Learned memory" (ADR-0011): what the bots of a workspace learned, per workspace and per bot,
@@ -26,6 +27,7 @@ import { Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient, LearnedMemoryEntry } from "../../api/client.js";
 import { Button } from "../../components/ui/button.js";
+import { Dialog, DialogContent, DialogTitle } from "../../components/ui/dialog.js";
 import { Pill } from "../../components/ui/pill.js";
 import type { MessageKey } from "../../i18n/catalogs.js";
 import { useT } from "../../i18n/i18n-provider.js";
@@ -218,6 +220,9 @@ export function LearnedMemoryScreen({
   const [pending, setPending] = useState<MemoryConfirmation[]>([]);
   const [editing, setEditing] = useState<{ id: string; body: string; version: number }>();
   const [forgetting, setForgetting] = useState<string>();
+  const forgetOpener = useRef<HTMLButtonElement | null>(null);
+  const cancelForget = useRef<HTMLButtonElement | null>(null);
+  const mutationPending = useRef(false);
   const [versions, setVersions] = useState<{
     id: string;
     items: MemoryVersion[];
@@ -394,6 +399,8 @@ export function LearnedMemoryScreen({
   }, [reload]);
 
   const perform = async (operation: () => Promise<unknown>, done: string) => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
     setBusy(true);
     setError("");
     setNotice("");
@@ -404,6 +411,7 @@ export function LearnedMemoryScreen({
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      mutationPending.current = false;
       setBusy(false);
     }
   };
@@ -462,7 +470,15 @@ export function LearnedMemoryScreen({
               >
                 {t("learnedMemory.action.edit")}
               </Button>
-              <Button type="button" disabled={busy} onClick={() => setForgetting(entry.id)}>
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={(event) => {
+                  forgetOpener.current = event.currentTarget;
+                  setError("");
+                  setForgetting(entry.id);
+                }}
+              >
                 {t("learnedMemory.action.forget")}
               </Button>
             </>
@@ -511,6 +527,197 @@ export function LearnedMemoryScreen({
     </>
   );
 
+  const ownerContent = (
+    <>
+      {embedded ? (
+        <ul className="memory-cards" aria-label={t("learnedMemory.entries.label")}>
+          {entries.length === 0 ? (
+            <li className="memory-card empty muted small">{emptyText}</li>
+          ) : null}
+          {entries.map((entry) => (
+            <li
+              key={entry.id}
+              className={`memory-card${entry.tombstoned ? " forgotten" : ""}`}
+              data-entry={entry.id}
+            >
+              <div className="memory-card-body">{bodyFor(entry)}</div>
+              <div className="memory-card-meta">
+                <Pill tone="neutral" title={t("learnedMemory.pill.authorityTitle")}>
+                  {label(AUTHORITY_LABELS, entry.authority)}
+                </Pill>
+                {entry.kind !== "note" ? (
+                  <Pill tone="neutral">{label(KIND_LABELS, entry.kind)}</Pill>
+                ) : null}
+                {entry.trust === "untrusted" ? (
+                  <Pill tone="warning" title={t("learnedMemory.pill.untrustedTitle")}>
+                    {t("learnedMemory.pill.needsConfirmation")}
+                  </Pill>
+                ) : null}
+                <span className="muted small">
+                  <SourceCell entry={entry} /> · {ageOf(entry.observedAt, at)} · {validityOf(entry)}
+                </span>
+              </div>
+              <div className="memory-card-actions">{actionsFor(entry)}</div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Table aria-label={t("learnedMemory.entries.label")} className="memory-table">
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("learnedMemory.table.memory")}</TableHead>
+              <TableHead>{t("learnedMemory.table.scope")}</TableHead>
+              <TableHead>{t("learnedMemory.table.trust")}</TableHead>
+              <TableHead>{t("learnedMemory.table.authority")}</TableHead>
+              <TableHead>{t("learnedMemory.table.source")}</TableHead>
+              <TableHead>{t("learnedMemory.table.age")}</TableHead>
+              <TableHead>{t("learnedMemory.table.derivedFrom")}</TableHead>
+              <TableHead>{t("learnedMemory.table.validity")}</TableHead>
+              <TableHead>{t("learnedMemory.table.actions")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {entries.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={9} className="table-empty">
+                  {t("learnedMemory.table.empty")}
+                </TableCell>
+              </TableRow>
+            ) : null}
+            {entries.map((entry) => (
+              <TableRow key={entry.id} data-entry={entry.id}>
+                <TableCell>{bodyFor(entry)}</TableCell>
+                <TableCell>
+                  {entry.kind !== "note"
+                    ? t("learnedMemory.scopeWithKind", {
+                        scope: label(SCOPE_LABELS, entry.scope),
+                        kind: label(KIND_LABELS, entry.kind),
+                      })
+                    : label(SCOPE_LABELS, entry.scope)}
+                </TableCell>
+                <TableCell>{label(TRUST_LABELS, entry.trust)}</TableCell>
+                <TableCell>{label(AUTHORITY_LABELS, entry.authority)}</TableCell>
+                <TableCell>
+                  <SourceCell entry={entry} />
+                </TableCell>
+                <TableCell>{ageOf(entry.observedAt, at)}</TableCell>
+                <TableCell>
+                  {entry.derivedFrom.length
+                    ? entry.derivedFrom.join(", ")
+                    : t("learnedMemory.table.directObservation")}
+                </TableCell>
+                <TableCell>{validityOf(entry)}</TableCell>
+                <TableCell>{actionsFor(entry)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+      {entryCursor ? loadMoreButton("entries") : null}
+      {versions ? (
+        <section aria-label={t("learnedMemory.versions.label")}>
+          <h2>{t("learnedMemory.versions.title", { id: versions.id })}</h2>
+          {versions.items.map((version) => (
+            <p key={version.version}>
+              {t("learnedMemory.versions.row", {
+                version: version.version,
+                op: label(OP_LABELS, version.op),
+                createdAt: version.createdAt,
+                body: version.redacted ? t("learnedMemory.versions.redacted") : version.body,
+              })}
+            </p>
+          ))}
+          {versions.nextCursor ? (
+            <Button
+              type="button"
+              onClick={() => {
+                const { id, nextCursor } = versions;
+                void api
+                  .listMemoryVersionsPage(id, nextCursor ? { cursor: nextCursor } : {})
+                  .then((page) =>
+                    setVersions((current) =>
+                      current?.id === id
+                        ? {
+                            id,
+                            items: [
+                              ...current.items,
+                              ...page.versions.filter(
+                                (v) => !current.items.some((c) => c.version === v.version),
+                              ),
+                            ],
+                            nextCursor: page.nextCursor,
+                          }
+                        : current,
+                    ),
+                  )
+                  .catch((err: Error) => setError(err.message));
+              }}
+            >
+              {t("learnedMemory.versions.loadOlder")}
+            </Button>
+          ) : null}
+          <Button type="button" onClick={() => setVersions(undefined)}>
+            {t("learnedMemory.versions.close")}
+          </Button>
+        </section>
+      ) : null}
+      {forgetting ? (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open && !mutationPending.current) setForgetting(undefined);
+          }}
+        >
+          <DialogContent
+            scroll
+            style={{ width: "min(480px, calc(100vw - 24px))" }}
+            aria-label={t("learnedMemory.forget.label")}
+            aria-labelledby={undefined}
+            aria-describedby={undefined}
+            closeLabel={t("learnedMemory.forget.close")}
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              cancelForget.current?.focus();
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              if (forgetOpener.current?.isConnected) forgetOpener.current.focus();
+            }}
+          >
+            <DialogTitle className="mb-3 pr-8 font-semibold">
+              {t("learnedMemory.forget.title")}
+            </DialogTitle>
+            {error ? <p role="alert">{error}</p> : null}
+            <p>{t("learnedMemory.forget.body")}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                variant="destructive"
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void perform(async () => {
+                    await api.forgetMemoryEntry(forgetting);
+                    setForgetting(undefined);
+                  }, t("learnedMemory.notice.forgotten"))
+                }
+              >
+                {t("learnedMemory.forget.confirm")}
+              </Button>
+              <Button
+                ref={cancelForget}
+                type="button"
+                disabled={busy}
+                onClick={() => setForgetting(undefined)}
+              >
+                {t("learnedMemory.forget.cancel")}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </>
+  );
+
   return (
     <section className={embedded ? "learned-memory embedded" : "learned-memory"}>
       {embedded ? null : (
@@ -520,7 +727,7 @@ export function LearnedMemoryScreen({
           <p>{t("learnedMemory.introRetrieval")}</p>
         </>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && !forgetting && <p role="alert">{error}</p>}
       {notice && <output>{notice}</output>}
       {embedded ? null : (
         <Select
@@ -711,185 +918,23 @@ export function LearnedMemoryScreen({
         </section>
       ) : null}
 
-      {owner ? null : (
-        <div role="tablist" aria-label={t("learnedMemory.owner.label")}>
-          <Button
-            type="button"
-            role="tab"
-            aria-selected={tab.kind === "workspace"}
-            disabled={busy}
-            onClick={() => setTab({ kind: "workspace" })}
-          >
-            {t("learnedMemory.owner.workspace")}
-          </Button>
-          {bots.map((bot) => (
-            <Button
-              key={bot.id}
-              type="button"
-              role="tab"
-              aria-selected={tab.kind === "bot" && tab.botId === bot.id}
-              disabled={busy}
-              onClick={() => setTab({ kind: "bot", botId: bot.id })}
-            >
-              {bot.name}
-            </Button>
-          ))}
-        </div>
-      )}
-
-      {embedded ? (
-        <ul className="memory-cards" aria-label={t("learnedMemory.entries.label")}>
-          {entries.length === 0 ? (
-            <li className="memory-card empty muted small">{emptyText}</li>
-          ) : null}
-          {entries.map((entry) => (
-            <li
-              key={entry.id}
-              className={`memory-card${entry.tombstoned ? " forgotten" : ""}`}
-              data-entry={entry.id}
-            >
-              <div className="memory-card-body">{bodyFor(entry)}</div>
-              <div className="memory-card-meta">
-                <Pill tone="neutral" title={t("learnedMemory.pill.authorityTitle")}>
-                  {label(AUTHORITY_LABELS, entry.authority)}
-                </Pill>
-                {entry.kind !== "note" ? (
-                  <Pill tone="neutral">{label(KIND_LABELS, entry.kind)}</Pill>
-                ) : null}
-                {entry.trust === "untrusted" ? (
-                  <Pill tone="warning" title={t("learnedMemory.pill.untrustedTitle")}>
-                    {t("learnedMemory.pill.needsConfirmation")}
-                  </Pill>
-                ) : null}
-                <span className="muted small">
-                  <SourceCell entry={entry} /> · {ageOf(entry.observedAt, at)} · {validityOf(entry)}
-                </span>
-              </div>
-              <div className="memory-card-actions">{actionsFor(entry)}</div>
-            </li>
-          ))}
-        </ul>
+      {owner ? (
+        ownerContent
       ) : (
-        <Table aria-label={t("learnedMemory.entries.label")} className="memory-table">
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("learnedMemory.table.memory")}</TableHead>
-              <TableHead>{t("learnedMemory.table.scope")}</TableHead>
-              <TableHead>{t("learnedMemory.table.trust")}</TableHead>
-              <TableHead>{t("learnedMemory.table.authority")}</TableHead>
-              <TableHead>{t("learnedMemory.table.source")}</TableHead>
-              <TableHead>{t("learnedMemory.table.age")}</TableHead>
-              <TableHead>{t("learnedMemory.table.derivedFrom")}</TableHead>
-              <TableHead>{t("learnedMemory.table.validity")}</TableHead>
-              <TableHead>{t("learnedMemory.table.actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {entries.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="table-empty">
-                  {t("learnedMemory.table.empty")}
-                </TableCell>
-              </TableRow>
-            ) : null}
-            {entries.map((entry) => (
-              <TableRow key={entry.id} data-entry={entry.id}>
-                <TableCell>{bodyFor(entry)}</TableCell>
-                <TableCell>
-                  {entry.kind !== "note"
-                    ? t("learnedMemory.scopeWithKind", {
-                        scope: label(SCOPE_LABELS, entry.scope),
-                        kind: label(KIND_LABELS, entry.kind),
-                      })
-                    : label(SCOPE_LABELS, entry.scope)}
-                </TableCell>
-                <TableCell>{label(TRUST_LABELS, entry.trust)}</TableCell>
-                <TableCell>{label(AUTHORITY_LABELS, entry.authority)}</TableCell>
-                <TableCell>
-                  <SourceCell entry={entry} />
-                </TableCell>
-                <TableCell>{ageOf(entry.observedAt, at)}</TableCell>
-                <TableCell>
-                  {entry.derivedFrom.length
-                    ? entry.derivedFrom.join(", ")
-                    : t("learnedMemory.table.directObservation")}
-                </TableCell>
-                <TableCell>{validityOf(entry)}</TableCell>
-                <TableCell>{actionsFor(entry)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <SectionTabs
+          label={t("learnedMemory.owner.label")}
+          items={[
+            { key: "workspace", label: t("learnedMemory.owner.workspace"), disabled: busy },
+            ...bots.map((bot) => ({ key: bot.id, label: bot.name, disabled: busy })),
+          ]}
+          value={tab.kind === "workspace" ? "workspace" : tab.botId}
+          onChange={(key) =>
+            setTab(key === "workspace" ? { kind: "workspace" } : { kind: "bot", botId: key })
+          }
+        >
+          {ownerContent}
+        </SectionTabs>
       )}
-      {entryCursor ? loadMoreButton("entries") : null}
-      {versions ? (
-        <section aria-label={t("learnedMemory.versions.label")}>
-          <h2>{t("learnedMemory.versions.title", { id: versions.id })}</h2>
-          {versions.items.map((version) => (
-            <p key={version.version}>
-              {t("learnedMemory.versions.row", {
-                version: version.version,
-                op: label(OP_LABELS, version.op),
-                createdAt: version.createdAt,
-                body: version.redacted ? t("learnedMemory.versions.redacted") : version.body,
-              })}
-            </p>
-          ))}
-          {versions.nextCursor ? (
-            <Button
-              type="button"
-              onClick={() => {
-                const { id, nextCursor } = versions;
-                void api
-                  .listMemoryVersionsPage(id, nextCursor ? { cursor: nextCursor } : {})
-                  .then((page) =>
-                    setVersions((current) =>
-                      current?.id === id
-                        ? {
-                            id,
-                            items: [
-                              ...current.items,
-                              ...page.versions.filter(
-                                (v) => !current.items.some((c) => c.version === v.version),
-                              ),
-                            ],
-                            nextCursor: page.nextCursor,
-                          }
-                        : current,
-                    ),
-                  )
-                  .catch((err: Error) => setError(err.message));
-              }}
-            >
-              {t("learnedMemory.versions.loadOlder")}
-            </Button>
-          ) : null}
-          <Button type="button" onClick={() => setVersions(undefined)}>
-            {t("learnedMemory.versions.close")}
-          </Button>
-        </section>
-      ) : null}
-      {forgetting ? (
-        <dialog open aria-label={t("learnedMemory.forget.label")}>
-          <h2>{t("learnedMemory.forget.title")}</h2>
-          <p>{t("learnedMemory.forget.body")}</p>
-          <Button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void perform(async () => {
-                await api.forgetMemoryEntry(forgetting);
-                setForgetting(undefined);
-              }, t("learnedMemory.notice.forgotten"))
-            }
-          >
-            {t("learnedMemory.forget.confirm")}
-          </Button>
-          <Button type="button" onClick={() => setForgetting(undefined)}>
-            {t("learnedMemory.forget.cancel")}
-          </Button>
-        </dialog>
-      ) : null}
     </section>
   );
 }

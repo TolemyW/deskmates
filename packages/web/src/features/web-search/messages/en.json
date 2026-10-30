@@ -1,0 +1,19 @@
+{
+  "webSearch.disable": "Turn off web search",
+  "webSearch.enable": "Turn on web search",
+  "webSearch.flow": "With web search on, the text of each search leaves this installation for public search engines, also from a workspace whose browsing is locked to a list. Opening a result still follows this workspace's egress rules: a site outside the list asks first.",
+  "webSearch.frozen": "Runs already started keep the setting they started with.",
+  "webSearch.intro": "Web search is on by default when this server has a search service. An Owner or Admin can turn it off for this workspace.",
+  "webSearch.loading": "Loading web search…",
+  "webSearch.notConfigured": "This server has no search service connected. Ask the person who runs Deskmates to connect one before turning on web search.",
+  "webSearch.off": "Off",
+  "webSearch.on": "On",
+  "webSearch.reset": "Return to the default",
+  "webSearch.retry": "Retry web search settings",
+  "webSearch.roleNote": "change web search",
+  "webSearch.setting.chosen": "set on this page",
+  "webSearch.setting.default": "by default",
+  "webSearch.strategyNote": "Web search is part of this workspace’s network settings. Turn it off if its data must stay out of public search queries.",
+  "webSearch.title": "Web search",
+  "webSearch.workspaceLabel": "This workspace"
+}

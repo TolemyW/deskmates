@@ -46,9 +46,22 @@ describe("AttachmentCards", () => {
     expect(screen.getByText(/https:\/\/x\.test\/log/)).toBeTruthy();
   });
 
+  // ADR-0014 A7 (issue #16): the card opens Files at the file's directory with the file selected.
+  it("links the card to the same file in Files", () => {
+    render(<AttachmentCards attachments={[upload, artifact]} api={api} workspaceId={WS} />);
+    const link = screen.getByRole("link", { name: "Show Quarterly report.pdf in Files" });
+    const href = link.getAttribute("href") ?? "";
+    expect(href.startsWith("#/resources/files?")).toBe(true);
+    const params = new URLSearchParams(href.split("?")[1]);
+    expect(params.get("workspace")).toBe(WS);
+    expect(params.get("path")).toBe(upload.ref);
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+  });
+
   it("falls back to plain lines before the workspace is known", () => {
     render(<AttachmentCards attachments={[upload]} api={api} workspaceId={undefined} />);
     expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
     expect(screen.getByText(/Quarterly report\.pdf/)).toBeTruthy();
   });
 });

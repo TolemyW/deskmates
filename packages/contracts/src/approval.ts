@@ -1,6 +1,7 @@
 // Risk tiers and approvals (design v0.3 §3.5, ADR-0002 decision 2).
 
 import type { ApprovalId, BotId, IsoTimestamp, MessageId, RunId, ThreadId } from "./ids.js";
+import { isVaultUseTool } from "./vault.js";
 
 /** L0 read-only, L1 reversible write, L2 external side effect. */
 export type RiskLevel = "L0" | "L1" | "L2";
@@ -43,6 +44,13 @@ export interface ToolAction {
   sqlStatementKind?: "select" | "insert" | "update" | "delete" | "ddl" | "other";
   amount?: number;
   filePath?: string;
+  /**
+   * SHA-256 (lower-case hex) of the tool input as the model gave it, set by the sidecar only when
+   * the action has no other stable target: no `argumentPattern`, no `filePath` and no
+   * `targetOrigin`. It is what an Always rule for such a tool binds to, because the summary of a
+   * free-text input is not stable and may be truncated (ADR-0002 amendment 3, A6).
+   */
+  inputSha256?: string;
   /**
    * The subagent type (`general-purpose`, `Explore`, ...) when the call was made inside a
    * subagent the run spawned: the hook input carried `agent_id` (ADR-0002 amendment 3, A5).
@@ -138,6 +146,8 @@ export interface ApprovalRuleMatcher {
   maxAmount?: number;
   /** Exact path or a directory prefix ending in `/`. */
   filePath?: string;
+  /** Exact `ToolAction.inputSha256`: the same input, and only it (A6). */
+  inputSha256?: string;
   originatingBotId?: BotId;
 }
 
@@ -180,6 +190,11 @@ export function globMatches(pattern: string, value: string): boolean {
 export function approvalRuleMatches(rule: ApprovalRule, action: ToolAction, botId: BotId): boolean {
   if (rule.botId !== botId) return false;
   const m = rule.matcher;
+  // ADR-0045 decision 4: a credential release is allowed by a rule only when the rule binds that
+  // tool, the entry's exact origin and the exact `vault:<id> rev:<n> op:<operation>` dimension. A
+  // broad tool-name or origin glob never authorizes one; a deny rule still matches as written.
+  if (rule.decision !== "deny" && isVaultUseTool(action.toolName) && !vaultRuleExact(m, action))
+    return false;
   if (m.toolName !== undefined && m.toolName !== action.toolName) return false;
   if (m.originatingBotId !== undefined && m.originatingBotId !== botId) return false;
   if (m.targetOrigin !== undefined) {
@@ -207,19 +222,191 @@ export function approvalRuleMatches(rule: ApprovalRule, action: ToolAction, botI
     if (dir ? !action.filePath.startsWith(m.filePath) : action.filePath !== m.filePath)
       return false;
   }
+  if (m.inputSha256 !== undefined && m.inputSha256 !== action.inputSha256) return false;
   return true;
 }
 
+/** Whether a matcher binds a credential release exactly (ADR-0045 decision 4). */
+function vaultRuleExact(m: ApprovalRuleMatcher, action: ToolAction): boolean {
+  return (
+    m.toolName === action.toolName &&
+    action.targetOrigin !== undefined &&
+    m.targetOrigin === action.targetOrigin &&
+    !m.targetOrigin.includes("*") &&
+    action.argumentPattern !== undefined &&
+    m.argumentPattern === action.argumentPattern &&
+    !m.argumentPattern.includes("*") &&
+    action.argumentSummary === action.argumentPattern
+  );
+}
+
+/** The character the sidecar ends a shortened `argumentSummary` with. */
+export const ARGUMENT_TRUNCATION_MARKER = "…";
+
 /**
- * The matcher an "Always" decision stores: tool name, the origin the call was made against, and
- * the sidecar's stable `argumentPattern` (or the summary verbatim when it gave none).
+ * The directory prefix a file tool's Always rule stores: everything up to and including the last
+ * `/` of the path, so a later write to another file in the same directory matches. A path with
+ * no directory part stays exact.
  */
-export function matcherFromAction(action: ToolAction): ApprovalRuleMatcher {
+export function filePathPrefix(filePath: string): string {
+  const slash = filePath.lastIndexOf("/");
+  return slash < 0 ? filePath : filePath.slice(0, slash + 1);
+}
+
+/**
+ * The matcher an "Always" decision proposes: the tool plus a stable target, never the displayed
+ * argument summary (ADR-0002 amendment 3, A6). By tool kind:
+ *
+ * - The sidecar's stable `argumentPattern` when it derived one: the program and subcommand of a
+ *   shell line, the side-effect phrase of a click (`*submit*`), the subagent type of a spawn
+ *   (`agent Explore: *`), a hash for exact code or terminal input, the connector or integration
+ *   action. The origin the call was made against is kept beside it.
+ * - Otherwise a file tool's directory prefix (`filePathPrefix`).
+ * - Otherwise the origin, for browser and HTTP tools.
+ * - Otherwise the input's hash (`inputSha256`): this exact input again, nothing else.
+ *
+ * Undefined when the action offers none of these (an action recorded before A6 with only a
+ * summary): Always then needs a matcher the human writes. Rules stored before A6 are matched as
+ * they always were; only new rules are built here.
+ */
+export function matcherFromAction(action: ToolAction): ApprovalRuleMatcher | undefined {
   const m: ApprovalRuleMatcher = { toolName: action.toolName };
-  if (action.targetOrigin !== undefined) m.targetOrigin = action.targetOrigin;
-  const pattern = action.argumentPattern ?? action.argumentSummary;
-  if (pattern !== undefined) m.argumentPattern = pattern;
-  return m;
+  if (action.argumentPattern !== undefined) {
+    if (action.targetOrigin !== undefined) m.targetOrigin = action.targetOrigin;
+    m.argumentPattern = action.argumentPattern;
+    return m;
+  }
+  if (action.filePath !== undefined) {
+    m.filePath = filePathPrefix(action.filePath);
+    return m;
+  }
+  if (action.targetOrigin !== undefined) {
+    m.targetOrigin = action.targetOrigin;
+    return m;
+  }
+  if (action.inputSha256 !== undefined) {
+    m.inputSha256 = action.inputSha256;
+    return m;
+  }
+  return undefined;
+}
+
+/** Why the Gateway refuses to store an Always rule (A6); the `reason` of its `validation` error. */
+export type ApprovalRuleRefusal =
+  /** No stable target could be derived and no matcher was given. */
+  | "rule_no_stable_target"
+  /** `argumentPattern` ends in the summary's truncation marker, so it can never match again. */
+  | "rule_pattern_truncated"
+  /** The matcher does not match the action the Always decision answers. */
+  | "rule_does_not_match_action"
+  /**
+   * A credential release's rule must bind its exact entry, revision, operation and origin
+   * (ADR-0045 decision 4); a widened scope is refused.
+   */
+  | "rule_vault_not_exact";
+
+/**
+ * Why a stored rule is accepted but flagged (A6). `exact_arguments`: an `argumentPattern` with no
+ * `*` that is not the sidecar's own stable pattern for the answered action, so the rule matches
+ * only this wording again. `exact_input`: the rule is bound to one input's hash.
+ */
+export type ApprovalRuleWarning = "exact_arguments" | "exact_input";
+
+export type AlwaysRuleCheck =
+  | { ok: true; warnings: ApprovalRuleWarning[] }
+  | { ok: false; refusal: ApprovalRuleRefusal; message: string };
+
+/**
+ * The checks the Gateway runs before it stores a rule (A6), shared with the web card so a human
+ * sees the refusal or the warning before saving. `answers` is the action an Always decision
+ * answers; a rule typed in outside any approval has none and is checked for truncation only.
+ */
+export function checkAlwaysRule(
+  matcher: ApprovalRuleMatcher,
+  answers?: { action: ToolAction; botId: BotId },
+): AlwaysRuleCheck {
+  const pattern = matcher.argumentPattern;
+  if (pattern?.endsWith(ARGUMENT_TRUNCATION_MARKER)) {
+    return {
+      ok: false,
+      refusal: "rule_pattern_truncated",
+      message:
+        "the argument pattern ends in the truncation marker of a shortened summary, so it would never match again; end it with * instead",
+    };
+  }
+  if (
+    answers !== undefined &&
+    isVaultUseTool(answers.action.toolName) &&
+    !vaultRuleExact(matcher, answers.action)
+  ) {
+    return {
+      ok: false,
+      refusal: "rule_vault_not_exact",
+      message:
+        "a credential release can be allowed again only for the same entry, revision, operation and exact origin",
+    };
+  }
+  if (answers !== undefined) {
+    const probe: ApprovalRule = {
+      id: "",
+      botId: answers.botId,
+      matcher,
+      decision: "allow_always",
+      createdBy: "",
+      createdAt: "",
+    };
+    if (!approvalRuleMatches(probe, answers.action, answers.botId)) {
+      return {
+        ok: false,
+        refusal: "rule_does_not_match_action",
+        message: "the rule does not match the action it answers",
+      };
+    }
+  }
+  const warnings: ApprovalRuleWarning[] = [];
+  if (
+    pattern !== undefined &&
+    !pattern.includes("*") &&
+    pattern !== answers?.action.argumentPattern
+  ) {
+    warnings.push("exact_arguments");
+  }
+  if (matcher.inputSha256 !== undefined) warnings.push("exact_input");
+  return { ok: true, warnings };
+}
+
+/**
+ * An operator's override of one tool's tier in one workspace (ADR-0002 amendment 3, A5). It is an
+ * operator action recorded with `createdBy` (`human:<id>`), never a bot action. No override is
+ * the default. It changes only the tier table's answer: the hard denies (egress, private
+ * addresses, IP literals, metadata, cross-workspace refusals, the directory guard, the secret
+ * scrub) run before the tier and are never overridden.
+ */
+export interface ToolTierOverride {
+  toolName: string;
+  riskLevel: RiskLevel;
+  createdBy: string;
+  createdAt: IsoTimestamp;
+}
+
+/**
+ * Tools whose tier is not the table's to give, so no override applies: a connector submit is
+ * tiered by its stored validation's effect class (ADR-0012), an integration action by the
+ * catalog's operation type and its own operator override (ADR-0013).
+ */
+export const TOOL_TIER_OVERRIDE_EXCLUDED: readonly string[] = [
+  "mcp__deskmates__connector_submit",
+  "mcp__deskmates__integration_execute",
+  // ADR-0045 decision 4: a credential release is L2 under every override.
+  "mcp__deskmates__vault_fill",
+  "mcp__deskmates__vault_request",
+];
+
+/** A tool name an override may name: the full name the SDK reports, `mcp__<server>__<tool>`. */
+export const TOOL_TIER_OVERRIDE_NAME = /^[A-Za-z0-9_.-]{1,200}$/;
+
+export function isRiskLevel(value: unknown): value is RiskLevel {
+  return value === "L0" || value === "L1" || value === "L2";
 }
 
 /** The first rule that answers the action, in the order given (the store lists oldest first). */

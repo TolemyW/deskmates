@@ -1,3 +1,4 @@
+import { SessionRolesProvider } from "../../state/session-roles.js";
 // @vitest-environment jsdom
 // ADR-0015 consequences, on the Skills page of issue #27: rows show name, description, stage,
 // who a skill is enabled for and when it was last used; origin, hash, scan findings and history
@@ -206,7 +207,7 @@ it("lists skills with who they are enabled for and confirms a held version", asy
   // No install form until asked for.
   expect(screen.queryByRole("region", { name: "Install a skill" })).toBeNull();
 
-  expect(screen.getByText("1 waiting for review")).toBeTruthy();
+  expect(screen.getByText("Waiting for review (1)")).toBeTruthy();
   const held = screen.getByRole("region", { name: "Skills needing confirmation" });
   expect(within(held).getByText(/Held because the scan found something/)).toBeTruthy();
   expect(within(held).getByText(/executable file in fetch.sh/)).toBeTruthy();
@@ -236,7 +237,7 @@ it("shows built-in Starter Skills as shared, read-only release assets", async ()
   expect(within(section).getByText(/1 release-bundled skills · pack 1.0.0/)).toBeInTheDocument();
   fireEvent.click(within(section).getByText("web-research-citations"));
   expect(within(section).getByText("Apache-2.0")).toBeInTheDocument();
-  expect(within(section).getByText("All bots in this workspace")).toBeInTheDocument();
+  expect(within(section).getByText("All Bots in this workspace")).toBeInTheDocument();
   expect(within(section).getByText(starter.sha256)).toBeInTheDocument();
   expect(within(section).queryByRole("button", { name: /assign/i })).toBeNull();
 });
@@ -393,8 +394,10 @@ it("closes the install form without installing", async () => {
   renderPanel(api);
   fireEvent.click(await screen.findByRole("button", { name: "Install skill" }));
   const form = screen.getByRole("region", { name: "Install a skill" });
+  expect(document.activeElement).toBe(within(form).getByLabelText("SKILL.md"));
   fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("region", { name: "Install a skill" })).toBeNull();
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Install skill" }));
   expect(api.installSkill).not.toHaveBeenCalled();
 });
 
@@ -418,9 +421,153 @@ it("pages skills and the whole confirmation queue with honest totals (#113)", as
 
   // The heading and the toolbar count the whole queue, not the 25 rows shown.
   expect(screen.getByText("Waiting for review (27)")).toBeTruthy();
-  expect(screen.getByText("27 waiting for review")).toBeTruthy();
+  expect(screen.getByText("Waiting for review (27)")).toBeTruthy();
   const queueNav = screen.getByRole("navigation", { name: "Confirmation queue pages" });
   fireEvent.click(within(queueNav).getByRole("button", { name: "Next" }));
   await waitFor(() => expect(queueNav).toHaveTextContent("26–27 of 27"));
   expect(api.listPendingSkillVersions).toHaveBeenLastCalledWith(WS, { cursor: "25", limit: 25 });
+});
+
+it("keeps loaded skills visible when the confirmation queue fails and retries only the queue", async () => {
+  const api = fakeApi({ skills: [skill({ id: "skill_a", name: "export-refunds" })], pending: [] });
+  api.listPendingSkillVersions.mockRejectedValueOnce(new Error("Queue unavailable"));
+  renderPanel(api);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Queue unavailable");
+  expect(await screen.findByText("export-refunds")).toBeVisible();
+  const listCalls = api.listSkills.mock.calls.length;
+  const queueCalls = api.listPendingSkillVersions.mock.calls.length;
+  fireEvent.click(screen.getByRole("button", { name: "Retry confirmation queue" }));
+  await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  expect(api.listPendingSkillVersions.mock.calls.length).toBeGreaterThan(queueCalls);
+  expect(api.listSkills).toHaveBeenCalledTimes(listCalls);
+});
+
+it("retries a failed skills list without presenting a successful empty result", async () => {
+  const api = fakeApi({ skills: [skill({ id: "skill_a", name: "export-refunds" })], pending: [] });
+  api.listSkills.mockRejectedValueOnce(new Error("Skills unavailable"));
+  renderPanel(api);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Skills unavailable");
+  fireEvent.click(screen.getByRole("button", { name: "Retry skills" }));
+  expect(await screen.findByText("export-refunds")).toBeVisible();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("retains loaded history and retries its failed older page", async () => {
+  const api = fakeApi({
+    skills: [skill({ id: "skill_b", name: "pdf-forms", version: 2 })],
+    pending: [],
+  });
+  renderPanel(api);
+  fireEvent.click(await screen.findByRole("button", { name: /^pdf-forms/ }));
+  const history = await screen.findByRole("region", { name: "Version history" });
+  await waitFor(() => expect(history).toHaveTextContent("v2"));
+  api.listSkillVersions.mockRejectedValueOnce(new Error("History unavailable"));
+  fireEvent.click(within(history).getByRole("button", { name: "Load older versions" }));
+  await within(history).findByRole("alert");
+  expect(history).toHaveTextContent("v2");
+  fireEvent.click(within(history).getByRole("button", { name: "Retry history" }));
+  await waitFor(() => expect(history).toHaveTextContent("v1"));
+  expect(within(history).queryByRole("alert")).toBeNull();
+  expect(api.listSkillVersions).toHaveBeenLastCalledWith("skill_b", { cursor: "older", limit: 25 });
+});
+
+it("retries the first history read without closing skill details", async () => {
+  const api = fakeApi({
+    skills: [skill({ id: "skill_b", name: "pdf-forms", version: 2 })],
+    pending: [],
+  });
+  api.listSkillVersions.mockRejectedValueOnce(new Error("History unavailable"));
+  renderPanel(api);
+  fireEvent.click(await screen.findByRole("button", { name: /^pdf-forms/ }));
+  const history = await screen.findByRole("region", { name: "Version history" });
+  await within(history).findByRole("alert");
+  fireEvent.click(within(history).getByRole("button", { name: "Retry history" }));
+  await waitFor(() => expect(history).toHaveTextContent("v2"));
+  expect(within(history).queryByRole("alert")).toBeNull();
+  expect(api.listSkillVersions).toHaveBeenLastCalledWith("skill_b", { limit: 25 });
+});
+
+it("returns to the selected skill after closing details without clearing search", async () => {
+  const api = fakeApi({ skills: [skill({ id: "skill_b", name: "pdf-forms" })], pending: [] });
+  renderPanel(api);
+  const search = await screen.findByRole("searchbox", { name: "Search skills" });
+  fireEvent.change(search, { target: { value: "pdf" } });
+  const row = await screen.findByRole("button", { name: /^pdf-forms/ });
+  fireEvent.click(row);
+  const detail = await screen.findByRole("complementary", { name: "Skill details" });
+  expect(detail).toHaveFocus();
+  fireEvent.click(within(detail).getByRole("button", { name: "Close details" }));
+  expect(row).toHaveFocus();
+  expect(search).toHaveValue("pdf");
+});
+
+it("keeps skills readable but disables management for a member of this workspace", async () => {
+  const api = fakeApi({
+    skills: [skill({ id: "skill_b", name: "pdf-forms", version: 2 })],
+    pending: [pending],
+  });
+  render(
+    <SessionRolesProvider
+      roles={{ tenantRole: "owner", platformMaintainer: false, workspaceRoles: { [WS]: "member" } }}
+    >
+      <SkillsPanel api={api} workspaceId={WS} workspaceName="ops" bots={bots} />
+    </SessionRolesProvider>,
+  );
+  const row = await screen.findByRole("button", { name: /^pdf-forms/ });
+  expect(screen.queryByRole("button", { name: "Install skill" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Reject" })).toBeDisabled();
+  fireEvent.click(row);
+  expect(screen.getByRole("button", { name: "Assign" })).toBeDisabled();
+  expect(screen.getByLabelText("Stage of pdf-forms")).toBeDisabled();
+  expect(await screen.findByRole("region", { name: "Version history" })).toBeInTheDocument();
+  expect(api.updateSkill).not.toHaveBeenCalled();
+});
+
+it("locks an installation while pending and preserves its draft after failure", async () => {
+  const api = fakeApi({ skills: [], pending: [] });
+  let reject!: (reason: Error) => void;
+  api.installSkill.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, fail) => {
+        reject = fail;
+      }),
+  );
+  renderPanel(api);
+  fireEvent.click(await screen.findByRole("button", { name: "Install skill" }));
+  const form = screen.getByRole("region", { name: "Install a skill" });
+  const content = "---\nname: retained-skill\ndescription: Retain this draft.\n---\nSteps.";
+  fireEvent.change(within(form).getByLabelText("SKILL.md"), { target: { value: content } });
+  fireEvent.change(within(form).getByLabelText("Reviewed SHA-256"), {
+    target: { value: "a".repeat(64) },
+  });
+  fireEvent.click(within(form).getByRole("button", { name: "Install" }));
+  expect((within(form).getByLabelText("SKILL.md") as HTMLTextAreaElement).disabled).toBe(true);
+  expect((within(form).getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+  reject(new Error("Installation failed"));
+  await screen.findByText("Installation failed");
+  expect((within(form).getByLabelText("SKILL.md") as HTMLTextAreaElement).value).toBe(content);
+  expect((within(form).getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(
+    false,
+  );
+  expect(api.installSkill).toHaveBeenCalledTimes(1);
+});
+
+it("keeps assignment errors and selections in the modal and returns focus on cancel", async () => {
+  const api = fakeApi({ skills: [skill({ id: "skill_a", name: "export-refunds" })], pending: [] });
+  vi.mocked(api.assignSkill).mockRejectedValueOnce(new Error("Assignment failed"));
+  renderPanel(api);
+  fireEvent.click(await screen.findByRole("button", { name: "More actions for export-refunds" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Assign" }));
+  const dialog = await screen.findByRole("dialog", { name: "Assign export-refunds" });
+  await waitFor(() => expect(dialog).toContainElement(document.activeElement as HTMLElement));
+  fireEvent.click(within(dialog).getByLabelText("orion"));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent("Assignment failed");
+  expect(within(dialog).getByLabelText("orion")).toBeChecked();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  await waitFor(() => expect(document.activeElement).toHaveTextContent("export-refunds"));
 });

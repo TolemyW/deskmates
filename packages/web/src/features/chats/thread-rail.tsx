@@ -13,12 +13,12 @@ import type {
   Workspace,
 } from "@deskmates/contracts";
 import { CHAT_THREAD_MAX_MEMBERS, EGRESS_OPEN_INTERNET, isOwnSideChat } from "@deskmates/contracts";
-import { ActionMenu } from "@deskmates/ui";
+import { ActionMenu, EmptyState } from "@deskmates/ui";
 import { Bot as BotIcon, Plus, Search, Users } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ApiClient, api as defaultApi } from "../../api/client.js";
-import { Avatar, AvatarStack } from "../../components/ui/avatar.js";
-import { Button } from "../../components/ui/button.js";
+import { Avatar } from "../../components/ui/avatar.js";
+import { Button, ButtonLink } from "../../components/ui/button.js";
 import {
   Dialog,
   DialogContent,
@@ -26,9 +26,10 @@ import {
   DialogTitle,
 } from "../../components/ui/dialog.js";
 import { Pill } from "../../components/ui/pill.js";
-import { errorMessage, formatRelative, splitList } from "../../format.js";
+import { errorMessage, formatRelative, formatTime, splitList } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { currentI18n } from "../../i18n/intl.js";
+import { useTuneView } from "../../lib/interface-view.js";
 import { navigate, newContactHref, threadHref } from "../../router.js";
 import { NextAction, useCan, useSessionActor } from "../../state/session-roles.js";
 import { EgressModePicker } from "../workspaces/egress-mode-picker.js";
@@ -93,8 +94,8 @@ export interface InboxEntry {
   bot: BotDefinition;
   thread?: ThreadSummary;
   /**
-   * Other one-member chats with this bot (retained histories and task chats), nested under it in
-   * recency order and labelled without chronology (ADR-0024 amendment 2, decision 12).
+   * Other one-member chat histories with this bot, nested under it in recency order. Linked
+   * task conversations live in Tasks and Activity (ADR-0024 amendment 4).
    */
   earlier: ThreadSummary[];
 }
@@ -153,6 +154,16 @@ export function railSections(
     const botId = ids[0] ?? (inferred ? bots[0]?.id : undefined);
     if (thread.kind !== "chat" || (ids.length !== 1 && !inferred) || !botId || !listed.has(botId))
       continue;
+    // ADR-0021 amendment 5: a task-linked extra one-Bot conversation belongs to the task and
+    // Bot Activity. Keep canonical/private entries (selected above) in Chats, but do not make
+    // their execution transcripts peer navigation. Direct links still open the transcript.
+    if (
+      thread.taskContext &&
+      thread.privateChatBotId === undefined &&
+      thread.privateToUserId === undefined &&
+      thread.sideChatActor === undefined
+    )
+      continue;
     oneMember.set(botId, [...(oneMember.get(botId) ?? []), thread]);
   }
   const inboxes = bots.map((bot): InboxEntry => {
@@ -191,6 +202,7 @@ export function ThreadRail(props: ThreadRailProps) {
   const { workspace, bots, threads, selectedId } = props;
   const api = props.api ?? defaultApi;
   const t = useT();
+  const tune = useTuneView();
   const canCreateWorkspace = useCan("workspace.create");
   const canOpenPrivateChat = useCan("privateChat.open").allowed;
   const actorId = useSessionActor();
@@ -365,7 +377,9 @@ export function ThreadRail(props: ThreadRailProps) {
       last?.authorKind === "bot"
         ? (botName(last.authorId as BotId) ?? t("threadRail.lastAuthor.bot"))
         : last?.authorKind === "human"
-          ? t("threadRail.lastAuthor.you")
+          ? last.authorId === actorId
+            ? t("threadRail.lastAuthor.you")
+            : (last.authorName ?? t("chatPane.author.human"))
           : last?.authorKind === "system"
             ? t("threadRail.lastAuthor.system")
             : undefined;
@@ -374,6 +388,14 @@ export function ThreadRail(props: ThreadRailProps) {
         {incoming ? (
           <span className="thread-preview">
             {incoming.callerName}: {incoming.excerpt}
+          </span>
+        ) : last?.authorKind === "system" && !tune ? (
+          <span className="thread-preview">
+            {t(
+              last.excerpt.startsWith("Approval needed:")
+                ? "threadRail.row.approvalRequested"
+                : "threadRail.row.activityUpdate",
+            )}
           </span>
         ) : last ? (
           <span className="thread-preview">
@@ -386,7 +408,13 @@ export function ThreadRail(props: ThreadRailProps) {
           <span className="thread-preview">{t("threadRail.row.noMessages")}</span>
         )}
         {thread.status === "paused" ? (
-          <Pill tone="warning">{t("threadRail.row.paused")}</Pill>
+          // ADR-0005 amendment 3, rewritten decision 21: the list shows when a turn-budget pause
+          // resumes by itself.
+          <Pill tone="warning">
+            {thread.resumeAt && thread.pauseReason === "turn_budget"
+              ? t("threadRail.row.pausedUntil", { time: formatTime(thread.resumeAt) })
+              : t("threadRail.row.paused")}
+          </Pill>
         ) : null}
       </span>
     );
@@ -395,7 +423,7 @@ export function ThreadRail(props: ThreadRailProps) {
   // Name first, then the authoritative unread count, then the time in a slot that never shrinks.
   const titleLine = (title: string, thread: ThreadSummary) => (
     <span className="thread-title">
-      <span>{title}</span>
+      <span title={title}>{title}</span>
       {(thread.unreadHandoffs ?? 0) > 0 ? (
         <span
           className="handoff-unread"
@@ -418,7 +446,9 @@ export function ThreadRail(props: ThreadRailProps) {
           <a href={threadHref(thread.id)}>
             <span className="thread-avatars">
               {group ? (
-                <AvatarStack names={names} />
+                <span className="avatar thread-group-avatar" aria-hidden="true">
+                  <Users size={18} />
+                </span>
               ) : ids.length === 1 ? (
                 <Avatar name={names[0] ?? "?"} />
               ) : (
@@ -452,7 +482,10 @@ export function ThreadRail(props: ThreadRailProps) {
             {pinMenu(thread, title)}
           </div>
           {earlier.length > 0 ? (
-            <details className="earlier-chats" open>
+            <details
+              className="earlier-chats"
+              open={Boolean(query.trim()) || earlier.some((item) => item.id === selectedId)}
+            >
               <summary>{t("threadRail.otherConversations", { count: earlier.length })}</summary>
               <ul className="thread-list">{earlier.map((item) => row(item, false))}</ul>
             </details>
@@ -515,14 +548,9 @@ export function ThreadRail(props: ThreadRailProps) {
         <h2>{t("threadRail.heading")}</h2>
         {/* The dialog creates groups and bots, which are an Admin's (ADR-0022 amendment 7 S6). */}
         {workspace && canCreateSomething ? (
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={t("threadRail.newChat")}
-            onClick={() => setCreateOpen(true)}
-          >
-            <Plus size={18} />
-          </button>
+          <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus size={16} /> {t("threadRail.newChat")}
+          </Button>
         ) : null}
       </div>
       {workspace && !nothing ? (
@@ -540,8 +568,7 @@ export function ThreadRail(props: ThreadRailProps) {
       <div className="rail-scroll">
         {pinError ? <p className="error small thread-row-error">{pinError}</p> : null}
         {!workspace ? (
-          <div className="thread-empty">
-            <p className="muted">{t("threadRail.empty.noWorkspace")}</p>
+          <EmptyState icon={<BotIcon size={20} />} title={t("threadRail.empty.noWorkspace")}>
             {canCreateWorkspace.allowed ? (
               <NextAction
                 action="workspace.create"
@@ -551,18 +578,20 @@ export function ThreadRail(props: ThreadRailProps) {
             ) : (
               <NextAction action="workspace.create" does={t("threadRail.empty.createWorkspace")} />
             )}
-          </div>
+          </EmptyState>
         ) : nothing ? (
-          <div className="thread-empty">
-            <p className="muted">{t("threadRail.empty.noChats")}</p>
+          <EmptyState icon={<Users size={20} />} title={t("threadRail.empty.noChats")}>
             <NextAction
               action="sideChat.open"
               does={t("threadRail.empty.startChat")}
               how={t("threadRail.empty.startChatHow")}
             />
-          </div>
+          </EmptyState>
         ) : shown === 0 ? (
-          <p className="thread-empty muted">{t("threadRail.empty.noMatch", { query })}</p>
+          <EmptyState
+            icon={<Search size={20} />}
+            title={t("threadRail.empty.noMatch", { query })}
+          />
         ) : null}
         {pinnedInboxes.length + pinnedGroups.length > 0 ? (
           <details className="rail-section pinned-chats" open>
@@ -611,7 +640,7 @@ export function ThreadRail(props: ThreadRailProps) {
               {t("threadRail.dialog.title")}
             </DialogTitle>
             <DialogDescription className="mt-1 text-sm text-muted-foreground">
-              {t("threadRail.dialog.description")}
+              {newChatDescription(workspace, bots, t)}
             </DialogDescription>
             <NewThreadForm
               api={api}
@@ -621,6 +650,10 @@ export function ThreadRail(props: ThreadRailProps) {
                 setCreateOpen(false);
                 props.onCreated(created);
               }}
+              onOpenBot={(bot) => {
+                setCreateOpen(false);
+                void openInbox(bot);
+              }}
             />
           </DialogContent>
         </Dialog>
@@ -629,14 +662,33 @@ export function ThreadRail(props: ThreadRailProps) {
   );
 }
 
+/**
+ * What the New chat dialog says under its title: how a group is made, or, with fewer than two bots
+ * in the workspace, why there is none to make yet and who can help (ADR-0051).
+ */
+function newChatDescription(
+  workspace: Workspace,
+  bots: readonly BotDefinition[],
+  t: ReturnType<typeof useT>,
+): string {
+  const wsBots = bots.filter((b) => b.workspaceId === workspace.id);
+  if (wsBots.length >= 2) return t("threadRail.dialog.description");
+  const assistant = wsBots.find((b) => b.id === workspace.defaultBotId);
+  return assistant
+    ? t("threadRail.newThread.askAssistant", { name: assistant.name })
+    : t("threadRail.newThread.needTwo");
+}
+
 interface NewThreadFormProps {
   api: ApiClient;
   workspace: Workspace;
   bots: readonly BotDefinition[];
   onCreated: ThreadRailProps["onCreated"];
+  /** Opens a bot's private chat and closes the dialog. */
+  onOpenBot: (bot: BotDefinition) => void;
 }
 
-function NewThreadForm({ api, workspace, bots, onCreated }: NewThreadFormProps) {
+function NewThreadForm({ api, workspace, bots, onCreated, onOpenBot }: NewThreadFormProps) {
   const t = useT();
   const workspaceId = workspace.id;
   const wsBots = bots.filter((b) => b.workspaceId === workspaceId);
@@ -677,54 +729,77 @@ function NewThreadForm({ api, workspace, bots, onCreated }: NewThreadFormProps) 
     }
   };
 
+  const newBot = canCreateBot.allowed ? (
+    <ButtonLink href={newContactHref()} variant="tertiary">
+      {t("threadRail.newThread.newBot")}
+    </ButtonLink>
+  ) : null;
+
+  // A group needs two bots. With fewer there is nothing to fill in: the default bot can set up a
+  // teammate and open the group (ADR-0051), or the person adds a bot themselves.
+  if (wsBots.length < 2) {
+    const assistant = wsBots.find((b) => b.id === workspace.defaultBotId);
+    return (
+      <div className="stack">
+        <div className="new-chat-actions">
+          {assistant ? (
+            <Button type="button" variant="primary" onClick={() => onOpenBot(assistant)}>
+              {t("threadRail.newThread.chatWith", { name: assistant.name })}
+            </Button>
+          ) : null}
+          {newBot}
+          {canCreateBot.allowed ? null : (
+            <NextAction action="bot.create" does={t("threadRail.newThread.addBot")} />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <form className="stack" onSubmit={submit} aria-label={t("threadRail.newThread.formLabel")}>
-      {wsBots.length >= 2 ? (
-        <fieldset className="bot-picker">
-          <legend>
-            {t("threadRail.newThread.botsIn", {
-              workspace: workspace.name,
+      <fieldset className="bot-picker">
+        <legend>
+          {t("threadRail.newThread.botsIn", {
+            workspace: workspace.name,
+            max: CHAT_THREAD_MAX_MEMBERS,
+          })}
+        </legend>
+        {wsBots.map((b) => {
+          const checked = botIds.includes(b.id);
+          const atLimit = botIds.length >= CHAT_THREAD_MAX_MEMBERS;
+          return (
+            <label key={b.id} className="contact-option">
+              <input
+                type="checkbox"
+                name="thread-bot"
+                value={b.id}
+                checked={checked}
+                disabled={!checked && atLimit}
+                onChange={(e) => toggleBot(b.id, e.target.checked)}
+              />
+              <Avatar name={b.name} size="sm" />
+              <span>
+                {b.name}
+                {b.role ? <span className="muted"> · {b.role}</span> : null}
+              </span>
+            </label>
+          );
+        })}
+        <span className="muted small">
+          <span>
+            {t("threadRail.newThread.selected", {
+              count: botIds.length,
               max: CHAT_THREAD_MAX_MEMBERS,
             })}
-          </legend>
-          {wsBots.map((b) => {
-            const checked = botIds.includes(b.id);
-            const atLimit = botIds.length >= CHAT_THREAD_MAX_MEMBERS;
-            return (
-              <label key={b.id} className="contact-option">
-                <input
-                  type="checkbox"
-                  name="thread-bot"
-                  value={b.id}
-                  checked={checked}
-                  disabled={!checked && atLimit}
-                  onChange={(e) => toggleBot(b.id, e.target.checked)}
-                />
-                <Avatar name={b.name} size="sm" />
-                <span>
-                  {b.name}
-                  {b.role ? <span className="muted"> · {b.role}</span> : null}
-                </span>
-              </label>
-            );
-          })}
-          <span className="muted small">
-            <span>
-              {t("threadRail.newThread.selected", {
-                count: botIds.length,
-                max: CHAT_THREAD_MAX_MEMBERS,
-              })}
-            </span>
-            <span>
-              {botIds.length >= 2
-                ? t("threadRail.newThread.groupChat")
-                : t("threadRail.newThread.minimum")}
-            </span>
           </span>
-        </fieldset>
-      ) : (
-        <p className="muted small">{t("threadRail.newThread.needTwo")}</p>
-      )}
+          <span>
+            {botIds.length >= 2
+              ? t("threadRail.newThread.groupChat")
+              : t("threadRail.newThread.minimum")}
+          </span>
+        </span>
+      </fieldset>
       <label>
         {t("threadRail.newThread.titleLabel")}
         <input
@@ -734,20 +809,16 @@ function NewThreadForm({ api, workspace, bots, onCreated }: NewThreadFormProps) 
         />
       </label>
       {error ? <p className="error small">{error}</p> : null}
-      <Button
-        type="submit"
-        variant="default"
-        disabled={busy || !workspaceId || !canCreateGroup.allowed || botIds.length < 2}
-      >
-        {t("threadRail.newThread.submit")}
-      </Button>
-      {canCreateBot.allowed ? (
-        <a className="button secondary" href={newContactHref()}>
-          {t("threadRail.newThread.newBot")}
-        </a>
-      ) : (
-        <NextAction action="bot.create" does={t("threadRail.newThread.addBot")} />
-      )}
+      <div className="new-chat-actions">
+        <Button
+          type="submit"
+          variant="default"
+          disabled={busy || !workspaceId || !canCreateGroup.allowed || botIds.length < 2}
+        >
+          {t("threadRail.newThread.submit")}
+        </Button>
+        {newBot ?? <NextAction action="bot.create" does={t("threadRail.newThread.addBot")} />}
+      </div>
     </form>
   );
 }
@@ -762,27 +833,25 @@ function FirstRunForm({ api, onCreated }: FirstRunFormProps) {
   const [workspaceName, setWorkspaceName] = useState("default");
   const [locked, setLocked] = useState(false);
   const [allowlist, setAllowlist] = useState("");
-  const [botName, setBotName] = useState("");
-  const [botRole, setBotRole] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
+  // ADR-0051 decision 11: the workspace comes with its default bot, the creator's first teammate.
+  // Its private chat opens, where it shows them around and sets up the next teammates.
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(undefined);
     try {
-      const workspace = await api.createWorkspace({
+      const { workspace, defaultBot, privateChat } = await api.createWorkspace({
         name: workspaceName.trim(),
         egressAllowlist: locked ? splitList(allowlist) : [EGRESS_OPEN_INTERNET],
       });
-      const bot = await api.createBot({
-        name: botName.trim(),
-        role: botRole.trim(),
-        workspaceId: workspace.id,
-      });
-      const { thread } = await api.resolvePrivateChat(bot.id);
-      onCreated({ thread, workspace, bot });
+      if (!defaultBot || !privateChat) {
+        setError(t("threadRail.firstRun.noAssistant"));
+        return;
+      }
+      onCreated({ thread: privateChat, workspace, bot: defaultBot });
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -804,21 +873,8 @@ function FirstRunForm({ api, onCreated }: FirstRunFormProps) {
         onLocked={setLocked}
         onDomains={setAllowlist}
       />
-      <label>
-        {t("threadRail.firstRun.botName")}
-        <input
-          value={botName}
-          onChange={(e) => setBotName(e.target.value)}
-          pattern="[A-Za-z0-9_\-]+"
-          required
-        />
-      </label>
-      <label>
-        {t("threadRail.firstRun.botRole")}
-        <input value={botRole} onChange={(e) => setBotRole(e.target.value)} />
-      </label>
       {error ? <p className="error small">{error}</p> : null}
-      <Button type="submit" variant="default" disabled={busy}>
+      <Button type="submit" variant="default" disabled={busy || workspaceName.trim() === ""}>
         {t("threadRail.firstRun.submit")}
       </Button>
     </form>

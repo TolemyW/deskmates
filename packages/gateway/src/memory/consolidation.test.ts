@@ -95,6 +95,7 @@ it("runs consolidations one at a time per workspace, applies trusted results and
   for (const id of [one.json.run.id, two.json.run.id]) {
     const run = ctx.runs.mustGet(id);
     expect(run.lane).toBe("background");
+    expect(run.triggerKind).toBe("model_job");
     expect(run.config.runType).toBe("memory_consolidation");
   }
   // The untrusted source is wrapped in the task text and taints bob's run from turn 1.

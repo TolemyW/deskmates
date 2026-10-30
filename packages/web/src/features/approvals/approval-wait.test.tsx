@@ -61,13 +61,13 @@ describe("approval card wait and thumbnail (issue #9)", () => {
     render(<ApprovalCard approval={pending} runStatus="waiting_approval_live" api={api()} />);
     const wait = screen.getByTestId("approval-wait");
     expect(wait.getAttribute("data-wait")).toBe("live");
-    expect(wait.textContent).toContain("the run parks in 3 min 42 s unless someone decides");
+    expect(wait.textContent).toContain("This work pauses in 3 min 42 s unless someone decides");
     act(() => {
       vi.advanceTimersByTime(2000);
     });
-    expect(wait.textContent).toContain("parks in 3 min 40 s");
+    expect(wait.textContent).toContain("pauses in 3 min 40 s");
     vi.useRealTimers();
-    const img = await screen.findByAltText("The run's latest screenshot");
+    const img = await screen.findByAltText("Latest screenshot from this work");
     expect(img.getAttribute("src")).toBe("data:image/jpeg;base64,AAAA");
     expect(img.closest("a")?.getAttribute("href")).toBe(`#/runs/${RUN_ID}`);
   });
@@ -76,7 +76,9 @@ describe("approval card wait and thumbnail (issue #9)", () => {
     render(<ApprovalCard approval={pending} runStatus="waiting_approval" api={api(null)} />);
     const wait = screen.getByTestId("approval-wait");
     expect(wait.getAttribute("data-wait")).toBe("parked");
-    expect(wait.textContent).toBe("Parked: the run has stopped and resumes when someone decides.");
+    expect(wait.textContent).toBe(
+      "Paused waiting for you. The work continues after someone decides.",
+    );
     await waitFor(() => expect(screen.queryByRole("img")).toBeNull());
   });
 

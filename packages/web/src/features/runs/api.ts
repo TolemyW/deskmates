@@ -12,6 +12,7 @@ import type {
   RunMark,
   RunStatus,
   RunTimeline,
+  RunTriggerKind,
   RunUsageReceipt,
   ThreadId,
   UsageCoverage,
@@ -31,6 +32,8 @@ export interface RunListFilter {
   /** The runs index (issue #11, ADR-0042 decision 2): these statuses only. */
   status?: readonly RunStatus[];
   lane?: RunLane;
+  /** What created the run; `model_job` separates Gateway model jobs from cron (issue #39). */
+  triggerKind?: RunTriggerKind;
   /** `createdAt` at or after this ISO time. */
   since?: string;
   /** `createdAt` before this ISO time. */
@@ -96,6 +99,11 @@ export interface RunsApi {
   /** The memory versions the run's context was given. */
   listRunMemoryVersions(id: RunId): Promise<RunSuppliedMemoryVersion[]>;
   listRuns(filter?: RunListFilter): Promise<RunPage>;
+  /**
+   * ADR-0029 decision 6: let runs the restart breaker holds continue (the named ones, or all);
+   * a platform operator action. Returns the runs released.
+   */
+  resumePlatformRuns(runIds?: readonly RunId[]): Promise<RunId[]>;
   /** Marks the run wrong, or replaces its note (ADR-0042 decision 3; Owner or Admin). */
   markRun(id: RunId, note?: string): Promise<RunMark>;
   memoryIndexObservation(workspaceId: WorkspaceId): Promise<MemoryIndexObservation | null>;
@@ -175,6 +183,7 @@ export function createRunsApi(t: HttpTransport): RunsApi {
           limit: filter.limit,
           status: filter.status && filter.status.length > 0 ? filter.status.join(",") : undefined,
           lane: filter.lane,
+          triggerKind: filter.triggerKind,
           since: filter.since,
           until: filter.until,
           failureClass: filter.failureClass,
@@ -196,6 +205,14 @@ export function createRunsApi(t: HttpTransport): RunsApi {
         `/api/runs/memory-index${query({ workspaceId })}`,
       );
       return r.observation;
+    },
+    async resumePlatformRuns(runIds) {
+      const r = await t.json<{ resumedRunIds: RunId[] }>(
+        "POST",
+        "/api/runtime/platform-resume",
+        runIds ? { runIds } : {},
+      );
+      return r.resumedRunIds;
     },
     async unmarkRun(id) {
       const r = await t.json<{ removed: boolean }>(

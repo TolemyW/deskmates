@@ -12,15 +12,20 @@ import { type ChatsApi, createChatsApi } from "../features/chats/api.js";
 import { type ComputerApi, createComputerApi } from "../features/computer/api.js";
 import { type ContactsApi, createContactsApi } from "../features/contacts/api.js";
 import { type CostsApi, createCostsApi } from "../features/costs/api.js";
+import { type DesktopToolsApi, createDesktopToolsApi } from "../features/desktop-tools/api.js";
 import { type FilesApi, createFilesApi } from "../features/files/api.js";
 import { type IntegrationsApi, createIntegrationsApi } from "../features/integrations/api.js";
 import { type KnowledgeApi, createKnowledgeApi } from "../features/knowledge/api.js";
 import { type LimitsApi, createLimitsApi } from "../features/limits/api.js";
 import { type NetworkApi, createNetworkApi } from "../features/network/api.js";
+import { type RunStatsApi, createRunStatsApi } from "../features/run-stats/api.js";
 import { type RunsApi, createRunsApi } from "../features/runs/api.js";
 import { type SkillsApi, createSkillsApi } from "../features/skills/api.js";
+import { type TaskKindsApi, createTaskKindsApi } from "../features/task-kinds/api.js";
 import { type TasksApi, createTasksApi } from "../features/tasks/api.js";
 import { type TrashApi, createTrashApi } from "../features/trash/api.js";
+import { type VaultApi, createVaultApi } from "../features/vault/api.js";
+import { type WebSearchApi, createWebSearchApi } from "../features/web-search/api.js";
 import { type WorkdirApi, createWorkdirApi } from "../features/workdir/api.js";
 import { type WorkspacesApi, createWorkspacesApi } from "../features/workspaces/api.js";
 import { type HttpTransportOptions, createHttpTransport } from "../platform/http-transport.js";
@@ -45,15 +50,20 @@ export type ApiClient = AppSharesApi &
   ConfigApi &
   ContactsApi &
   CostsApi &
+  DesktopToolsApi &
   FilesApi &
   IntegrationsApi &
   KnowledgeApi &
   LimitsApi &
   NetworkApi &
+  RunStatsApi &
   RunsApi &
   SkillsApi &
+  TaskKindsApi &
   TasksApi &
   TrashApi &
+  VaultApi &
+  WebSearchApi &
   WorkdirApi &
   WorkspacesApi;
 
@@ -76,15 +86,20 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     ...createConfigApi(t),
     ...createContactsApi(t),
     ...createCostsApi(t),
+    ...createDesktopToolsApi(t),
     ...createFilesApi(t),
     ...createIntegrationsApi(t),
     ...createKnowledgeApi(t),
     ...createLimitsApi(t),
     ...createNetworkApi(t),
+    ...createRunStatsApi(t),
     ...createRunsApi(t),
     ...createSkillsApi(t),
+    ...createTaskKindsApi(t),
     ...createTasksApi(t),
     ...createTrashApi(t),
+    ...createVaultApi(t),
+    ...createWebSearchApi(t),
     ...createWorkdirApi(t),
     ...createWorkspacesApi(t),
   };

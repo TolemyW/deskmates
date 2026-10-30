@@ -5,7 +5,7 @@
 // Leaving the screen cancels uploads still in flight.
 
 import type { Workspace, WorkspaceId, WorkspaceUpload } from "@deskmates/contracts";
-import { Button } from "@deskmates/ui";
+import { Button, HelpTip } from "@deskmates/ui";
 import { RotateCcw, Upload, X } from "lucide-react";
 import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "../../api/types.js";
@@ -238,10 +238,10 @@ export function FilesUploadControl({
         data-testid="files-upload-input"
         onChange={choose}
       />
-      <Button type="button" onClick={() => input.current?.click()}>
+      <Button data-row-control type="button" onClick={() => input.current?.click()}>
         <Upload size={16} aria-hidden="true" /> {t("files.upload.button")}
       </Button>
-      <p className="muted small">{t("files.upload.hint")}</p>
+      <HelpTip label={t("files.upload.help")}>{t("files.upload.hint")}</HelpTip>
       <UploadJobList uploads={uploads} />
     </div>
   );

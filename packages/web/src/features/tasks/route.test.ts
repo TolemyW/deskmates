@@ -9,8 +9,10 @@ describeRoutes({
   module: routes,
   screens: { tasks: "tasks" },
   addresses: [
+    ["#/task-kinds", { name: "tasks" }, "#/tasks"],
+    ["#/task-kinds/support-ticket", { name: "tasks" }, "#/tasks"],
     ["#/tasks", { name: "tasks" }],
-    ["#/tasks/", { name: "tasks" }],
+    ["#/tasks/", { name: "tasks" }, "#/tasks"],
     ["#/tasks/task_1", { name: "tasks", id: "task_1" }],
     ["#/tasks/a%2Fb", { name: "tasks", id: "a/b" }],
   ],

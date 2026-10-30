@@ -10,7 +10,7 @@ the continuation evidence is at the end. Raw evidence remains outside Git.
 Owner request: update the Testbox internal-trial deployment from the merged
 `main` branch and run one functional scenario round. This checkpoint is partial:
 v0.3.1 is installed, **not activated**, and no real-model scenario has started.
-The last observed active version is v0.3.0. SSH to 10.20.40.132 subsequently
+The last observed active version is v0.3.0. SSH to 10.88.40.132 subsequently
 timed out, so present server state and the final full T2 outcome are unknown.
 
 ## Source and release gates

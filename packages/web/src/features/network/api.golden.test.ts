@@ -7,16 +7,19 @@ import { type GoldenCases, WS, wireGolden } from "../../platform/http-golden.js"
 import { type NetworkApi, createNetworkApi } from "./api.js";
 
 const RULES = [
-  { kind: "subnet" as const, cidr: "10.20.30.0/24", schemes: ["http" as const], ports: [23001] },
+  { kind: "subnet" as const, cidr: "10.88.30.0/24", schemes: ["http" as const], ports: [23001] },
 ];
 
 const CASES: GoldenCases<NetworkApi> = {
   createNetworkProfile: (a) => a.createNetworkProfile({ name: "Lab", rules: RULES }),
   deleteNetworkProfile: (a) => a.deleteNetworkProfile("netp/1"),
+  getHostResources: (a) => a.getHostResources(),
   getNetworkOverlaps: (a) => a.getNetworkOverlaps(),
   getWorkspaceNetwork: (a) => a.getWorkspaceNetwork(WS),
   listNetworkProfiles: (a) => a.listNetworkProfiles(),
-  preflightWorkspaceNetwork: (a) => a.preflightWorkspaceNetwork(WS, "http://10.20.30.24:23001/"),
+  preflightWorkspaceNetwork: (a) => a.preflightWorkspaceNetwork(WS, "http://10.88.30.24:23001/"),
+  reattachHostResource: (a) => a.reattachHostResource("topology_mismatch:ws/1"),
+  removeHostResource: (a) => a.removeHostResource("orphan:ws_t2"),
   replaceNetworkProfile: (a) =>
     a.replaceNetworkProfile(
       "netp/1",

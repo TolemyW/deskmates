@@ -39,6 +39,8 @@ export function splitWorkspacePaths(body: string): BodySegment[] {
   let cursor = 0;
   for (const match of body.matchAll(TOKEN)) {
     const start = match.index;
+    // Keep the whole unsupported name as text instead of inventing a truncated file card.
+    if (/^[\p{L}\p{N}\p{M}]/u.test(body.slice(start + match[0].length))) continue;
     const quote = body[start - 1];
     if (quote === '"' || quote === "'" || quote === "`") {
       const close = body.indexOf(quote, start);

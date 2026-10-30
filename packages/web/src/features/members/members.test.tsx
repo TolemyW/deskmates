@@ -10,7 +10,7 @@ import type {
   Workspace,
   WorkspaceId,
 } from "@deskmates/contracts";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ApiClient } from "../../api/client.js";
 import type { MembersClient, MembersPageRequest } from "../../api/members-client.js";
@@ -217,5 +217,100 @@ it("pages people 25 at a time with their total, and a role filter returns to the
     expect(pageMembers).toHaveBeenLastCalledWith("ws_b", { offset: 0, limit: 25, role: "guest" }),
   );
   await screen.findByText("Person 00");
-  expect(screen.getByRole("navigation", { name: "Member pages" })).toHaveTextContent("1–10 of 10");
+  expect(screen.queryByRole("navigation", { name: "Member pages" })).not.toBeInTheDocument();
+});
+
+it("retries invitations independently while keeping the member list visible", async () => {
+  const client = membersClient();
+  client.pageInvitations.mockRejectedValueOnce(new Error("Invitation service unavailable"));
+  render(
+    <MembersScreen
+      client={client as unknown as MembersClient}
+      workspaceId="ws_b"
+      tenantRole="owner"
+      userId="usr_1"
+      ssoProviders={[]}
+    />,
+  );
+  expect(await screen.findByText("Mia")).toBeVisible();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Invitation service unavailable");
+  expect(screen.queryByText("No invitations yet.")).not.toBeInTheDocument();
+  const calls = client.pageMembers.mock.calls.length;
+  fireEvent.click(screen.getByRole("button", { name: "Retry invitations" }));
+  await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  expect(client.pageMembers).toHaveBeenCalledTimes(calls);
+  expect(client.pageInvitations).toHaveBeenLastCalledWith("ws_b", { offset: 0, limit: 25 });
+  expect(screen.getByText("Mia")).toBeVisible();
+});
+
+it("drops a late member mutation failure after switching workspaces", async () => {
+  const client = membersClient();
+  let reject: (error: Error) => void = () => {};
+  client.updateMember.mockImplementationOnce(
+    () =>
+      new Promise<void>((_resolve, fail) => {
+        reject = fail;
+      }),
+  );
+  const view = (workspaceId: string) => (
+    <SessionRolesProvider roles={{ tenantRole: "owner", platformMaintainer: false }}>
+      <MembersScreen
+        client={client as unknown as MembersClient}
+        tenantRole="owner"
+        userId="usr_1"
+        ssoProviders={[]}
+        workspaceId={workspaceId}
+      />
+    </SessionRolesProvider>
+  );
+  const page = render(view("ws_a"));
+  fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+  expect(screen.getByRole("button", { name: "Remove" })).toBeDisabled();
+  page.rerender(view("ws_b"));
+  expect(await screen.findByRole("button", { name: "Remove" })).toBeEnabled();
+  await act(async () => reject(new Error("Old workspace refused the change")));
+  expect(screen.queryByText("Old workspace refused the change")).toBeNull();
+  expect(screen.getByRole("button", { name: "Remove" })).toBeEnabled();
+});
+
+it("retains members after a failed removal and allows retry", async () => {
+  const client = membersClient();
+  client.updateMember.mockRejectedValueOnce(new Error("Removal failed"));
+  render(
+    <SessionRolesProvider roles={{ tenantRole: "owner", platformMaintainer: false }}>
+      <MembersScreen
+        client={client as unknown as MembersClient}
+        tenantRole="owner"
+        userId="usr_1"
+        ssoProviders={[]}
+        workspaceId="ws_b"
+      />
+    </SessionRolesProvider>,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Removal failed");
+  expect(screen.getByText("Mia")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+  await waitFor(() => expect(client.updateMember).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+});
+
+it("shows an empty member list only after a successful read, with retry after failure", async () => {
+  const client = membersClient();
+  client.pageMembers.mockRejectedValueOnce(new Error("People unavailable"));
+  client.pageMembers.mockResolvedValue({ members: [], offset: 0, limit: 25, total: 0 });
+  render(
+    <MembersScreen
+      client={client as unknown as MembersClient}
+      tenantRole="owner"
+      userId="usr_1"
+      ssoProviders={[]}
+      workspaceId="ws_b"
+    />,
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent("People unavailable");
+  expect(screen.queryByText("No members to show.")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(await screen.findByText("No members to show.")).toBeVisible();
+  expect(screen.queryByRole("alert")).toBeNull();
 });

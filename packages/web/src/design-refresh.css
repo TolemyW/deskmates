@@ -73,29 +73,6 @@
   border-radius: 24px;
   box-shadow: var(--app-shadow-sm);
 }
-.app-tabs {
-  width: fit-content;
-  max-width: 100%;
-  padding: 4px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--default);
-  gap: 4px;
-}
-.app-tabs button {
-  padding: 8px 16px;
-  min-height: 36px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font-size: var(--app-text-base);
-}
-.app-tabs button.active {
-  background: var(--surface);
-  color: var(--foreground);
-  box-shadow: var(--app-shadow-sm);
-}
 .avatar.emoji {
   display: inline-grid;
   place-items: center;
@@ -292,4 +269,16 @@ td {
 .detail-drawer .detail-pane-body > h2 {
   padding-right: 36px;
   overflow-wrap: anywhere;
+}
+
+/* Menu pages share one inset from the sidebar and shell role bar. */
+.content > .page-container {
+  padding: 24px 32px 48px;
+  flex: 0 0 auto;
+  min-height: auto;
+}
+@media (max-width: 720px) {
+  .content > .page-container {
+    padding: 20px 16px 32px;
+  }
 }

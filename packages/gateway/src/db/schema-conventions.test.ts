@@ -1,6 +1,7 @@
 // The schema conventions of ADR-0031 decision 5 and the workspace scope of decision 6, checked
 // over the migrated schema itself, so a later migration that breaks one fails here.
 
+import { RUN_TRIGGER_KINDS } from "@deskmates/contracts";
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { AUDIT_ACTIONS, AuditLog } from "../audit/audit-log.js";
@@ -75,7 +76,7 @@ function indexes(table: string): Array<{ name: string; columns: string[]; partia
 
 /** Columns that hold a 0/1 flag. A new boolean column joins this list with its CHECK. */
 const BOOLEAN =
-  /^(is_|must_|has_|can_)|^(email_verified|tainted|valid|stream|redacted|tombstoned|pinned|public_url|lowerable_to_l1|never_lowerable)$/;
+  /^(is_|must_|has_|can_)|^(email_verified|tainted|valid|stream|redacted|tombstoned|pinned|public_url|lowerable_to_l1|never_lowerable|usage_complete)$/;
 
 describe("schema conventions (ADR-0031 decision 5)", () => {
   it("stores every timestamp as text", () => {
@@ -168,6 +169,17 @@ describe("workspace scope (ADR-0031 decision 6)", () => {
       .prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND sql LIKE '%tnt_default%'")
       .all();
     expect(triggers).toEqual([]);
+  });
+});
+
+describe("run trigger kinds (ADR-0031 decision 5, issue #39 item 7)", () => {
+  it("the lookup holds exactly the contract's trigger kinds", () => {
+    const seeded = (
+      db.prepare("SELECT kind FROM run_trigger_kinds ORDER BY kind").all() as Array<{
+        kind: string;
+      }>
+    ).map((r) => r.kind);
+    expect(seeded).toEqual([...RUN_TRIGGER_KINDS].sort());
   });
 });
 

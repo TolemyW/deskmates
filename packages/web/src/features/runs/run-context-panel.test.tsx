@@ -38,7 +38,7 @@ it("keeps absent measurements unknown and displays memory exclusion receipts", a
   );
   await waitFor(() => expect(api.getRunContext).toHaveBeenCalledOnce());
   expect(screen.getByText(/does not confirm task completion/)).toBeTruthy();
-  expect(screen.getAllByText("Unknown tokens")).toHaveLength(2);
+  expect(screen.getAllByText("AI usage: Unknown")).toHaveLength(2);
   expect(screen.getByText(/Pinned memory index considered: 8, included: 2/)).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Continue run" })).toBeNull();
 });
@@ -84,9 +84,9 @@ it("discards an older context reply after another refresh supersedes it", async 
   };
   render(<RunContextPanel api={api} run={run()} events={[]} onRunChanged={vi.fn()} />);
   fireEvent.click(screen.getByRole("button", { name: "Refresh measurements" }));
-  expect(await screen.findByText("42 tokens")).toBeTruthy();
+  expect(await screen.findByText("AI usage: 42")).toBeTruthy();
   resolveFirst({ ...metrics, peakInputTokens: 99 });
-  await waitFor(() => expect(screen.queryByText("99 tokens")).toBeNull());
+  await waitFor(() => expect(screen.queryByText("AI usage: 99")).toBeNull());
 });
 
 // ADR-0016 amendment 2 decisions 15 and 16: the panel shows the continuation limit the run froze
@@ -133,7 +133,7 @@ it("shows section sizes, the prompt hash and peak input against the window", asy
   ]);
   const hash = screen.getByText("3f1c0d9e2b7a");
   expect(hash.getAttribute("title")).toBe(measured.systemPromptSha256);
-  expect(screen.getByText("200,000 tokens")).toBeTruthy();
+  expect(screen.getByText("AI usage: 200,000")).toBeTruthy();
   const meter = screen.getByRole("meter") as HTMLMeterElement;
   expect([meter.value, meter.max]).toEqual([150000, 200000]);
   expect(screen.getByText("75% of the window")).toBeTruthy();
@@ -147,7 +147,38 @@ it("has no meter and says so when the CLI reported no window", async () => {
     decideContinuation: vi.fn(),
   };
   render(<RunContextPanel api={api} run={run()} events={[]} onRunChanged={vi.fn()} />);
-  expect(await screen.findByText("Not reported: the CLI chose its own window")).toBeTruthy();
+  expect(await screen.findByText("Not reported: the CLI chose its own capacity")).toBeTruthy();
   expect(screen.queryByRole("meter")).toBeNull();
   expect(screen.getByText("No section sizes were recorded for this run.")).toBeTruthy();
+});
+
+it("explains a platform park and lets an operator resume a run the restart breaker holds (ADR-0029)", async () => {
+  const held = run({ status: "waiting_platform", config: { platformHeld: true } });
+  const onRunChanged = vi.fn();
+  const api = {
+    getRunContext: vi.fn(async () => metrics),
+    decideContinuation: vi.fn(),
+    resumePlatformRuns: vi.fn(async () => [held.id]),
+  };
+  render(<RunContextPanel api={api} run={held} events={[]} onRunChanged={onRunChanged} />);
+  expect(screen.getByText(/Paused by the platform/)).toBeTruthy();
+  expect(screen.getByText(/restart breaker holds this run/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Resume parked run" }));
+  await waitFor(() => expect(api.resumePlatformRuns).toHaveBeenCalledWith([held.id]));
+  await waitFor(() =>
+    expect(onRunChanged).toHaveBeenCalledWith(
+      expect.objectContaining({ config: expect.objectContaining({ platformHeld: false }) }),
+    ),
+  );
+  cleanup();
+  // A run the platform continues by itself offers nothing to press.
+  render(
+    <RunContextPanel
+      api={api}
+      run={run({ status: "waiting_platform", config: {} })}
+      events={[]}
+      onRunChanged={vi.fn()}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Resume parked run" })).toBeNull();
 });

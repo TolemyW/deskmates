@@ -1,4 +1,4 @@
-# T0/T1 gate. No Docker, no network beyond `npm ci`, no model: `npm test` must pass on such a
+# T0/T1 plus fixture-only UI layout gate. No Docker or model: `npm test` must pass on such a
 # machine (AGENTS.md). T2 runs on Testbox before a release is activated; T3 runs there for
 # milestone releases (docs/runbooks/stable-release.md).
 #
@@ -20,12 +20,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # A change under any of these runs the whole suite: shared packages and config, migrations,
-  # docs and generated docs, scripts and their guards, route policies (read as text), locale
-  # fragments, goldens and snapshots, and the workflows themselves.
-  FULL_SUITE_PATHS: '^(packages/contracts/|packages/testkit/|packages/[^/]+/package\.json$|package(-lock)?\.json$|tsconfig|vitest\.config|biome\.json|scripts/|docs/|\.github/|acceptance/|evals/|packages/gateway/migrations/|packages/gateway/src/api/route-policies/)|/messages/|__golden__/|__snapshots__/'
-
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -36,17 +30,25 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          fetch-depth: 0 # the migration order check needs the merge base with the target branch
-      - uses: actions/setup-node@v4
+          fetch-depth: 0 # the migration check and the test scope need the PR's base commit
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
+      # Decide before expensive build steps. The base is pinned to this PR, not moving main.
+      - name: Choose the test scope
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: node scripts/ci/test-scope.mjs
       - run: npm ci
       # Builds every package's dist/ before the tests import them. The root typecheck and
       # `npm test` already cover packages/web; its build is the only web-specific step.
       - run: npm run typecheck
+        if: steps.scope.outputs.typecheck == 'true'
       - run: npm run lint
       - run: npm run docs:check
       # ADR-0030: a PR compares with its base branch, a push to main with the previous commit. A
@@ -54,26 +56,43 @@ jobs:
       - name: New migrations sort after the target branch
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         env:
-          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: node scripts/check-migration-order.mjs --base "$BASE"
       - run: npm run build -w packages/web
-      # A pull request runs only the tests its change can affect (vitest --changed follows the
-      # import graph). Files that tests read as text, not through imports, and anything shared by
-      # every package force the full suite. A manual run and a call from another workflow always
-      # run everything. Releases are tested on the target host (stable.sh verify), not here.
-      - name: Choose the test scope
-        id: scope
+        if: steps.scope.outputs.web_build == 'true'
+      # Real geometry cannot be checked by jsdom. Only UI-affecting changes install a browser.
+      - name: Install layout-check browser
+        if: steps.scope.outputs.web_build == 'true'
+        run: npm exec -w packages/web -- playwright install --with-deps --only-shell chromium
+      - name: Check layout contracts
+        id: tab_layout
+        if: steps.scope.outputs.web_build == 'true'
         env:
-          BASE: origin/${{ github.base_ref }}
-        run: |
-          if [ "${{ github.event_name }}" != "pull_request" ]; then echo "full=true" >>"$GITHUB_OUTPUT"; exit 0; fi
-          changed="$(git diff --name-only "$BASE"...HEAD)"
-          printf '%s\n' "$changed"
-          if printf '%s\n' "$changed" | grep -qE "$FULL_SUITE_PATHS"; then full=true; else full=false; fi
-          echo "full=$full" >>"$GITHUB_OUTPUT"
+          TAB_LAYOUT_FEATURES: ${{ steps.scope.outputs.layout_features }}
+          ROW_LAYOUT_FEATURES: ${{ steps.scope.outputs.layout_features }}
+          TAB_LAYOUT_OUTPUT: ${{ runner.temp }}/deskmates-tab-layout
+          ROW_LAYOUT_OUTPUT: ${{ runner.temp }}/deskmates-page-rows
+        run: npm run check:layout -w packages/web
+      - name: Upload layout failure evidence
+        if: failure() && steps.tab_layout.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tab-layout-failures
+          path: |
+            ${{ runner.temp }}/deskmates-tab-layout
+            ${{ runner.temp }}/deskmates-page-rows
+          retention-days: 7
+      # Source edits use Vitest's import graph; every changed path adds the tests that read it and
+      # its owner's tests. Only the root toolchain and manual invocations run the whole suite.
       - name: Test the whole suite
-        if: steps.scope.outputs.full == 'true'
-        run: npm test
+        if: steps.scope.outputs.mode == 'full'
+        run: node scripts/ci/test-metrics.mjs
       - name: Test what the change affects
-        if: steps.scope.outputs.full != 'true'
-        run: npm test -- --changed "origin/${{ github.base_ref }}" --passWithNoTests
+        if: steps.scope.outputs.mode != 'full'
+        run: node scripts/ci/test-metrics.mjs --changed "${{ github.event.pull_request.base.sha }}" --passWithNoTests
+      # The selector emits JSON argv, never interpolated shell text. npm keeps the tier filters.
+      - name: Text-reading guards and affected owner tests
+        if: steps.scope.outputs.mode != 'full'
+        env:
+          CI_GUARD_TESTS: ${{ steps.scope.outputs.guards }}
+        run: node scripts/ci/test-guards.mjs

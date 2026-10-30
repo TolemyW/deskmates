@@ -244,8 +244,10 @@
   padding: 6px 10px;
   border: 1px solid var(--app-border);
   border-radius: 9px;
+  flex-direction: row;
+  min-height: 38px;
 }
-.workspace-manage-search input {
+.workspace-manage .workspace-manage-search input {
   flex: 1;
   min-width: 0;
   border: 0;
@@ -253,6 +255,25 @@
   color: var(--text);
   font: inherit;
   outline: none;
+  box-shadow: none;
+  padding: 0;
+  width: 100%;
+  min-height: 0;
+}
+.workspace-manage-search:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.workspace-manage-actions {
+  width: 128px;
+}
+td.workspace-manage-actions {
+  text-align: right;
+}
+.workspace-manage-actions > a {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: var(--app-text-xs);
 }
 .workspace-manage-segments {
   display: inline-flex;
@@ -277,6 +298,7 @@
 }
 .workspace-manage-role {
   display: inline-flex;
+  flex-direction: row;
   align-items: center;
   gap: 6px;
 }
@@ -334,6 +356,9 @@
   font-weight: 600;
 }
 .workspace-manage-badge {
+  display: inline-block;
+  white-space: nowrap;
+  vertical-align: middle;
   margin-left: 6px;
   padding: 1px 6px;
   border-radius: 999px;
@@ -379,17 +404,6 @@
   font-size: var(--app-text-base);
   font-weight: 600;
 }
-@media (max-width: 640px) {
-  .workspace-manage-table th:nth-child(3),
-  .workspace-manage-table td:nth-child(3),
-  .workspace-manage-table th:nth-child(5),
-  .workspace-manage-table td:nth-child(5) {
-    display: none;
-  }
-  .workspace-manage-name-cell {
-    width: auto;
-  }
-}
 /* Inline network, people and archive editing on the detail page (ADR-0034 decision 9). */
 .workspace-allowlist {
   list-style: none;
@@ -419,4 +433,126 @@
 }
 .workspace-detail-section .members-embedded .members-table {
   overflow-x: auto;
+}
+
+/* The network mode line: its icon sits on the text line, not above it. */
+.network-mode-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.network-mode-line > svg {
+  flex-shrink: 0;
+}
+
+.workspace-settings-intro {
+  color: var(--app-text-3);
+  font-size: var(--app-text-xs);
+  margin: 16px 0;
+}
+.workspace-settings [role="tabpanel"] > .workspace-detail-section + .workspace-detail-section {
+  margin-top: 16px;
+}
+.workspace-settings [hidden] {
+  display: none;
+}
+.workspace-identifier {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-3);
+  margin-bottom: 12px;
+}
+.workspace-identifier code {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 6px;
+}
+.workspace-name-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.workspace-name-value > strong {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .workspace-manage {
+    padding: 16px;
+  }
+  .workspace-manage-search {
+    flex-basis: 100%;
+  }
+  .workspace-manage-table,
+  .workspace-manage-table tbody {
+    display: block;
+  }
+  .workspace-manage-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .workspace-manage-table tr {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr);
+    gap: 4px 8px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--app-border);
+  }
+  .workspace-manage-table td {
+    border: 0;
+    padding: 0;
+    width: auto;
+  }
+  .workspace-manage-table .workspace-manage-pin-col {
+    grid-column: 1;
+    grid-row: 1 / 5;
+  }
+  .workspace-manage-table .workspace-manage-name-cell {
+    grid-column: 2 / 4;
+  }
+  .workspace-manage-table td:nth-child(3),
+  .workspace-manage-table td:nth-child(5),
+  .workspace-manage-table td:nth-child(4),
+  .workspace-manage-table td:nth-child(6) {
+    grid-row: 2;
+    text-align: left;
+    font-size: var(--app-text-xs);
+    color: var(--app-text-3);
+  }
+  .workspace-manage-table td:nth-child(3) {
+    grid-column: 2;
+  }
+  .workspace-manage-table td:nth-child(5) {
+    grid-column: 3;
+  }
+  .workspace-manage-table td:nth-child(4) {
+    grid-row: 3;
+    grid-column: 2;
+  }
+  .workspace-manage-table td:nth-child(6) {
+    grid-row: 3;
+    grid-column: 3;
+  }
+  .workspace-manage-table td[data-label]::before {
+    content: attr(data-label) ": ";
+  }
+  .workspace-manage-table td.workspace-manage-actions {
+    grid-column: 2 / 4;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 6px;
+  }
+  .workspace-manage-actions > a {
+    margin: 0;
+  }
+}
+
+.workspace-manage-pin:disabled {
+  cursor: wait;
+  opacity: 0.5;
 }

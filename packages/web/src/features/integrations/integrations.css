@@ -171,17 +171,6 @@
     height: 22px;
     object-fit: contain;
   }
-  .featured-grid {
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
-  }
-  .featured-card {
-    min-height: 132px;
-    background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--primary) 4%, transparent),
-        transparent 70%
-      ), var(--app-surface);
-  }
   .integration-categories {
     display: flex;
     flex-wrap: wrap;
@@ -254,6 +243,7 @@
   }
   .integration-card-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: flex-start;
     gap: 12px;
@@ -275,6 +265,50 @@
     border: 1px solid var(--app-border);
     border-radius: var(--app-radius-md);
     background: white;
+  }
+  /* ADR-0047: an ABI-2 plugin's connections, capability matrix and blocklist. */
+  .channel-capabilities ul,
+  .channel-connection-list,
+  .channel-blocklist {
+    display: grid;
+    gap: 6px;
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .channel-capabilities li,
+  .channel-blocklist li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .channel-connection {
+    display: grid;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-md);
+  }
+  .channel-connection-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    overflow-wrap: anywhere;
+  }
+  .channel-connection-section > summary {
+    cursor: pointer;
+  }
+  .integration-notice {
+    display: grid;
+    gap: 8px;
+    justify-items: start;
+    padding: 10px 12px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-md);
+    background: var(--surface-2);
+    line-height: 1.5;
   }
   @media (max-width: 720px) {
     .integrations-header {
@@ -312,5 +346,265 @@
     .integrations-screen {
       padding: 20px;
     }
+  }
+}
+
+/* Connections (2026-10-22): tabs, then each tab's sections. Workflows live in dialogs. */
+.connections-screen {
+  display: grid;
+  gap: 16px;
+}
+
+.connections-tab {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.connections-tab > section {
+  padding: 20px 22px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-xs);
+  min-width: 0;
+}
+.connections-tab-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.connections-tab-intro p {
+  max-width: 70ch;
+  margin: 0;
+}
+.connections-tab .link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.channel-connected-list,
+.apps-in-use,
+.channel-dialog-body,
+.channel-guide,
+.channel-setup-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.channel-connected-row,
+.apps-in-use-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--app-border);
+}
+.channel-connected-row:first-child,
+.apps-in-use-row:first-child {
+  border-top: 0;
+}
+.channel-connected-main {
+  display: grid;
+  flex: 1 1 260px;
+  gap: 2px;
+  min-width: 0;
+}
+.channel-connected-main strong {
+  overflow-wrap: anywhere;
+}
+.channel-open-link,
+.channel-guide-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--primary-text);
+  font-weight: 600;
+}
+.channel-provider-card .channel-capabilities {
+  margin-top: auto;
+}
+.apps-search {
+  flex: 1 1 auto;
+  max-width: 420px;
+}
+.apps-include-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--app-text-3);
+}
+.apps-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.apps-accounts summary {
+  cursor: pointer;
+}
+.channel-dialog,
+.channel-setup {
+  gap: 12px;
+}
+.channel-setup {
+  display: grid;
+}
+.channel-setup-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  color: var(--app-text-4);
+  font-size: var(--app-text-sm);
+}
+.channel-setup-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.channel-setup-steps li > span {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-full);
+  font-size: var(--app-text-xs);
+}
+.channel-setup-steps li[aria-current="step"] {
+  color: var(--text);
+  font-weight: 600;
+}
+.channel-setup-steps li[aria-current="step"] > span,
+.channel-setup-steps li[data-done="true"] > span {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-text);
+}
+.channel-guide {
+  display: grid;
+  gap: 10px;
+  counter-reset: channel-step;
+}
+.channel-guide > li {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding-left: 30px;
+  counter-increment: channel-step;
+}
+.channel-guide > li::before {
+  content: counter(channel-step);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--app-radius-full);
+  background: var(--surface-2);
+  color: var(--app-text-3);
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+}
+.channel-guide p {
+  margin: 0;
+  line-height: 1.5;
+}
+.channel-copy {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: var(--app-radius-sm);
+  background: var(--surface-2);
+}
+.channel-copy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.channel-copy-value {
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  font-size: var(--app-text-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.channel-field {
+  display: grid;
+  gap: 4px;
+}
+.channel-methods {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.channel-method {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  cursor: pointer;
+}
+.channel-method:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.channel-method > span {
+  display: grid;
+  gap: 2px;
+}
+.channel-dialog-body > .integration-card {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* App discovery is a browsable catalog, not a stack of nested settings panels. */
+.apps-tab > section {
+  padding: 16px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.apps-tab .integration-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+}
+.apps-tab .integration-card {
+  min-height: 0;
+  padding: 14px;
+  box-shadow: none;
+  border-color: var(--app-border);
+}
+.apps-tab .integration-card-actions > button:first-child {
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .apps-tab .integration-card {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .apps-tab .integration-card-head {
+    flex: 1 1 180px;
+  }
+  .apps-tab .integration-card-actions {
+    margin-top: 0;
+    padding-top: 0;
   }
 }

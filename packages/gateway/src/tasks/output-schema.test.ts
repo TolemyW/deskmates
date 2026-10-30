@@ -2,7 +2,13 @@
 // checked against, and the write-time checks on the schema itself.
 import type { TaskOutputSchema } from "@deskmates/contracts";
 import { describe, expect, it } from "vitest";
-import { OUTPUT_LIMITS, outputErrors, parseOutput, parseOutputSchema } from "./output-schema.js";
+import {
+  OUTPUT_LIMITS,
+  exampleOutput,
+  outputErrors,
+  parseOutput,
+  parseOutputSchema,
+} from "./output-schema.js";
 
 const report: TaskOutputSchema = {
   type: "object",
@@ -139,5 +145,41 @@ describe("parseOutput", () => {
     expect(() => parseOutput("x".repeat(OUTPUT_LIMITS.outputBytes))).toThrowError(
       expect.objectContaining({ code: "validation" }),
     );
+  });
+
+  // Issue #39 item 5: the example a refused delivery carries conforms to the task's schema.
+  it("builds an example output that conforms to the schema", () => {
+    const example = exampleOutput(report);
+    expect(example).toEqual({ ticker: "<text>", price: 0, tags: ["<text>"] });
+    expect(outputErrors(report, example)).toEqual([]);
+    const loose: TaskOutputSchema = {
+      properties: { side: { enum: ["buy", "sell"] }, ok: { type: "boolean" } },
+    };
+    expect(exampleOutput(loose)).toEqual({ side: "buy", ok: true });
+    expect(outputErrors(loose, exampleOutput(loose))).toEqual([]);
+  });
+});
+
+describe("correction examples satisfy all supported constraints", () => {
+  it.each([
+    { type: "string", enum: [1, "valid"] },
+    { type: ["object", "null"], required: ["x"], additionalProperties: false },
+    { type: "object", properties: { optional: { type: "string", enum: [1] } } },
+    { type: "object", required: ["x"], additionalProperties: { type: "integer" } },
+    { type: "array", items: { type: "string", enum: [1] } },
+    { type: "object", enum: [{ x: 1 }, { x: "ok" }], properties: { x: { type: "string" } } },
+  ])("validates the generated example for %j", (raw) => {
+    const schema = parseOutputSchema(raw);
+    const example = exampleOutput(schema);
+    expect(example).not.toBeUndefined();
+    expect(outputErrors(schema, example)).toEqual([]);
+  });
+
+  it.each([
+    { type: "string", enum: [1] },
+    { type: "object", required: ["x"], additionalProperties: false },
+    { type: "object", required: ["x"], properties: { x: { type: "string", enum: [1] } } },
+  ])("omits an example for unsatisfiable constraints %j", (raw) => {
+    expect(exampleOutput(parseOutputSchema(raw))).toBeUndefined();
   });
 });

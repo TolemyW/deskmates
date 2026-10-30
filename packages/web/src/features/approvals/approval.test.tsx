@@ -4,6 +4,7 @@
 // Gateway returns; a decision goes out as `POST /api/approvals/:id/decide` and comes back either
 // as that response or as an `approval` SSE frame, and either way the card stops offering buttons.
 
+import "../../test-support/select.js";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../../api/client.js";
@@ -31,6 +32,11 @@ import { ApprovalCard } from "./approval-card.js";
 import { ApprovalsScreen } from "./approvals.js";
 
 const request = approvalMessage(2, approvalBody());
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 /** Everything the thread screen fetches before it can draw one thread. */
 function threadRoutes(extra: Record<string, unknown> = {}) {
@@ -95,11 +101,12 @@ describe("approval card in the transcript", () => {
         <ThreadScreen api={createApiClient({ fetch: wire.fetch })} threadId={THREAD_ID} />
       </SessionRolesProvider>,
     );
-    const echo = await screen.findByTestId("approval-echo");
-    expect(
-      within(echo).getByText("Denied by Demo operator: ask human:user:usr_other"),
-    ).toBeTruthy();
-    expect(within(echo).getByText(body).closest("details")).not.toBeNull();
+    await screen.findByTestId("approval-card");
+    const receipt = document.querySelector(".chat-approval-receipt") as HTMLDetailsElement;
+    expect(receipt.open).toBe(false);
+    expect(receipt.querySelector("summary")?.textContent).toContain("Denied");
+    expect(screen.queryByTestId("approval-echo")).toBeNull();
+    expect(within(receipt).getByText(body).closest("details")).not.toBeNull();
     expect(wire.calls.every((call) => call.method === "GET")).toBe(true);
     expect(wire.calls.some((call) => /members|people/.test(call.path))).toBe(false);
   });
@@ -109,11 +116,14 @@ describe("approval card in the transcript", () => {
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
 
     const card = await screen.findByTestId("approval-card");
-    expect(card.textContent).toContain("browser_click");
-    expect(card.textContent).toContain("https://shop.example.com");
-    expect(card.textContent).toContain("click Submit order");
-    expect(card.textContent).toContain("order the widgets");
-    for (const name of ["Allow once", "Always", "Deny"]) {
+    expect(card.textContent).toContain("Submit order");
+    expect(card.textContent).not.toContain("browser_click");
+    fireEvent.click(within(card).getByRole("button", { name: "Details" }));
+    expect(await screen.findByText("browser_click", { exact: true })).toBeTruthy();
+    expect(screen.getByText("https://shop.example.com")).toBeTruthy();
+    expect(screen.getByText("click Submit order")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close details" }));
+    for (const name of ["Allow once", "More approval options", "Deny"]) {
       expect(within(card).getByRole("button", { name })).toBeTruthy();
     }
     // The raw three-line body is replaced by the card, not printed next to it.
@@ -137,7 +147,7 @@ describe("approval card in the transcript", () => {
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
 
     const card = await screen.findByTestId("approval-card");
-    expect(card.textContent).toContain("browser_click");
+    expect(card.textContent).toContain("Submit order");
     expect(within(card).getByRole("button", { name: "Allow once" })).toBeTruthy();
     expect(screen.queryByText(/^Approval needed:/)).toBeNull();
   });
@@ -202,7 +212,7 @@ describe("approval card in the transcript", () => {
     const { fetch } = fakeFetch(threadRoutes());
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
     const card = await screen.findByTestId("approval-card");
-    expect(within(card).getByRole("button", { name: "Always" })).toBeTruthy();
+    expect(within(card).getByRole("button", { name: "More approval options" })).toBeTruthy();
 
     FakeEventSource.forUrl("/api/events?threadId=thr_1").emit({
       type: "approval",
@@ -231,7 +241,7 @@ describe("approval card in the transcript", () => {
     expect(within(card).queryByRole("button")).toBeNull();
   });
 
-  it("renders the decision echo as a wrapping note with the bot name, not a second card", async () => {
+  it("folds the decision echo into the original approval and preserves its audit text", async () => {
     const decided = approval({
       decision: "deny",
       decidedBy: "human:operator",
@@ -254,10 +264,12 @@ describe("approval card in the transcript", () => {
 
     await screen.findByTestId("approval-card");
     expect(screen.getAllByTestId("approval-card")).toHaveLength(1);
-    const line = screen.getByTestId("approval-echo");
-    expect(line.textContent).toContain("Approved by ops: Critical-path review.");
-    expect(line.textContent).not.toContain("bot:bot_1");
-    expect(line.querySelector(".approval-decision-text")).toBeTruthy();
+    expect(screen.queryByTestId("approval-echo")).toBeNull();
+    const receipt = document.querySelector(".chat-approval-receipt") as HTMLDetailsElement;
+    expect(receipt.open).toBe(false);
+    expect(receipt.querySelector(".chat-approval-audit")?.textContent).toContain(echo.body);
+    fireEvent.click(receipt.querySelector("summary") as HTMLElement);
+    expect(receipt.open).toBe(true);
   });
 });
 
@@ -286,16 +298,104 @@ describe("ApprovalsScreen", () => {
     const list = await screen.findByLabelText("Pending approvals");
     const rows = within(list).getAllByRole("listitem");
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.textContent).toContain("browser_click");
+    expect(rows[0]?.textContent).toContain("Submit order");
     await waitFor(() => expect(rows[0]?.textContent).toContain("ops"));
     expect(calls.map((c) => c.path)).not.toContain("/api/bots");
     expect(calls.filter((c) => c.path.startsWith("/api/bots"))).toHaveLength(1);
     expect(rows[1]?.textContent).toContain("git push origin main");
     expect(
       within(rows[0] as HTMLElement)
-        .getByRole("link", { name: "thread" })
+        .getByRole("link", { name: "chat" })
         .getAttribute("href"),
     ).toBe(`#/threads/${THREAD_ID}`);
+  });
+
+  it("shows a retry instead of an empty success state when loading fails", async () => {
+    let failed = true;
+    const { fetch } = fakeFetch({
+      "GET /api/approval-groups": () =>
+        failed
+          ? new Error("Approval service unavailable")
+          : { groups: [], totalGroups: 0, totalApprovals: 0 },
+    });
+    render(<ApprovalsScreen api={createApiClient({ fetch })} />);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Approval service unavailable",
+    );
+    expect(screen.queryByText(/Nothing pending/)).toBeNull();
+    failed = false;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByText(/Nothing pending/);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("groups identical actions and decides every request with one group action", async () => {
+    const same = approval({
+      id: "apr_2" as typeof APPROVAL_ID,
+      action: { toolName: "Bash", input: { command: "git push" }, argumentSummary: "git push" },
+    });
+    let pending = true;
+    const { fetch, calls } = fakeFetch({
+      [`GET /api/bots?ids=${BOT_ID}`]: { bots: [bot] },
+      "GET /api/approval-groups": () =>
+        pending
+          ? {
+              groups: [{ key: "same-action", approval: same, count: 3 }],
+              totalGroups: 1,
+              totalApprovals: 3,
+            }
+          : { groups: [], totalGroups: 0, totalApprovals: 0 },
+      "POST /api/approval-groups/same-action/decide": () => {
+        pending = false;
+        return { approvals: [] };
+      },
+    });
+    render(<ApprovalsScreen api={createApiClient({ fetch })} />);
+
+    const group = await screen.findByTestId("approval-group");
+    expect(group.textContent).toContain("3 identical requests");
+    expect(within(group).getByRole("button", { name: "Allow all" })).toBeTruthy();
+    fireEvent.click(within(group).getByRole("button", { name: "Deny all" }));
+    await screen.findByText(/Nothing pending/);
+    expect(calls.find((call) => call.method === "POST")).toEqual({
+      method: "POST",
+      path: "/api/approval-groups/same-action/decide",
+      body: { decision: "deny_all" },
+    });
+  });
+
+  it("keeps Tell it what to do on the approval page while denying with new instructions", async () => {
+    const denied = approval({
+      decision: "deny",
+      decidedBy: "human:operator",
+      decidedAt: "2026-09-21T10:01:00.000Z",
+      reason: "use the preview first",
+    });
+    const { fetch, calls } = fakeFetch({
+      [`GET /api/bots?ids=${BOT_ID}`]: { bots: [bot] },
+      "GET /api/approval-groups": {
+        groups: [{ key: "one", approval: approval(), count: 1 }],
+        totalGroups: 1,
+        totalApprovals: 1,
+      },
+      "POST /api/approvals/apr_1/decide": { approval: denied },
+    });
+    window.location.hash = "#/approvals";
+    render(<ApprovalsScreen api={createApiClient({ fetch })} />);
+
+    const card = await screen.findByTestId("approval-card");
+    fireEvent.click(within(card).getByRole("button", { name: "More approval options" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Tell it what to do instead" }));
+    fireEvent.change(within(card).getByLabelText("Message to the bot"), {
+      target: { value: "use the preview first" },
+    });
+    fireEvent.click(within(card).getByRole("button", { name: "Send and let it rethink" }));
+    await screen.findByText(/Nothing pending/);
+    expect(window.location.hash).toBe("#/approvals");
+    expect(calls.find((call) => call.method === "POST")?.body).toEqual({
+      decision: "deny",
+      reason: "use the preview first",
+    });
   });
 
   it("decides a row, drops it, and reports an empty inbox", async () => {
@@ -305,14 +405,15 @@ describe("ApprovalsScreen", () => {
       decidedAt: "2026-09-21T10:01:00.000Z",
     });
     const { fetch, calls } = fakeFetch({
-      "GET /api/bots": { bots: [bot] },
+      [`GET /api/bots?ids=${BOT_ID}`]: { bots: [bot] },
       "GET /api/approvals?status=pending": { approvals: [approval()] },
       "POST /api/approvals/apr_1/decide": { approval: decided, rule: approvalRule() },
     });
     render(<ApprovalsScreen api={createApiClient({ fetch })} />);
 
     const list = await screen.findByLabelText("Pending approvals");
-    fireEvent.click(within(list).getByRole("button", { name: "Always" }));
+    fireEvent.click(within(list).getByRole("button", { name: "More approval options" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Always" }));
     // Always shows the rule's effective scope and decides nothing until it is confirmed.
     expect(calls.find((c) => c.method === "POST")).toBeUndefined();
     fireEvent.click(within(list).getByRole("button", { name: "Confirm Always" }));
@@ -338,7 +439,7 @@ describe("ApprovalsScreen", () => {
         ++snapshots === 1 ? { approvals: [approval()] } : reconnect,
     });
     render(<ApprovalsScreen api={createApiClient({ fetch })} />);
-    await screen.findByText("browser_click");
+    await screen.findByText(/Click “Submit order”/);
 
     const es = FakeEventSource.last;
     es.open();
@@ -347,8 +448,8 @@ describe("ApprovalsScreen", () => {
     es.emit({ type: "approval", threadId: THREAD_ID, approval: later });
     resolveReconnect({ approvals: [] });
 
-    await waitFor(() => expect(screen.queryByText("browser_click")).toBeNull());
-    expect(await screen.findByText("git push origin main")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText(/Click “Submit order”/)).toBeNull());
+    expect(await screen.findByText(/Run “git push origin main”/)).toBeTruthy();
   });
 
   it("fetches the authoritative decision when a competing decision returns 409", async () => {
@@ -442,7 +543,7 @@ describe("egress approval card (ADR-0020)", () => {
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
 
     const card = await screen.findByTestId("approval-card");
-    expect(card.textContent).toContain("Open docs.databricks.com?");
+    expect(card.textContent).toContain("Open docs.databricks.com.");
     expect(within(card).queryByRole("button", { name: "Allow once" })).toBeNull();
     expect(within(card).queryByRole("button", { name: "Always" })).toBeNull();
     fireEvent.click(within(card).getByRole("button", { name: "Allow this site" }));
@@ -457,4 +558,90 @@ describe("egress approval card (ADR-0020)", () => {
       body: { decision: "allow_always" },
     });
   });
+});
+
+it("retains a failed group decision and lets the operator retry it", async () => {
+  const wire = fakeFetch({
+    [`GET /api/bots?ids=${BOT_ID}`]: { bots: [bot] },
+    "GET /api/approval-groups": {
+      groups: [{ key: "retry-group", approval: approval(), count: 2 }],
+      totalGroups: 1,
+      totalApprovals: 2,
+    },
+  });
+  const api = createApiClient({ fetch: wire.fetch });
+  const decide = vi
+    .spyOn(api, "decideApprovalGroup")
+    .mockRejectedValue(new Error("Group decision failed"));
+  render(<ApprovalsScreen api={api} />);
+  const group = await screen.findByTestId("approval-group");
+  fireEvent.click(within(group).getByRole("button", { name: "Deny all" }));
+  expect((await within(group).findByRole("alert")).textContent).toContain("Group decision failed");
+  expect(screen.getByTestId("approval-group")).toBeTruthy();
+  fireEvent.click(within(group).getByRole("button", { name: "Deny all" }));
+  await waitFor(() => expect(decide).toHaveBeenCalledTimes(2));
+  expect(decide.mock.calls).toEqual([
+    ["retry-group", "deny_all"],
+    ["retry-group", "deny_all"],
+  ]);
+});
+
+it.each(["member", "admin"] as const)(
+  "uses the request workspace's %s role for inbox site approvals",
+  async (role) => {
+    const requestedWorkspace = "ws_requested" as typeof bot.workspaceId;
+    const wire = fakeFetch({
+      [`GET /api/bots?ids=${BOT_ID}`]: { bots: [{ ...bot, workspaceId: requestedWorkspace }] },
+      "GET /api/approval-groups": {
+        groups: [{ key: "site-group", approval: approval({ kind: "egress" }), count: 2 }],
+        totalGroups: 1,
+        totalApprovals: 2,
+      },
+    });
+    render(
+      <SessionRolesProvider
+        roles={{
+          tenantRole: "owner",
+          platformMaintainer: false,
+          workspaceRoles: { ws_elsewhere: "owner", [requestedWorkspace]: role },
+        }}
+      >
+        <ApprovalsScreen api={createApiClient({ fetch: wire.fetch })} />
+      </SessionRolesProvider>,
+    );
+    await screen.findByTestId("approval-group");
+    await waitFor(() =>
+      expect(wire.calls.some((call) => call.path.startsWith("/api/bots?ids="))).toBe(true),
+    );
+    if (role === "admin") {
+      expect(await screen.findByRole("button", { name: "Allow all" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Allow this site" })).toBeTruthy();
+    } else {
+      expect(screen.queryByRole("button", { name: "Allow all" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Allow this site" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Deny all" })).toBeTruthy();
+    }
+  },
+);
+
+it("recovers workspace permissions after a failed bot lookup without deciding an approval", async () => {
+  const wire = fakeFetch({
+    [`GET /api/bots?ids=${BOT_ID}`]: { bots: [bot] },
+    "GET /api/approval-groups": {
+      groups: [{ key: "site-retry", approval: approval({ kind: "egress" }), count: 2 }],
+      totalGroups: 1,
+      totalApprovals: 2,
+    },
+  });
+  const api = createApiClient({ fetch: wire.fetch });
+  const lookup = vi.spyOn(api, "listBotsByIds").mockRejectedValueOnce(new Error("Unavailable"));
+  const decide = vi.spyOn(api, "decideApprovalGroup");
+  render(<ApprovalsScreen api={api} />);
+  const retry = await screen.findByRole("button", { name: "Retry workspace lookup" });
+  expect(screen.queryByRole("button", { name: "Allow all" })).toBeNull();
+  fireEvent.click(retry);
+  expect(await screen.findByRole("button", { name: "Allow all" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Retry workspace lookup" })).toBeNull();
+  expect(lookup).toHaveBeenCalledTimes(2);
+  expect(decide).not.toHaveBeenCalled();
 });

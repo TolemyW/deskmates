@@ -40,11 +40,25 @@ describe("Guest (ADR-0022 amendment 6 W6)", () => {
       ).status,
     ).toBe(201);
     const runsBefore = runCount(harness);
+    const linkedTask = ctx.tasks.create(people.workspace.id, {
+      title: "Internal task details",
+      threadIds: [group.id],
+    });
 
     // Reads: the shared chat and its original text, the workspace and its bots.
     const listed = await (await people.guest.fetch("GET", "/api/threads")).text();
     expect(listed).toContain(group.id);
     expect(listed).not.toContain(bus.id);
+    expect(listed).not.toContain(linkedTask.title);
+    expect(listed).not.toContain("taskContext");
+    for (const query of [
+      `workspaceId=${people.workspace.id}&limit=50`,
+      `workspaceId=${people.workspace.id}&ids=${group.id}`,
+    ]) {
+      const page = await (await people.guest.fetch("GET", `/api/threads?${query}`)).text();
+      expect(page).toContain(group.id);
+      expect(page).not.toContain("taskContext");
+    }
     const messages = await people.guest.json<{ messages: Array<{ body: string }> }>(
       "GET",
       `/api/threads/${group.id}/messages`,

@@ -32,6 +32,7 @@ export interface TasksApi {
     id: string,
     version: number,
     idempotencyKey: string,
+    feedback?: string,
   ): Promise<TaskSubmitResponse>;
   updateTask(workspaceId: WorkspaceId, id: string, input: UpdateTaskInput): Promise<Task>;
 }
@@ -62,10 +63,11 @@ export function createTasksApi(t: HttpTransport): TasksApi {
     listTasks(workspaceId, filters = {}) {
       return t.json<TaskListPage>("GET", `${tasks(workspaceId)}${query({ ...filters })}`);
     },
-    async runTask(workspaceId, id, version, idempotencyKey) {
+    async runTask(workspaceId, id, version, idempotencyKey, feedback) {
       return t.json<TaskSubmitResponse>("POST", `${one(workspaceId, id)}/run`, {
         version,
         idempotencyKey,
+        ...(feedback === undefined ? {} : { feedback }),
       });
     },
     async updateTask(workspaceId, id, input) {

@@ -81,7 +81,7 @@ function setup(
 
 /** Open a bot's run list, the only place Stop is offered. */
 function expand(name: string) {
-  fireEvent.click(screen.getByRole("button", { name: new RegExp(` of ${name}$`) }));
+  fireEvent.click(screen.getByRole("button", { name: new RegExp(`work items? for ${name}$`) }));
 }
 
 const cancelCalls = (calls: { method: string; path: string }[]) =>
@@ -99,7 +99,7 @@ describe("Stop in the grouped run status (issues #76, #126)", () => {
     expect(screen.queryByRole("button", { name: /^Stop/ })).toBeNull();
     expand("ops");
     expect(
-      screen.getByRole("button", { name: "Stop ops (running): Reply to “check the deploy”" }),
+      screen.getByRole("button", { name: "Stop ops (working): Reply to “check the deploy”" }),
     ).toBeTruthy();
   });
 
@@ -110,17 +110,17 @@ describe("Stop in the grouped run status (issues #76, #126)", () => {
     });
 
     expand("ops");
-    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(working\)/ }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Stop this run of ops?")).toBeTruthy();
+    expect(within(dialog).getByText("Stop ops's work?")).toBeTruthy();
     expect(within(dialog).getByText("run_1")).toBeTruthy();
-    expect(dialog.textContent).toContain("Only this run stops");
-    expect(dialog.textContent).toContain("other bots");
+    expect(dialog.textContent).toContain("Only this work stops");
+    expect(dialog.textContent).toContain("other Bots");
     expect(dialog.textContent).toContain("queued");
     expect(cancelCalls(calls)).toHaveLength(0);
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Stop run" }));
-    await screen.findByText("ops's run was cancelled. Other work in this chat keeps going.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Stop work" }));
+    await screen.findByText("ops's work was cancelled. Other work in this chat keeps going.");
     expect(cancelCalls(calls).map((c) => c.path)).toEqual(["/api/runs/run_1/cancel"]);
     expect(onRunUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: "cancelled" }));
   });
@@ -128,8 +128,8 @@ describe("Stop in the grouped run status (issues #76, #126)", () => {
   it("keeps the run when the operator declines", async () => {
     const { calls } = setup([run({ status: "running" })]);
     expand("ops");
-    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Keep running" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(working\)/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Keep working" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(cancelCalls(calls)).toHaveLength(0);
   });
@@ -151,8 +151,8 @@ describe("Stop in the grouped run status (issues #76, #126)", () => {
     );
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("run_b")).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Stop run" }));
-    await screen.findByText("ops's run was cancelled. Other work in this chat keeps going.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Stop work" }));
+    await screen.findByText("ops's work was cancelled. Other work in this chat keeps going.");
     expect(cancelCalls(calls).map((c) => c.path)).toEqual(["/api/runs/run_b/cancel"]);
   });
 
@@ -164,10 +164,10 @@ describe("Stop in the grouped run status (issues #76, #126)", () => {
     });
     expand("ops");
     expand("qa");
-    expect(screen.getByRole("button", { name: /^Stop ops \(running\)/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Stop ops \(working\)/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^Stop qa \(queued\)/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
-    await screen.findByText("qa's run was cancelled. Other work in this chat keeps going.");
+    fireEvent.click(await screen.findByRole("button", { name: "Stop work" }));
+    await screen.findByText("qa's work was cancelled. Other work in this chat keeps going.");
     expect(cancelCalls(calls).map((c) => c.path)).toEqual(["/api/runs/run_b/cancel"]);
   });
 
@@ -181,14 +181,14 @@ describe("Stop in the grouped run status (issues #76, #126)", () => {
         }),
     });
     expand("ops");
-    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(working\)/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Stop work" }));
     const pending = await screen.findByRole("button", { name: "Stopping ops…" });
     expect((pending as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(pending);
     expect(screen.queryByRole("dialog")).toBeNull();
     release({ run: { ...active, status: "cancelled" } });
-    await screen.findByText("ops's run was cancelled. Other work in this chat keeps going.");
+    await screen.findByText("ops's work was cancelled. Other work in this chat keeps going.");
     expect(cancelCalls(calls)).toHaveLength(1);
   });
 
@@ -204,29 +204,29 @@ describe("Stop in the grouped run status (issues #76, #126)", () => {
     const onRunUpdated = vi.fn();
     render(view(fetch, [active], onRunUpdated));
     expand("ops");
-    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
-    await screen.findByText("ops's run had already finished; nothing was cancelled.");
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(working\)/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Stop work" }));
+    await screen.findByText("ops's work had already finished; nothing was cancelled.");
     await waitFor(() =>
       expect(onRunUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: "succeeded" })),
     );
   });
 
   it.each([
-    [403, { code: "forbidden", message: "not your side chat", details: {} }, /permission/],
-    [500, { code: "internal", message: "boom", details: {} }, /Could not cancel ops's run: boom/],
+    [403, { code: "forbidden", message: "not your side chat", details: {} }, /cannot cancel/],
+    [500, { code: "internal", message: "boom", details: {} }, /Could not cancel ops's work: boom/],
   ])("reports a %s refusal and lets the operator try again", async (status, body, text) => {
     const active = run({ status: "running" });
     const fetch = (async () => json(status, body)) as typeof globalThis.fetch;
     const onRunUpdated = vi.fn();
     render(view(fetch, [active], onRunUpdated));
     expand("ops");
-    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(working\)/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Stop work" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(text);
     expect(onRunUpdated).not.toHaveBeenCalled();
     expect(
-      (screen.getByRole("button", { name: /^Stop ops \(running\)/ }) as HTMLButtonElement).disabled,
+      (screen.getByRole("button", { name: /^Stop ops \(working\)/ }) as HTMLButtonElement).disabled,
     ).toBe(false);
   });
 
@@ -236,10 +236,10 @@ describe("Stop in the grouped run status (issues #76, #126)", () => {
     }) as typeof globalThis.fetch;
     render(view(fetch, [run({ status: "running" })]));
     expand("ops");
-    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(working\)/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Stop work" }));
     expect((await screen.findByRole("alert")).textContent).toContain(
-      "ops's run may still be running",
+      "ops's work may still be active",
     );
   });
 
@@ -247,13 +247,13 @@ describe("Stop in the grouped run status (issues #76, #126)", () => {
     const active = run({ status: "running" });
     const { calls, rerender } = setup([active]);
     expand("ops");
-    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(running\)/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Stop ops \(working\)/ }));
     await screen.findByRole("dialog");
     rerender([]);
     expect(
-      await screen.findByText("This run has already finished; there is nothing to stop."),
+      await screen.findByText("This work has already finished; there is nothing to stop."),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Stop run" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stop work" })).toBeNull();
     expect(cancelCalls(calls)).toHaveLength(0);
   });
 
@@ -270,7 +270,7 @@ describe("Stop in the grouped run status (issues #76, #126)", () => {
       },
     );
     expand("ops");
-    expect(screen.getByRole("link", { name: "Run details" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Work details" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Stop/ })).toBeNull();
     expect(
       screen.getByText(/^Only .+ can cancel a run outside your own side chats\.$/),
@@ -292,6 +292,6 @@ describe("Stop in the grouped run status (issues #76, #126)", () => {
       },
     );
     expand("ops");
-    expect(screen.getByRole("button", { name: /^Stop ops \(running\)/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Stop ops \(working\)/ })).toBeTruthy();
   });
 });

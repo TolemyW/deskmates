@@ -18,6 +18,7 @@ import type { RunView } from "../../api/types.js";
 import { Button } from "../../components/ui/button.js";
 import { errorMessage, formatDateTime } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
+import { useTuneView } from "../../lib/interface-view.js";
 import type { RunSuppliedMemoryVersion } from "./api.js";
 import { FailureClassLabel } from "./failure-class.js";
 import { RunMarkControl } from "./run-mark.js";
@@ -39,6 +40,9 @@ function frozenModel(config: Record<string, unknown>): string | undefined {
 
 export function RunChangesSection({ api, run }: RunChangesSectionProps) {
   const t = useT();
+  // The mark, the memory it was given, what was frozen at start and the replay export are for
+  // tuning (docs/use-and-tune-views.md); the use view keeps what the run changed.
+  const tune = useTuneView();
   const runId = run.id as RunId;
   const [changes, setChanges] = useState<RunChanges>();
   const [supplied, setSupplied] = useState<RunSuppliedMemoryVersion[]>();
@@ -83,12 +87,14 @@ export function RunChangesSection({ api, run }: RunChangesSectionProps) {
           {t("runChanges.failureClass")} <FailureClassLabel failureClass={run.failureClass} />
         </p>
       ) : null}
-      <RunMarkControl
-        runId={runId}
-        mark={mark}
-        actions={{ mark: api.markRun, unmark: api.unmarkRun }}
-        onChange={setMark}
-      />
+      {tune ? (
+        <RunMarkControl
+          runId={runId}
+          mark={mark}
+          actions={{ mark: api.markRun, unmark: api.unmarkRun }}
+          onChange={setMark}
+        />
+      ) : null}
       {changes?.prunedAt ? (
         <p className="notice small">
           {t("runChanges.pruned", { when: formatDateTime(changes.prunedAt) })}
@@ -176,23 +182,27 @@ export function RunChangesSection({ api, run }: RunChangesSectionProps) {
         </ul>
       )}
 
-      <h4>{t("runChanges.memorySupplied")}</h4>
-      {supplied === undefined ? (
-        <p className="muted small">{t("runChanges.loading")}</p>
-      ) : supplied.length === 0 ? (
-        <p className="muted small">{t("runChanges.none")}</p>
-      ) : (
-        <ul className="small">
-          {supplied.map((version) => (
-            <li key={`${version.entryId}@${version.version}:${version.via}`}>
-              <code>
-                {version.entryId}@{version.version}
-              </code>{" "}
-              <span className="muted">{version.via}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {tune ? (
+        <>
+          <h4>{t("runChanges.memorySupplied")}</h4>
+          {supplied === undefined ? (
+            <p className="muted small">{t("runChanges.loading")}</p>
+          ) : supplied.length === 0 ? (
+            <p className="muted small">{t("runChanges.none")}</p>
+          ) : (
+            <ul className="small">
+              {supplied.map((version) => (
+                <li key={`${version.entryId}@${version.version}:${version.via}`}>
+                  <code>
+                    {version.entryId}@{version.version}
+                  </code>{" "}
+                  <span className="muted">{version.via}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : null}
 
       <h4>{t("runChanges.approvals")}</h4>
       {changes === undefined ? (
@@ -241,53 +251,57 @@ export function RunChangesSection({ api, run }: RunChangesSectionProps) {
         </ul>
       )}
 
-      <h4>{t("runChanges.frozen")}</h4>
-      <dl className="run-facts small">
-        <dt>{t("runChanges.model")}</dt>
-        <dd>{model ? <code>{model}</code> : t("runChanges.notRecorded")}</dd>
-        <dt>{t("runChanges.skills")}</dt>
-        <dd>
-          {skills.length === 0
-            ? t("runChanges.none")
-            : skills.map((skill) => `${skill.name}@${skill.version}`).join(", ")}
-        </dd>
-        <dt>{t("runChanges.soul")}</dt>
-        <dd>
-          {typeof soulVersion === "number"
-            ? t("runChanges.version", { version: soulVersion })
-            : t("runChanges.notRecorded")}
-        </dd>
-        {typeof promptSha === "string" ? (
-          <>
-            <dt>{t("runChanges.systemPrompt")}</dt>
+      {tune ? (
+        <>
+          <h4>{t("runChanges.frozen")}</h4>
+          <dl className="run-facts small">
+            <dt>{t("runChanges.model")}</dt>
+            <dd>{model ? <code>{model}</code> : t("runChanges.notRecorded")}</dd>
+            <dt>{t("runChanges.skills")}</dt>
             <dd>
-              <code>{promptSha.slice(0, 12)}</code>
+              {skills.length === 0
+                ? t("runChanges.none")
+                : skills.map((skill) => `${skill.name}@${skill.version}`).join(", ")}
             </dd>
-          </>
-        ) : null}
-      </dl>
+            <dt>{t("runChanges.soul")}</dt>
+            <dd>
+              {typeof soulVersion === "number"
+                ? t("runChanges.version", { version: soulVersion })
+                : t("runChanges.notRecorded")}
+            </dd>
+            {typeof promptSha === "string" ? (
+              <>
+                <dt>{t("runChanges.systemPrompt")}</dt>
+                <dd>
+                  <code>{promptSha.slice(0, 12)}</code>
+                </dd>
+              </>
+            ) : null}
+          </dl>
 
-      {isTerminal(run.status) ? (
-        <div className="run-replay" data-testid="run-replay">
-          <h4>{t("runChanges.replay.heading")}</h4>
-          <p className="muted small">
-            {t("runChanges.replay.how", { path: `evals/traces/${runId}.json` })}
-          </p>
-          <pre className="small">{command}</pre>
-          {canCopy ? (
-            <Button
-              size="sm"
-              onClick={() => {
-                void navigator.clipboard.writeText(command).then(
-                  () => setCopied(true),
-                  () => setCopied(false),
-                );
-              }}
-            >
-              {copied ? t("runChanges.replay.copied") : t("runChanges.replay.copy")}
-            </Button>
+          {isTerminal(run.status) ? (
+            <div className="run-replay" data-testid="run-replay">
+              <h4>{t("runChanges.replay.heading")}</h4>
+              <p className="muted small">
+                {t("runChanges.replay.how", { path: `evals/traces/${runId}.json` })}
+              </p>
+              <pre className="small">{command}</pre>
+              {canCopy ? (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(command).then(
+                      () => setCopied(true),
+                      () => setCopied(false),
+                    );
+                  }}
+                >
+                  {copied ? t("runChanges.replay.copied") : t("runChanges.replay.copy")}
+                </Button>
+              ) : null}
+            </div>
           ) : null}
-        </div>
+        </>
       ) : null}
     </details>
   );

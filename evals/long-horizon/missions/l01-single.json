@@ -1,0 +1,55 @@
+{
+  "id": "L01-single-run",
+  "version": "2",
+  "suite": "long-single-task",
+  "description": "Deskbench L01 on one isolated stack. Server state and the operation log grade the sweep independently of its reply.",
+  "expected": { "tickets": ["1003", "1011", "1019", "1027", "1035", "1043"] },
+  "budgets": {
+    "maxTurns": 50,
+    "runTimeoutSeconds": 600,
+    "shortWaitSeconds": 5,
+    "missionWallSeconds": 900
+  },
+  "phases": [
+    {
+      "id": "sweep",
+      "trigger": {
+        "kind": "message",
+        "text": "Find all tickets with the label bug, the status open, and a creation time more than 30 days ago; add the comment Overdue to each, then close them."
+      },
+      "checkpoints": [
+        { "name": "run succeeded", "type": "run_status", "in": ["succeeded"] },
+        {
+          "name": "all six tickets swept",
+          "type": "tickets_swept",
+          "comment": "Overdue",
+          "op": "eq",
+          "value": 6
+        },
+        {
+          "name": "twelve intended mutations",
+          "type": "oplog_mutations",
+          "ops": ["ticket_comment", "ticket_close"],
+          "op": "eq",
+          "value": 12
+        }
+      ]
+    }
+  ],
+  "final": [
+    { "name": "frozen eligible seed", "type": "eligible_tickets" },
+    {
+      "name": "all six tickets swept",
+      "type": "tickets_swept",
+      "comment": "Overdue",
+      "op": "eq",
+      "value": 6
+    },
+    { "name": "exactly twelve mutations", "type": "oplog_mutations", "op": "eq", "value": 12 },
+    {
+      "name": "no collateral changes",
+      "type": "no_unexpected_changes",
+      "allowed": ["tickets.{ticket}.status", "tickets.{ticket}.comments"]
+    }
+  ]
+}

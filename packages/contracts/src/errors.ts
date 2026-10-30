@@ -54,12 +54,22 @@ export type DeskmatesErrorCode =
   // A person or service principal posted to a thread owned by an external chat channel. Its Web
   // view is a read-only mirror; the human replies on that channel (ADR-0017 amendment 2).
   | "channel_thread_read_only"
+  // ChannelPlugin ABI 2 (ADR-0047): the verified identity is already connected somewhere in the
+  // installation (409); a relink verified a different identity than the connection's (409); a
+  // host handle of a disconnected, rebound or reopened connection was used and nothing happened
+  // (409).
+  | "channel_identity_in_use"
+  | "channel_identity_mismatch"
+  | "channel_connection_stale"
   // The workspace's disk is full or over its filesystem quota while writing an upload; the
   // partial upload is kept consistent and can resume (ADR-0014 amendment A5 decision 30).
   | "storage_exhausted"
   // The look/OCR or speech service failed, timed out or answered something unreadable; the
   // operation proxy never retries (ADR-0040 decision 1). `details.reason` says which.
-  | "operation_unavailable";
+  | "operation_unavailable"
+  // The Grafana behind the analytics relay is unreachable or did not answer in time (ADR-0046
+  // amendment 1 decision 14); the body never names its address.
+  | "analytics_unavailable";
 
 export class DeskmatesError extends Error {
   readonly code: DeskmatesErrorCode;
@@ -114,8 +124,12 @@ const DESKMATES_ERROR_CODES = [
   "integration_not_adopted",
   "integration_protocol",
   "channel_thread_read_only",
+  "channel_identity_in_use",
+  "channel_identity_mismatch",
+  "channel_connection_stale",
   "storage_exhausted",
   "operation_unavailable",
+  "analytics_unavailable",
 ] as const satisfies readonly DeskmatesErrorCode[];
 
 type MissingErrorCode = Exclude<DeskmatesErrorCode, (typeof DESKMATES_ERROR_CODES)[number]>;

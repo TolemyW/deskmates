@@ -40,6 +40,15 @@ no task API is exposed on the sandbox listener or through sidecar tools.
 
 ## Bot delivery (ADR-0021 amendment 2)
 
+Delivery rechecks the run's terminal status inside the write transaction, after file
+verification. A cancellation during verification therefore refuses the pending write.
+An identical retry of the latest delivery returns its original receipt and task version,
+including its file publications, without another delivery row, ledger event or notification.
+The comparison binds run, attempt, scope, normalized payload and verified file digests;
+changed content or a task edit/reopen remains a new delivery. Replay hashes and committed
+task versions persist across restarts. Historical rows without replay metadata are kept
+unchanged and are not guessed to be a retry.
+
 Migration `0041` adds `output_schema_json`, `output_json` and `delivered_by`, keeping
 every earlier row (its deliverer is NULL, never guessed). Operator POST/PATCH accept an
 optional `outputSchema` (null clears it): a JSON object of at most 16 KiB using only
@@ -61,3 +70,32 @@ hasOutput}` and publishes `task_delivered` `{workspaceId, task, runId, summary}`
 `threadId` when it has one). It starts, wakes and kicks nothing; acceptance stays the operator
 route. A run is offered the tool only when `TaskStore.deliverableFor` finds an open task linked
 to it or its thread; the start request names those tasks in `deliverableTasks` (at most 20).
+
+Paths and refusals (issue #39 item 5, `src/tasks/task-paths.ts`). A relative artifact or
+checkpoint evidence path is resolved against the directory the run started in (ADR-0038:
+`/work/bots/<bot>` in per-bot mode, `/work` in shared mode), `.` and `..` are normalised, and the
+result must still pass the lexical policy; the stored path is the resolved one. Checkpoint
+evidence may also be a git commit hash (7 to 40 hex characters) or an http(s) URL, stored as given
+with `evidenceKinds` (`path`, `commit`, `url`) beside `evidence`; nothing fetches or verifies them,
+and a checkpoint stored before kinds existed has none (all its entries are paths). An artifact
+must be a file, so a commit or URL there is refused. A refusal for a missing or malformed field
+(`summary` included), a missing or non-conforming `output`, a refused path or a failed file
+verification carries `details.workDir` and `details.example`, a minimal valid call whose `output`
+follows the task's `outputSchema`; the sidecar prints both in the tool result. The sidecar's
+`summary` parameter is optional so that a call without it reaches this refusal.
+
+
+## Progress and result history
+
+Each new checkpoint records the task scope version at recording time. The sidecar sends
+the version from its start request; a stale version is refused without a checkpoint write. Operator details
+retain older checkpoints with their version; the UI and continuation context mark an older
+or unknown version as historical evidence to revalidate. Criteria progress uses only records
+from the current scope. A legacy checkpoint has unknown scope; it is not silently stamped
+with the current version.
+
+On a schema-less complete delivery, omitting `output` preserves the current structured
+result; explicit `output: null` clears it. Tasks with an output schema still require a valid
+output. Every new delivery stores its structured result snapshot, which remains readable
+through task details and the delivery history after subsequent changes. Historical deliveries
+without a snapshot omit `output`; the migration never fabricates history from today's result.

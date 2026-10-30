@@ -44,7 +44,7 @@ function authored(): string {
   const run = fx.ctx.runs.create({
     botId: fx.a.bot.id,
     lane: "background",
-    triggerKind: "cron",
+    triggerKind: "model_job",
     triggerRef: "consolidation",
     config: {
       runType: "memory_consolidation",

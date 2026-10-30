@@ -30,3 +30,13 @@ untrusted-content, remote-image opt-in, range-budget and download policies still
 
 Local verification and synthetic browser evidence:
 [`ui-chat-feedback-results-2026-10-11.md`](../../../docs/design/ui-chat-feedback-results-2026-10-11.md).
+
+## Static HTML report reading (2026-10-22)
+
+An HTML file's card and preview toolbar now offer **Open full page** under the current signed-in
+Deskmates address. This reader uses the authenticated file range API and needs no app subdomain,
+new DNS or certificate. The opaque offline preview preserves embedded CSS and raster data images;
+active content and automatic external resources stay blocked. Sources are explicit parent-owned
+links below the preview. **Fit width** follows the available space; **Desktop width** keeps a
+1120px document canvas with horizontal scrolling. Source and download keep the original bytes.
+See ADR-0014 amendment A8. JavaScript apps continue to use ADR-0035's isolated publication origins.

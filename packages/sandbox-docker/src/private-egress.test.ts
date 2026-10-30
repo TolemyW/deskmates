@@ -11,7 +11,7 @@ const expiry = await import(
 const grant = {
   workspaceId: "ws_a",
   hostname: "console.vendordb.test",
-  address: "10.20.36.35",
+  address: "10.88.36.35",
   port: 443,
   expiresAt: "2099-01-01T00:00:00Z",
 };

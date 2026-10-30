@@ -1,5 +1,5 @@
 import { ChatViewport } from "@deskmates/ui";
-import { ArrowLeft, ArrowUp, Info, PauseCircle } from "lucide-react";
+import { ArrowLeft, ArrowUp, Info, MoreHorizontal } from "lucide-react";
 import { Avatar, AvatarStack } from "../../components/ui/avatar.js";
 import { Button } from "../../components/ui/button.js";
 import {
@@ -8,13 +8,17 @@ import {
   DialogDescription,
   DialogTitle,
 } from "../../components/ui/dialog.js";
+import { useTuneView } from "../../lib/interface-view.js";
 import { Markdown, looksLikeMarkdown } from "../../lib/markdown.js";
 import { approvalEchoLabel } from "../../state/actor-label.js";
-import { useActorLabel } from "../../state/session-roles.js";
-import { DesktopView } from "../computer/desktop-view.js";
+import type { DesktopMember } from "../computer/desktop-rail.js";
+import { TakeoverDisplay } from "../computer/takeover-display.js";
+import { ActivityNoticeRow, activityNotice } from "./activity-notice.js";
 import { AttachmentCards } from "./attachment-cards.js";
+import { ChatApproval } from "./chat-approval.js";
 import { ChatInfo } from "./chat-info.js";
 import { ChatRunStatus } from "./chat-run-status.js";
+import { CompactRunError } from "./compact-run-error.js";
 import {
   ComposerAttachButton,
   ComposerAttachmentChips,
@@ -22,8 +26,16 @@ import {
   useChatDropTarget,
   useComposerAttachments,
 } from "./composer-attachments.js";
+import {
+  currentFailure,
+  everydayHistory,
+  isInternalJob,
+  routingNoticeKey,
+} from "./everyday-history.js";
+import { HandoffMessage, handoffPresentation, hasHandoffOutcome } from "./handoff-message.js";
 import { IncomingHandoffs } from "./incoming-handoffs.js";
 import {
+  ElsewhereActivityError,
   ElsewhereActivityItem,
   ElsewhereActivityOlder,
   useElsewhereActivity,
@@ -65,11 +77,16 @@ import {
 } from "react";
 import { type ApiClient, api as defaultApi } from "../../api/client.js";
 import { type ConnectionStatus, subscribeEvents } from "../../api/events.js";
-import type { NamedThreadMember, RunView, ThreadDetailView } from "../../api/types.js";
+import {
+  ApiError,
+  type NamedThreadMember,
+  type RunView,
+  type ThreadDetailView,
+} from "../../api/types.js";
+import { DeletedObjectState } from "../../components/deleted-object-state.js";
 import { errorMessage, formatDateTime, formatDay, formatTime } from "../../format.js";
 import type { MessageKey } from "../../i18n/catalogs.js";
-import { useT } from "../../i18n/i18n-provider.js";
-import { currentI18n } from "../../i18n/intl.js";
+import { useLocale, useT } from "../../i18n/i18n-provider.js";
 import { runHref, threadHref } from "../../router.js";
 import {
   authorizeConversationDraft,
@@ -82,7 +99,14 @@ import {
   subscribeConversationComposer,
   writeConversationDraft,
 } from "../../state/conversation-drafts.js";
-import { RoleNote, useCanPost, useIsGuest } from "../../state/session-roles.js";
+import {
+  RoleNote,
+  useActorLabel,
+  useCan,
+  useCanPost,
+  useIsGuest,
+  useWorkspaceRole,
+} from "../../state/session-roles.js";
 import {
   EMPTY_THREAD_VIEW,
   activeRuns,
@@ -91,13 +115,16 @@ import {
   threadViewReducer,
   transcriptTimeline,
 } from "../../state/thread-view.js";
-import { ApprovalCard, approvalRefOf } from "../approvals/approval-card.js";
+import { approvalRefOf } from "../approvals/approval-card.js";
 import { ApproveAllBadge } from "../approvals/approval-mode.js";
 import { splitWorkspacePaths } from "../files/path-links.js";
 import { ActivityPanel } from "../runs/activity.js";
 import { firstRunPages } from "../runs/run-feed.js";
 import { MentionTextarea } from "./mention-textarea.js";
+import { MessageContent } from "./message-content.js";
+import { MessageContext } from "./message-context.js";
 import { ThreadMembership } from "./thread-membership.js";
+import { ThreadPausedBanner, humanMessageResumes } from "./thread-paused-banner.js";
 
 const CONNECTION_LABELS: Readonly<Record<ConnectionStatus, MessageKey>> = {
   open: "chatPane.connection.open",
@@ -121,31 +148,6 @@ function approvalIdBatches(messages: readonly ThreadMessage[]): string[][] {
   return batches;
 }
 
-/** One line for the header: who is in the chat and what is happening right now. */
-function membersSummary(
-  members: readonly { botId: string; name: string }[],
-  activity: ReadonlyMap<string, string>,
-): string {
-  const { t } = currentI18n();
-  const ready = t("chatPane.activity.ready");
-  const busy = members.filter((m) => {
-    const state = activity.get(m.botId) ?? ready;
-    return state !== ready;
-  });
-  const who =
-    members.length === 1
-      ? (members[0]?.name ?? "")
-      : t("chatPane.summary.bots", { count: members.length });
-  if (busy.length === 0) return t("chatPane.summary.line", { who, activity: ready });
-  return t("chatPane.summary.line", {
-    who,
-    activity: busy
-      .map((m) =>
-        t("chatPane.summary.busyMember", { name: m.name, activity: activity.get(m.botId) }),
-      )
-      .join(", "),
-  });
-}
 import { WorkspaceFilePreview } from "../files/workspace-file-preview.js";
 import { ReplyPreviews, replyPreviewReducer } from "./reply-preview.js";
 import { useRunActivity } from "./use-run-activity.js";
@@ -167,6 +169,28 @@ export interface ChatPaneProps {
 }
 
 export function ChatPane(props: ChatPaneProps) {
+  const [headerActionsOpen, setHeaderActionsOpen] = useState(false);
+  const headerOptions = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!headerActionsOpen) return;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !headerOptions.current?.contains(event.target))
+        setHeaderActionsOpen(false);
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setHeaderActionsOpen(false);
+      headerOptions.current?.querySelector<HTMLButtonElement>(".chat-header-more")?.focus();
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, [headerActionsOpen]);
+
+  const tune = useTuneView();
   const { threadId } = props;
   const api = props.api ?? defaultApi;
   const t = useT();
@@ -191,8 +215,20 @@ export function ChatPane(props: ChatPaneProps) {
   for (const member of members) knownNamesRef.current.set(member.botId, member.name);
   // Declared before the transcript subscription so its unfiltered stream opens first.
   const browser = useWorkspaceLock(detail?.thread.workspaceId, api);
+  // Issue #15: what the first message does where no container exists. An archived workspace's
+  // message is refused (`invalid_transition`); otherwise the run it starts creates the container.
+  const containerHint: MessageKey | undefined = detail?.workspaceArchived
+    ? "chatPane.composer.containerArchived"
+    : browser.container === "never_created"
+      ? "chatPane.composer.containerNeverCreated"
+      : browser.container === "removed"
+        ? "chatPane.composer.containerRemoved"
+        : undefined;
   // A Member posts in shared chats, never a bus thread; a Guest nowhere (ADR-0022 amendment 6).
   const canPost = useCanPost(detail?.thread, members.length);
+  // ADR-0005 amendment 3, decision 23: an Owner or Admin pauses and resumes the conversation.
+  const canPause = useCan("thread.pause", detail?.thread.workspaceId);
+  const [resuming, setResuming] = useState(false);
   // A Guest reads the transcript only: runs and approvals are refused to them (amendment 6 W6).
   const guest = useIsGuest(detail?.thread.workspaceId);
   const guestRef = useRef(guest);
@@ -203,9 +239,11 @@ export function ChatPane(props: ChatPaneProps) {
     detail !== undefined && isChannelMirrorThread(detail.thread)
       ? detail.thread.channel
       : undefined;
+  const internalCollaboration = detail?.thread.kind === "bus" && mirrorChannel === "internal";
   const channelName = useChannelDisplayName(api, mirrorChannel);
   const [connection, setConnection] = useState<ConnectionStatus>("connecting");
   const [error, setError] = useState<string | undefined>();
+  const [missing, setMissing] = useState(false);
   const [retryingWelcome, setRetryingWelcome] = useState(false);
   const [handoffRuns, setHandoffRuns] = useState<readonly string[]>([]);
   // A one-member chat also shows its bot's work elsewhere (other conversations, background
@@ -264,14 +302,28 @@ export function ChatPane(props: ChatPaneProps) {
     const lifecycleRevision = lifecycleRevisionRef.current + 1;
     lifecycleRevisionRef.current = lifecycleRevision;
     let cancelled = false;
+    let terminal = false;
+    let stop = (): void => {};
     let detailRequest = 0;
     setError(undefined);
+    setMissing(false);
     dispatch({ type: "reset" });
     applyPreview({ type: "reset" });
     setRunsCursor(undefined);
     setHasOlderMessages(false);
     runRevisionRef.current = 0;
     setDetail(undefined);
+
+    const fail = (err: unknown): void => {
+      if (cancelled || terminal) return;
+      if (err instanceof ApiError && err.status === 404) {
+        terminal = true;
+        setMissing(true);
+        stop();
+        return;
+      }
+      setError(errorMessage(err));
+    };
 
     /** Apply only the newest requested detail snapshot; an older slow response is stale. */
     const refreshDetail = async (): Promise<void> => {
@@ -343,7 +395,7 @@ export function ChatPane(props: ChatPaneProps) {
       }
     };
 
-    const stop = subscribeEvents({
+    stop = subscribeEvents({
       threadId,
       onEvent: (event) => {
         if (cancelled) return;
@@ -359,7 +411,7 @@ export function ChatPane(props: ChatPaneProps) {
           event.type === "run_status"
         ) {
           void refreshDetail().catch((err: unknown) => {
-            if (!cancelled) setError(errorMessage(err));
+            fail(err);
           });
         }
       },
@@ -369,7 +421,7 @@ export function ChatPane(props: ChatPaneProps) {
       // Frames emitted while the stream was down are never replayed, so recover them by hand.
       onReconnect: () => {
         void refetch().catch((err: unknown) => {
-          if (!cancelled) setError(errorMessage(err));
+          fail(err);
         });
       },
     });
@@ -391,7 +443,7 @@ export function ChatPane(props: ChatPaneProps) {
         });
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(errorMessage(err));
+        fail(err);
       });
     return () => {
       cancelled = true;
@@ -456,10 +508,12 @@ export function ChatPane(props: ChatPaneProps) {
         runs: guestRef.current ? [] : result.runs,
         runSnapshotRevision,
       });
-      // A human message resumes a thread paused by its turn budget.
+      // A human message resumes a thread paused by its turn budget, never one an operator paused
+      // (ADR-0005 amendment 3, decision 24); the refresh below brings the authoritative row.
       const current = detailRef.current;
-      if (current?.thread.status === "paused") {
-        const next = { ...current, thread: { ...current.thread, status: "active" as const } };
+      if (current && humanMessageResumes(current.thread)) {
+        const { pauseReason: _reason, resumeAt: _resumeAt, ...rest } = current.thread;
+        const next = { ...current, thread: { ...rest, status: "active" as const } };
         setDetail(next);
         onThreadUpdatedRef.current?.(next.thread);
       }
@@ -470,7 +524,21 @@ export function ChatPane(props: ChatPaneProps) {
     }
   };
 
-  const pending = activeRuns(state);
+  // Pause or Resume (decision 23); the answer is the authoritative thread detail.
+  const setThreadStatus = async (status: "paused" | "active"): Promise<void> => {
+    setResuming(true);
+    try {
+      const next = await api.setThreadStatus(threadId, status);
+      setDetail(next);
+      onThreadUpdatedRef.current?.(next.thread, next.members);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setResuming(false);
+    }
+  };
+
+  const pending = activeRuns(state).filter((run) => tune || !isInternalJob(run));
   const roundRevision = `${state.messages.length}:${pending.map((run) => `${run.id}${run.status}`).join(",")}:${Object.keys(state.runs).length}`;
   const { rounds, reload: reloadRounds } = useThreadRounds(api, threadId, roundRevision);
   const round = currentRound(rounds);
@@ -554,9 +622,15 @@ export function ChatPane(props: ChatPaneProps) {
   const memberActivity = new Map<string, string>();
   for (const member of members) {
     const runs = activityByBot.get(member.botId) ?? [];
-    const latest = latestRunForBot(state, member.botId);
+    const latest = tune
+      ? latestRunForBot(state, member.botId)
+      : Object.values(state.runs)
+          .filter((run) => run.botId === member.botId && currentFailure(run, state))
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+          .at(-1);
     const idleLabel =
-      latest?.status === "failed" || latest?.status === "cancelled" || latest?.status === "stopped"
+      latest &&
+      (latest.status === "failed" || latest.status === "cancelled" || latest.status === "stopped")
         ? runStatusLabel(latest.status)
         : t("chatPane.activity.ready");
     // One entry per status with its count ("queued ×3"), so several runs of one bot never read as
@@ -576,12 +650,24 @@ export function ChatPane(props: ChatPaneProps) {
 
   // An approval shows up twice in the transcript: the request the hook posted and the echo the
   // decision posted, both `system` messages carrying the same attachment. The first is the card;
-  // every later one is a one-line note, so a decided approval never draws two cards.
+  // later receipts live inside its audit disclosure once the decision has loaded.
   const firstApprovalSeq = new Map<string, number>();
   for (const m of state.messages) {
     const ref = approvalRefOf(m.attachments);
     if (ref !== undefined && !firstApprovalSeq.has(ref)) firstApprovalSeq.set(ref, m.seq);
   }
+
+  const fullTimeline = transcriptTimeline(state, hasOlderMessages, elsewhere.runs);
+  const timeline = tune ? fullTimeline : everydayHistory(fullTimeline, state, props.messageId);
+
+  const lastConversationMessage = state.messages.filter((m) => m.authorKind !== "system").at(-1);
+
+  if (missing)
+    return (
+      <section className="chat">
+        <DeletedObjectState />
+      </section>
+    );
 
   return (
     <>
@@ -599,15 +685,23 @@ export function ChatPane(props: ChatPaneProps) {
               >
                 <ArrowLeft size={18} />
               </a>
-              <h2>{detail?.thread.title || namesTitle(members.map((m) => m.name))}</h2>
-              <span className={`connection-status ${connection}`}>
+              <h2 title={detail?.thread.title || namesTitle(members.map((m) => m.name))}>
+                {detail?.thread.title || namesTitle(members.map((m) => m.name))}
+              </h2>
+              <span
+                className={`connection-status ${connection}`}
+                title={t(CONNECTION_LABELS[connection])}
+                aria-label={t(CONNECTION_LABELS[connection])}
+              >
                 <span className="status-dot" />
-                {t(CONNECTION_LABELS[connection])}
+                {connection !== "open" ? t(CONNECTION_LABELS[connection]) : null}
               </span>
               <ApproveAllBadge api={api} workspaceId={detail?.thread.workspaceId} />
               {channelName !== undefined ? (
                 <span className="thread-channel small muted" data-testid="thread-channel">
-                  {t("chatPane.channelMirror.badge", { channel: channelName })}
+                  {internalCollaboration
+                    ? t("chatPane.collaboration.badge")
+                    : t("chatPane.channelMirror.badge", { channel: channelName })}
                 </span>
               ) : null}
               {detail?.thread.deadline ? (
@@ -625,51 +719,79 @@ export function ChatPane(props: ChatPaneProps) {
                 </span>
               ) : null}
             </div>
-            <div className="chat-header-actions">
-              {detail !== undefined && browser.loaded ? (
-                <TakeoverControls
-                  browser={browser}
-                  api={api}
-                  workspaceId={detail.thread.workspaceId}
-                />
-              ) : null}
-              {props.onToggleInfo ? (
-                <button
-                  type="button"
-                  className="icon-button"
-                  id={`chat-info-toggle-${threadId}`}
-                  aria-pressed={props.infoShown ?? false}
-                  aria-label={
-                    props.infoShown ? t("chatPane.header.hideInfo") : t("chatPane.header.showInfo")
-                  }
-                  title={
-                    props.infoShown ? t("chatPane.header.hideInfo") : t("chatPane.header.showInfo")
-                  }
-                  onClick={props.onToggleInfo}
-                >
-                  <Info size={18} />
-                </button>
-              ) : null}
+            <div className="chat-header-options" ref={headerOptions}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="chat-header-more"
+                aria-label={t("chatPane.header.moreActions")}
+                aria-expanded={headerActionsOpen}
+                aria-controls={`chat-actions-${threadId}`}
+                onClick={() => setHeaderActionsOpen((open) => !open)}
+              >
+                <MoreHorizontal size={18} />
+              </Button>
+              <div
+                className="chat-header-actions"
+                id={`chat-actions-${threadId}`}
+                data-open={headerActionsOpen}
+              >
+                {detail && members.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="chat-members-summary"
+                    onClick={props.onToggleInfo}
+                    disabled={!props.onToggleInfo}
+                    title={t("chatPane.header.membersAndInfo")}
+                  >
+                    <AvatarStack names={members.map((m) => m.name)} max={4} />
+                    <span className="muted small">
+                      {t("chatPane.summary.bots", { count: members.length })}
+                    </span>
+                  </Button>
+                ) : null}
+                {detail !== undefined && browser.loaded ? (
+                  <TakeoverControls
+                    browser={browser}
+                    api={api}
+                    workspaceId={detail.thread.workspaceId}
+                    members={members}
+                  />
+                ) : null}
+                {props.onToggleInfo ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    id={`chat-info-toggle-${threadId}`}
+                    aria-pressed={props.infoShown ?? false}
+                    aria-label={
+                      props.infoShown
+                        ? t("chatPane.header.hideInfo")
+                        : t("chatPane.header.showInfo")
+                    }
+                    title={
+                      props.infoShown
+                        ? t("chatPane.header.hideInfo")
+                        : t("chatPane.header.showInfo")
+                    }
+                    onClick={props.onToggleInfo}
+                  >
+                    <Info size={18} />
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </div>
-          {detail ? (
-            <button
-              type="button"
-              className="chat-members-summary"
-              onClick={props.onToggleInfo}
-              disabled={!props.onToggleInfo}
-              title={t("chatPane.header.membersAndInfo")}
-            >
-              <AvatarStack names={members.map((m) => m.name)} max={4} />
-              <span className="muted small">{membersSummary(members, memberActivity)}</span>
-            </button>
-          ) : null}
         </header>
-        {detail?.thread.status === "paused" ? (
-          <output className="paused-banner">
-            <PauseCircle size={16} aria-hidden="true" />
-            <span>{t("chatPane.paused")}</span>
-          </output>
+        {detail ? (
+          <ThreadPausedBanner
+            thread={detail.thread}
+            resuming={resuming}
+            onResume={canPause.allowed ? () => void setThreadStatus("active") : undefined}
+          />
         ) : null}
         {members.length > 1 && showsRoundCard(detail?.groupRouting, round) ? (
           <RoundCard
@@ -694,8 +816,10 @@ export function ChatPane(props: ChatPaneProps) {
           scrollTargetId={props.messageId ? `message-${props.messageId}` : undefined}
           composer={
             <div className="chat-composer-region">
-              {pending.some((run) => run.status === "queued") ? (
-                <p className="chat-notice">{t("chatPane.queueNotice")}</p>
+              {detail?.thread.status === "paused" && detail.thread.pauseReason === "operator" ? (
+                <p className="chat-notice" data-testid="operator-paused-notice">
+                  {t("chatPane.operatorPausedComposer")}
+                </p>
               ) : null}
               {canRetryWelcome ? (
                 <aside className="message system send-failure" role="alert">
@@ -746,10 +870,16 @@ export function ChatPane(props: ChatPaneProps) {
                   data-testid="channel-mirror-notice"
                 >
                   <p>
-                    <strong>{t("chatPane.channelMirror.title", { channel: channelName })}</strong>
+                    <strong>
+                      {internalCollaboration
+                        ? t("chatPane.collaboration.title")
+                        : t("chatPane.channelMirror.title", { channel: channelName })}
+                    </strong>
                   </p>
                   <p className="muted small">
-                    {t("chatPane.channelMirror.body", { channel: channelName })}
+                    {internalCollaboration
+                      ? t("chatPane.collaboration.body")
+                      : t("chatPane.channelMirror.body", { channel: channelName })}
                   </p>
                 </div>
               ) : canPost.allowed ? null : guest ? (
@@ -829,7 +959,12 @@ export function ChatPane(props: ChatPaneProps) {
                       {t("chatPane.guest.inquiryScope")}
                     </p>
                   ) : null}
-                  <p className="composer-hint">
+                  {containerHint ? (
+                    <p className="composer-hint" data-testid="container-hint">
+                      {t(containerHint)}
+                    </p>
+                  ) : null}
+                  <p className="composer-hint composer-key-hint">
                     {t.rich("chatPane.composer.keys", { kbd: (text) => <span>{text}</span> })}
                   </p>
                 </form>
@@ -852,132 +987,155 @@ export function ChatPane(props: ChatPaneProps) {
                 </Button>
               </li>
             ) : null}
-            <ElsewhereActivityOlder older={elsewhere.older} />
-            {transcriptTimeline(state, hasOlderMessages, elsewhere.runs).map(
-              (item, index, items) => {
-                const previous = items[index - 1];
-                const dayLabel =
-                  item.kind === "message" &&
-                  (previous === undefined ||
-                    previous.kind !== "message" ||
-                    formatDay(previous.message.ts) !== formatDay(item.message.ts))
-                    ? formatDay(item.message.ts)
-                    : undefined;
-                const continued =
-                  item.kind === "message" &&
-                  previous?.kind === "message" &&
-                  previous.message.authorKind === item.message.authorKind &&
-                  previous.message.authorId === item.message.authorId &&
-                  item.message.authorKind !== "system" &&
-                  approvalRefOf(previous.message.attachments) === undefined &&
-                  new Date(item.message.ts).getTime() - new Date(previous.message.ts).getTime() <
-                    5 * 60 * 1000;
-                if (item.kind === "elsewhere")
-                  return (
-                    <ElsewhereActivityItem
-                      key={`elsewhere:${item.run.id}`}
-                      run={item.run}
-                      api={api}
-                      botName={botName}
-                    />
-                  );
-                if (item.kind === "outcome") {
-                  const run = item.run;
-                  const when = formatTime(run.finishedAt ?? run.startedAt ?? run.createdAt);
-                  return (
-                    <li
-                      key={`outcome:${run.id}`}
-                      className={`message system run-outcome ${run.status}`}
-                    >
-                      <div className="meta">
-                        <span className="author bot">{botName(run.botId)}</span>
-                        <span className={`status ${run.status}`}>{runStatusLabel(run.status)}</span>
-                        <span className="muted small">{when}</span>
-                        <a href={runHref(run.id)} className="small">
-                          {t("chatPane.outcome.viewRun")}
-                        </a>
-                      </div>
-                      <div className="body">
-                        {run.error ??
-                          (run.status === "cancelled"
-                            ? t("chatPane.outcome.cancelled")
-                            : run.status === "stopped"
-                              ? t("chatPane.outcome.stopped")
-                              : t("chatPane.outcome.failed"))}
-                      </div>
-                    </li>
-                  );
-                }
-                const m = item.message;
-                const ref = approvalRefOf(m.attachments);
-                if (ref === undefined)
-                  return (
-                    <MessageRow
-                      key={m.id}
-                      message={m}
-                      botName={botName}
-                      api={api}
-                      workspaceId={detail?.thread.workspaceId}
-                      continued={continued}
-                      dayLabel={dayLabel}
-                    />
-                  );
-                if (firstApprovalSeq.get(ref) !== m.seq) {
-                  return (
-                    <li
-                      key={m.id}
-                      id={`message-${m.id}`}
-                      className="message system approval-echo"
-                      data-testid="approval-echo"
-                    >
-                      <div className="approval-decision-text">
-                        {approvalEchoLabel(m.body, actorName).replace(
-                          /bot:(bot_[a-zA-Z0-9_]+)/g,
-                          (label, id) => botName(id) ?? label,
-                        )}
-                        {approvalEchoLabel(m.body, actorName) !== m.body ? (
-                          <details>
-                            <summary>{t("actor.audit")}</summary>
-                            <div>{m.body}</div>
-                          </details>
-                        ) : null}
-                      </div>
-                    </li>
-                  );
-                }
+            {tune ? <ElsewhereActivityOlder older={elsewhere.older} /> : null}
+            {timeline.map((item, index, items) => {
+              const previous = items[index - 1];
+              const dayLabel =
+                item.kind === "message" &&
+                (previous === undefined ||
+                  previous.kind !== "message" ||
+                  formatDay(previous.message.ts) !== formatDay(item.message.ts))
+                  ? formatDay(item.message.ts)
+                  : undefined;
+              const continued =
+                item.kind === "message" &&
+                previous?.kind === "message" &&
+                previous.message.authorKind === item.message.authorKind &&
+                previous.message.authorId === item.message.authorId &&
+                item.message.authorKind !== "system" &&
+                approvalRefOf(previous.message.attachments) === undefined &&
+                new Date(item.message.ts).getTime() - new Date(previous.message.ts).getTime() <
+                  5 * 60 * 1000;
+              if (item.kind === "elsewhere")
                 return (
-                  <li key={m.id} id={`message-${m.id}`} className="message system">
-                    <Avatar name="approval" kind="system" />
+                  <ElsewhereActivityItem
+                    key={`elsewhere:${item.run.id}`}
+                    run={item.run}
+                    api={api}
+                    botName={botName}
+                  />
+                );
+              if (item.kind === "outcome") {
+                const run = item.run;
+                if (hasHandoffOutcome(run, state.messages)) return null;
+                const when = formatTime(run.finishedAt ?? run.startedAt ?? run.createdAt);
+                return (
+                  <li
+                    key={`outcome:${run.id}`}
+                    className={`message system run-outcome ${run.status}`}
+                  >
                     <div className="meta">
-                      <span className="author system">{t("chatPane.author.approval")}</span>
-                      <span className="muted small">{formatTime(m.ts)}</span>
+                      <span className="author bot">{botName(run.botId)}</span>
+                      <span className={`status ${run.status}`}>{runStatusLabel(run.status)}</span>
+                      <span className="muted small">{when}</span>
+                      <a href={runHref(run.id)} className="small">
+                        {t("chatPane.outcome.viewRun")}
+                      </a>
                     </div>
-                    <ApprovalCard
-                      approval={state.approvals[ref]}
-                      fallbackBody={m.body}
-                      api={api}
-                      botName={
-                        state.approvals[ref] ? botName(state.approvals[ref].botId) : undefined
-                      }
-                      runStatus={
-                        state.approvals[ref]
-                          ? state.runs[state.approvals[ref].runId]?.status
-                          : undefined
-                      }
-                      onDecided={(approval) => dispatch({ type: "approval", threadId, approval })}
-                      readOnlyNote={
-                        channelName !== undefined
-                          ? t("chatPane.channelMirror.approval", { channel: channelName })
-                          : undefined
-                      }
-                    />
+                    <div className="body">
+                      {run.error ? (
+                        <CompactRunError error={run.error} />
+                      ) : run.status === "cancelled" ? (
+                        t("chatPane.outcome.cancelled")
+                      ) : run.status === "stopped" ? (
+                        t("chatPane.outcome.stopped")
+                      ) : (
+                        t("chatPane.outcome.failed")
+                      )}
+                    </div>
                   </li>
                 );
-              },
-            )}
+              }
+              const m = item.message;
+              const ref = approvalRefOf(m.attachments);
+              if (ref === undefined)
+                return (
+                  <MessageRow
+                    key={m.id}
+                    message={m}
+                    bots={props.bots}
+                    latest={lastConversationMessage?.id === m.id}
+                    reveal={props.messageId === m.id}
+                    botName={botName}
+                    api={api}
+                    workspaceId={detail?.thread.workspaceId}
+                    continued={continued}
+                    dayLabel={dayLabel}
+                  />
+                );
+              if (firstApprovalSeq.get(ref) !== m.seq) {
+                if (state.approvals[ref]?.decision !== undefined) return null;
+                return (
+                  <li
+                    key={m.id}
+                    id={`message-${m.id}`}
+                    className="message system approval-echo"
+                    data-testid="approval-echo"
+                  >
+                    <div className="approval-decision-text">
+                      {approvalEchoLabel(m.body, actorName).replace(
+                        /bot:(bot_[a-zA-Z0-9_]+)/g,
+                        (label, id) => botName(id) ?? label,
+                      )}
+                      {approvalEchoLabel(m.body, actorName) !== m.body ? (
+                        <details>
+                          <summary>{t("actor.audit")}</summary>
+                          <div>{m.body}</div>
+                        </details>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              }
+              return (
+                <li key={m.id} id={`message-${m.id}`} className="message system chat-approval">
+                  <ChatApproval
+                    receipts={state.messages.filter(
+                      (receipt) =>
+                        receipt.seq !== m.seq && approvalRefOf(receipt.attachments) === ref,
+                    )}
+                    reveal={
+                      props.messageId === m.id ||
+                      state.messages.some(
+                        (receipt) =>
+                          receipt.id === props.messageId &&
+                          approvalRefOf(receipt.attachments) === ref,
+                      )
+                    }
+                    approval={state.approvals[ref]}
+                    fallbackBody={m.body}
+                    api={api}
+                    botName={state.approvals[ref] ? botName(state.approvals[ref].botId) : undefined}
+                    runStatus={
+                      state.approvals[ref]
+                        ? state.runs[state.approvals[ref].runId]?.status
+                        : undefined
+                    }
+                    onDecided={(approval) => dispatch({ type: "approval", threadId, approval })}
+                    readOnlyNote={
+                      internalCollaboration
+                        ? t("chatPane.collaboration.approval")
+                        : channelName !== undefined
+                          ? t("chatPane.channelMirror.approval", { channel: channelName })
+                          : undefined
+                    }
+                  />
+                </li>
+              );
+            })}
             <IncomingHandoffs api={api} threadId={threadId} onRuns={setHandoffRuns} />
             <ReplyPreviews previews={previews} runs={pending} botName={botName} />
             <ChatRunStatus
+              approvalRunIds={
+                new Set(
+                  Object.values(state.approvals)
+                    .filter(
+                      (approval) =>
+                        approval.decision === undefined && firstApprovalSeq.has(approval.id),
+                    )
+                    .map((approval) => approval.runId),
+                )
+              }
               key={threadId}
               api={api}
               runs={pending}
@@ -992,11 +1150,7 @@ export function ChatPane(props: ChatPaneProps) {
               }}
             />
           </ol>
-          {elsewhere.error ? (
-            <p className="error elsewhere-error" role="alert">
-              {elsewhere.error}
-            </p>
-          ) : null}
+          <ElsewhereActivityError activity={elsewhere} />
         </ChatViewport>
         {dropTarget.overlay}
       </section>
@@ -1010,6 +1164,12 @@ export function ChatPane(props: ChatPaneProps) {
           workspaceId={detail.thread.workspaceId}
           shown={props.infoShown ?? false}
           onClose={props.onToggleInfo}
+          {...(canPause.allowed && !guest
+            ? {
+                onSetStatus: (status: "paused" | "active") => void setThreadStatus(status),
+                statusBusy: resuming,
+              }
+            : {})}
           activity={
             <ActivityPanel
               runs={Object.values(state.runs)}
@@ -1049,8 +1209,8 @@ export function ChatPane(props: ChatPaneProps) {
 }
 
 /**
- * Take over / hand back the one browser this workspace runs. Held, the screen is the same one the
- * bots use, streamed through the Gateway's screen proxy for the lease holder only (ADR-0022
+ * Take over / hand back the one browser this workspace runs. Start with the chat member's
+ * region; the overview remains available. Both stream through the Gateway for the lease holder only (ADR-0022
  * amendment 1, C7): no noVNC address or password reaches this page, so it works the same from
  * the Gateway host and from another machine. Until the container exists there is no screen.
  */
@@ -1058,34 +1218,44 @@ function TakeoverControls({
   browser,
   api,
   workspaceId,
+  members,
 }: {
   browser: WorkspaceLockState;
   api: ApiClient;
   workspaceId: WorkspaceId;
+  members: readonly DesktopMember[];
 }) {
   const t = useT();
-  const openTicket = useCallback(() => api.openTakeoverScreen(workspaceId), [api, workspaceId]);
+  const role = useWorkspaceRole(workspaceId);
+  const mayTake = role === undefined || role !== "guest";
+  const mayRelease =
+    role !== "guest" &&
+    (role === undefined || browser.heldByMe || role === "owner" || role === "admin");
   return (
     <span className="takeover-controls small">
       {browser.held ? (
         <>
           <span className="muted">{t("chatPane.takeover.held")}</span>
-          {browser.hasScreen ? (
+          {browser.hasScreen && browser.heldByMe ? (
             <Button type="button" onClick={browser.openScreen} disabled={browser.busy}>
               {t("chatPane.takeover.openScreen")}
             </Button>
           ) : (
-            <span className="muted">{t("chatPane.takeover.noScreen")}</span>
+            <span className="muted takeover-note" title={t("chatPane.takeover.noScreen")}>
+              {t("chatPane.takeover.noScreen")}
+            </span>
           )}
-          <Button type="button" onClick={browser.handBack} disabled={browser.busy}>
-            {t("chatPane.takeover.handBack")}
-          </Button>
+          {mayRelease ? (
+            <Button type="button" onClick={browser.handBack} disabled={browser.busy}>
+              {t("chatPane.takeover.handBack")}
+            </Button>
+          ) : null}
         </>
-      ) : (
+      ) : mayTake && browser.hasScreen ? (
         <Button type="button" onClick={browser.takeOver} disabled={browser.busy}>
           {t("chatPane.takeover.takeOver")}
         </Button>
-      )}
+      ) : null}
       {browser.error ? <span className="error">{browser.error}</span> : null}
       <Dialog
         open={browser.screenOpen && browser.hasScreen}
@@ -1093,7 +1263,7 @@ function TakeoverControls({
           if (!open) browser.closeScreen();
         }}
       >
-        <DialogContent>
+        <DialogContent className="desktop-dialog">
           <DialogTitle className="text-lg font-semibold">
             {t("chatPane.takeover.screenTitle")}
           </DialogTitle>
@@ -1101,12 +1271,7 @@ function TakeoverControls({
             {t("chatPane.takeover.screenDescription")}
           </DialogDescription>
           {browser.screenOpen && browser.hasScreen ? (
-            <DesktopView
-              api={api}
-              open={openTicket}
-              mode="control"
-              label={t("chatPane.takeover.screenLabel")}
-            />
+            <TakeoverDisplay api={api} workspaceId={workspaceId} members={members} />
           ) : null}
           <div className="desktop-dialog-footer">
             <Button type="button" onClick={browser.handBack} disabled={browser.busy}>
@@ -1121,6 +1286,9 @@ function TakeoverControls({
 
 function MessageRow({
   message,
+  bots,
+  latest,
+  reveal,
   botName,
   api,
   workspaceId,
@@ -1128,6 +1296,9 @@ function MessageRow({
   dayLabel,
 }: {
   message: ThreadMessage;
+  bots: readonly BotDefinition[] | undefined;
+  latest: boolean;
+  reveal: boolean;
   botName: (botId: string) => string;
   api: ApiClient;
   /** Unknown until the thread detail loads; paths stay plain text until then. */
@@ -1138,17 +1309,22 @@ function MessageRow({
   dayLabel?: string | undefined;
 }) {
   const t = useT();
+  const locale = useLocale();
+  const tune = useTuneView();
+  const noticeKey = routingNoticeKey(message);
   const handoff = message.attachments.find((attachment) =>
     isThreadLinkAttachmentMime(attachment.mimeType),
   );
+  const presentedHandoff = handoffPresentation(message);
   const otherAttachments = message.attachments.filter(
     (attachment) => !isThreadLinkAttachmentMime(attachment.mimeType),
   );
+  const activity = activityNotice(message);
   const label =
     message.authorKind === "bot"
       ? botName(message.authorId)
       : message.authorKind === "system"
-        ? handoff
+        ? handoff || presentedHandoff
           ? t("chatPane.author.handoff")
           : t("chatPane.author.system")
         : t("chatPane.author.human");
@@ -1159,42 +1335,70 @@ function MessageRow({
           {dayLabel}
         </li>
       ) : null}
-      <li
-        id={`message-${message.id}`}
-        className={`message ${message.authorKind}${handoff ? " handoff" : ""}${continued ? " continued" : ""}`}
-      >
-        <Avatar
-          name={label}
-          kind={
-            message.authorKind === "bot"
-              ? "bot"
-              : message.authorKind === "human"
-                ? "human"
-                : "system"
-          }
-        />
-        <div className="meta">
-          <span className={`author ${message.authorKind}`}>{label}</span>
-          <span className="muted small">{formatTime(message.ts)}</span>
-          {message.runId ? (
-            <a href={runHref(message.runId)} className="small" title={message.runId}>
-              {t("chatPane.runLink")}
+      {activity ? (
+        <ActivityNoticeRow message={message} notice={activity} bots={bots} reveal={reveal} />
+      ) : (
+        <li
+          id={`message-${message.id}`}
+          data-latest={latest && message.authorKind === "bot" ? "true" : undefined}
+          className={`message ${message.authorKind}${handoff || presentedHandoff ? " handoff" : ""}${continued ? " continued" : ""}`}
+        >
+          {message.authorKind !== "human" ? (
+            <Avatar name={label} kind={message.authorKind === "bot" ? "bot" : "system"} />
+          ) : null}
+          <div className="meta">
+            {message.authorKind !== "human" ? (
+              <span className={`author ${message.authorKind}`}>{label}</span>
+            ) : null}
+            <MessageContext message={message} botName={botName} />
+            <time
+              className="message-time muted small"
+              dateTime={message.ts}
+              title={formatDateTime(message.ts)}
+            >
+              {new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(
+                new Date(message.ts),
+              )}
+            </time>
+            {message.runId ? (
+              <a
+                href={runHref(message.runId)}
+                className="small message-run-link"
+                title={message.runId}
+              >
+                {t("chatPane.runLink")}
+              </a>
+            ) : null}
+          </div>
+          {!tune && noticeKey ? (
+            <div className="body">{t(noticeKey)}</div>
+          ) : presentedHandoff ? (
+            <HandoffMessage message={message} presentation={presentedHandoff} />
+          ) : (
+            <MessageContent
+              body={message.body}
+              author={label}
+              collapsible={message.authorKind === "bot"}
+              prominent={latest}
+              reveal={reveal}
+              renderBody={(body) =>
+                workspaceId !== undefined &&
+                (message.authorKind === "human" || message.authorKind === "bot") ? (
+                  <MessageBody body={body} api={api} workspaceId={workspaceId} />
+                ) : (
+                  <div className="body">{body}</div>
+                )
+              }
+            />
+          )}
+          {handoff && !presentedHandoff ? (
+            <a className="handoff-link small" href={threadHref(handoff.ref as ThreadId)}>
+              {handoff.name}
             </a>
           ) : null}
-        </div>
-        {workspaceId !== undefined &&
-        (message.authorKind === "human" || message.authorKind === "bot") ? (
-          <MessageBody body={message.body} api={api} workspaceId={workspaceId} />
-        ) : (
-          <div className="body">{message.body}</div>
-        )}
-        {handoff ? (
-          <a className="handoff-link small" href={threadHref(handoff.ref as ThreadId)}>
-            {handoff.name}
-          </a>
-        ) : null}
-        <AttachmentCards attachments={otherAttachments} api={api} workspaceId={workspaceId} />
-      </li>
+          <AttachmentCards attachments={otherAttachments} api={api} workspaceId={workspaceId} />
+        </li>
+      )}
     </>
   );
 }
@@ -1224,6 +1428,7 @@ function MessageBody({
           api={api}
           workspaceId={workspaceId}
           path={segment.path}
+          inline
         />
       ),
     );

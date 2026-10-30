@@ -1,25 +1,26 @@
 // @vitest-environment jsdom
 // T1 (in-process): the main navigation keeps a name for every destination when its labels are
-// hidden. Between 721 and 1100 px the sidebar is an icon-only rail: app.css hides each link's
+// hidden. In the explicit compact sidebar, shell.css hides each link's
 // label span with `display: none`, which also removes it from the accessibility tree, so the
 // link itself must carry the name (issue #13).
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./app.js";
 import { approval, installFakeEventSource } from "./test-support/fixtures.js";
 
 const DESTINATIONS = [
   "Chats",
-  "Contacts",
   "Tasks",
-  "Attention, 1 pending",
+  "Approvals, 1 pending",
+  "Bots",
   "Board",
   "Files",
+  "Connections",
   "Knowledge",
   "Skills",
   "Computer",
   "Costs",
-  "Integrations",
+  "Vault",
   "People",
   // A tenant Owner sees Network (ADR-0027 amendment 1 decision 12, owner-decided 2026-10-14).
   "Network",
@@ -36,6 +37,8 @@ let iconRail: HTMLStyleElement | undefined;
 
 beforeEach(() => {
   window.location.hash = "#/threads";
+  // These tests name every destination: the tune view shows them all (use-and-tune-views.md).
+  window.localStorage.setItem("deskmates.view", "tune");
   installFakeEventSource();
   vi.stubGlobal(
     "fetch",
@@ -72,6 +75,36 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  window.localStorage.removeItem("deskmates.view");
+});
+
+it("starts in the use view with the everyday destinations; the footer switch shows the rest", async () => {
+  window.localStorage.removeItem("deskmates.view");
+  render(<App />);
+  const nav = await screen.findByRole("navigation", { name: "Main navigation" });
+  await waitFor(() =>
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .map((link) => link.getAttribute("href")),
+    ).toEqual([
+      "#/threads",
+      "#/tasks",
+      "#/approvals",
+      "#/contacts",
+      "#/board",
+      "#/resources/files",
+      "#/connections/channels",
+    ]),
+  );
+  // The role badge is a tuning aid; the use view leaves it out of the account row.
+  expect(screen.queryByTestId("role-badge")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+  fireEvent.click(screen.getByRole("switch", { name: "Tune view" }));
+  fireEvent.click(screen.getByRole("button", { name: "Close preferences" }));
+  await waitFor(() => expect(within(nav).getAllByRole("link")).toHaveLength(DESTINATIONS.length));
+  expect(window.localStorage.getItem("deskmates.view")).toBe("tune");
+  expect(screen.getByTestId("role-badge")).toBeTruthy();
 });
 
 /** The main navigation once all fourteen links and the pending-approval badge have rendered. */
@@ -101,7 +134,7 @@ it("names every main destination in the icon-only rail", async () => {
     expect(within(nav).getByRole("link", { name })).toBe(links[index]);
 });
 
-it("groups Files, Knowledge and Skills under Resources and puts Computer first under Operate (issue #27)", async () => {
+it("groups Files, Connections, Knowledge and Skills under Resources and puts Computer first under Operate (issue #27)", async () => {
   const nav = await renderNavigation();
   const groups = [...nav.querySelectorAll(".nav-group")].map((group) => ({
     label: group.querySelector(".nav-group-label")?.textContent,
@@ -110,11 +143,17 @@ it("groups Files, Knowledge and Skills under Resources and puts Computer first u
       .map((link) => link.getAttribute("href")),
   }));
   expect(groups).toEqual([
-    { label: "Talk", links: ["#/threads", "#/contacts", "#/tasks", "#/approvals", "#/board"] },
-    { label: "Resources", links: ["#/resources/files", "#/knowledge/documents", "#/skills"] },
     {
-      label: "Operate",
-      links: ["#/computer", "#/costs", "#/integrations", "#/members", "#/network"],
+      label: "Work",
+      links: ["#/threads", "#/tasks", "#/approvals", "#/contacts", "#/board"],
+    },
+    {
+      label: "Resources",
+      links: ["#/resources/files", "#/connections/channels", "#/knowledge/documents", "#/skills"],
+    },
+    {
+      label: "System",
+      links: ["#/computer", "#/costs", "#/vault", "#/members", "#/network"],
     },
   ]);
 });
@@ -146,11 +185,9 @@ it("keeps one compact footer: status and Help on a row, the identity below, no S
   const footer = container.querySelector(".sidebar-footer") as HTMLElement;
   const status = footer.querySelector(".sidebar-status-row") as HTMLElement;
   expect(status).not.toBeNull();
-  expect(within(status).getByText("Connected")).toBeTruthy();
+  expect(within(status).getByText("Connecting…")).toBeTruthy();
   expect(within(status).getByRole("button", { name: "Help" })).toBeTruthy();
-  expect(
-    within(footer).getByRole("link", { name: /^Account settings and preferences for / }),
-  ).toBeTruthy();
+  expect(within(footer).getByRole("link", { name: /^Account settings for / })).toBeTruthy();
   expect(within(footer).queryByRole("button", { name: "Settings" })).toBeNull();
   expect(footer.querySelector(".preferences-trigger")).toBeNull();
 });
@@ -164,3 +201,40 @@ it("redirects an old Facts link to Observations and marks Knowledge current", as
   );
   expect(within(nav).getByRole("link", { name: "Skills" }).getAttribute("aria-current")).toBeNull();
 });
+
+it.each([false, true])(
+  "restores only a connected drawer opener after responsive resizing (removed: %s)",
+  async (removed) => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1400 });
+    render(<App />);
+    await screen.findByRole("navigation", { name: "Main navigation" });
+    // A feature-owned link in the retained work area exercises the shell's generic route handling.
+    const opener = document.createElement("a");
+    opener.href = "#/runs/test-run";
+    opener.textContent = "Inspect run";
+    document.querySelector("main.content")?.appendChild(opener);
+    fireEvent.click(opener);
+    await act(async () => {
+      window.location.hash = "#/runs/test-run";
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    await screen.findByRole("button", { name: "Close run details" });
+    act(() => {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+      window.dispatchEvent(new Event("resize"));
+    });
+    if (removed) opener.remove();
+    const focus = vi.spyOn(opener, "focus");
+    fireEvent.click(screen.getByRole("button", { name: "Close run details" }));
+    if (removed) {
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: "Close run details" })).toBeNull(),
+      );
+      expect(focus).not.toHaveBeenCalled();
+    } else {
+      await waitFor(() => expect(document.activeElement).toBe(opener));
+    }
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
+  },
+);

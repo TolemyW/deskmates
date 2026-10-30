@@ -46,6 +46,19 @@ describe("model transport timing", () => {
     expect(end.model_body?.parentSpanId).toBe("span-1");
   });
 
+  it("names the request's model on every span when it is given", () => {
+    const samples: PhaseTimingSample[] = [];
+    const timing = new ModelTransportTiming({
+      record: (sample) => samples.push(sample),
+      model: "model-under-test",
+    });
+    timing.receivedHeaders();
+    timing.receivedBytes(1);
+    timing.completed();
+    expect(samples).toHaveLength(8);
+    expect(samples.every((sample) => sample.model === "model-under-test")).toBe(true);
+  });
+
   it("labels both edges with the fixed endpoint kind", () => {
     const samples: PhaseTimingSample[] = [];
     const timing = new ModelTransportTiming({

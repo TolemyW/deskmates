@@ -56,9 +56,9 @@ describe("Chats rail pages (#113 CH)", () => {
     render(<ThreadScreen api={createApiClient({ fetch })} />);
     await screen.findByText("Newest group");
     expect(within(rail()).queryByText("Oldest group")).toBeNull();
-    fireEvent.click(within(rail()).getByRole("button", { name: "Show older conversations" }));
+    fireEvent.click(within(rail()).getByRole("button", { name: "Show older chats" }));
     await within(rail()).findByText("Oldest group");
-    expect(within(rail()).queryByRole("button", { name: "Show older conversations" })).toBeNull();
+    expect(within(rail()).queryByRole("button", { name: "Show older chats" })).toBeNull();
     // A list refresh reads page one again; the older page stays.
     const before = calls.length;
     act(() =>

@@ -1,0 +1,19 @@
+{"section":"seed","request":"GET /api/bots/bot_0002/run-stats","status":200,"json":{"runStats":{"botId":"bot_0002","enabled":false}}}
+{"section":"seed","request":"GET /api/bots/bot_0003/run-stats","status":200,"json":{"runStats":{"botId":"bot_0003","enabled":false}}}
+{"section":"seed","request":"GET /api/bots/bot_0004/run-stats","status":200,"json":{"runStats":{"botId":"bot_0004","enabled":false}}}
+{"section":"seed","request":"GET /api/bots/bot_001r/run-stats","status":200,"json":{"runStats":{"botId":"bot_001r","enabled":false}}}
+{"section":"seed","request":"GET /api/bots/bot_001x/run-stats","status":200,"json":{"runStats":{"botId":"bot_001x","enabled":false}}}
+{"section":"seed","request":"GET /api/bots/bot_001y/run-stats","status":200,"json":{"runStats":{"botId":"bot_001y","enabled":false}}}
+{"section":"seed","request":"GET /api/bots/bot_001z/run-stats","status":200,"json":{"runStats":{"botId":"bot_001z","enabled":false}}}
+{"section":"seed","request":"GET /api/bots/bot_0020/run-stats","status":200,"json":{"runStats":{"botId":"bot_0020","enabled":false}}}
+{"section":"after session","request":"GET /api/bots/bot_0002/run-stats","status":200,"json":{"runStats":{"botId":"bot_0002","enabled":false}}}
+{"section":"after session","request":"GET /api/bots/bot_0003/run-stats","status":200,"json":{"runStats":{"botId":"bot_0003","enabled":false}}}
+{"section":"after session","request":"GET /api/bots/bot_0004/run-stats","status":200,"json":{"runStats":{"botId":"bot_0004","enabled":false}}}
+{"section":"after session","request":"GET /api/bots/bot_001r/run-stats","status":200,"json":{"runStats":{"botId":"bot_001r","enabled":false}}}
+{"section":"after session","request":"GET /api/bots/bot_001x/run-stats","status":200,"json":{"runStats":{"botId":"bot_001x","enabled":false}}}
+{"section":"after session","request":"GET /api/bots/bot_001y/run-stats","status":200,"json":{"runStats":{"botId":"bot_001y","enabled":false}}}
+{"section":"after session","request":"GET /api/bots/bot_001z/run-stats","status":200,"json":{"runStats":{"botId":"bot_001z","enabled":false}}}
+{"section":"after session","request":"GET /api/bots/bot_0020/run-stats","status":200,"json":{"runStats":{"botId":"bot_0020","enabled":false}}}
+{"section":"after session","request":"GET /api/bots/bot_003i/run-stats","status":200,"json":{"runStats":{"botId":"bot_003i","enabled":false}}}
+{"section":"after session","request":"GET /api/bots/bot_003v/run-stats","status":200,"json":{"runStats":{"botId":"bot_003v","enabled":false}}}
+{"section":"after session","request":"GET /api/bots/bot_003y/run-stats","status":200,"json":{"runStats":{"botId":"bot_003y","enabled":false}}}

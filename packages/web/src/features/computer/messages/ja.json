@@ -1,4 +1,5 @@
 {
+  "computer.allowedDomains.manage": "ワークスペースの設定で変更",
   "computer.context": "{name} · このワークスペースのすべてのボットが共有するブラウザー、ファイル、シェル",
   "computer.desktops.intro": "各ボットの画面と共有デスクトップの操作の引き継ぎは、そのボットのプロフィールにあります。",
   "computer.desktops.loading": "ボットを読み込んでいます…",
@@ -39,6 +40,9 @@
   "desktopView.live.control": "あなたが操作中",
   "desktopView.live.view": "ライブ · 閲覧のみ",
   "desktopView.reconnect": "再接続",
+  "desktopView.screen": "画面",
+  "desktopView.sharedFallback": "この Bot の画面はまだ準備できていないため、ワークスペース全体を表示しています。個別の画面を使うには、デスクトップを起動するか、ワークスペースのイメージを更新してください。",
+  "desktopView.workspace": "ワークスペース全体",
   "desktops.empty.body": "ワークスペースを作成し、最初のボットを追加して始めましょう。",
   "desktops.empty.setup": "ワークスペースを設定",
   "desktops.empty.title": "チームの画面がここに表示されます。",

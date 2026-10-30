@@ -81,11 +81,12 @@ describe("images/connector-postgres/Dockerfile", () => {
     expect(sources).toContain("packages/contracts/dist");
   });
 
-  it("runs as an unprivileged user from a node:22-bookworm-slim base", () => {
-    expect([...dockerfile.matchAll(/^FROM (\S+)/gm)].map((m) => m[1])).toEqual([
-      "node:22-bookworm-slim",
-      "node:22-bookworm-slim",
-    ]);
+  it("runs as an unprivileged user from a digest-pinned node:22-bookworm-slim base", () => {
+    const bases = [...dockerfile.matchAll(/^FROM (\S+)/gm)].map((m) => m[1]);
+    expect(bases).toHaveLength(2);
+    // #63 L20: pinned by digest, so a new base is a visible change to this file and its tag.
+    for (const base of bases) expect(base).toMatch(/^node:22-bookworm-slim@sha256:[0-9a-f]{64}$/);
+    expect(new Set(bases).size).toBe(1);
     const users = [...dockerfile.matchAll(/^USER (\S+)/gm)].map((m) => m[1]);
     expect(users).toEqual(["node"]);
   });

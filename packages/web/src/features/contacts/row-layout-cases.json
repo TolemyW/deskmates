@@ -1,0 +1,44 @@
+[
+  {
+    "id": "list",
+    "route": "#/contacts"
+  },
+  {
+    "id": "new",
+    "route": "#/contacts/new"
+  },
+  {
+    "id": "profile",
+    "route": "#/contacts/bot_0002"
+  },
+  {
+    "id": "tab-0",
+    "route": "#/contacts/bot_0002",
+    "steps": [
+      {
+        "role": "tab",
+        "name": "Experience"
+      }
+    ]
+  },
+  {
+    "id": "tab-1",
+    "route": "#/contacts/bot_0002",
+    "steps": [
+      {
+        "role": "tab",
+        "name": "Long-term instructions"
+      }
+    ]
+  },
+  {
+    "id": "tab-2",
+    "route": "#/contacts/bot_0002",
+    "steps": [
+      {
+        "role": "tab",
+        "name": "Settings"
+      }
+    ]
+  }
+]

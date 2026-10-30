@@ -1,5 +1,5 @@
 import { type BotDefinition, type CronEntry, nextCronFire, parseCron } from "@deskmates/contracts";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { Button } from "../../components/ui/button.js";
 import { errorMessage } from "../../format.js";
@@ -33,11 +33,12 @@ export function BotSchedules({
     () => draftsFor(api).get(bot.id) ?? bot.cron.map((entry) => ({ ...entry })),
   );
   const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [now, setNow] = useState(() => new Date());
-  const locked = !useCan("bot.configure").allowed;
-  const canRunNow = useCan("bot.runCronNow").allowed;
+  const locked = !useCan("bot.configure", bot.workspaceId).allowed;
+  const canRunNow = useCan("bot.runCronNow", bot.workspaceId).allowed;
   const t = useT();
   const locale = useLocale();
   useEffect(() => {
@@ -70,6 +71,15 @@ export function BotSchedules({
 
   // ADR-0043 decision 6: a saved entry runs now as a `manual` background run.
   const runNow = async (index: number) => {
+    if (
+      pending.current ||
+      !canRunNow ||
+      bot.pausedAt !== undefined ||
+      !entries[index] ||
+      JSON.stringify(entries[index]) !== JSON.stringify(bot.cron[index])
+    )
+      return;
+    pending.current = true;
     setBusy(true);
     setError("");
     setNotice("");
@@ -79,11 +89,14 @@ export function BotSchedules({
     } catch (err) {
       setError(errorMessage(err));
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
 
   const save = async () => {
+    if (pending.current || locked || !changed) return;
+    pending.current = true;
     try {
       for (const entry of entries) {
         parseCron(entry.schedule);
@@ -105,6 +118,7 @@ export function BotSchedules({
     } catch (err) {
       setError(errorMessage(err));
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
@@ -122,7 +136,7 @@ export function BotSchedules({
           strong: (chunks) => <strong>{chunks}</strong>,
         })}
       </p>
-      <RoleNote action="bot.configure" does={t("botSchedules.roleNote.does")} />
+      <RoleNote allowed={!locked} action="bot.configure" does={t("botSchedules.roleNote.does")} />
       {error ? <p role="alert">{error}</p> : null}
       {notice ? <output>{notice}</output> : null}
       {entries.length === 0 ? <p className="muted small">{t("botSchedules.empty")}</p> : null}
@@ -174,46 +188,55 @@ export function BotSchedules({
                   ? t("botSchedules.next", { at: next })
                   : t("botSchedules.nextUnavailable")}
             </p>
-            {canRunNow ? (
+            <div className="settings-actions">
+              {canRunNow ? (
+                <Button
+                  type="button"
+                  disabled={
+                    busy ||
+                    bot.pausedAt !== undefined ||
+                    JSON.stringify(entry) !== JSON.stringify(bot.cron[index])
+                  }
+                  title={
+                    bot.pausedAt !== undefined
+                      ? t("botSchedules.runNowPaused")
+                      : JSON.stringify(entry) !== JSON.stringify(bot.cron[index])
+                        ? t("botSchedules.runNowUnsaved")
+                        : undefined
+                  }
+                  onClick={() => void runNow(index)}
+                >
+                  {t("botSchedules.runNow", { number: index + 1 })}
+                </Button>
+              ) : null}
               <Button
                 type="button"
-                disabled={
-                  busy ||
-                  bot.pausedAt !== undefined ||
-                  JSON.stringify(entry) !== JSON.stringify(bot.cron[index])
-                }
-                title={
-                  bot.pausedAt !== undefined
-                    ? t("botSchedules.runNowPaused")
-                    : JSON.stringify(entry) !== JSON.stringify(bot.cron[index])
-                      ? t("botSchedules.runNowUnsaved")
-                      : undefined
-                }
-                onClick={() => void runNow(index)}
+                disabled={busy || locked}
+                onClick={() => edit((current) => current.filter((_, i) => i !== index))}
               >
-                {t("botSchedules.runNow", { number: index + 1 })}
+                {t("botSchedules.remove", { number: index + 1 })}
               </Button>
-            ) : null}
-            <Button
-              type="button"
-              disabled={busy || locked}
-              onClick={() => edit((current) => current.filter((_, i) => i !== index))}
-            >
-              {t("botSchedules.remove", { number: index + 1 })}
-            </Button>
+            </div>
           </div>
         );
       })}
-      <Button
-        type="button"
-        disabled={busy || locked}
-        onClick={() => edit((current) => [...current, { schedule: "0 9 * * 1-5", prompt: "" }])}
-      >
-        {t("botSchedules.add")}
-      </Button>
-      <Button type="button" disabled={busy || locked || !changed} onClick={() => void save()}>
-        {t("botSchedules.save")}
-      </Button>
+      <div className="settings-actions">
+        <Button
+          type="button"
+          variant="default"
+          disabled={busy || locked || !changed}
+          onClick={() => void save()}
+        >
+          {t("botSchedules.save")}
+        </Button>
+        <Button
+          type="button"
+          disabled={busy || locked}
+          onClick={() => edit((current) => [...current, { schedule: "0 9 * * 1-5", prompt: "" }])}
+        >
+          {t("botSchedules.add")}
+        </Button>
+      </div>
     </section>
   );
 }

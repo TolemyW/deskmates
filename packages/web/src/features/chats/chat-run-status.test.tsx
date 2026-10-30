@@ -68,9 +68,11 @@ function show(runs: RunView[]) {
 
 const rows = () => screen.queryAllByTestId("typing");
 const toggleFor = (name: string) =>
-  screen.getByRole("button", { name: new RegExp(` of ${name}$`) });
+  screen.getByRole("button", { name: new RegExp(` for ${name}$`) });
 const runItems = (name: string) =>
-  within(screen.getByRole("list", { name: `Unfinished runs of ${name}` })).getAllByRole("listitem");
+  within(screen.getByRole("list", { name: `Unfinished work for ${name}` })).getAllByRole(
+    "listitem",
+  );
 
 describe("ChatRunStatus (issue #126)", () => {
   beforeEach(() => {
@@ -84,33 +86,32 @@ describe("ChatRunStatus (issue #126)", () => {
     ]);
     expect(rows()).toHaveLength(1);
     const row = rows()[0] as HTMLElement;
-    expect(row.textContent).toContain("ops is running…");
+    expect(row.textContent).toContain("ops is working…");
     expect(row.textContent).toContain("1 queued");
     expect(row.getAttribute("data-state")).toBe("running");
 
     const toggle = toggleFor("ops");
-    expect(toggle.textContent).toContain("2 runs");
+    expect(toggle.getAttribute("aria-label")).toContain("2 work items");
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.queryByRole("list", { name: "Unfinished runs of ops" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "Unfinished work for ops" })).toBeNull();
 
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     const region = document.getElementById(toggle.getAttribute("aria-controls") ?? "");
     expect(region?.hidden).toBe(false);
     const [first, second] = runItems("ops");
-    expect(first?.textContent).toContain("running");
+    expect(first?.textContent).toContain("working");
     expect(first?.textContent).toContain("Reply to “check the deploy”");
     expect(second?.textContent).toContain("queued");
     expect(second?.textContent).toContain("Reply to “and then rerun the nightly report”");
-    const links = within(screen.getByRole("list", { name: "Unfinished runs of ops" })).getAllByRole(
-      "link",
-      { name: "Run details" },
-    );
+    const links = within(
+      screen.getByRole("list", { name: "Unfinished work for ops" }),
+    ).getAllByRole("link", { name: "Work details" });
     expect(links.map((a) => a.getAttribute("href"))).toEqual(["#/runs/run_1", "#/runs/run_2"]);
 
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.queryByRole("list", { name: "Unfinished runs of ops" })).toBeNull();
+    expect(screen.queryByRole("list", { name: "Unfinished work for ops" })).toBeNull();
   });
 
   it("gives several bots one row each, so extra runs never look like extra bots", () => {
@@ -125,9 +126,9 @@ describe("ChatRunStatus (issue #126)", () => {
     ]);
     const texts = rows().map((row) => row.textContent ?? "");
     expect(texts).toHaveLength(3);
-    expect(texts[0]).toMatch(/^.*ops is running….*1 queued/);
+    expect(texts[0]).toMatch(/^.*ops is working….*1 queued/);
     expect(texts[1]).toMatch(/qa is queued.*1 queued/);
-    expect(texts[2]).toMatch(/dbe is running….*2 queued/);
+    expect(texts[2]).toMatch(/dbe is working….*2 queued/);
     // No Stop row: Stop exists only inside an expanded list.
     expect(screen.queryByRole("button", { name: /^Stop/ })).toBeNull();
     fireEvent.click(toggleFor("dbe"));
@@ -154,13 +155,13 @@ describe("ChatRunStatus (issue #126)", () => {
       expect(row.querySelector(".typing-dots")).toBeNull();
     }
     fireEvent.click(toggleFor("ops"));
-    expect(runItems("ops")[0]?.textContent).toContain("waiting approval");
+    expect(runItems("ops")[0]?.textContent).toContain("waiting for approval");
   });
 
   it("prefers a running run in the summary even when an older run waits for approval", () => {
     show([r({ status: "waiting_approval" }), r({ status: "running", lane: "background" })]);
     const row = rows()[0] as HTMLElement;
-    expect(row.textContent).toContain("ops is running…");
+    expect(row.textContent).toContain("ops is working…");
     expect(row.textContent).toContain("1 more waiting");
   });
 
@@ -170,13 +171,13 @@ describe("ChatRunStatus (issue #126)", () => {
       r({ status: "running", lane: "background", triggerKind: "cron", triggerRef: "0" }),
     ]);
     expect(rows()).toHaveLength(1);
-    expect(rows()[0]?.textContent).toContain("1 more running");
+    expect(rows()[0]?.textContent).toContain("1 more working");
     fireEvent.click(toggleFor("ops"));
     const [interactive, background] = runItems("ops");
-    expect(interactive?.textContent).toContain("interactive lane");
-    expect(background?.textContent).toContain("background lane");
+    expect(interactive?.textContent).toContain("Chat reply");
+    expect(background?.textContent).toContain("Scheduled work");
     expect(background?.textContent).toContain("Scheduled task");
-    expect(screen.getAllByRole("button", { name: /^Stop ops \(running\)/ })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /^Stop ops \(working\)/ })).toHaveLength(2);
   });
 
   it("updates summary and expanded list together and drops finished runs", () => {
@@ -189,11 +190,11 @@ describe("ChatRunStatus (issue #126)", () => {
 
     // `a` finished; `b` started. The caller passes only unfinished runs.
     rerender([{ ...b, status: "running" }, c]);
-    expect(rows()[0]?.textContent).toContain("ops is running…");
+    expect(rows()[0]?.textContent).toContain("ops is working…");
     expect(rows()[0]?.textContent).not.toContain("queued");
-    expect(toggleFor("ops").textContent).toContain("1 run");
+    expect(toggleFor("ops").getAttribute("aria-label")).toContain("1 work item");
     expect(runItems("ops")).toHaveLength(1);
-    expect(screen.queryByRole("link", { name: "Run details", hidden: false })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Work details", hidden: false })).toBeTruthy();
 
     rerender([c]);
     expect(rows()).toHaveLength(1);
@@ -226,7 +227,7 @@ describe("grouped run status in the chat pane (issue #126)", () => {
     { ...(members[0] as NamedThreadMember), botId: bot2, name: "qa" },
   ];
 
-  it("counts a bot's runs per status in the header instead of repeating the status", async () => {
+  it("keeps activity in one disclosure instead of repeating it in the header", async () => {
     const queued = [1, 2, 3].map((n) => r({ status: "queued", triggerRef: `msg_${n}` }));
     const { fetch } = fakeFetch({
       "GET /api/threads/thr_1": { thread, members: group },
@@ -239,7 +240,8 @@ describe("grouped run status in the chat pane (issue #126)", () => {
       "GET /api/threads/thr_1/rounds": { rounds: [] },
     });
     render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
-    await waitFor(() => expect(screen.getAllByText(/queued ×3/).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByText("3 queued")).toBeTruthy());
+    expect(document.querySelector(".chat-header")?.textContent).not.toContain("queued");
     expect(screen.queryByText(/queued, queued/)).toBeNull();
   });
 
@@ -265,7 +267,7 @@ describe("grouped run status in the chat pane (issue #126)", () => {
     await waitFor(() => expect(rows()).toHaveLength(2));
     expect(screen.queryByRole("button", { name: /^Stop/ })).toBeNull();
     expect(screen.queryByRole("group", { name: "Stop work in this chat" })).toBeNull();
-    expect(rows()[0]?.textContent).toContain("ops is running…");
+    expect(rows()[0]?.textContent).toContain("ops is working…");
     expect(rows()[1]?.textContent).toContain("qa is waiting for approval");
     fireEvent.click(toggleFor("ops"));
     expect(runItems("ops")[0]?.textContent).toContain("Reply to “check the deploy”");
@@ -293,9 +295,9 @@ describe("grouped run status in the chat pane (issue #126)", () => {
       stream.open();
     });
     await waitFor(() => expect(rows()).toHaveLength(1));
-    expect(rows()[0]?.textContent).toContain("ops is running…");
+    expect(rows()[0]?.textContent).toContain("ops is working…");
     expect(runItems("ops")).toHaveLength(1);
-    expect(runItems("ops")[0]?.textContent).toContain("running");
+    expect(runItems("ops")[0]?.textContent).toContain("working");
     expect(screen.queryByText(/qa is/)).toBeNull();
   });
 });

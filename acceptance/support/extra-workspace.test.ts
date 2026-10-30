@@ -72,7 +72,7 @@ describe("addWorkspace", () => {
     const extra = await addWorkspace(stack, { label: "arm-b", egressAllowlist: ["site.test"] });
 
     expect(steps).toEqual([
-      `POST /api/workspaces ${JSON.stringify({ name: "m0-arm-b", egressAllowlist: ["site.test"] })}`,
+      `POST /api/workspaces ${JSON.stringify({ defaultBot: false, name: "m0-arm-b", egressAllowlist: ["site.test"] })}`,
       `ensure ws_b journal=${JSON.stringify({ workspaceId: "ws_b" })}`,
       "exec arm-b-container deskmates-healthz",
     ]);
@@ -112,7 +112,11 @@ describe("stopStack", () => {
       dbPath,
       workspace: { id: "ws_restart" },
       extraWorkspaces: [],
-      docker: { destroy: async () => {}, client: { request: async () => ({ status: 204 }) } },
+      docker: {
+        destroy: async () => {},
+        removeHostResources: async () => [],
+        client: { request: async () => ({ status: 204 }) },
+      },
       app: {
         deskmates: {
           ctx: { db: original },
@@ -171,6 +175,11 @@ describe("stopStack", () => {
           destroyed.push(h.providerRef);
           if (h.providerRef === "extra-a") throw new Error("container busy");
         },
+        // The label sweep after the volumes (ADR-0006 amendment 5 decision 15).
+        removeHostResources: async (target: { workspaceId: string }) => {
+          order.push(`sweep ${target.workspaceId}`);
+          return [];
+        },
         client: {
           request: async (method: string, path: string) => {
             order.push(`${method} ${path}`);
@@ -197,6 +206,10 @@ describe("stopStack", () => {
       "/volumes/a-work?force=true",
       "/volumes/b-profile?force=true",
     ]);
+    expect(order.filter((step) => step.startsWith("sweep "))).toEqual(["sweep ws_a", "sweep ws_b"]);
+    expect(order.indexOf("sweep ws_a")).toBeGreaterThan(
+      order.indexOf("DELETE /volumes/b-profile?force=true"),
+    );
     expect(existsSync(tmp)).toBe(false);
     // Best-effort means carry on, never say nothing.
     expect(problems).toEqual([

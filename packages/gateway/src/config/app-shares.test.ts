@@ -30,23 +30,23 @@ describe("readAppSharesConfig", () => {
 
   it("accepts the Testbox topology: nip.io base, IP-literal operator, TLS proxy (decision 11)", () => {
     const config = readAppSharesConfig({
-      APP_SHARE_BASE_URL: "https://10.20.40.132.nip.io:18443",
-      APP_SHARE_OPERATOR_URL: "https://10.20.40.132:18443",
+      APP_SHARE_BASE_URL: "https://10.88.40.132.nip.io:18443",
+      APP_SHARE_OPERATOR_URL: "https://10.88.40.132:18443",
       APP_SHARE_PORT: "18382",
     });
     expect(config).toEqual({
       appShares: {
-        baseUrl: "https://10.20.40.132.nip.io:18443",
-        operatorOrigin: "https://10.20.40.132:18443",
+        baseUrl: "https://10.88.40.132.nip.io:18443",
+        operatorOrigin: "https://10.88.40.132:18443",
         port: 18382,
         bind: "127.0.0.1",
       },
     });
     // The default HTTPS port is dropped from the origin, as browsers send it.
-    expect(read("https://10.20.40.132.nip.io:443", "https://10.20.40.132").appShares).toMatchObject(
+    expect(read("https://10.88.40.132.nip.io:443", "https://10.88.40.132").appShares).toMatchObject(
       {
-        baseUrl: "https://10.20.40.132.nip.io",
-        operatorOrigin: "https://10.20.40.132",
+        baseUrl: "https://10.88.40.132.nip.io",
+        operatorOrigin: "https://10.88.40.132",
       },
     );
   });

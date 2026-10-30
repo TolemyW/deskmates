@@ -112,7 +112,9 @@ it("can resume an existing human hold without taking it again and keeps remote E
     within(dialog).getByText("Live view. Browser work is paused for human control."),
   ).toBeTruthy();
   fireEvent.click(within(dialog).getByRole("button", { name: "Resume control" }));
-  expect(within(dialog).getByTestId("desktop-mode").textContent).toBe("control");
+  await waitFor(() =>
+    expect(within(dialog).getByTestId("desktop-mode").textContent).toBe("control"),
+  );
   fireEvent.keyDown(dialog, { key: "Escape" });
   expect(screen.getByRole("dialog")).toBeTruthy();
   expect(calls.some((c) => c.method === "POST")).toBe(false);

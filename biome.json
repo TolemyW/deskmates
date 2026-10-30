@@ -22,6 +22,7 @@
       "dist-demo",
       "spikes/**",
       "evals/tasks/*.json",
+      "observability/grafana/**",
       "data",
       ".claude/**",
       "dist-studio",

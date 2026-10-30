@@ -1,0 +1,883 @@
+{
+  "uid": "deskmates-model-latency",
+  "title": "Model latency",
+  "description": "Model request duration and time to first byte through the Gateway's model proxy, per model and request kind, with percentiles over time and the slowest requests. Read from the obs model (ADR-0046).",
+  "tags": [
+    "deskmates"
+  ],
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "timezone": "browser",
+  "links": [
+    {
+      "title": "Deskmates dashboards",
+      "type": "dashboards",
+      "tags": [
+        "deskmates"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Overview (inference requests)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Inference requests",
+      "description": "Model proxy requests of kind messages that ended in the time range.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(*) AS requests FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}'",
+          "queryText": "SELECT count(*) AS requests FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Median request duration",
+      "description": "From the proxy sending the request to the last response byte.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT p50 AS median_ms FROM (SELECT count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN duration_ms END) AS p50 FROM (SELECT duration_ms, row_number() OVER (ORDER BY duration_ms) AS pct_rn, count(*) OVER () AS pct_n FROM (SELECT duration_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked) q",
+          "queryText": "SELECT p50 AS median_ms FROM (SELECT count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN duration_ms END) AS p50 FROM (SELECT duration_ms, row_number() OVER (ORDER BY duration_ms) AS pct_rn, count(*) OVER () AS pct_n FROM (SELECT duration_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked) q",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "p95 request duration",
+      "description": "95 % of inference requests finished within this time.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT p95 AS p95_ms FROM (SELECT count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95 FROM (SELECT duration_ms, row_number() OVER (ORDER BY duration_ms) AS pct_rn, count(*) OVER () AS pct_n FROM (SELECT duration_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked) q",
+          "queryText": "SELECT p95 AS p95_ms FROM (SELECT count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95 FROM (SELECT duration_ms, row_number() OVER (ORDER BY duration_ms) AS pct_rn, count(*) OVER () AS pct_n FROM (SELECT duration_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked) q",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Median time to first byte",
+      "description": "From sending the request to the first response body byte. A request that returned no body byte has no value and is left out, never counted as 0.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT p50 AS median_ms FROM (SELECT count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN first_byte_ms END) AS p50 FROM (SELECT first_byte_ms, row_number() OVER (ORDER BY first_byte_ms) AS pct_rn, count(*) OVER () AS pct_n FROM (SELECT first_byte_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE first_byte_ms IS NOT NULL) pct_ranked) q",
+          "queryText": "SELECT p50 AS median_ms FROM (SELECT count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN first_byte_ms END) AS p50 FROM (SELECT first_byte_ms, row_number() OVER (ORDER BY first_byte_ms) AS pct_rn, count(*) OVER () AS pct_n FROM (SELECT first_byte_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE first_byte_ms IS NOT NULL) pct_ranked) q",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "p95 time to first byte",
+      "description": "95 % of inference requests saw their first body byte within this time.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT p95 AS p95_ms FROM (SELECT count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN first_byte_ms END) AS p95 FROM (SELECT first_byte_ms, row_number() OVER (ORDER BY first_byte_ms) AS pct_rn, count(*) OVER () AS pct_n FROM (SELECT first_byte_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE first_byte_ms IS NOT NULL) pct_ranked) q",
+          "queryText": "SELECT p95 AS p95_ms FROM (SELECT count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN first_byte_ms END) AS p95 FROM (SELECT first_byte_ms, row_number() OVER (ORDER BY first_byte_ms) AS pct_rn, count(*) OVER () AS pct_n FROM (SELECT first_byte_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE first_byte_ms IS NOT NULL) pct_ranked) q",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Failed or cancelled",
+      "description": "Inference requests that ended with an error or were cancelled, as a share.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT 100.0 * sum(CASE WHEN outcome = 'ok' THEN 0 ELSE 1 END) / nullif(count(*), 0) AS failed_share FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}'",
+          "queryText": "SELECT 100.0 * sum(CASE WHEN outcome = 'ok' THEN 0 ELSE 1 END) / nullif(count(*), 0) AS failed_share FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Percentiles over time",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Request duration per hour (p50, p90, p95, p99)",
+      "description": "Percentiles of inference request duration for the requests that ended in each hour.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT time, p50, p90, p95, p99 FROM (SELECT time, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN duration_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 90 + 99) / 100 THEN duration_ms END) AS p90, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95, max(CASE WHEN pct_rn = (pct_n * 99 + 99) / 100 THEN duration_ms END) AS p99 FROM (SELECT time, duration_ms, row_number() OVER (PARTITION BY time ORDER BY duration_ms) AS pct_rn, count(*) OVER (PARTITION BY time) AS pct_n FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z', ended_at) AS time, duration_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked GROUP BY time) q ORDER BY time",
+          "queryText": "SELECT time, p50, p90, p95, p99 FROM (SELECT time, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN duration_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 90 + 99) / 100 THEN duration_ms END) AS p90, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95, max(CASE WHEN pct_rn = (pct_n * 99 + 99) / 100 THEN duration_ms END) AS p99 FROM (SELECT time, duration_ms, row_number() OVER (PARTITION BY time ORDER BY duration_ms) AS pct_rn, count(*) OVER (PARTITION BY time) AS pct_n FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z', ended_at) AS time, duration_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked GROUP BY time) q ORDER BY time",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Time to first byte per hour (p50, p90, p95, p99)",
+      "description": "Percentiles of time to first byte for the inference requests that ended in each hour.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT time, p50, p90, p95, p99 FROM (SELECT time, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN first_byte_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 90 + 99) / 100 THEN first_byte_ms END) AS p90, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN first_byte_ms END) AS p95, max(CASE WHEN pct_rn = (pct_n * 99 + 99) / 100 THEN first_byte_ms END) AS p99 FROM (SELECT time, first_byte_ms, row_number() OVER (PARTITION BY time ORDER BY first_byte_ms) AS pct_rn, count(*) OVER (PARTITION BY time) AS pct_n FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z', ended_at) AS time, first_byte_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE first_byte_ms IS NOT NULL) pct_ranked GROUP BY time) q ORDER BY time",
+          "queryText": "SELECT time, p50, p90, p95, p99 FROM (SELECT time, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN first_byte_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 90 + 99) / 100 THEN first_byte_ms END) AS p90, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN first_byte_ms END) AS p95, max(CASE WHEN pct_rn = (pct_n * 99 + 99) / 100 THEN first_byte_ms END) AS p99 FROM (SELECT time, first_byte_ms, row_number() OVER (PARTITION BY time ORDER BY first_byte_ms) AS pct_rn, count(*) OVER (PARTITION BY time) AS pct_n FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z', ended_at) AS time, first_byte_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE first_byte_ms IS NOT NULL) pct_ranked GROUP BY time) q ORDER BY time",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "p95 request duration per hour by model",
+      "description": "The 95th percentile of inference request duration, one line per model.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT time, model, p95 FROM (SELECT time, model, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95 FROM (SELECT time, model, duration_ms, row_number() OVER (PARTITION BY time, model ORDER BY duration_ms) AS pct_rn, count(*) OVER (PARTITION BY time, model) AS pct_n FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z', ended_at) AS time, model, duration_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked GROUP BY time, model) q ORDER BY time, model",
+          "queryText": "SELECT time, model, p95 FROM (SELECT time, model, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95 FROM (SELECT time, model, duration_ms, row_number() OVER (PARTITION BY time, model ORDER BY duration_ms) AS pct_rn, count(*) OVER (PARTITION BY time, model) AS pct_n FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z', ended_at) AS time, model, duration_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked GROUP BY time, model) q ORDER BY time, model",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "p95 time to first byte per hour by model",
+      "description": "The 95th percentile of time to first byte, one line per model.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT time, model, p95 FROM (SELECT time, model, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN first_byte_ms END) AS p95 FROM (SELECT time, model, first_byte_ms, row_number() OVER (PARTITION BY time, model ORDER BY first_byte_ms) AS pct_rn, count(*) OVER (PARTITION BY time, model) AS pct_n FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z', ended_at) AS time, model, first_byte_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE first_byte_ms IS NOT NULL) pct_ranked GROUP BY time, model) q ORDER BY time, model",
+          "queryText": "SELECT time, model, p95 FROM (SELECT time, model, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN first_byte_ms END) AS p95 FROM (SELECT time, model, first_byte_ms, row_number() OVER (PARTITION BY time, model ORDER BY first_byte_ms) AS pct_rn, count(*) OVER (PARTITION BY time, model) AS pct_n FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z', ended_at) AS time, model, first_byte_ms FROM model_latency WHERE request_kind = 'messages' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE first_byte_ms IS NOT NULL) pct_ranked GROUP BY time, model) q ORDER BY time, model",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Failed and cancelled requests per hour by model",
+      "description": "Requests of every kind that ended with an error or were cancelled.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', ended_at) AS time, model, count(*) AS requests FROM model_latency WHERE outcome <> 'ok' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "queryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', ended_at) AS time, model, count(*) AS requests FROM model_latency WHERE outcome <> 'ok' AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "By model and request kind",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "panels": []
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "Models",
+      "description": "Per model and request kind: requests, errors, cancellations, request duration percentiles and time to first byte. model_source run counts requests whose model is the run's, recorded before the proxy named it.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT c.model, c.request_kind, c.requests, c.errors, c.cancelled, c.model_from_run, r.p50 AS p50_ms, r.p90 AS p90_ms, r.p95 AS p95_ms, r.p99 AS p99_ms, f.p50 AS first_byte_p50_ms, f.p95 AS first_byte_p95_ms, h.p50 AS headers_p50_ms FROM (SELECT model, request_kind, count(*) AS requests, sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS errors, sum(CASE WHEN outcome = 'cancelled' THEN 1 ELSE 0 END) AS cancelled, sum(CASE WHEN model_source = 'run' THEN 1 ELSE 0 END) AS model_from_run FROM model_latency WHERE ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}' GROUP BY model, request_kind) c LEFT JOIN (SELECT model, request_kind, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN duration_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 90 + 99) / 100 THEN duration_ms END) AS p90, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95, max(CASE WHEN pct_rn = (pct_n * 99 + 99) / 100 THEN duration_ms END) AS p99 FROM (SELECT model, request_kind, duration_ms, row_number() OVER (PARTITION BY model, request_kind ORDER BY duration_ms) AS pct_rn, count(*) OVER (PARTITION BY model, request_kind) AS pct_n FROM (SELECT model, request_kind, duration_ms FROM model_latency WHERE ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked GROUP BY model, request_kind) r ON r.model = c.model AND r.request_kind = c.request_kind LEFT JOIN (SELECT model, request_kind, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN first_byte_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN first_byte_ms END) AS p95 FROM (SELECT model, request_kind, first_byte_ms, row_number() OVER (PARTITION BY model, request_kind ORDER BY first_byte_ms) AS pct_rn, count(*) OVER (PARTITION BY model, request_kind) AS pct_n FROM (SELECT model, request_kind, first_byte_ms FROM model_latency WHERE ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE first_byte_ms IS NOT NULL) pct_ranked GROUP BY model, request_kind) f ON f.model = c.model AND f.request_kind = c.request_kind LEFT JOIN (SELECT model, request_kind, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN headers_ms END) AS p50 FROM (SELECT model, request_kind, headers_ms, row_number() OVER (PARTITION BY model, request_kind ORDER BY headers_ms) AS pct_rn, count(*) OVER (PARTITION BY model, request_kind) AS pct_n FROM (SELECT model, request_kind, headers_ms FROM model_latency WHERE ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE headers_ms IS NOT NULL) pct_ranked GROUP BY model, request_kind) h ON h.model = c.model AND h.request_kind = c.request_kind ORDER BY c.requests DESC, c.model, c.request_kind",
+          "queryText": "SELECT c.model, c.request_kind, c.requests, c.errors, c.cancelled, c.model_from_run, r.p50 AS p50_ms, r.p90 AS p90_ms, r.p95 AS p95_ms, r.p99 AS p99_ms, f.p50 AS first_byte_p50_ms, f.p95 AS first_byte_p95_ms, h.p50 AS headers_p50_ms FROM (SELECT model, request_kind, count(*) AS requests, sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS errors, sum(CASE WHEN outcome = 'cancelled' THEN 1 ELSE 0 END) AS cancelled, sum(CASE WHEN model_source = 'run' THEN 1 ELSE 0 END) AS model_from_run FROM model_latency WHERE ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}' GROUP BY model, request_kind) c LEFT JOIN (SELECT model, request_kind, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN duration_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 90 + 99) / 100 THEN duration_ms END) AS p90, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95, max(CASE WHEN pct_rn = (pct_n * 99 + 99) / 100 THEN duration_ms END) AS p99 FROM (SELECT model, request_kind, duration_ms, row_number() OVER (PARTITION BY model, request_kind ORDER BY duration_ms) AS pct_rn, count(*) OVER (PARTITION BY model, request_kind) AS pct_n FROM (SELECT model, request_kind, duration_ms FROM model_latency WHERE ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked GROUP BY model, request_kind) r ON r.model = c.model AND r.request_kind = c.request_kind LEFT JOIN (SELECT model, request_kind, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN first_byte_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN first_byte_ms END) AS p95 FROM (SELECT model, request_kind, first_byte_ms, row_number() OVER (PARTITION BY model, request_kind ORDER BY first_byte_ms) AS pct_rn, count(*) OVER (PARTITION BY model, request_kind) AS pct_n FROM (SELECT model, request_kind, first_byte_ms FROM model_latency WHERE ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE first_byte_ms IS NOT NULL) pct_ranked GROUP BY model, request_kind) f ON f.model = c.model AND f.request_kind = c.request_kind LEFT JOIN (SELECT model, request_kind, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN headers_ms END) AS p50 FROM (SELECT model, request_kind, headers_ms, row_number() OVER (PARTITION BY model, request_kind ORDER BY headers_ms) AS pct_rn, count(*) OVER (PARTITION BY model, request_kind) AS pct_n FROM (SELECT model, request_kind, headers_ms FROM model_latency WHERE ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}') pct_src WHERE headers_ms IS NOT NULL) pct_ranked GROUP BY model, request_kind) h ON h.model = c.model AND h.request_kind = c.request_kind ORDER BY c.requests DESC, c.model, c.request_kind",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p90_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p99_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "first_byte_p50_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "first_byte_p95_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "headers_p50_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 16,
+      "type": "table",
+      "title": "Slowest requests",
+      "description": "The model requests that took longest in the time range, with their time to first byte. A run id opens the run view.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT ended_at, workspace_name, bot_name, model, model_source, request_kind, outcome, duration_ms, first_byte_ms, headers_ms, run_id FROM model_latency WHERE duration_ms IS NOT NULL AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}' ORDER BY duration_ms DESC, ended_at DESC LIMIT 50",
+          "queryText": "SELECT ended_at, workspace_name, bot_name, model, model_source, request_kind, outcome, duration_ms, first_byte_ms, headers_ms, run_id FROM model_latency WHERE duration_ms IS NOT NULL AND ended_at >= '${__from:date:iso}' AND ended_at < '${__to:date:iso}' ORDER BY duration_ms DESC, ended_at DESC LIMIT 50",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "duration_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "first_byte_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "headers_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this run",
+                    "url": "/d/deskmates-agent-runs/agent-runs?var-run=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ]
+}

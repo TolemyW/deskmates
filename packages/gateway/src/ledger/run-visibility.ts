@@ -1,9 +1,11 @@
 // Run visibility (issue #70): what a run did that someone else can see, reported beside its
-// status by the run API. `silent` keeps its ADR-0005 decision 3 meaning; these flags are derived
-// on read from the run's final reply and the events the Gateway appended when it accepted a
-// post, an approval decision or a task delivery, so no stored row is relabelled and runs
-// recorded before this module get the same flags as new ones. The definition itself is
-// `deriveRunVisibility` in contracts; this module only fetches its inputs.
+// status by the run API. The flags are derived on read from the run's status, thread, final
+// reply and the events the Gateway appended when it accepted a post, an approval decision or a
+// task delivery, so no stored row is relabelled and runs recorded before this module get the
+// same flags as new ones. That includes `silent` by the owner's definition of 2026-10-17 (a
+// thread run that ended successfully without posting a message; ADR-0005, "Definition of
+// `silent`"): an older run stored `silent` that posted through `thread_post` is not silent here.
+// The definition itself is `deriveRunVisibility` in contracts; this module only fetches inputs.
 
 import {
   type Run,
@@ -26,6 +28,9 @@ export const RUN_VISIBILITY_EVENTS_SQL = `SELECT run_id, kind, payload_json FROM
           AND json_extract(payload_json, '$.tool') IN ('thread_post', 'message_bot', 'task_deliver'))
       OR (kind = 'approval' AND json_extract(payload_json, '$.phase') = 'decided_by_tool'))`;
 
+/** The run fields the derivation reads. */
+export type VisibilityRun = Pick<Run, "id" | "summary" | "status" | "threadId">;
+
 interface VisibilityRow {
   run_id: string;
   kind: string;
@@ -35,7 +40,7 @@ interface VisibilityRow {
 /** Visibility for each given run, keyed by run id. One query, whatever the number of runs. */
 export function runVisibility(
   db: GatewayDb,
-  runs: readonly Pick<Run, "id" | "summary">[],
+  runs: readonly VisibilityRun[],
 ): Map<RunId, RunVisibility> {
   const out = new Map<RunId, RunVisibility>();
   if (runs.length === 0) return out;
@@ -57,6 +62,8 @@ export function runVisibility(
       deriveRunVisibility({
         ...(run.summary ? { reply: run.summary.reply } : {}),
         events: events.get(run.id) ?? [],
+        status: run.status,
+        ...(run.threadId === undefined ? {} : { threadId: run.threadId }),
       }),
     );
   }
@@ -64,7 +71,7 @@ export function runVisibility(
 }
 
 /** The run with its visibility attached, as the run API returns it. */
-export function withVisibility<R extends Pick<Run, "id" | "summary">>(
+export function withVisibility<R extends VisibilityRun>(
   db: GatewayDb,
   runs: readonly R[],
 ): (R & { visibility: RunVisibility })[] {

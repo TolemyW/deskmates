@@ -1,0 +1,55 @@
+{
+  "failures": [
+    {
+      "width": 640,
+      "problems": [
+        {
+          "label": "Long-term instructions",
+          "rule": "text-inside-padding",
+          "box": {
+            "left": 674,
+            "right": 797
+          },
+          "text": {
+            "left": 652.890625,
+            "right": 818.109375
+          }
+        }
+      ]
+    },
+    {
+      "width": 760,
+      "problems": [
+        {
+          "label": "Long-term instructions",
+          "rule": "text-inside-padding",
+          "box": {
+            "left": 734,
+            "right": 887
+          },
+          "text": {
+            "left": 727.890625,
+            "right": 893.109375
+          }
+        }
+      ]
+    },
+    {
+      "width": 761,
+      "problems": [
+        {
+          "label": "Long-term instructions",
+          "rule": "text-inside-padding",
+          "box": {
+            "left": 734.5,
+            "right": 887.75
+          },
+          "text": {
+            "left": 728.515625,
+            "right": 893.734375
+          }
+        }
+      ]
+    }
+  ]
+}

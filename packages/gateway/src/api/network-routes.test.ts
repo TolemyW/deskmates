@@ -21,7 +21,7 @@ afterEach(async () => {
 
 const LAN = {
   name: "VendorDB test environment",
-  rules: [{ kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [23001] }],
+  rules: [{ kind: "subnet", cidr: "10.88.30.0/24", schemes: ["http"], ports: [23001] }],
 };
 
 function running(harness: Harness, workspace: Workspace): SandboxHandle {

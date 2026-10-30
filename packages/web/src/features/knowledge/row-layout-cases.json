@@ -1,0 +1,10 @@
+[
+  {
+    "id": "documents",
+    "route": "#/knowledge/documents"
+  },
+  {
+    "id": "observations",
+    "route": "#/knowledge/observations"
+  }
+]

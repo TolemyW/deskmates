@@ -24,6 +24,9 @@ export function WorkspaceTrashScreen({ api }: { api: ApiClient }) {
     <section className="workspace-screen resource-page page-container">
       <h1>{t("workspaceTrash.title")}</h1>
       <p role="alert">{t("workspaceTrash.denied")}</p>
+      <ButtonLink href="#/threads" variant="primary">
+        {t("app.missing.home")}
+      </ButtonLink>
     </section>
   );
 }

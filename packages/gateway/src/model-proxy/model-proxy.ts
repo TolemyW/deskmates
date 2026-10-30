@@ -268,6 +268,7 @@ export function registerModelProxy(app: FastifyInstance, opts: ModelProxyOptions
       const timing = new ModelTransportTiming({
         ...opts.timing,
         requestKind,
+        ...(verdict.model ? { model: verdict.model } : {}),
         ...(recorder ? { record: recorder } : {}),
       });
 

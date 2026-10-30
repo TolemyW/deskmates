@@ -11,6 +11,7 @@ import {
   type ThreadId,
   type ThreadKind,
   type ThreadMember,
+  type ThreadPauseReason,
   type ThreadStatus,
   type WorkspaceId,
 } from "@deskmates/contracts";
@@ -23,6 +24,9 @@ interface ThreadRow {
   kind: ThreadKind;
   channel: string;
   external_key: string | null;
+  /** ADR-0047 decision 10; absent on a database before that migration. */
+  channel_connection_id?: string | null;
+  binding_generation?: number | null;
   title: string;
   turn_budget: number;
   status: ThreadStatus;
@@ -32,6 +36,12 @@ interface ThreadRow {
   /** Absent on a database before migration 0046 (ADR-0022 amendment 1). */
   opened_by?: string | null;
   private_to_user_id?: string | null;
+  /** ADR-0005 amendment 3, decisions 20 and 22 (migration 202610171101). */
+  pause_reason?: ThreadPauseReason | null;
+  paused_seq?: number | null;
+  paused_at?: string | null;
+  resume_at?: string | null;
+  budget_reset_seq?: number;
   created_at: string;
   updated_at: string;
 }
@@ -43,6 +53,17 @@ interface MemberRow {
   joined_at: string;
 }
 
+/** What a pause records (ADR-0005 amendment 3, decision 20), written in one update. */
+export interface ThreadPause {
+  reason: ThreadPauseReason;
+  /** The seq of the message that caused the pause. */
+  seq: number;
+  /** ISO time the pause began. */
+  at: string;
+  /** A `turn_budget` pause only: when its reset window ends (rewritten decision 22). */
+  resumeAt?: string;
+}
+
 export interface CreateThreadInput {
   workspaceId: WorkspaceId;
   botIds: readonly BotId[];
@@ -50,6 +71,8 @@ export interface CreateThreadInput {
   channel?: string;
   /** Binding to an external conversation of `channel` (ADR-0017 decision 2); unique per channel. */
   externalKey?: string;
+  /** An ABI-2 channel thread's connection and binding generation (ADR-0047 decision 10). */
+  channelConnection?: { id: string; bindingGeneration: number };
   title?: string;
   turnBudget?: number;
   /** Canonical UTC ISO text (`normalizeDeadline`); issue #21. */
@@ -127,6 +150,13 @@ export class ThreadStore {
         );
       if (input.deadline !== undefined) {
         this.db.prepare("UPDATE threads SET deadline = ? WHERE id = ?").run(input.deadline, id);
+      }
+      if (input.channelConnection !== undefined) {
+        this.db
+          .prepare(
+            "UPDATE threads SET channel_connection_id = ?, binding_generation = ? WHERE id = ?",
+          )
+          .run(input.channelConnection.id, input.channelConnection.bindingGeneration, id);
       }
       if (input.sideChatActor !== undefined) {
         // A person's side chat has a private audience: that person only (ADR-0031 decision 9).
@@ -239,13 +269,17 @@ export class ThreadStore {
 
   /** The thread bound to an external conversation (ADR-0017 decision 2), if any. */
   /** A binding is unique per workspace (migration 0031); a lookup never leaves it. */
+  /** ABI-2 connection threads are reached only through their connection's host (ADR-0047). */
   findByExternalKey(
     workspaceId: WorkspaceId,
     channel: string,
     externalKey: string,
   ): Thread | undefined {
     const row = this.db
-      .prepare("SELECT * FROM threads WHERE workspace_id = ? AND channel = ? AND external_key = ?")
+      .prepare(
+        `SELECT * FROM threads WHERE workspace_id = ? AND channel = ? AND external_key = ?
+           AND binding_generation IS NULL`,
+      )
       .get(workspaceId, channel, externalKey) as ThreadRow | undefined;
     return row ? toThread(row) : undefined;
   }
@@ -390,7 +424,8 @@ export class ThreadStore {
       const liveRun = this.db
         .prepare(
           `SELECT id FROM runs WHERE thread_id = ? AND bot_id = ?
-         AND status IN ('queued', 'running', 'stalled', 'waiting_approval_live', 'waiting_approval', 'waiting_browser', 'waiting_continuation')
+         AND status IN ('queued', 'running', 'stalled', 'waiting_approval_live', 'waiting_approval', 'waiting_browser', 'waiting_continuation',
+           'waiting_platform')
          LIMIT 1`,
         )
         .get(threadId, botId) as { id: string } | undefined;
@@ -448,11 +483,65 @@ export class ThreadStore {
     return row?.id as BotId | undefined;
   }
 
-  setStatus(threadId: ThreadId, status: ThreadStatus): Thread {
-    this.db
-      .prepare("UPDATE threads SET status = ?, updated_at = ? WHERE id = ?")
-      .run(status, nowIso(), threadId);
-    return this.mustGet(threadId);
+  /**
+   * Pause the thread (ADR-0005 amendment 3, decision 20): status, reason, causing seq, pause time
+   * and, for a turn-budget pause, the resume time, in one update. A thread already paused keeps
+   * its pause, except that an operator pause replaces a turn-budget one (which then no longer
+   * ends by itself). Returns whether the row changed.
+   */
+  pause(threadId: ThreadId, pause: ThreadPause): boolean {
+    if (pause.reason === "operator" && pause.resumeAt !== undefined)
+      throw new DeskmatesError("validation", "an operator pause has no resume time");
+    const changed = this.db
+      .prepare(
+        `UPDATE threads SET status = 'paused', pause_reason = ?, paused_seq = ?, paused_at = ?,
+           resume_at = ?, updated_at = ?
+         WHERE id = ? AND (status = 'active' OR (? = 'operator' AND pause_reason = 'turn_budget'))`,
+      )
+      .run(
+        pause.reason,
+        pause.seq,
+        pause.at,
+        pause.resumeAt ?? null,
+        nowIso(),
+        threadId,
+        pause.reason,
+      ).changes;
+    return changed > 0;
+  }
+
+  /**
+   * End a pause (decisions 22 to 24): clear the reason and resume time and set the thread
+   * `active`, and, when `budgetResetSeq` is given, move the budget origin to it, in one update.
+   * `only` restricts it to a pause of that reason. Returns whether a pause ended, so two callers
+   * racing for the same pause cannot both announce it. The callers are a human message
+   * (`ThreadRouter.postHuman`), Resume (`ThreadRouter.operatorResume`) and the reset window
+   * (`ThreadRouter.resumeDuePauses`); `thread-unpause-callers.test.ts` keeps it that way.
+   */
+  resume(
+    threadId: ThreadId,
+    opts: { budgetResetSeq?: number; only?: ThreadPauseReason } = {},
+  ): boolean {
+    const only = opts.only ?? null;
+    const changed = this.db
+      .prepare(
+        `UPDATE threads SET status = 'active', pause_reason = NULL, resume_at = NULL,
+           budget_reset_seq = max(budget_reset_seq, coalesce(?, budget_reset_seq)), updated_at = ?
+         WHERE id = ? AND status = 'paused' AND (? IS NULL OR pause_reason = ?)`,
+      )
+      .run(opts.budgetResetSeq ?? null, nowIso(), threadId, only, only).changes;
+    return changed > 0;
+  }
+
+  /** Turn-budget pauses whose reset window ended at or before `now` (rewritten decision 22). */
+  duePauses(now: Date): ThreadId[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id FROM threads WHERE resume_at IS NOT NULL AND resume_at <= ?
+           AND status = 'paused' AND pause_reason = 'turn_budget' ORDER BY resume_at, id`,
+      )
+      .all(now.toISOString()) as { id: string }[];
+    return rows.map((row) => row.id as ThreadId);
   }
 
   /** Set or clear the thread's deadline (issue #21); canonical UTC ISO text or `undefined`. */
@@ -499,9 +588,16 @@ function toThread(row: ThreadRow): Thread {
     kind: row.kind,
     channel: row.channel,
     ...(row.external_key !== null ? { externalKey: row.external_key } : {}),
+    ...(row.channel_connection_id ? { channelConnectionId: row.channel_connection_id } : {}),
+    ...(row.binding_generation ? { bindingGeneration: row.binding_generation } : {}),
     title: row.title,
     turnBudget: row.turn_budget,
     status: row.status,
+    ...(row.pause_reason ? { pauseReason: row.pause_reason } : {}),
+    ...(row.pause_reason && row.paused_seq != null ? { pausedSeq: row.paused_seq } : {}),
+    ...(row.pause_reason && row.paused_at ? { pausedAt: row.paused_at } : {}),
+    ...(row.resume_at ? { resumeAt: row.resume_at } : {}),
+    ...(row.budget_reset_seq ? { budgetResetSeq: row.budget_reset_seq } : {}),
     ...(row.owner_bot_id ? { ownerBotId: row.owner_bot_id as BotId } : {}),
     ...(row.deadline ? { deadline: row.deadline } : {}),
     ...(row.opened_by ? { sideChatActor: row.opened_by } : {}),

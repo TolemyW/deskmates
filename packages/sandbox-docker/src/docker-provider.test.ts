@@ -44,6 +44,8 @@ interface Stub {
    * no published ports until it is started. `POST /containers/proxy1/start` flips it.
    */
   proxyStopped?: boolean;
+  /** No managed proxy exists until the provider creates one; it then carries the create labels. */
+  proxyMissing?: boolean;
   /** The proxy's address on the workspace network; a connect with an `IPAMConfig` moves it. */
   proxyIp?: string;
   /** The daemon ignores a requested address (it is taken), as a real one answers with 403. */
@@ -63,6 +65,7 @@ function stubClient(client: DockerClient, stub: Stub): Call[] {
   let proxyWorkspace = "ws1";
   let proxyRunning = stub.proxyStopped !== true;
   let proxyIp = stub.proxyIp ?? "172.31.0.2";
+  let createdProxyLabels: Record<string, string> | undefined;
   const patch = {
     expect: async (method: string, path: string, body?: unknown) => {
       calls.push({ method, path, body });
@@ -76,14 +79,19 @@ function stubClient(client: DockerClient, stub: Stub): Call[] {
         path.startsWith("/containers/json") &&
         decodeURIComponent(path).includes(EGRESS_PROXY_ROLE)
       ) {
+        if (stub.proxyMissing && createdProxyLabels === undefined) return { status: 200, json: [] };
         return {
           status: 200,
           json: [
-            summary("proxy1", proxyRunning ? "running" : "exited", {
-              [WORKSPACE_LABEL]: proxyWorkspace,
-              [MANAGED_LABEL]: "true",
-              [ROLE_LABEL]: EGRESS_PROXY_ROLE,
-            }),
+            summary(
+              "proxy1",
+              proxyRunning ? "running" : "exited",
+              createdProxyLabels ?? {
+                [WORKSPACE_LABEL]: proxyWorkspace,
+                [MANAGED_LABEL]: "true",
+                [ROLE_LABEL]: EGRESS_PROXY_ROLE,
+              },
+            ),
           ],
         };
       }
@@ -98,7 +106,7 @@ function stubClient(client: DockerClient, stub: Stub): Call[] {
                 "DESKMATES_HOST_FALLBACK_IP=172.31.0.1",
                 ...(stub.proxyEnv ?? []),
               ],
-              Labels: managedLabels(proxyWorkspace),
+              Labels: createdProxyLabels ?? managedLabels(proxyWorkspace),
             },
             // A stopped container has no address and no published port until Docker starts it.
             NetworkSettings: {
@@ -151,8 +159,8 @@ function stubClient(client: DockerClient, stub: Stub): Call[] {
         return { status: 204, body: "" };
       }
       if (method === "POST" && path.startsWith("/containers/create?name=deskmates-egress-")) {
-        proxyWorkspace =
-          (body as { Labels: Record<string, string> }).Labels[WORKSPACE_LABEL] ?? "ws1";
+        createdProxyLabels = (body as { Labels: Record<string, string> }).Labels;
+        proxyWorkspace = createdProxyLabels[WORKSPACE_LABEL] ?? "ws1";
         return { status: 201, body: JSON.stringify({ Id: "proxy1" }) };
       }
       if (method === "DELETE" && path.startsWith("/networks/")) {
@@ -447,6 +455,20 @@ describe("DockerProvider readiness wait (M2)", () => {
     const unlimited = await hostConfigOf({});
     expect(unlimited).not.toHaveProperty("Memory");
     expect(unlimited).not.toHaveProperty("NanoCpus");
+  });
+
+  it("create runs the workspace as the image's root user: no User on the container", async () => {
+    // Issue #3 B: bot tools run as root with no capabilities, so a file of another uid in /work is
+    // read-only to them (no CAP_DAC_OVERRIDE) and cannot be chowned back (no CAP_CHOWN). Whatever
+    // the platform writes there must therefore be written by root.
+    const p = newProvider();
+    const calls = stubCreate(p, () => "healthy");
+    await p.create(spec);
+    const create = calls.find((c) => c.path.startsWith("/containers/create?name=deskmates-ws-"));
+    expect(create?.body).not.toHaveProperty("User");
+    expect((create?.body as { HostConfig: Record<string, unknown> }).HostConfig).not.toHaveProperty(
+      "UsernsMode",
+    );
   });
 
   it("create fails with reason not_ready when the container never becomes healthy", async () => {
@@ -1162,6 +1184,92 @@ describe("DockerProvider.exec: a broken stream is an error, not truncated output
     });
   }
 
+  it("killRun kills the processes carrying the run marker, and refuses what is not a run id (ADR-0029 decision 4)", async () => {
+    const p = newProvider();
+    const calls = stubClient(p.client, {
+      expect: (_m, path) => {
+        if (path.endsWith("/exec")) return { Id: "exec-1" };
+        if (path === "/exec/exec-1/json") return { Running: false, ExitCode: 0 };
+        throw new Error(`unexpected ${path}`);
+      },
+      hijack: () => {
+        const socket = new PassThrough();
+        setImmediate(() => socket.end());
+        return { socket: socket as unknown as Socket, head: Buffer.alloc(0) };
+      },
+    });
+    await p.killRun(handle, "run_abc-123");
+    const created = calls.find((c) => c.path === "/containers/c1/exec");
+    const cmd = (created?.body as { Cmd: string[] }).Cmd;
+    // The marker and the run id are arguments, never interpolated into the script.
+    expect(cmd.slice(0, 2)).toEqual(["/bin/sh", "-c"]);
+    expect(cmd[2]).toContain('grep -qx "$0=$1"');
+    expect(cmd[2]).toContain('run-supervisor.py stop "$0" "$1"');
+    expect(cmd.slice(3)).toEqual(["DESKMATES_RUN_ID", "run_abc-123"]);
+    await expect(p.killRun(handle, "run; rm -rf /")).rejects.toThrow(/not a run id/);
+  });
+
+  it("reports a supervisor cleanup failure instead of confirming a kill", async () => {
+    const p = newProvider();
+    stubClient(p.client, {
+      expect: (_m, path) => {
+        if (path.endsWith("/exec")) return { Id: "exec-1" };
+        if (path === "/exec/exec-1/json") return { Running: false, ExitCode: 125 };
+        throw new Error(`unexpected ${path}`);
+      },
+      request: () => ({ status: 200, body: "{}" }),
+      hijack: () => {
+        const socket = new PassThrough();
+        setImmediate(() => socket.end());
+        return { socket: socket as unknown as Socket, head: Buffer.alloc(0) };
+      },
+    });
+    await expect(p.killRun(handle, "run_1")).rejects.toThrow(/cleanup not confirmed/);
+  });
+
+  it("every sidecar exec can carry the run marker in its environment", async () => {
+    const p = newProvider();
+    const calls = stubClient(p.client, {
+      expect: (_m, path) => {
+        if (path.endsWith("/exec")) return { Id: "exec-1" };
+        if (path === "/exec/exec-1/json") return { Running: false, ExitCode: 0 };
+        throw new Error(`unexpected ${path}`);
+      },
+      hijack: () => {
+        const socket = new PassThrough();
+        setImmediate(() => socket.end());
+        return { socket: socket as unknown as Socket, head: Buffer.alloc(0) };
+      },
+    });
+    await p.exec(handle, { cmd: ["deskmates-sidecar", "run"], env: { DESKMATES_RUN_ID: "run_1" } });
+    const created = calls.find((c) => c.path === "/containers/c1/exec");
+    expect((created?.body as { Env: string[] }).Env).toContain("DESKMATES_RUN_ID=run_1");
+  });
+
+  it("an exec runs as the container's root user, so what it writes in /work is root-owned", async () => {
+    // Issue #3 B: uploads, memory edits, renames and every other file the Gateway places in the
+    // workspace arrive through an exec (`deskmates-sidecar file-write` and its siblings). An exec
+    // with a `User` would leave files the bots, root without capabilities, cannot change.
+    const p = newProvider();
+    const calls = stubClient(p.client, {
+      expect: (_m, path) => {
+        if (path.endsWith("/exec")) return { Id: "exec-1" };
+        if (path === "/exec/exec-1/json") return { Running: false, ExitCode: 0 };
+        throw new Error(`unexpected ${path}`);
+      },
+      hijack: () => {
+        const socket = new PassThrough();
+        setImmediate(() => socket.end());
+        return { socket: socket as unknown as Socket, head: Buffer.alloc(0) };
+      },
+    });
+    await p.exec(handle, { cmd: ["deskmates-sidecar", "file-write"], cwd: "/work" });
+    const created = calls.find((c) => c.path === "/containers/c1/exec");
+    expect(created?.body).toMatchObject({ Cmd: ["deskmates-sidecar", "file-write"] });
+    expect(created?.body).not.toHaveProperty("User");
+    expect(created?.body).not.toHaveProperty("Privileged");
+  });
+
   it("a clean stream still returns stdout and the exit code", async () => {
     const p = newProvider();
     stubExec(p, (s) => {
@@ -1178,7 +1286,13 @@ describe("DockerProvider.exec: a broken stream is an error, not truncated output
 
   it("a socket error mid-stream throws instead of reporting a successful exit code", async () => {
     const p = newProvider();
-    stubExec(p, (s) => {
+    let cleaned = false;
+    stubExec(p, (s, nth) => {
+      if (nth > 0) {
+        cleaned = true;
+        s.end();
+        return;
+      }
       s.write(encodeDockerFrame(1, "first half\n"));
       s.destroy(new Error("ECONNRESET from the daemon"));
     });
@@ -1190,12 +1304,17 @@ describe("DockerProvider.exec: a broken stream is an error, not truncated output
     }
     expect(isDeskmatesError(err) && err.code).toBe("sandbox_unavailable");
     expect(isDeskmatesError(err) && err.details.reason).toBe("stream_error");
+    expect(cleaned).toBe(true);
   });
 
   it("bytes left over from a partial frame throw: the output would be truncated", async () => {
     const p = newProvider();
     const frame = encodeDockerFrame(1, "abcdefghij");
-    stubExec(p, (s) => {
+    stubExec(p, (s, nth) => {
+      if (nth > 0) {
+        s.end();
+        return;
+      }
       s.write(frame.subarray(0, 12));
       s.end();
     });
@@ -1519,4 +1638,66 @@ describe("DockerProvider.attach: a proxy that lost its pinned address is moved b
     });
     expect(networkCalls(calls).at(-1)).toMatchObject({ op: "connect", Container: "c1" });
   });
+});
+
+// #63 M10: `attach` recreates a missing proxy (and a missing workspace network). Without the
+// owner label on what it recreates, every later ownership check refuses the workspace:
+// preflight, restart and the image upgrade for a named tenant, permanent deletion for any.
+describe("DockerProvider.attach: a repaired proxy and network keep the owning tenant", () => {
+  it.each(["tnt_a", "tnt_default"])(
+    "labels them for %s so preflight and permanent deletion still accept the workspace",
+    async (tenant) => {
+      const workspaceLabels = { ...managedLabels("ws1"), [TENANT_LABEL]: tenant };
+      const createdBody = (prefix: string) =>
+        calls.find((c) => c.method === "POST" && c.path.startsWith(prefix))?.body as
+          | { Name?: string; Labels: Record<string, string> }
+          | undefined;
+      const p = newProvider();
+      const calls: Call[] = stubClient(p.client, {
+        proxyMissing: true,
+        expect: (_method, path) => {
+          if (path.startsWith(LIST_PREFIX)) {
+            const proxy = createdBody("/containers/create?name=deskmates-egress-");
+            return [
+              summary("c1", "running", workspaceLabels),
+              ...(proxy === undefined ? [] : [summary("proxy1", "running", proxy.Labels)]),
+            ];
+          }
+          if (path === "/containers/c1/json")
+            return { ...inspectOf("c1"), Config: { Env: [], Labels: workspaceLabels } };
+          throw new Error(`unexpected ${path}`);
+        },
+        request: (method, path) => {
+          if (method === "GET" && path.startsWith("/images/"))
+            return { status: 200, body: JSON.stringify({ Id: "sha256:present" }) };
+          if (method === "GET" && path.startsWith("/volumes/")) return { status: 404, body: "" };
+          return { status: 204, body: "" };
+        },
+      });
+
+      expect((await p.attach(WS, tenant))?.providerRef).toBe("c1");
+
+      expect(createdBody("/containers/create?name=deskmates-egress-")?.Labels[TENANT_LABEL]).toBe(
+        tenant,
+      );
+      const network = calls.find(
+        (c) =>
+          c.path === "/networks/create" && (c.body as { Name: string }).Name === networkName(WS),
+      )?.body as { Labels: Record<string, string> };
+      expect(network.Labels[TENANT_LABEL]).toBe(tenant);
+      await p.preflight({
+        workspaceId: WS,
+        tenantId: tenant,
+        image: "workspace",
+        egressAllowlist: [],
+        env: {},
+        ports: [],
+        volumes: {},
+      });
+      await p.permanentlyDelete(WS, tenant);
+      const removed = calls.filter((c) => c.method === "DELETE").map((c) => c.path);
+      expect(removed).toContain("/containers/proxy1?v=false&force=true");
+      expect(removed).toContain(`/networks/${networkName(WS)}`);
+    },
+  );
 });

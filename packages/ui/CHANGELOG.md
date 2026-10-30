@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Restore the chat's floating frosted latest control and soft bottom fade without a layout
+  strip; show the transcript scrollbar while scrolling or using keyboard focus.
+
+- Add `PageHeader`, the shared product-page title, description and primary-action composition.
 - Breaking: `BrandMark` renders the Deskmates icon as a 1:1 `<img>` of a cropped 256 px PNG
   in its own colors, no longer an inline `<svg>` with a 784:628 viewBox that followed
   `currentColor`; consumers styling `.brand-mark > svg` or relying on text color must
@@ -50,3 +54,14 @@
   mention composer; expose metric-card layout classes and align pill icons inline.
 - Hide the transcript scrollbar on narrow and touch-first screens while preserving
   scrolling, keyboard access and the return-to-latest control.
+
+### Section navigation
+
+- Add `SectionTabs` with content-sized, internally scrollable labels, keyboard
+  navigation and optional lazy-retained panels.
+- Add `TabNavigation` for real route links with the same overflow contract.
+
+- Add ChoiceGroup for consistent filters and display modes, with owned standard sizing.
+- Document selection/navigation requirements and enforce cross-page style consistency.
+
+- Add HelpTip and ControlPopover for compact optional guidance and secondary controls.

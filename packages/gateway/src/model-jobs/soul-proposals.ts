@@ -170,7 +170,7 @@ export class SoulProposals {
       const run = this.ctx.runs.create({
         botId: bot.id,
         lane: "background",
-        triggerKind: "cron",
+        triggerKind: "model_job",
         triggerRef: `${SOUL_PROPOSAL}:${id}`,
         triggerPayload: { prompt: "" },
         config: {

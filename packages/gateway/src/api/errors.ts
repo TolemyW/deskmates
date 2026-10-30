@@ -36,6 +36,11 @@ const STATUS_BY_CODE: Readonly<Record<DeskmatesErrorCode, number>> = {
   memory_rule_refused: 403,
   // A Web post to a channel-owned thread: the caller is known, the surface is the wrong one.
   channel_thread_read_only: 403,
+  // ADR-0047: the identity is connected elsewhere, a relink found another identity, or a fenced
+  // channel handle was used; each conflicts with stored state.
+  channel_identity_in_use: 409,
+  channel_identity_mismatch: 409,
+  channel_connection_stale: 409,
   // The connector is the Gateway's upstream: an unreachable one or a malformed answer is a bad
   // gateway, not the caller's fault.
   connector_unavailable: 502,
@@ -48,6 +53,8 @@ const STATUS_BY_CODE: Readonly<Record<DeskmatesErrorCode, number>> = {
   connector_hash_mismatch: 409,
   // The look/OCR or speech service is the Gateway's upstream (ADR-0040).
   operation_unavailable: 502,
+  // The Grafana behind the analytics relay (ADR-0046 amendment 1 decision 14).
+  analytics_unavailable: 502,
   // Integration runtime (ADR-0013); the table lives with the codes in contracts.
   ...INTEGRATION_ERROR_STATUS,
 };

@@ -1,0 +1,8 @@
+[
+  {
+    "id": "navigation",
+    "route": "#/connections/channels",
+    "container": ".connections-screen",
+    "strip": ".connections-screen > .gb-tab-scroll"
+  }
+]

@@ -65,6 +65,22 @@ describe("private-chat handoffs (ADR-0024)", () => {
     expect(ctx.messages.list(busMessage.threadId)).toHaveLength(1);
   });
 
+  // Issue #16: the handoff card and the rail derive their excerpt with `messageExcerpt`.
+  it("derives handoff excerpts without the fence and with collapsed whitespace", () => {
+    const { ctx, chief, run } = setup();
+    const source = ctx.router.postFromRun(
+      run,
+      '```json {"reply": "@chief please\n\n  review"} ```',
+    );
+    // Code is literal (ADR-0056); an explicit message_bot target still hands this body off.
+    postDirectMessage(ctx, run, "chief", source.body, [], source);
+    const inbox = ctx.privateChats.resolve(chief.id);
+    expect(ctx.privateChats.list(inbox.id, "user:one")[0]?.excerpt).toBe(
+      '{"reply": "@chief please review"}',
+    );
+    expect(ctx.privateChats.latest(inbox.id)?.excerpt).toBe('{"reply": "@chief please review"}');
+  });
+
   it("tracks multiple coalesced requests through the single actual run and scopes read state by operator", () => {
     const { ctx, chief, run } = setup();
     ctx.router.postFromRun(run, "@chief first request");
@@ -139,7 +155,8 @@ describe("private-chat handoffs (ADR-0024)", () => {
     const { ctx, chief, run, chat, ws } = setup();
     // The turn budget is off by default (ADR-0005 amendment 5 decision 42); a workspace turns it on.
     if (limit === "budget") ctx.limits.set(ws.id, { turnBudget: 1 }, "user:admin");
-    if (limit === "paused") ctx.threads.setStatus(chat.id, "paused");
+    if (limit === "paused")
+      ctx.threads.pause(chat.id, { reason: "turn_budget", seq: 0, at: new Date().toISOString() });
     const trigger =
       limit === "relay"
         ? ctx.messages.append({
@@ -162,7 +179,11 @@ describe("private-chat handoffs (ADR-0024)", () => {
   it("does not report delivery when the destination bus is paused, even if an older wake exists", () => {
     const { ctx, chief, run, chat } = setup();
     const first = postDirectMessage(ctx, run, "chief", "first", []);
-    ctx.threads.setStatus(first.message.threadId, "paused");
+    ctx.threads.pause(first.message.threadId, {
+      reason: "turn_budget",
+      seq: 0,
+      at: new Date().toISOString(),
+    });
     ctx.router.postFromRun(run, "@chief another request");
     expect(ctx.privateChats.list(ctx.privateChats.resolve(chief.id).id, "web")).toHaveLength(1);
     expect(ctx.messages.list(chat.id).at(-1)?.body).toContain("was not delivered");

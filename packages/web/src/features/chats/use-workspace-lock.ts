@@ -8,10 +8,10 @@
 // on, so it reads the id from a ref and opens once per mount.
 //
 // The screen itself is never an address: taking over grants a lease, and the holder's screen
-// streams through the Gateway's screen proxy with a one-use ticket (`openTakeoverScreen`), which
+// streams through the Gateway's screen proxy with a one-use region or overview ticket, which
 // ends when the lease does (ADR-0022 amendment 1, C7). `screenOpen` says whether to show it.
 
-import type { BrowserLock, WorkspaceId } from "@deskmates/contracts";
+import type { BrowserLock, WorkspaceContainerState, WorkspaceId } from "@deskmates/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { subscribeEvents } from "../../api/events.js";
@@ -22,17 +22,25 @@ export interface WorkspaceLockState {
   lock: BrowserLock | null;
   /** False until the workspace container exists and publishes the shared screen. */
   hasScreen: boolean;
+  /**
+   * Whether the workspace container exists, from the same fetch (issue #15); undefined until it
+   * settles and from an older Gateway. The composer says what a first message will do.
+   */
+  container: WorkspaceContainerState | undefined;
   /** Whether the held screen is shown; it closes when the hold ends. */
   screenOpen: boolean;
   held: boolean;
+  /** True only when this signed-in principal owns the current human hold. */
+  heldByMe: boolean;
   /** False until `GET /api/workspaces/:id` has settled; the controls stay hidden until then. */
   loaded: boolean;
   /** An action is in flight; the buttons stay disabled so a double click cannot double post. */
   busy: boolean;
   error: string | undefined;
   takeOver: () => void;
-  /** Show the screen of a hold that already exists (after a reload, or after closing it). */
+  /** Show the screen of a hold that already exists after a reload. */
   openScreen: () => void;
+  /** Closing control hands the browser back; the dialog never leaves a hidden hold behind. */
   closeScreen: () => void;
   handBack: () => void;
 }
@@ -43,7 +51,10 @@ export function useWorkspaceLock(
 ): WorkspaceLockState {
   const [lock, setLock] = useState<BrowserLock | null>(null);
   const [hasScreen, setHasScreen] = useState(false);
+  const [container, setContainer] = useState<WorkspaceContainerState>();
   const [screenOpen, setScreenOpen] = useState(false);
+  const screenOpenRef = useRef(false);
+  const [heldByMe, setHeldByMe] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -80,9 +91,14 @@ export function useWorkspaceLock(
           if (lockRevision.current === lockRevisionAtStart) {
             lockRef.current = view.browserLock;
             setLock(view.browserLock);
-            if (view.browserLock === null) setScreenOpen(false);
+            setHeldByMe(view.browserLockHeldByMe === true);
+            if (view.browserLock === null) {
+              screenOpenRef.current = false;
+              setScreenOpen(false);
+            }
           }
           setHasScreen(view.takeoverScreen);
+          setContainer(view.container);
           setError(undefined);
         })
         .catch((err: unknown) => {
@@ -114,7 +130,10 @@ export function useWorkspaceLock(
     lockRef.current = null;
     setLock(null);
     setHasScreen(false);
+    setContainer(undefined);
     setScreenOpen(false);
+    screenOpenRef.current = false;
+    setHeldByMe(false);
     setLoaded(false);
     setError(undefined);
     if (workspaceId !== undefined) refetch(workspaceId);
@@ -130,8 +149,20 @@ export function useWorkspaceLock(
         lockRevision.current += 1;
         lockRef.current = event.browserLock;
         setLock(event.browserLock);
+        if (event.browserLock === null) setHeldByMe(false);
+        else {
+          // The frame intentionally carries no principal. Refresh the identity-bound boolean so
+          // a persistent global banner learns that this tab's person is the holder after another
+          // hook (for example ChatPane) took the lease.
+          setHeldByMe(false);
+          const id = workspaceRef.current;
+          if (id !== undefined) refetch(id);
+        }
         // The Gateway has already closed the proxied stream; drop the view with it.
-        if (event.browserLock === null) setScreenOpen(false);
+        if (event.browserLock === null) {
+          screenOpenRef.current = false;
+          setScreenOpen(false);
+        }
       },
       onReconnect: () => {
         const id = workspaceRef.current;
@@ -142,7 +173,7 @@ export function useWorkspaceLock(
   }, [refetch]);
 
   const takeOver = useCallback(() => {
-    if (workspaceId === undefined) return;
+    if (workspaceId === undefined || !hasScreen) return;
     const action = ++actionRevision.current;
     const lockRevisionAtStart = lockRevision.current;
     setBusy(true);
@@ -160,7 +191,9 @@ export function useWorkspaceLock(
         if (lockRevision.current === lockRevisionAtStart) lockRevision.current += 1;
         lockRef.current = result.lock;
         setLock(result.lock);
+        setHeldByMe(true);
         // The lease is granted; the screen opens through the proxy.
+        screenOpenRef.current = true;
         setScreenOpen(true);
       })
       .catch((err: unknown) => {
@@ -169,12 +202,14 @@ export function useWorkspaceLock(
       .finally(() => {
         if (mounted.current && action === actionRevision.current) setBusy(false);
       });
-  }, [workspaceId, api]);
+  }, [workspaceId, hasScreen, api]);
 
   const openScreen = useCallback(() => {
-    if (lockRef.current !== null) setScreenOpen(true);
+    if (lockRef.current !== null) {
+      screenOpenRef.current = true;
+      setScreenOpen(true);
+    }
   }, []);
-  const closeScreen = useCallback(() => setScreenOpen(false), []);
 
   const handBack = useCallback(() => {
     if (workspaceId === undefined) return;
@@ -195,6 +230,8 @@ export function useWorkspaceLock(
         lockRevision.current += 1;
         lockRef.current = null;
         setLock(null);
+        setHeldByMe(false);
+        screenOpenRef.current = false;
         setScreenOpen(false);
       })
       .catch((err: unknown) => {
@@ -205,11 +242,30 @@ export function useWorkspaceLock(
       });
   }, [workspaceId, api]);
 
+  const closeScreen = handBack;
+
+  // A route change or parent unmount cannot strand a control session. Handback is idempotent;
+  // the normal close path may race this cleanup safely.
+  useEffect(
+    () => () => {
+      const id = workspaceRef.current;
+      if (id !== undefined && screenOpenRef.current) {
+        // Navigation is already committed, so there is nowhere useful to surface a cleanup
+        // failure. The global hold banner still exposes the lease if the Gateway remains
+        // reachable and the release did not take effect.
+        void api.handBack(id).catch(() => undefined);
+      }
+    },
+    [api],
+  );
+
   return {
     lock,
     hasScreen,
+    container,
     screenOpen: screenOpen && lock !== null,
     held: lock !== null,
+    heldByMe,
     loaded,
     busy,
     error,

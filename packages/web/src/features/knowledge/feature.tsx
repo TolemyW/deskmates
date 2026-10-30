@@ -7,6 +7,7 @@ import { knowledgeHref, routes } from "./route.js";
 export const feature = defineFeature(routes, {
   nav: {
     group: "resources",
+    audience: "tune",
     order: 20,
     icon: <BookOpen size={18} />,
     label: "app.nav.knowledge",

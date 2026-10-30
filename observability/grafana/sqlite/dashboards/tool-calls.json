@@ -1,0 +1,1019 @@
+{
+  "uid": "deskmates-tool-calls",
+  "title": "Tool calls",
+  "description": "Tool call volume, error rate and duration across every workspace, the tools that fail most, and every bot's calls. Read from the obs model (ADR-0046).",
+  "tags": [
+    "deskmates"
+  ],
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "timezone": "browser",
+  "links": [
+    {
+      "title": "Deskmates dashboards",
+      "type": "dashboards",
+      "tags": [
+        "deskmates"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Overview",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Tool calls",
+      "description": "Tool calls made in the time range.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(*) AS calls FROM tool_calls WHERE called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}'",
+          "queryText": "SELECT count(*) AS calls FROM tool_calls WHERE called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Tool error rate",
+      "description": "Calls whose result was an error, as a share of calls that got a result.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT 100.0 * sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) / nullif(count(*), 0) AS error_rate FROM tool_calls WHERE outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}'",
+          "queryText": "SELECT 100.0 * sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) / nullif(count(*), 0) AS error_rate FROM tool_calls WHERE outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Calls without a result",
+      "description": "Calls whose run ended, or is still going, without a result for them.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(*) AS no_result FROM tool_calls WHERE outcome = 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}'",
+          "queryText": "SELECT count(*) AS no_result FROM tool_calls WHERE outcome = 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Median duration",
+      "description": "Median time from a call to its result.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT p50 AS median_ms FROM (SELECT count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN duration_ms END) AS p50 FROM (SELECT duration_ms, row_number() OVER (ORDER BY duration_ms) AS pct_rn, count(*) OVER () AS pct_n FROM (SELECT duration_ms FROM tool_calls WHERE outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked) q",
+          "queryText": "SELECT p50 AS median_ms FROM (SELECT count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN duration_ms END) AS p50 FROM (SELECT duration_ms, row_number() OVER (ORDER BY duration_ms) AS pct_rn, count(*) OVER () AS pct_n FROM (SELECT duration_ms FROM tool_calls WHERE outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked) q",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "p95 duration",
+      "description": "95 % of calls got their result within this time.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT p95 AS p95_ms FROM (SELECT count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95 FROM (SELECT duration_ms, row_number() OVER (ORDER BY duration_ms) AS pct_rn, count(*) OVER () AS pct_n FROM (SELECT duration_ms FROM tool_calls WHERE outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked) q",
+          "queryText": "SELECT p95 AS p95_ms FROM (SELECT count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95 FROM (SELECT duration_ms, row_number() OVER (ORDER BY duration_ms) AS pct_rn, count(*) OVER () AS pct_n FROM (SELECT duration_ms FROM tool_calls WHERE outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked) q",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Bots calling tools",
+      "description": "Bots that made at least one tool call in the time range.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(DISTINCT bot_id) AS bots FROM tool_calls WHERE called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}'",
+          "queryText": "SELECT count(DISTINCT bot_id) AS bots FROM tool_calls WHERE called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Over time",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Tool calls per hour by outcome",
+      "description": "Tool calls per hour, stacked by ok, error and no result.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', called_at) AS time, outcome, count(*) AS calls FROM tool_calls WHERE called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "queryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', called_at) AS time, outcome, count(*) AS calls FROM tool_calls WHERE called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Error rate per hour",
+      "description": "Errors as a share of the calls that got a result, per hour.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', called_at) AS time, 100.0 * sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) / nullif(count(*), 0) AS error_rate FROM tool_calls WHERE outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}' GROUP BY 1 ORDER BY 1",
+          "queryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', called_at) AS time, 100.0 * sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) / nullif(count(*), 0) AS error_rate FROM tool_calls WHERE outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}' GROUP BY 1 ORDER BY 1",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "p95 duration per hour by tool family",
+      "description": "The 95th percentile of call duration per hour, one line per MCP server; tools of the agent loop itself are built-in.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT time, family, p95 FROM (SELECT time, family, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95 FROM (SELECT time, family, duration_ms, row_number() OVER (PARTITION BY time, family ORDER BY duration_ms) AS pct_rn, count(*) OVER (PARTITION BY time, family) AS pct_n FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z', called_at) AS time, coalesce((CASE WHEN substr(tool_name, 1, 5) = 'mcp__' AND instr(substr(substr(tool_name, 6), 2), '__') > 0 THEN substr(substr(tool_name, 6), 1, instr(substr(substr(tool_name, 6), 2), '__')) END), 'built-in') AS family, duration_ms FROM tool_calls WHERE tool_name IS NOT NULL AND outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked GROUP BY time, family) q ORDER BY time, family",
+          "queryText": "SELECT time, family, p95 FROM (SELECT time, family, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95 FROM (SELECT time, family, duration_ms, row_number() OVER (PARTITION BY time, family ORDER BY duration_ms) AS pct_rn, count(*) OVER (PARTITION BY time, family) AS pct_n FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z', called_at) AS time, coalesce((CASE WHEN substr(tool_name, 1, 5) = 'mcp__' AND instr(substr(substr(tool_name, 6), 2), '__') > 0 THEN substr(substr(tool_name, 6), 1, instr(substr(substr(tool_name, 6), 2), '__')) END), 'built-in') AS family, duration_ms FROM tool_calls WHERE tool_name IS NOT NULL AND outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked GROUP BY time, family) q ORDER BY time, family",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "row",
+      "title": "Tools",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "panels": []
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Top failing tools",
+      "description": "The tools with the most errors in the time range, their error rate and the runs affected.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT tool_name, sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS errors, count(*) AS calls, 100.0 * sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) / nullif(sum(CASE WHEN outcome <> 'no_result' THEN 1 ELSE 0 END), 0) AS error_rate, count(DISTINCT CASE WHEN outcome = 'error' THEN run_id END) AS runs, max(CASE WHEN outcome = 'error' THEN called_at END) AS last_error FROM tool_calls WHERE tool_name IS NOT NULL AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}' GROUP BY tool_name HAVING sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) > 0 ORDER BY errors DESC, tool_name LIMIT 20",
+          "queryText": "SELECT tool_name, sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS errors, count(*) AS calls, 100.0 * sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) / nullif(sum(CASE WHEN outcome <> 'no_result' THEN 1 ELSE 0 END), 0) AS error_rate, count(DISTINCT CASE WHEN outcome = 'error' THEN run_id END) AS runs, max(CASE WHEN outcome = 'error' THEN called_at END) AS last_error FROM tool_calls WHERE tool_name IS NOT NULL AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}' GROUP BY tool_name HAVING sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) > 0 ORDER BY errors DESC, tool_name LIMIT 20",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Tool families",
+      "description": "Calls and errors per MCP server; tools of the agent loop itself are built-in.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT coalesce((CASE WHEN substr(tool_name, 1, 5) = 'mcp__' AND instr(substr(substr(tool_name, 6), 2), '__') > 0 THEN substr(substr(tool_name, 6), 1, instr(substr(substr(tool_name, 6), 2), '__')) END), 'built-in') AS family, count(*) AS calls, sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS errors FROM tool_calls WHERE tool_name IS NOT NULL AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}' GROUP BY 1 ORDER BY calls DESC, family",
+          "queryText": "SELECT coalesce((CASE WHEN substr(tool_name, 1, 5) = 'mcp__' AND instr(substr(substr(tool_name, 6), 2), '__') > 0 THEN substr(substr(tool_name, 6), 1, instr(substr(substr(tool_name, 6), 2), '__')) END), 'built-in') AS family, count(*) AS calls, sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS errors FROM tool_calls WHERE tool_name IS NOT NULL AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}' GROUP BY 1 ORDER BY calls DESC, family",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "Tools",
+      "description": "Per tool: calls, errors, calls without a result, error rate and the median, p95 and longest time from call to result.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT t.tool_name, t.family, t.calls, t.errors, t.no_result, 100.0 * t.errors / nullif(t.calls - t.no_result, 0) AS error_rate, q.p50 AS p50_ms, q.p95 AS p95_ms, t.max_duration_ms FROM (SELECT tool_name, coalesce((CASE WHEN substr(tool_name, 1, 5) = 'mcp__' AND instr(substr(substr(tool_name, 6), 2), '__') > 0 THEN substr(substr(tool_name, 6), 1, instr(substr(substr(tool_name, 6), 2), '__')) END), 'built-in') AS family, count(*) AS calls, sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS errors, sum(CASE WHEN outcome = 'no_result' THEN 1 ELSE 0 END) AS no_result, max(duration_ms) AS max_duration_ms FROM tool_calls WHERE tool_name IS NOT NULL AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}' GROUP BY tool_name) t LEFT JOIN (SELECT tool_name, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN duration_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95 FROM (SELECT tool_name, duration_ms, row_number() OVER (PARTITION BY tool_name ORDER BY duration_ms) AS pct_rn, count(*) OVER (PARTITION BY tool_name) AS pct_n FROM (SELECT tool_name, duration_ms FROM tool_calls WHERE tool_name IS NOT NULL AND outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked GROUP BY tool_name) q ON q.tool_name = t.tool_name ORDER BY t.calls DESC, t.tool_name LIMIT 100",
+          "queryText": "SELECT t.tool_name, t.family, t.calls, t.errors, t.no_result, 100.0 * t.errors / nullif(t.calls - t.no_result, 0) AS error_rate, q.p50 AS p50_ms, q.p95 AS p95_ms, t.max_duration_ms FROM (SELECT tool_name, coalesce((CASE WHEN substr(tool_name, 1, 5) = 'mcp__' AND instr(substr(substr(tool_name, 6), 2), '__') > 0 THEN substr(substr(tool_name, 6), 1, instr(substr(substr(tool_name, 6), 2), '__')) END), 'built-in') AS family, count(*) AS calls, sum(CASE WHEN outcome = 'error' THEN 1 ELSE 0 END) AS errors, sum(CASE WHEN outcome = 'no_result' THEN 1 ELSE 0 END) AS no_result, max(duration_ms) AS max_duration_ms FROM tool_calls WHERE tool_name IS NOT NULL AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}' GROUP BY tool_name) t LEFT JOIN (SELECT tool_name, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN duration_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95 FROM (SELECT tool_name, duration_ms, row_number() OVER (PARTITION BY tool_name ORDER BY duration_ms) AS pct_rn, count(*) OVER (PARTITION BY tool_name) AS pct_n FROM (SELECT tool_name, duration_ms FROM tool_calls WHERE tool_name IS NOT NULL AND outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked GROUP BY tool_name) q ON q.tool_name = t.tool_name ORDER BY t.calls DESC, t.tool_name LIMIT 100",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "max_duration_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "Per bot",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
+      "panels": []
+    },
+    {
+      "id": 17,
+      "type": "table",
+      "title": "Bots",
+      "description": "Per bot: calls, errors, error rate, calls without a result, distinct tools, and the median and p95 duration.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT b.workspace_name, b.bot_name, b.calls, b.errors, 100.0 * b.errors / nullif(b.calls - b.no_result, 0) AS error_rate, b.no_result, b.tools, q.p50 AS p50_ms, q.p95 AS p95_ms FROM (SELECT coalesce(c.bot_id, '') AS bot_key, max(n.workspace_name) AS workspace_name, max(coalesce(n.bot_name, c.bot_id)) AS bot_name, count(*) AS calls, sum(CASE WHEN c.outcome = 'error' THEN 1 ELSE 0 END) AS errors, sum(CASE WHEN c.outcome = 'no_result' THEN 1 ELSE 0 END) AS no_result, count(DISTINCT c.tool_name) AS tools FROM tool_calls c LEFT JOIN runs_named n ON n.run_id = c.run_id WHERE c.called_at >= '${__from:date:iso}' AND c.called_at < '${__to:date:iso}' GROUP BY 1) b LEFT JOIN (SELECT bot_key, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN duration_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95 FROM (SELECT bot_key, duration_ms, row_number() OVER (PARTITION BY bot_key ORDER BY duration_ms) AS pct_rn, count(*) OVER (PARTITION BY bot_key) AS pct_n FROM (SELECT coalesce(bot_id, '') AS bot_key, duration_ms FROM tool_calls WHERE outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked GROUP BY bot_key) q ON q.bot_key = b.bot_key ORDER BY b.calls DESC, b.bot_name",
+          "queryText": "SELECT b.workspace_name, b.bot_name, b.calls, b.errors, 100.0 * b.errors / nullif(b.calls - b.no_result, 0) AS error_rate, b.no_result, b.tools, q.p50 AS p50_ms, q.p95 AS p95_ms FROM (SELECT coalesce(c.bot_id, '') AS bot_key, max(n.workspace_name) AS workspace_name, max(coalesce(n.bot_name, c.bot_id)) AS bot_name, count(*) AS calls, sum(CASE WHEN c.outcome = 'error' THEN 1 ELSE 0 END) AS errors, sum(CASE WHEN c.outcome = 'no_result' THEN 1 ELSE 0 END) AS no_result, count(DISTINCT c.tool_name) AS tools FROM tool_calls c LEFT JOIN runs_named n ON n.run_id = c.run_id WHERE c.called_at >= '${__from:date:iso}' AND c.called_at < '${__to:date:iso}' GROUP BY 1) b LEFT JOIN (SELECT bot_key, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN duration_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN duration_ms END) AS p95 FROM (SELECT bot_key, duration_ms, row_number() OVER (PARTITION BY bot_key ORDER BY duration_ms) AS pct_rn, count(*) OVER (PARTITION BY bot_key) AS pct_n FROM (SELECT coalesce(bot_id, '') AS bot_key, duration_ms FROM tool_calls WHERE outcome <> 'no_result' AND called_at >= '${__from:date:iso}' AND called_at < '${__to:date:iso}') pct_src WHERE duration_ms IS NOT NULL) pct_ranked GROUP BY bot_key) q ON q.bot_key = b.bot_key ORDER BY b.calls DESC, b.bot_name",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error_rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 18,
+      "type": "table",
+      "title": "Tool errors by bot",
+      "description": "Which bot's calls of which tool failed, and in how many runs.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 53
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT n.workspace_name, n.bot_name, c.tool_name, count(*) AS errors, count(DISTINCT c.run_id) AS runs, max(c.called_at) AS last_seen FROM tool_calls c LEFT JOIN runs_named n ON n.run_id = c.run_id WHERE c.outcome = 'error' AND c.called_at >= '${__from:date:iso}' AND c.called_at < '${__to:date:iso}' GROUP BY 1, 2, 3 ORDER BY errors DESC, last_seen DESC LIMIT 50",
+          "queryText": "SELECT n.workspace_name, n.bot_name, c.tool_name, count(*) AS errors, count(DISTINCT c.run_id) AS runs, max(c.called_at) AS last_seen FROM tool_calls c LEFT JOIN runs_named n ON n.run_id = c.run_id WHERE c.outcome = 'error' AND c.called_at >= '${__from:date:iso}' AND c.called_at < '${__to:date:iso}' GROUP BY 1, 2, 3 ORDER BY errors DESC, last_seen DESC LIMIT 50",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 19,
+      "type": "table",
+      "title": "Newest errors",
+      "description": "The newest calls whose result was an error. A run id opens the run view.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 53
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT c.called_at, n.bot_name, c.tool_name, c.duration_ms, n.status AS run_status, c.run_id FROM tool_calls c LEFT JOIN runs_named n ON n.run_id = c.run_id WHERE c.outcome = 'error' AND c.called_at >= '${__from:date:iso}' AND c.called_at < '${__to:date:iso}' ORDER BY c.called_at DESC LIMIT 50",
+          "queryText": "SELECT c.called_at, n.bot_name, c.tool_name, c.duration_ms, n.status AS run_status, c.run_id FROM tool_calls c LEFT JOIN runs_named n ON n.run_id = c.run_id WHERE c.outcome = 'error' AND c.called_at >= '${__from:date:iso}' AND c.called_at < '${__to:date:iso}' ORDER BY c.called_at DESC LIMIT 50",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "duration_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this run",
+                    "url": "/d/deskmates-agent-runs/agent-runs?var-run=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Calls without a result",
+      "description": "The newest calls that never got a result, with the run's status. A run id opens the run view.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 62
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT c.called_at, n.bot_name, c.tool_name, n.status AS run_status, c.run_id FROM tool_calls c LEFT JOIN runs_named n ON n.run_id = c.run_id WHERE c.outcome = 'no_result' AND c.called_at >= '${__from:date:iso}' AND c.called_at < '${__to:date:iso}' ORDER BY c.called_at DESC LIMIT 50",
+          "queryText": "SELECT c.called_at, n.bot_name, c.tool_name, n.status AS run_status, c.run_id FROM tool_calls c LEFT JOIN runs_named n ON n.run_id = c.run_id WHERE c.outcome = 'no_result' AND c.called_at >= '${__from:date:iso}' AND c.called_at < '${__to:date:iso}' ORDER BY c.called_at DESC LIMIT 50",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this run",
+                    "url": "/d/deskmates-agent-runs/agent-runs?var-run=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ]
+}

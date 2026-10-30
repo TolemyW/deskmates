@@ -1,7 +1,7 @@
 # ADR-0032: Workspace monetary budget and separated cost reporting
 
 Date: 2026-10-13
-Status: Proposed (for owner review; implements the owner decisions of 2026-10-13 on issues #61 and #112)
+Status: Accepted (under owner delegation, 2026-10-17, with one change: decisions 1 and 7 name an Owner or Admin of the workspace, as ADR-0022 amendment 6 and the route policy already do, instead of an Admin of the workspace's tenant). Implements the owner decisions of 2026-10-13 on issues #61 and #112. Still pending: the per-run overshoot measurement on a real model (decision 8), and decision 10's follow-ups, which this acceptance does not take.
 Source: issue #61 owner comments "Owner clarification: agent completion and workspace budget
 backstop" and "Final owner decisions: pricing, budget period and continuation" (both 2026-10-13);
 issue #112 reporting contract and the owner's wireframe choice (one page, a 金额 | 用量 toggle).
@@ -25,7 +25,7 @@ at all, which a money budget cannot work with.
 
 1. **A workspace has two optional monetary limits, both off by default.** A weekly limit and a
    cumulative ceiling, in USD, each either absent (no limit) or a positive number. A new
-   workspace has neither. Only an Admin of the workspace's tenant sets or clears them
+   workspace has neither. Only an Owner or Admin of the workspace (ADR-0022 amendment 6) sets or clears them
    (`PUT /api/budgets/:workspaceId`); every change writes a `budget.set` audit row with the
    before and after values in the same transaction. Limits are operator data, not run knobs;
    a park records the limits in force when it happened.
@@ -76,7 +76,7 @@ at all, which a money budget cannot work with.
    holds it. A run with no resumable SDK session cannot be checkpointed and fails with the typed
    error `budget_exhausted`. The open park, its limit and the spend are shown on the Costs page.
 
-7. **Continuation is manual only.** An Admin continues parked work explicitly
+7. **Continuation is manual only.** An Owner or Admin of the workspace continues parked work explicitly
    (`POST /api/budgets/:workspaceId/continue`, all parked runs of the workspace or the listed
    ones); it is refused with `409 budget_exhausted` while the workspace is still exhausted, so a
    continue never re-parks at once. It closes the parks with who and when, writes one
@@ -133,7 +133,7 @@ at all, which a money budget cannot work with.
 
 | Item | Concrete meaning | Test | Metric |
 |---|---|---|---|
-| 1 | No limits on a new workspace (admission admits any spend); PUT sets and clears each limit, rejects zero, negative and non-numbers with 400, is Admin only, and writes one `budget.set` audit row with before and after per change | T0 `packages/gateway/src/budget/budget-store.test.ts`; T1 `packages/gateway/src/api/budget-routes.test.ts` | limit changes per week (audit) |
+| 1 | No limits on a new workspace (admission admits any spend); PUT sets and clears each limit, rejects zero, negative and non-numbers with 400, is Owner or Admin only, and writes one `budget.set` audit row with before and after per change | T0 `packages/gateway/src/budget/budget-store.test.ts`; T1 `packages/gateway/src/api/budget-routes.test.ts` | limit changes per week (audit) |
 | 2 | Week start for Sunday 23:59 UTC is the previous Monday, for Monday 00:00 UTC is that instant; a charge before the boundary leaves the new week's spend at zero and the cumulative unchanged | T0 `packages/gateway/src/budget/budget-week.test.ts`, `budget-store.test.ts` | none |
 | 3 | Charging a run twice with no new usage appends nothing; new usage appends only the difference; unknown tokens charge nothing and are counted; known and estimated are separate columns | T0 `budget-store.test.ts` | charges per run (reported) |
 | 4 | With two configured models the estimate of an unpriced row is the per-category mean of their in-force unit prices, not a mean of request totals; a future-dated price is excluded; an empty price table gives no estimate and the row stays unpriced; null categories stay null | T0 `packages/gateway/src/ledger/price-estimate.test.ts`; T1 `packages/gateway/src/api/cost-routes.test.ts` | estimated share of spend (reported) |

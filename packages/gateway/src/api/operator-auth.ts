@@ -23,6 +23,15 @@ import { bearerToken } from "../model-proxy/model-proxy.js";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
+/**
+ * Route patterns whose browser client cannot send the session's CSRF header: Grafana's own
+ * frontend behind the analytics relay (ADR-0046 amendment 1 decision 13). Their unsafe methods
+ * still need a same-origin `Origin`, and only the root's own session passes them. A fixed list,
+ * so a new route cannot opt out of the CSRF check; `analytics-routes.test.ts` checks it equals
+ * the relay's routes.
+ */
+export const ORIGIN_CHECKED_ROUTES: ReadonlySet<string> = new Set(["/analytics", "/analytics/*"]);
+
 function equalToken(candidate: string | undefined, expected: string): boolean {
   if (candidate === undefined) return false;
   const left = Buffer.from(candidate, "utf8");
@@ -95,16 +104,19 @@ export function registerOperatorAuth(app: FastifyInstance, ctx: GatewayContext):
         : ctx.auth.resolve(sessionToken, selected || undefined);
     if (!sessionToken || !resolved)
       throw new DeskmatesError("token_rejected", "missing or invalid operator credential");
-    // A default password (the root's `admin`) admits only its own change, on `/auth/password`
-    // outside this scope (ADR-0031 decision 8).
+    // A password chosen by somebody else admits only session essentials and its own change, on
+    // `/auth/*` outside this scope (ADR-0031 decision 8, issue #21).
     if (ctx.auth.mustChangePassword(resolved.session))
-      throw new DeskmatesError("forbidden", "change the default password first", {
+      throw new DeskmatesError("forbidden", "change the initial password first", {
         reason: "password_change_required",
       });
     if (!SAFE_METHODS.has(request.method)) {
       if (!originAllowed(request, ctx.auth.config.allowedOrigins))
         throw new DeskmatesError("forbidden", "cross-origin request refused", { reason: "origin" });
-      if (!sameSecret(headerValue(request, CSRF_HEADER), csrfTokenFor(sessionToken)))
+      if (
+        !ORIGIN_CHECKED_ROUTES.has(request.routeOptions.url ?? "") &&
+        !sameSecret(headerValue(request, CSRF_HEADER), csrfTokenFor(sessionToken))
+      )
         throw new DeskmatesError("forbidden", "missing or invalid CSRF token", { reason: "csrf" });
     }
     request.principal = resolved.principal;

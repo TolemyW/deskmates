@@ -7,9 +7,11 @@
   "appShares.open.continue": "繼續",
   "appShares.open.failed": "無法開啟應用程式：{error}",
   "appShares.open.opening": "正在開啟應用程式…",
+  "appShares.open.retry": "重試",
   "appShares.open.title": "已發布的應用程式",
   "appShares.openApp": "開啟",
   "appShares.port": "連接埠 {port}",
+  "appShares.portInvalid": "請輸入 1024–65535 的連接埠。6080–6086 為工作空間桌面保留。",
   "appShares.publish": "分享",
   "appShares.publishIntro": "分享一個已在工作區中執行的網頁應用程式（監聽 0.0.0.0）。",
   "appShares.publishLabel": "名稱",
@@ -21,6 +23,6 @@
   "appShares.state.unavailable": "未執行",
   "appShares.stop": "停止分享",
   "appShares.stopConfirm": "停止分享「{label}」？已開啟的分頁會立即失去存取權；應用程式仍在工作區中執行。",
-  "appShares.title": "應用程式",
+  "appShares.title": "共享應用程式",
   "appShares.unavailableHint": "此連接埠沒有回應。請讓機器人重新啟動應用程式；網址保持不變。"
 }

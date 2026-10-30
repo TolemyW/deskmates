@@ -25,11 +25,21 @@ import { RoleNote, useCan } from "../../state/session-roles.js";
 /** The order the counters are shown in: conversation first, then the run. */
 const ORDER: readonly WorkspaceLimitKey[] = [
   "turnBudget",
+  // ADR-0005 amendment 3, rewritten decision 22: how long a turn-budget pause lasts.
+  "turnBudgetResetMinutes",
   "relayCountMax",
   "maxTurns",
   "continuationLimit",
   "continuationWindowHours",
 ];
+
+/**
+ * The keys this Gateway reports, in display order: an older Gateway that does not know a key
+ * (`turnBudgetResetMinutes` before ADR-0005 amendment 3) is neither shown it nor sent it.
+ */
+function knownKeys(view: WorkspaceLimitsView): WorkspaceLimitKey[] {
+  return ORDER.filter((key) => key in view.ranges && key in view.effective);
+}
 
 /** The order the switches are shown in: the breaker rule, then the budget gate. */
 const SWITCH_ORDER: readonly WorkspaceLimitSwitchKey[] = ["volumeBreaker", "requireBudgetForOff"];
@@ -60,7 +70,7 @@ function inputOf(
   view: WorkspaceLimitsView,
 ): { input: WorkspaceLimitsInput } | { invalid: WorkspaceLimitKey } {
   const input: WorkspaceLimitsInput = {};
-  for (const key of WORKSPACE_LIMIT_KEYS) {
+  for (const key of knownKeys(view)) {
     const { text, off } = draft.limits[key];
     let value: WorkspaceLimitValue | null = null;
     if (off) value = "off";
@@ -162,7 +172,7 @@ export function LimitsSection({
         )
       ) : draft ? (
         <form className="limits-form" onSubmit={save}>
-          {ORDER.map((key) => {
+          {knownKeys(view).map((key) => {
             const range = view.ranges[key];
             const offAllowed = range.off && !gated(draft.switches);
             const fallback = view.defaults[key];
@@ -242,7 +252,7 @@ export function LimitsSection({
       ) : (
         <>
           <dl className="limits-list">
-            {ORDER.map((key) => (
+            {knownKeys(view).map((key) => (
               <div key={key}>
                 <dt>{t(`limits.key.${key}`)}</dt>
                 <dd>{shown(key)}</dd>

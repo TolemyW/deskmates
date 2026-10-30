@@ -15,7 +15,7 @@ it("defines one responsive centered page container and applies it to menu pages"
   for (const file of [
     "./features/members/members.tsx",
     "./features/costs/costs.tsx",
-    "./features/integrations/integrations.tsx",
+    "./features/integrations/connections.tsx",
     "./features/computer/computer.tsx",
     "./features/skills/skills.tsx",
     "./features/knowledge/knowledge-page.tsx",

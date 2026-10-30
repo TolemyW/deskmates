@@ -93,7 +93,7 @@ describe("Attention inbox pages (#113 surface 23)", () => {
     render(<ApprovalsScreen api={createApiClient({ fetch })} />);
     await screen.findByLabelText("Pending approvals");
     fireEvent.click(screen.getByRole("button", { name: /Next/ }));
-    await screen.findByText("command 26");
+    await screen.findByText("Run “command 26”.");
     secondPage = [];
     for (const decided of second)
       FakeEventSource.last.emit({
@@ -106,7 +106,7 @@ describe("Attention inbox pages (#113 surface 23)", () => {
           decidedAt: "2026-10-14T01:00:00.000Z",
         },
       });
-    await screen.findByText("command 0");
+    await screen.findByText("Run “command 0”.");
   });
 });
 
@@ -119,4 +119,39 @@ describe("Attention badge", () => {
     const { result } = renderHook(() => feature.nav?.badge?.useCount(ctx));
     await waitFor(() => expect(result.current).toBe(27));
   });
+});
+
+it("ignores a stale reconnect response after a newer inbox snapshot", async () => {
+  let finishOld: (value: {
+    groups: { key: string; approval: ReturnType<typeof row>; count: number }[];
+    totalGroups: number;
+    totalApprovals: number;
+  }) => void = () => {};
+  const old = new Promise((resolve) => {
+    finishOld = resolve;
+  });
+  let reads = 0;
+  const full = {
+    groups: [{ key: "old-request", approval: row(1), count: 1 }],
+    totalGroups: 1,
+    totalApprovals: 1,
+  };
+  const wire = fakeFetch({
+    "GET /api/approval-groups": () =>
+      ++reads === 1 ? full : reads === 2 ? old : { groups: [], totalGroups: 0, totalApprovals: 0 },
+  });
+  render(<ApprovalsScreen api={createApiClient({ fetch: wire.fetch })} />);
+  await screen.findByText(/command 1/);
+  const es = FakeEventSource.last;
+  es.open();
+  es.drop();
+  es.open();
+  await waitFor(() => expect(reads).toBe(2));
+  es.drop();
+  es.open();
+  await screen.findByText(/Nothing pending/);
+  finishOld(full);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(screen.queryByText(/command 1/)).toBeNull();
+  expect(screen.getByText(/Nothing pending/)).toBeTruthy();
 });

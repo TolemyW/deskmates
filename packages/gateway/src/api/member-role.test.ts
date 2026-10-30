@@ -139,7 +139,13 @@ function pendingApproval(kind?: "egress", startedBy?: string): ApprovalId {
             input: { url: "https://new-site.example.org/page" },
             targetOrigin: "https://new-site.example.org",
           }
-        : { toolName: "Bash", input: { command: "echo hi" } },
+        : // As the sidecar builds it: Always stores the stable pattern (ADR-0002 am. 3, A6).
+          {
+            toolName: "Bash",
+            input: { command: "echo hi" },
+            argumentSummary: "echo hi",
+            argumentPattern: "echo hi*",
+          },
     riskLevel: "L2",
     ...(kind ? { kind } : {}),
   });

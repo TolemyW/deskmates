@@ -19,6 +19,7 @@ afterEach(async () => {
 
 async function setup(): Promise<{ workspace: Workspace; bot: BotDefinition }> {
   const created = await h.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+    defaultBot: false,
     name: "Audited",
     egressAllowlist: ["example.test"],
   });

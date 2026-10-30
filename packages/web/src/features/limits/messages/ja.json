@@ -11,6 +11,7 @@
   "limits.key.maxTurns": "1 回の試行あたりのモデルターン数",
   "limits.key.relayCountMax": "リレー上限（1 つのメッセージチェーンのホップ数）",
   "limits.key.turnBudget": "ターン予算（最後の人間のメッセージ以降のチャットごとのボットメッセージ数）",
+  "limits.key.turnBudgetResetMinutes": "ターン予算で一時停止したチャットが自動的に再開するまでの分数",
   "limits.loading": "制限を読み込み中…",
   "limits.off": "オフ",
   "limits.offNeedsBudget": "このワークスペースでは、制限をオフにする前に週次または累計の予算（コストページ）が必要です。",

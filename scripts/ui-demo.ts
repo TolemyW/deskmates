@@ -302,6 +302,7 @@ async function main(): Promise<void> {
   };
 
   const { workspace } = await api<{ workspace: { id: string } }>("POST", "/api/workspaces", {
+    defaultBot: false,
     name: "galaxy-ops",
     egressAllowlist: ["ops.example.test", "*.galaxy.example"],
   });
@@ -350,7 +351,7 @@ async function main(): Promise<void> {
     body: "@chief put together this week's ops brief: KPI changes and open P1 tickets. Keep it to one page.",
   });
 
-  await app.deskmates.ctx.auth.bootstrapOwner({
+  await app.deskmates.ctx.auth.bootstrapRoot({
     loginName: DEMO_LOGIN,
     displayName: "Demo operator",
     password: DEMO_PASSWORD,

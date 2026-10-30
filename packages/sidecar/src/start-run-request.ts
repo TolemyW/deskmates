@@ -11,8 +11,11 @@
 
 import {
   CONNECTOR_TOOL_NAMES,
+  DEFAULT_BOT_TOOL_NAMES,
   INTEGRATION_TOOL_NAMES,
   type StartRunRequest,
+  TOOL_TIER_OVERRIDE_NAME,
+  VAULT_TOOL_NAMES,
   isSkillFilePath,
   isSkillName,
 } from "@deskmates/contracts";
@@ -70,6 +73,12 @@ const threadMessageDeliverySchema = z.object({
   addressing: z.enum(["recipient", "everyone", "unaddressed", "other"]).optional(),
   body: z.string(),
   attachments: z.array(attachmentSchema),
+});
+
+const deferredActionSchema = z.object({
+  toolName: z.string(),
+  targetOrigin: z.string().optional(),
+  argumentPattern: z.string().optional(),
 });
 
 const triggerSchema = z.discriminatedUnion("kind", [
@@ -140,6 +149,13 @@ const triggerSchema = z.discriminatedUnion("kind", [
             spaced: z.array(z.string()),
           })
           .optional(),
+        // ADR-0005 amendment 3, decision 27: named here for the same reason.
+        paused: z
+          .object({
+            reason: z.enum(["turn_budget", "operator"]),
+            resumeAt: z.string().optional(),
+          })
+          .optional(),
       })
       .optional(),
     relayCount: z.number().int().nonnegative(),
@@ -165,6 +181,23 @@ const triggerSchema = z.discriminatedUnion("kind", [
       .refine((path) => !path.split("/").includes(".."))
       .optional(),
   }),
+  // ADR-0029: the platform continues a run it interrupted. zod strips keys it does not name, so
+  // each of these is named, or the resumed attempt would lose its notice.
+  z.object({
+    kind: z.literal("platform_resume"),
+    reason: z.enum(["drain", "restart"]),
+    interruptedCall: z
+      .object({
+        toolUseId: z.string(),
+        toolName: z.string(),
+        riskLevel: z.enum(["L0", "L1", "L2"]),
+        targetOrigin: z.string().optional(),
+        argumentPattern: z.string().optional(),
+      })
+      .optional(),
+    freshSession: z.object({ handoff: z.string() }).optional(),
+    currentOrigin: z.string().optional(),
+  }),
   z.object({
     kind: z.literal("approval"),
     approvalId: id,
@@ -174,12 +207,22 @@ const triggerSchema = z.discriminatedUnion("kind", [
     // The resume hand-over (ADR-0002 amendment 2, "the decision survives a stale snapshot").
     // zod strips keys the schema does not name, so leaving these out silently turns every
     // retry into a fresh L2 call: this is the only thing between the contract and the process.
-    deferredAction: z
-      .object({
-        toolName: z.string(),
-        targetOrigin: z.string().optional(),
-        argumentPattern: z.string().optional(),
-      })
+    deferredAction: deferredActionSchema.optional(),
+    // Issue #62 H3: an egress decision answers only an egress ask, a tool decision only an L2 ask.
+    approvalKind: z.enum(["tool", "egress"]).optional(),
+    // Issue #62 M8: every decided approval of a run one turn parked on several approvals.
+    decidedApprovals: z
+      .array(
+        z.object({
+          approvalId: id,
+          decision: z.enum(["allow_once", "allow_always", "deny"]),
+          toolUseId: z.string().optional(),
+          approvalKind: z.enum(["tool", "egress"]),
+          deferredAction: deferredActionSchema.optional(),
+          reason: z.string().optional(),
+        }),
+      )
+      .max(100)
       .optional(),
     currentOrigin: z.string().optional(),
   }),
@@ -189,10 +232,23 @@ export const startRunRequestSchema = z.object({
   runId: id,
   botId: id,
   botName: z.string().min(1),
+  // Issue #39 item 4: the identity line of the static prompt. A role may be empty.
+  botRole: z.string(),
   workspaceId: id,
+  workspaceName: z.string(),
   threadId: id.optional(),
   botHomeDir: z.string().min(1),
   sdkSessionId: z.string().optional(),
+  pendingApprovals: z
+    .array(
+      z.object({
+        approvalId: id,
+        toolUseId: id,
+        kind: z.enum(["tool", "egress"]),
+        actionFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+      }),
+    )
+    .optional(),
   // The second half of the Gateway's `(run, attempt, seq)` dedup key: 1 for the first process of
   // a run, one more on every resume. A missing or zero attempt would make a resumed process's
   // events look like a redelivery of the first process's and be dropped.
@@ -227,6 +283,18 @@ export const startRunRequestSchema = z.object({
           .min(1)
           .max(20),
         activity: z.string().max(40_000),
+        asOf: z.string().optional(),
+        evidence: z
+          .array(
+            z.object({
+              id: z.string(),
+              at: z.string(),
+              text: z.string().max(501),
+              sha256: z.string(),
+            }),
+          )
+          .max(150)
+          .optional(),
       }),
       z.object({
         kind: z.literal("approval_review"),
@@ -265,6 +333,9 @@ export const startRunRequestSchema = z.object({
       }),
     ])
     .optional(),
+  // Issue #39 item 8: the Gateway's MODEL_JOB_DEADLINE_MS; absent keeps the 55 s default.
+  modelJobDeadlineMs: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+  researchGuidance: z.literal("verify-v1").optional(),
   groupGuidance: z.literal("owner-v1").optional(),
   // Issue #88, ADR-0038: present for a per-bot run (the default); absent keeps the shared /work.
   workdirMode: z.literal("per-bot").optional(),
@@ -311,8 +382,14 @@ export const startRunRequestSchema = z.object({
   browserExecutionMode: z.literal("vision-cli-v2").optional(),
   // ADR-0002 amendment 5 (opt-in): browser code is tiered by its effects.
   browserCodeApproval: z.literal("effects-v1").optional(),
+  // ADR-0002 amendment 3, A5: the workspace operator's tier overrides, frozen on the run row.
+  toolTierOverrides: z
+    .record(z.string().regex(TOOL_TIER_OVERRIDE_NAME), z.enum(["L0", "L1", "L2"]))
+    .optional(),
   // ADR-0023 amendment 2: the run's model cannot see; image content becomes a text notice.
   visionPolicy: z.literal("withhold").optional(),
+  // ADR-0048 decision 1: the opt-in native desktop tools, frozen on the run row.
+  desktopTools: z.literal("lcu-v1").optional(),
   screenSlot: z.number().int().min(0).max(5).optional(),
   browserSnapshotMode: z.enum(["explicit-v1", "inline-v2"]).optional(),
   // ADR-0023 amendment 5: extra built-in CLI tools to withhold and inline settings switches. A
@@ -362,8 +439,16 @@ export const startRunRequestSchema = z.object({
       "app_publish",
       "image_describe",
       "audio_transcribe",
+      "image_generate",
+      // ADR-0050: offered only to a run that froze `runStats: "self-v1"`.
+      "run_stats",
+      // ADR-0049: offered only to a run whose row froze `webSearch: on`.
+      "web_search",
       ...CONNECTOR_TOOL_NAMES,
       ...INTEGRATION_TOOL_NAMES,
+      ...VAULT_TOOL_NAMES,
+      // ADR-0051: offered only to a run that froze `workspaceAssistant: "assistant-v1"`.
+      ...DEFAULT_BOT_TOOL_NAMES,
     ]),
   ),
   memoryIndex: memoryIndexSchema.optional(),
@@ -416,6 +501,7 @@ export const startRunRequestSchema = z.object({
         scopeVersion: z.number().int().positive().optional(),
         latestCheckpoint: z
           .object({
+            scopeVersion: z.number().int().positive().optional(),
             runId: z.string().nullable(),
             attempt: z.number().int(),
             createdAt: z.string(),

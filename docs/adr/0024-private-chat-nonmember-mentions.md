@@ -231,8 +231,9 @@ that proposal with workspace-shared pins and ordering on 2026-10-11.
 
 ## Amendment 2 (2026-10-14): welcome delivery and other one-member conversations
 
-Status: proposed (issue #122, batch 2026-10-14). Decisions 11 and 12 correct presentation and
-the retry guard of decisions 8 and 9; they change no run status, prompt or ledger row.
+Status: Accepted under owner delegation (2026-10-17); proposed in issue #122, batch 2026-10-14.
+Decisions 11 and 12 correct presentation and the retry guard of decisions 8 and 9; they change no
+run status, prompt or ledger row.
 
 ### Context
 
@@ -271,6 +272,10 @@ created today was listed under **Earlier conversations** below an older canonica
 
 ## Amendment 3 (2026-10-16): what a bot calls the person is not an address
 
+Status: Accepted under owner delegation (2026-10-17). It had no status line; it suppresses a
+false diagnostic only, keeps decision 2's visible diagnostic for every other unknown name, and
+changes no routing a configured handoff relies on.
+
 ### Context
 
 In a one-member web chat a bot answering the person often writes `@user`, and the
@@ -302,3 +307,20 @@ attempted handoff is never lost silently, and nothing was attempted.
 A bot that misspells a configured recipient still sees the diagnostic. A workspace
 that names a bot `user` or `owner` and expects handoffs to it by that name from a
 chat it is not a member of will not get them; rename the bot.
+
+## Amendment 4 (2026-10-19): task conversations leave the Chats rail
+
+Status: accepted by the product owner on 2026-10-19. This amendment narrows amendment 2 decision
+12 and delegates the full task presentation rule to ADR-0021 amendment 5.
+
+14. **Task-owned history is not chat navigation.** An additional one-Bot conversation linked to
+    a task is omitted from the Chats rail unless it is the Bot's canonical chat or a person's
+    private chat. It remains durable and reachable from the Task, Bot Activity, Run details and
+    a direct link. Additional one-Bot conversations with no task context remain under the Bot as
+    Other conversations. A group chat is never hidden merely because a task links it.
+
+### Verification
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| 14 | task context is projected by the Gateway; Web omits only linked extra one-Bot rows and keeps canonical/private/group rows | T1 Gateway `api/thread-list-routes.test.ts`; T0 Web `features/chats/thread-rail-inboxes.test.tsx` | task conversations shown as chat peers = 0; unreachable task histories = 0 |

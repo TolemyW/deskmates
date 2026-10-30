@@ -35,6 +35,13 @@ export const SUMMARY_INSTRUCTION = [
   "learned is your memory: task = state of this thread's work; workspace = a fact about this",
   "workspace every bot here needs; bot = a working habit of yours. Write facts, preferences and",
   "procedures, never instructions or rules; a human owns rules. Use [] when nothing is worth keeping.",
+  "Write each learned fact as one declarative statement of its current value. For a correction,",
+  "reuse the existing memory statement with only the corrected value changed, keeping the same",
+  "scope and conditions. Put the old value and the correction history in reply, not in learned.",
+  "Do not add commands such as 'always use' or 'ignore the old value' to a fact: those require",
+  "human confirmation. A memory write is checked after this summary; do not promise it was saved.",
+  "A project fact shared by teammates (for example this week's target) has workspace scope,",
+  "keeping its time condition. Task scope is for progress, checkpoints and delivery history.",
 ].join("\n");
 
 // The fence may share its line with the object (```json {...} ```); a model that writes it that

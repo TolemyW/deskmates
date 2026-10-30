@@ -4,6 +4,7 @@
 
 import {
   APPROVAL_MODES,
+  type Approval,
   type ApprovalId,
   type ApprovalMode,
   type BotId,
@@ -15,16 +16,23 @@ import {
   isApprovalMode,
 } from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
+import { checkedRuleMatcher } from "../approvals/always-rule.js";
 import { AutoApprovalSettings } from "../approvals/auto-approval.js";
 import type { GatewayContext } from "../context.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
-import { applyEgressDecision } from "../workspaces/egress-policy.js";
+import { applyEgressDecision, decideWithEgress } from "../workspaces/egress-policy.js";
 import { requestActorId } from "./actor.js";
-import { pendingInboxPage } from "./approval-inbox.js";
+import {
+  pendingApprovalGroupKey,
+  pendingApprovalGroupPage,
+  pendingInboxPage,
+  visiblePending,
+} from "./approval-inbox.js";
 import { parseOffsetQuery } from "./pagination.js";
 import { requestTenant } from "./route-policy.js";
 import { requireOwnRun } from "./side-chat-guard.js";
 import { threadApprovalsByIds } from "./thread-approvals.js";
+import { registerToolTierRoutes } from "./tool-tier-routes.js";
 import {
   asApprovalDecision,
   asRecord,
@@ -42,6 +50,9 @@ export function registerApprovalRoutes(
   ctx: GatewayContext,
   scheduler: Scheduler,
 ): void {
+  // ADR-0002 amendment 3, A5: the workspace's tool tier overrides, part of the approvals domain.
+  registerToolTierRoutes(app, ctx);
+
   app.get<{
     Querystring: {
       status?: string;
@@ -75,6 +86,12 @@ export function registerApprovalRoutes(
     };
   });
 
+  app.get<{
+    Querystring: { botId?: string; cursor?: string; limit?: string };
+  }>("/api/approval-groups", async (request) =>
+    pendingApprovalGroupPage(ctx, request, request.query),
+  );
+
   app.get<{ Params: { id: string } }>("/api/approvals/:id", async (request) => ({
     approval: ctx.approvals.mustGet(request.params.id as ApprovalId),
   }));
@@ -105,24 +122,64 @@ export function registerApprovalRoutes(
       );
     }
     const reason = optionalString(body, "reason");
+    // ADR-0002 amendment 3, A6: the human may edit the proposed Always matcher before saving.
+    const matcher = body.matcher === undefined ? undefined : asRuleMatcher(body.matcher);
     const authorId = requestActorId(request, body);
     // An egress "allow this site" joins the allowlist first, so the proxy admits the host by the
-    // time the run continues (ADR-0020 decision 2).
-    await applyEgressDecision(
+    // time the run continues (ADR-0020 decision 2); a decision that then fails takes it out again.
+    const result = await decideWithEgress(
       ctx,
       request.params.id as ApprovalId,
       decision,
       decidedByHuman(authorId),
-    );
-    const result = ctx.broker.decide(
-      request.params.id as ApprovalId,
-      decision,
-      decidedByHuman(authorId),
-      reason,
+      () =>
+        ctx.broker.decide(
+          request.params.id as ApprovalId,
+          decision,
+          decidedByHuman(authorId),
+          reason,
+          matcher === undefined ? {} : { matcher },
+        ),
     );
     // A parked run whose approval just landed is resumed by the next scheduling pass.
     scheduler.kick();
     return result;
+  });
+
+  app.post<{ Params: { key: string } }>("/api/approval-groups/:key/decide", async (request) => {
+    const body = asRecord(request.body);
+    if (body.decision !== "allow_all" && body.decision !== "deny_all") {
+      throw new DeskmatesError("validation", "decision must be allow_all or deny_all", {
+        field: "decision",
+      });
+    }
+    const approvals = visiblePending(ctx, request).filter(
+      (approval) => pendingApprovalGroupKey(approval) === request.params.key,
+    );
+    const first = approvals[0];
+    if (!first) throw new DeskmatesError("not_found", "approval group not found");
+    const belowAdmin = actsBelowAdmin(
+      ctx,
+      request,
+      ctx.ownership.workspaceOf("approval", first.id) ?? "",
+    );
+    // A group is one bot and one action, but retain the per-row ownership check as the authority.
+    for (const approval of approvals) {
+      if (belowAdmin)
+        requireOwnRun(ctx, request, ctx.runs.mustGet(approval.runId), "answer an approval");
+    }
+    const author = decidedByHuman(requestActorId(request, body));
+    const decided: Approval[] = [];
+    for (const approval of approvals) {
+      // "All" means every currently pending request in this group, never a persistent rule or
+      // an egress allowlist change. Each request still receives its own one-time decision.
+      const decision = body.decision === "deny_all" ? "deny" : "allow_once";
+      await applyEgressDecision(ctx, approval.id, decision, author);
+      decided.push(ctx.broker.decide(approval.id, decision, author).approval);
+    }
+    // Every row was decided and audited independently; one pass may now resume all parked runs.
+    scheduler.kick();
+    return { approvals: decided };
   });
 
   app.post<{ Params: { id: string } }>("/api/runs/:id/continuation/decide", async (request) => {
@@ -216,13 +273,17 @@ export function registerApprovalRoutes(
       });
     }
     const authorId = requestActorId(request, body);
+    // A6: a pattern ending in the truncation marker is refused; an exact one is flagged.
+    const checked = checkedRuleMatcher(asRuleMatcher(body.matcher));
     const rule = ctx.rules.create({
       botId,
-      matcher: asRuleMatcher(body.matcher),
+      matcher: checked.matcher,
       decision: body.decision,
       createdBy: decidedByHuman(authorId),
     });
-    return reply.code(201).send({ rule });
+    return reply
+      .code(201)
+      .send({ rule, ...(checked.warnings.length > 0 ? { warnings: checked.warnings } : {}) });
   });
 
   // ADR-0043 decision 6: a rule is edited in place, under the same validation as a new one.
@@ -240,10 +301,12 @@ export function registerApprovalRoutes(
     }
     if (body.matcher === undefined && body.decision === undefined)
       throw new DeskmatesError("validation", "nothing to update: send matcher or decision");
+    const checked =
+      body.matcher === undefined ? undefined : checkedRuleMatcher(asRuleMatcher(body.matcher));
     const updated = ctx.rules.update(
       rule.id,
       {
-        ...(body.matcher === undefined ? {} : { matcher: asRuleMatcher(body.matcher) }),
+        ...(checked === undefined ? {} : { matcher: checked.matcher }),
         ...(body.decision === undefined
           ? {}
           : { decision: body.decision as "allow_always" | "deny" }),
@@ -254,7 +317,12 @@ export function registerApprovalRoutes(
       const approval = ctx.approvals.get(rule.createdFromApprovalId);
       if (approval) ctx.broker.event(approval.runId, { phase: "rule_updated", ruleId: rule.id });
     }
-    return { rule: updated };
+    return {
+      rule: updated,
+      ...(checked !== undefined && checked.warnings.length > 0
+        ? { warnings: checked.warnings }
+        : {}),
+    };
   });
 
   app.delete<{ Params: { id: string } }>("/api/approval-rules/:id", async (request) => {

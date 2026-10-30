@@ -1,0 +1,19 @@
+[
+  {
+    "id": "main",
+    "route": "#/board"
+  },
+  {
+    "id": "edit-post",
+    "route": "#/board",
+    "steps": [
+      {
+        "name": "Post options for Demo operator"
+      },
+      {
+        "role": "menuitem",
+        "name": "Edit"
+      }
+    ]
+  }
+]

@@ -4,6 +4,11 @@
    Rules inside @layer components rank with the shared components of app.css and lose to
    any unlayered rule; within the layer the later rule wins. */
 @layer components {
+  .board-screen {
+    display: grid;
+    gap: 24px;
+    padding: 32px;
+  }
   .board-composer {
     display: grid;
     gap: 0.5rem;
@@ -58,5 +63,51 @@
 
   .board-post-flag {
     font-weight: 600;
+  }
+}
+
+@media (max-width: 720px) {
+  .board-screen {
+    padding: 20px 16px;
+  }
+}
+
+.board-screen {
+  max-width: 1040px;
+  margin-inline: auto;
+  width: 100%;
+}
+.board-screen .board-post {
+  position: relative;
+  padding: 18px 20px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+.board-post-meta {
+  padding-right: 36px;
+}
+.board-post-menu {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+.board-screen .board-composer {
+  border-radius: 12px;
+  box-shadow: none;
+  padding: 20px;
+  margin-bottom: 0;
+}
+.board-post-meta .muted {
+  font-size: var(--app-text-xs);
+}
+@media (max-width: 720px) {
+  .board-screen .board-post,
+  .board-screen .board-composer {
+    padding: 16px;
+  }
+  .board-post-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
   }
 }

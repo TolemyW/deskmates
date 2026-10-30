@@ -1,7 +1,7 @@
 // T1: a Member's private chat is theirs alone (ADR-0022 amendment 6 W7, ADR-0031 decision 9).
 // Another Member, an Admin, the Owner, the root and the operator credential get the uniform 404
-// for its thread, messages, activity, runs, run events and approvals, lists leave it out, and
-// their live streams never carry it; its person reads all of it.
+// for its thread, messages, activity, runs, run events, timeline and approvals, lists leave it
+// out, and their live streams never carry it, reply previews included; its person reads it all.
 
 import type { ApprovalId, BotId, RunId } from "@deskmates/contracts";
 import { afterEach, describe, expect, it } from "vitest";
@@ -55,6 +55,7 @@ describe("private chats (ADR-0022 amendment 6 W7)", () => {
       `/api/runs/${runId}`,
       `/api/runs/${runId}/events`,
       `/api/runs/${runId}/context`,
+      `/api/runs/${runId}/timeline`,
       `/api/runs?threadId=${threadId}`,
       `/api/approvals/${approvalId}`,
     ];
@@ -114,6 +115,28 @@ describe("private chats (ADR-0022 amendment 6 W7)", () => {
       expect(third.status).toBe(201);
     });
     expect(ownStream).toContain("third secret");
+
+    // A streamed reply preview (ADR-0037 decision 7) of the private chat's run follows the same
+    // audience: the Admin's stream never carries it, the person's does.
+    const preview = (text: string) => async () => {
+      ctx.bus.publish({
+        type: "run_reply_preview",
+        threadId: threadId as never,
+        preview: {
+          runId: runId as RunId,
+          threadId: threadId as never,
+          botId: people.bot.id as BotId,
+          attempt: 1,
+          seq: 1,
+          text,
+        },
+      });
+    };
+    const adminPreview = await streamText(harness, people.admin, preview("private preview"));
+    expect(adminPreview).not.toContain("private preview");
+    expect(adminPreview).not.toContain(runId);
+    const ownPreview = await streamText(harness, people.member, preview("own preview"));
+    expect(ownPreview).toContain("own preview");
   });
 
   it("a guessed id of a private chat is the same 404 as a missing one", async () => {

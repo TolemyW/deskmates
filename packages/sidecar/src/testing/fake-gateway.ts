@@ -8,11 +8,14 @@ import type {
   ApprovalResponse,
   BrowserLockRequest,
   BrowserLockResponse,
+  DesktopLockRequest,
+  DesktopLockResponse,
   EgressAllowlistResponse,
   MemorySearchHit,
   PostMessageRequest,
   ReplyPreviewRequest,
   RunEnded,
+  SessionStartedReport,
   SidecarEvent,
 } from "@deskmates/contracts";
 
@@ -29,6 +32,8 @@ export interface FakeGatewayOptions {
   /** Answer to a new approval request; `"pending"` makes the sidecar poll. */
   approvalResponder?: (req: ApprovalRequest) => ApprovalResponse | "pending";
   lockResponder?: (req: BrowserLockRequest) => BrowserLockResponse;
+  /** ADR-0048 amendment 1, A3: the shared-screen lease and the hook's probe; default granted. */
+  desktopLockResponder?: (req: DesktopLockRequest) => DesktopLockResponse;
   /** Fault injection: answer the first N `POST /ended` with 503 before accepting one. */
   failEndedPosts?: number;
   /** Fault injection: answer the first N approval polls with 503 before answering properly. */
@@ -58,6 +63,11 @@ export interface FakeGatewayOptions {
   memorySearch?: (query: string, scope: string | undefined) => MemorySearchHit[];
   /** Status for `POST /reply-preview` (ADR-0037); default 200. */
   replyPreviewStatus?: number;
+  /**
+   * ADR-0029 decision 2, read on every request: the Gateway drains. Event batches are acknowledged
+   * with `drain: true`, and a poll of an undecided approval answers the platform `defer`.
+   */
+  draining?: () => boolean;
 }
 
 export interface FakeGateway {
@@ -68,9 +78,12 @@ export interface FakeGateway {
   /** Decisions a bot took with `approval_decide`. */
   decides: ApprovalDecideRequest[];
   locks: BrowserLockRequest[];
+  desktopLocks: DesktopLockRequest[];
   messages: PostMessageRequest[];
   /** Reply preview frames, in arrival order (ADR-0037 decision 7). */
   previews: ReplyPreviewRequest[];
+  /** The SDK sessions the sidecar reported (ADR-0029 decision 4). */
+  sessions: SessionStartedReport[];
   ended: RunEnded[];
   /**
    * Attempts per route, including the ones answered with an injected failure. `egressGets` is how
@@ -101,8 +114,10 @@ export function createFakeGateway(opts: FakeGatewayOptions = {}): FakeGateway {
     approvals: [],
     decides: [],
     locks: [],
+    desktopLocks: [],
     messages: [],
     previews: [],
+    sessions: [],
     ended: [],
     attempts: { endedPosts: 0, approvalPolls: 0, approvalPosts: 0, egressGets: 0 },
     decide: (response) => {
@@ -123,8 +138,13 @@ export function createFakeGateway(opts: FakeGatewayOptions = {}): FakeGateway {
       const rest = m[2] ?? "";
 
       if (method === "POST" && rest === "events") {
-        gw.events.push(...(JSON.parse(body) as SidecarEvent[]));
-        return json({ ok: true });
+        const batch = JSON.parse(body) as SidecarEvent[];
+        gw.events.push(...batch);
+        return json({ stored: batch.length, ...(opts.draining?.() ? { drain: true } : {}) });
+      }
+      if (method === "POST" && rest === "session") {
+        gw.sessions.push(JSON.parse(body) as SessionStartedReport);
+        return json({ stored: true });
       }
       if (method === "POST" && rest === "ended") {
         gw.attempts.endedPosts += 1;
@@ -167,6 +187,14 @@ export function createFakeGateway(opts: FakeGatewayOptions = {}): FakeGateway {
         }
         const id = decodeURIComponent(rest.slice("approvals/".length));
         const answer = decided.get(id);
+        if (!answer && opts.draining?.())
+          return json({
+            type: "approval_response",
+            approvalId: id,
+            decision: "defer",
+            reason: "draining",
+            platform: "drain",
+          });
         return answer ? json(answer) : new Response(null, { status: 202 });
       }
       if (method === "GET" && rest === "egress") {
@@ -181,6 +209,17 @@ export function createFakeGateway(opts: FakeGatewayOptions = {}): FakeGateway {
           updatedAt: opts.egressUpdatedAt?.() ?? "2026-09-22T09:00:00.000Z",
         };
         return json(response);
+      }
+      if (method === "POST" && rest === "desktop-lock") {
+        const req = JSON.parse(body) as DesktopLockRequest;
+        gw.desktopLocks.push(req);
+        return json(
+          opts.desktopLockResponder?.(req) ?? {
+            type: "desktop_lock_result",
+            runId: req.runId,
+            granted: true,
+          },
+        );
       }
       if (method === "POST" && rest === "browser-lock") {
         const req = JSON.parse(body) as BrowserLockRequest;

@@ -45,6 +45,7 @@ interface Call {
 function fakeGateway(
   account: AccountView = { localLoginName: "olive", password: "available" },
   role: "owner" | "admin" | "member" = "member",
+  root = false,
 ) {
   const state = {
     csrf: "csrf-1",
@@ -62,6 +63,7 @@ function fakeGateway(
   const calls: Call[] = [];
   const view = () => ({
     authenticated: true,
+    root,
     user: {
       id: "usr_1",
       displayName: state.displayName,
@@ -172,26 +174,66 @@ it("is reached from the signed-in identity, which links to it in every sidebar l
   window.location.hash = "#/threads";
   render(<App />);
   const link = await screen.findByRole("link", {
-    name: "Account settings and preferences for Olive Owner",
+    name: "Account settings for Olive Owner",
   });
   expect(link).toHaveAttribute("href", "#/account");
   window.location.hash = "#/account";
   window.dispatchEvent(new HashChangeEvent("hashchange"));
   expect(await screen.findByRole("heading", { name: "Account settings" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Account settings for Olive Owner" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+});
+
+async function editName() {
+  fireEvent.click(await screen.findByRole("button", { name: "Change display name" }));
+  return screen.getByLabelText("Display name");
+}
+async function editPassword() {
+  fireEvent.click(await screen.findByRole("button", { name: "Change password" }));
+  return screen.getByLabelText("Current password");
+}
+
+it("opens editors explicitly, restores focus on cancel and discards unsaved names and passwords", async () => {
+  const gw = fakeGateway();
+  render(<App />);
+  await screen.findByRole("button", { name: "Change display name" });
+  expect(screen.queryByLabelText("Display name")).toBeNull();
+  expect(screen.queryByLabelText("Current password")).toBeNull();
+  const name = await editName();
+  expect(name).toHaveFocus();
+  fireEvent.change(name, { target: { value: "Discard this draft" } });
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.getByRole("button", { name: "Change display name" })).toHaveFocus();
+  expect(await editName()).toHaveValue("Olive Owner");
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+  const current = await editPassword();
+  expect(current).toHaveFocus();
+  fireEvent.change(current, { target: { value: CURRENT } });
+  fireEvent.change(screen.getByLabelText("New password"), { target: { value: NEXT } });
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.getByRole("button", { name: "Change password" })).toHaveFocus();
+  expect(screen.queryByLabelText("Current password")).toBeNull();
+  expect(await editPassword()).toHaveValue("");
+  expect(screen.getByLabelText("New password")).toHaveValue("");
+  expect(screen.getByLabelText("Confirm new password")).toHaveValue("");
   expect(
-    screen.getByRole("link", { name: "Account settings and preferences for Olive Owner" }),
-  ).toHaveAttribute("aria-current", "page");
+    gw.calls.some((call) => call.path === "/auth/profile" || call.path === "/auth/password"),
+  ).toBe(false);
+  expectNoSecretStored();
 });
 
 for (const role of ["owner", "admin", "member"] as const) {
-  it(`gives a ${role} three settings pages: Profile, Password, Preferences and Sign out first`, async () => {
+  it(`gives a ${role} three settings pages with explicit account editors and separate preferences`, async () => {
     fakeGateway(undefined, role);
     render(<App />);
     await screen.findByRole("heading", { name: "Account settings" });
     const sections = screen
       .getAllByRole("heading", { level: 2 })
       .map((heading) => heading.textContent);
-    expect(sections).toEqual(["Profile", "Password", "Preferences", "Sign out"]);
+    expect(sections).toEqual(["Profile", "Password", "Sign out"]);
     // ADR-0034 decision 7: Personal settings, Agent access and Workspaces, each an address.
     const pages = screen.getByRole("navigation", { name: "Settings pages" });
     expect(
@@ -207,9 +249,11 @@ for (const role of ["owner", "admin", "member"] as const) {
       "aria-current",
       "page",
     );
+    fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
     const preferences = screen.getByRole("region", { name: "Preferences" });
     expect(within(preferences).getByLabelText("Language")).toBeInTheDocument();
     expect(within(preferences).getByLabelText("Appearance")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close preferences" }));
     const signOut = screen.getByRole("region", { name: "Sign out" });
     expect(within(signOut).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
     expect(
@@ -221,7 +265,7 @@ for (const role of ["owner", "admin", "member"] as const) {
 it("saves the display name and updates the identity without touching the login name", async () => {
   const gw = fakeGateway();
   render(<App />);
-  const field = await screen.findByLabelText("Display name");
+  const field = await editName();
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   fireEvent.change(field, { target: { value: "  " } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -242,9 +286,7 @@ it("saves the display name and updates the identity without touching the login n
   const save = gw.calls.filter((call) => call.path === "/auth/profile").at(-1);
   expect(save?.body).toEqual({ displayName: "Olive O." });
   expect(save?.headers.get("x-deskmates-csrf")).toBe("csrf-1");
-  expect(
-    screen.getByRole("link", { name: "Account settings and preferences for Olive O." }),
-  ).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Account settings for Olive O." })).toBeInTheDocument();
   const facts = screen.getByText("Login name").closest("div") as HTMLElement;
   expect(within(facts).getByText("olive")).toBeInTheDocument();
 });
@@ -270,15 +312,21 @@ it("previews, uploads and removes a photo, and rejects an unsupported file befor
     type: "image/png",
   });
   fireEvent.change(input, { target: { files: [png] } });
-  await screen.findByRole("button", { name: "Save photo" });
+  expect(await screen.findByRole("button", { name: "Save photo" })).toHaveFocus();
+  fireEvent.click(screen.getByRole("button", { name: "Discard photo" }));
+  expect(screen.getByRole("button", { name: "Change photo" })).toHaveFocus();
+  expect(gw.calls.some((call) => call.path === "/auth/avatar")).toBe(false);
+  fireEvent.change(input, { target: { files: [png] } });
+  expect(await screen.findByRole("button", { name: "Save photo" })).toHaveFocus();
   expect(document.querySelector(".account-photo img")).toHaveAttribute("src", "blob:preview");
   fireEvent.click(screen.getByRole("button", { name: "Save photo" }));
   expect(await screen.findByText("Photo saved.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Change photo" })).toHaveFocus();
   const upload = gw.calls.find((call) => call.path === "/auth/avatar" && call.method === "PUT");
   expect(upload?.headers.get("content-type")).toBe("image/png");
   // The sidebar identity shows the stored photo.
   const identity = screen.getByRole("link", {
-    name: "Account settings and preferences for Olive Owner",
+    name: "Account settings for Olive Owner",
   });
   expect(identity.querySelector("img")).toHaveAttribute("src", "/auth/avatar?v=0123456789abcdef");
 
@@ -290,7 +338,7 @@ it("previews, uploads and removes a photo, and rejects an unsupported file befor
 it("changes the password, adopts the rotated session and clears the fields", async () => {
   const gw = fakeGateway();
   render(<App />);
-  const current = await screen.findByLabelText("Current password");
+  const current = await editPassword();
   const next = screen.getByLabelText("New password");
   const confirm = screen.getByLabelText("Confirm new password");
   expect(current).toHaveAttribute("autocomplete", "current-password");
@@ -302,17 +350,19 @@ it("changes the password, adopts the rotated session and clears the fields", asy
   fireEvent.change(current, { target: { value: CURRENT } });
   fireEvent.change(next, { target: { value: NEXT } });
   fireEvent.change(confirm, { target: { value: NEXT } });
-  fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save password" }));
   expect(await screen.findByText(/Password changed/)).toBeInTheDocument();
-  expect(current).toHaveValue("");
-  expect(next).toHaveValue("");
-  expect(confirm).toHaveValue("");
+  expect(screen.queryByLabelText("Current password")).toBeNull();
+  await editPassword();
+  expect(screen.getByLabelText("Current password")).toHaveValue("");
+  expect(screen.getByLabelText("New password")).toHaveValue("");
+  expect(screen.getByLabelText("Confirm new password")).toHaveValue("");
   const change = gw.calls.find((call) => call.path === "/auth/password");
   expect(change?.headers.get("x-deskmates-csrf")).toBe("csrf-1");
   expect(change?.body).toEqual({ currentPassword: CURRENT, newPassword: NEXT });
 
   // The next mutation carries the rotated session's token.
-  fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Olive Two" } });
+  fireEvent.change(await editName(), { target: { value: "Olive Two" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByText("Display name saved.");
   const after = gw.calls.filter((call) => call.path === "/auth/profile").at(-1);
@@ -330,24 +380,25 @@ it("is not signed out by a 401 its own password change causes", async () => {
   });
   gw.state.holdPassword = held;
   render(<App />);
-  fireEvent.change(await screen.findByLabelText("Current password"), {
+  fireEvent.change(await editPassword(), {
     target: { value: CURRENT },
   });
   fireEvent.change(screen.getByLabelText("New password"), { target: { value: NEXT } });
   fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: NEXT } });
   // The same form element throughout: the tab never unmounts for a sign-in check.
   const form = screen.getByLabelText("Current password");
-  fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save password" }));
   await waitFor(() => expect(gw.state.rotating).toBe(true));
   await waitFor(() => expect(FakeEventSource.instances.length).toBeGreaterThan(0));
   for (const stream of [...FakeEventSource.instances]) stream.fail();
   await waitFor(() =>
     expect(gw.calls.some((call) => call.path === "/api/config" && call.status === 401)).toBe(true),
   );
+  expect(form.isConnected).toBe(true);
   release();
   expect(await screen.findByText(/Password changed/)).toBeInTheDocument();
-  expect(form.isConnected).toBe(true);
-  expect(screen.getByLabelText("Current password")).toBe(form);
+  expect(form.isConnected).toBe(false);
+  expect(screen.queryByLabelText("Current password")).toBeNull();
   expect(screen.getByRole("heading", { name: "Account settings" })).toBeInTheDocument();
   expect(screen.queryByLabelText("Login name")).toBeNull();
 });
@@ -355,17 +406,17 @@ it("is not signed out by a 401 its own password change causes", async () => {
 it("shows mismatch and wrong-password errors without sending or keeping the passwords", async () => {
   const gw = fakeGateway();
   render(<App />);
-  fireEvent.change(await screen.findByLabelText("Current password"), {
+  fireEvent.change(await editPassword(), {
     target: { value: "wrong password here" },
   });
   fireEvent.change(screen.getByLabelText("New password"), { target: { value: NEXT } });
   fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: "other" } });
-  fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save password" }));
   expect(await screen.findByText("The new passwords do not match.")).toBeInTheDocument();
   expect(gw.calls.some((call) => call.path === "/auth/password")).toBe(false);
 
   fireEvent.change(screen.getByLabelText("Confirm new password"), { target: { value: NEXT } });
-  fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save password" }));
   expect(await screen.findByText("Your current password is incorrect.")).toBeInTheDocument();
   expect(screen.getByLabelText("Current password")).toHaveValue("");
   expect(screen.getByLabelText("Current password")).toHaveAttribute("aria-invalid", "true");
@@ -402,7 +453,7 @@ function fakeClipboard(result: "ok" | "fail" = "ok") {
 
 it("keeps the issued token separate from the copied skill-installation prompt", async () => {
   window.location.hash = "#/account/agent-access";
-  const gw = fakeGateway(undefined, "admin");
+  const gw = fakeGateway(undefined, "admin", true);
   const writeText = fakeClipboard();
   render(<App />);
   expect(await screen.findByRole("heading", { name: "Connect an agent" })).toBeInTheDocument();
@@ -412,20 +463,20 @@ it("keeps the issued token separate from the copied skill-installation prompt", 
   expect(promptBox.textContent).not.toContain("DESKMATES_TOKEN=");
   expect(promptBox.textContent).not.toContain("deskmates-sp.");
 
-  fireEvent.click(screen.getByRole("button", { name: "Create agent token" }));
+  fireEvent.click(screen.getByRole("button", { name: "Create agent key" }));
   expect(await screen.findByText(/not included in the agent prompt/)).toBeInTheDocument();
   const create = gw.calls.find((call) => call.path === "/api/service-principals");
   expect(create?.method).toBe("POST");
   expect(create?.body).toEqual({ name: "Olive Owner's agent" });
   expect(create?.headers.get("x-deskmates-csrf")).toBe("csrf-1");
-  expect(screen.getByLabelText("One-time agent token")).toHaveTextContent("deskmates-sp.secret-1");
+  expect(screen.getByLabelText("One-time agent key")).toHaveTextContent("deskmates-sp.secret-1");
   expect(promptBox.textContent).not.toContain("DESKMATES_TOKEN=");
   expect(promptBox.textContent).not.toContain("deskmates-sp.");
   // One token per visit: the button is gone once the token is shown separately.
-  expect(screen.queryByRole("button", { name: "Create agent token" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Create agent key" })).toBeNull();
 
-  fireEvent.click(screen.getByRole("button", { name: "Copy token" }));
-  expect(await screen.findByText(/Token copied/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Copy key" }));
+  expect(await screen.findByText(/Key copied/)).toBeInTheDocument();
   expect(writeText).toHaveBeenNthCalledWith(1, "deskmates-sp.secret-1");
 
   fireEvent.click(screen.getByRole("button", { name: "Copy prompt" }));
@@ -443,27 +494,30 @@ it("keeps the issued token separate from the copied skill-installation prompt", 
 
 it("reports a token the Gateway would not create and a copy the browser refused", async () => {
   window.location.hash = "#/account/agent-access";
-  const gw = fakeGateway(undefined, "owner");
+  const gw = fakeGateway(undefined, "owner", true);
   fakeClipboard("fail");
   gw.state.principalStatus = 503;
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "Create agent token" }));
-  expect(await screen.findByText("Could not create the token. Try again.")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Create agent token" })).toBeEnabled();
+  fireEvent.click(await screen.findByRole("button", { name: "Create agent key" }));
+  expect(await screen.findByText("Could not create the key. Try again.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Create agent key" })).toBeEnabled();
   fireEvent.click(screen.getByRole("button", { name: "Copy prompt" }));
   expect(await screen.findByText(/Could not copy/)).toBeInTheDocument();
 });
 
-it("gives a Member a safe installation prompt and no way to create a token", async () => {
-  window.location.hash = "#/account/agent-access";
-  const gw = fakeGateway(undefined, "member");
-  render(<App />);
-  expect(await screen.findByRole("heading", { name: "Connect an agent" })).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Create agent token" })).toBeNull();
-  expect(screen.getByText(/Creating a token needs an Admin/)).toBeInTheDocument();
-  const prompt = screen.getByLabelText("Prompt for your agent").textContent ?? "";
-  expect(prompt).not.toContain("DESKMATES_TOKEN=");
-  expect(prompt).not.toContain("deskmates-sp.");
-  expect(prompt).toContain("credentials are not enrolled");
-  expect(gw.calls.some((call) => call.path === "/api/service-principals")).toBe(false);
-});
+it.each(["owner", "admin", "member"] as const)(
+  "gives a non-root %s an installation prompt without key creation",
+  async (role) => {
+    window.location.hash = "#/account/agent-access";
+    const gw = fakeGateway(undefined, role);
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Connect an agent" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create agent key" })).toBeNull();
+    expect(screen.getByText(/Creating a key requires the root account/)).toBeInTheDocument();
+    const prompt = screen.getByLabelText("Prompt for your agent").textContent ?? "";
+    expect(prompt).not.toContain("DESKMATES_TOKEN=");
+    expect(prompt).not.toContain("deskmates-sp.");
+    expect(prompt).toContain("credentials are not enrolled");
+    expect(gw.calls.some((call) => call.path === "/api/service-principals")).toBe(false);
+  },
+);

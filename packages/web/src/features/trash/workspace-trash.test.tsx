@@ -173,12 +173,12 @@ it("retains an in-flight archive and its cleanup failure after the live archive 
   expect(f.calls.filter((call) => call.method === "POST")).toHaveLength(2);
 });
 for (const role of ["owner", "admin"] as const)
-  it(`${role} can restore from team Trash without replaying work or deleting anything`, async () => {
+  it(`${role} can restore from Organization Trash without replaying work or deleting anything`, async () => {
     const f = fixture({ role, rows: [], trash: true });
     fireEvent.click(await screen.findByRole("button", { name: "Restore default" }));
     await screen.findByText("Restored default.");
     await screen.findByRole("button", { name: "Workspace: default" });
-    expect(screen.getByText("No archived workspaces in this team.")).toBeTruthy();
+    expect(screen.getByText("No archived workspaces in this Organization.")).toBeTruthy();
     expect(f.calls.filter((call) => call.method !== "GET").map((call) => call.path)).toEqual([
       "/api/workspaces/ws_1/restore",
     ]);
@@ -190,7 +190,7 @@ it("separates loading and failed Trash reads from empty, and provides Retry", as
   f.state.trashError = true;
   fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
   await screen.findByRole("alert");
-  expect(screen.queryByText("No archived workspaces in this team.")).toBeNull();
+  expect(screen.queryByText("No archived workspaces in this Organization.")).toBeNull();
   let resolve!: (value: unknown) => void;
   f.state.trashRead = () =>
     new Promise((done) => {
@@ -201,7 +201,7 @@ it("separates loading and failed Trash reads from empty, and provides Retry", as
   expect(screen.getByRole("button", { name: "Retry" })).toBeDisabled();
   await act(async () => resolve({ workspaces: [], bots: [] }));
   expect(screen.queryByRole("alert")).toBeNull();
-  expect(screen.getByText("No archived workspaces in this team.")).toBeTruthy();
+  expect(screen.getByText("No archived workspaces in this Organization.")).toBeTruthy();
 });
 it("blocks duplicate restore requests, keeps errors actionable, and ignores completion after leaving Trash", async () => {
   const f = fixture({ rows: [], trash: true });
@@ -236,9 +236,8 @@ it("pages archived workspaces and steps back when a restore empties the last pag
   expect(pages).toHaveTextContent("26–26 of 26");
   fireEvent.click(restore);
   // The emptied second page clamps back to the first, now the whole list.
-  await waitFor(() => expect(pages).toHaveTextContent("1–25 of 25"));
-  expect(screen.getByRole("button", { name: "Restore Old 0" })).toBeTruthy();
-  expect(within(pages).getByRole("button", { name: "Next" })).toBeDisabled();
+  await screen.findByRole("button", { name: "Restore Old 0" });
+  expect(screen.queryByRole("navigation", { name: "Trash pages" })).not.toBeInTheDocument();
 });
 it("hides management actions from Members and denies direct Trash access without fetching it", async () => {
   const f = fixture({ role: "member" });
@@ -246,7 +245,7 @@ it("hides management actions from Members and denies direct Trash access without
   expect(screen.queryByRole("menuitem", { name: "Workspace Trash" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Move workspace to Trash" })).toBeNull();
   f.show(true);
-  expect(screen.getByRole("alert")).toHaveTextContent("Only a team Owner or Admin");
+  expect(screen.getByRole("alert")).toHaveTextContent("Only an Organization Owner or Admin");
   expect(f.calls.some((call) => call.path === "/api/trash")).toBe(false);
 });
 it("clears Trash content when an authorized viewer becomes a Member", async () => {
@@ -254,5 +253,5 @@ it("clears Trash content when an authorized viewer becomes a Member", async () =
   await screen.findByRole("button", { name: "Restore default" });
   f.show(true, "member");
   expect(screen.queryByRole("button", { name: "Restore default" })).toBeNull();
-  expect(screen.getByRole("alert")).toHaveTextContent("Only a team Owner or Admin");
+  expect(screen.getByRole("alert")).toHaveTextContent("Only an Organization Owner or Admin");
 });

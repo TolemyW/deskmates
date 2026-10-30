@@ -930,3 +930,9 @@ textarea {
 .chat-message-column > :last-child {
   margin-bottom: 0;
 }
+
+.studio-page-states {
+  display: grid;
+  gap: 20px;
+  margin-bottom: 32px;
+}

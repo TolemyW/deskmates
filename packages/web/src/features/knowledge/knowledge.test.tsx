@@ -99,7 +99,8 @@ it("pages documents and the whole pending queue instead of truncating them (#113
   // A new search starts its results from the first page, by offset with the honest match count.
   fireEvent.change(screen.getByLabelText("Search knowledge"), { target: { value: "doc" } });
   fireEvent.click(screen.getByRole("button", { name: "Search" }));
-  await waitFor(() => expect(docs.textContent).toContain("1–2 of 2"));
+  await screen.findByRole("button", { name: "Doc 0 · v1" });
+  expect(screen.queryByRole("navigation", { name: "Document pages" })).not.toBeInTheDocument();
   expect(urls).toContain("/api/knowledge?q=doc&offset=0&limit=25");
 });
 
@@ -130,10 +131,10 @@ it("sends the loaded memory version and retains the edit after a conflict", asyn
   await screen.findByText("writer");
   await selectOption("Bot", "writer");
   await screen.findByDisplayValue("old memory");
-  fireEvent.change(screen.getByLabelText("Memory Markdown"), {
+  fireEvent.change(screen.getByLabelText("Instructions (Markdown)"), {
     target: { value: "edited memory" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Save memory" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save instructions" }));
   await screen.findByRole("alert");
   expect(write).toHaveBeenCalledWith({ body: "edited memory", expectedVersion: "a".repeat(64) });
   await waitFor(() => expect(screen.getByDisplayValue("edited memory")).toBeTruthy());
@@ -239,4 +240,69 @@ it("opens the proposal editor on demand and keeps a draft when it is closed", as
   expect(screen.getByLabelText("Markdown")).toHaveValue("Keep these notes");
   expect(screen.queryByRole("alertdialog")).toBeNull();
   expect(fetcher.mock.calls.every(([url]) => !String(url).includes("/review"))).toBe(true);
+});
+
+it("distinguishes loading and failed document requests from an empty library, then retries", async () => {
+  const api = createApiClient({ fetch: async () => Response.json({ proposals: [], total: 0 }) });
+  let fail: (error: Error) => void = () => {};
+  vi.spyOn(api, "listKnowledgePage")
+    .mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+    )
+    .mockResolvedValue({ documents: [], total: 0 });
+  render(<KnowledgePanel api={api} />);
+  expect(await screen.findByText("Loading documents…")).toBeVisible();
+  fail(new Error("Library unavailable"));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Library unavailable");
+  expect(
+    screen.queryByText("No published documents yet. Create a document to send it for review."),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry documents" }));
+  await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  expect(
+    await screen.findByText("No published documents yet. Create a document to send it for review."),
+  ).toBeVisible();
+  expect(api.listKnowledgePage).toHaveBeenCalledTimes(2);
+});
+
+it("keeps a local draft when retrying a failed proposal queue", async () => {
+  const api = createApiClient({ fetch: async () => Response.json({ documents: [], total: 0 }) });
+  vi.spyOn(api, "listKnowledgeProposalsPage")
+    .mockRejectedValueOnce(new Error("Queue unavailable"))
+    .mockResolvedValue({ proposals: [], total: 0 });
+  render(<KnowledgePanel api={api} />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Queue unavailable");
+  fireEvent.click(screen.getByRole("button", { name: "New document" }));
+  fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Keep my draft" } });
+  fireEvent.click(screen.getByRole("button", { name: "Retry proposals" }));
+  await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  expect(screen.getByLabelText("Title")).toHaveValue("Keep my draft");
+});
+
+it("distinguishes an unmatched search from an empty published library", async () => {
+  const api = createApiClient({
+    fetch: async (input) =>
+      Response.json(
+        String(input).includes("proposals")
+          ? { proposals: [], total: 0 }
+          : { documents: [], total: 0 },
+      ),
+  });
+  render(<KnowledgePanel api={api} />);
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search knowledge" }), {
+    target: { value: "missing policy" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Search" }));
+  expect(await screen.findByText("No documents match “missing policy”.")).toBeVisible();
+  expect(
+    screen.queryByText("No published documents yet. Create a document to send it for review."),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(
+    await screen.findByText("No published documents yet. Create a document to send it for review."),
+  ).toBeVisible();
+  expect(screen.getByRole("searchbox", { name: "Search knowledge" })).toHaveValue("");
 });

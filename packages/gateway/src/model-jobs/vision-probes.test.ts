@@ -140,8 +140,12 @@ afterEach(async () => {
 });
 
 async function workspace(harness: Harness, name = "ws"): Promise<Workspace> {
-  return (await harness.api<{ workspace: Workspace }>("POST", "/api/workspaces", { name })).json
-    .workspace;
+  return (
+    await harness.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+      name,
+      defaultBot: false,
+    })
+  ).json.workspace;
 }
 
 async function createBot(harness: Harness, ws: Workspace, name: string, model?: string) {
@@ -233,6 +237,7 @@ describe("vision probe lifecycle", () => {
     // Usage is the run's, so the workspace's.
     const runId = result.runId as RunId;
     expect(harness.app.deskmates.ctx.runs.mustGet(runId).status).toBe("succeeded");
+    expect(harness.app.deskmates.ctx.runs.mustGet(runId).triggerKind).toBe("model_job");
 
     // A second bot on the same model, and any number of reads, queue nothing.
     await createBot(harness, ws, "beta");

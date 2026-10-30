@@ -17,7 +17,7 @@ export function BotDiary({ api, bot }: { api: ApiClient; bot: BotDefinition }) {
   const [confirm, setConfirm] = useState<number>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const canEdit = useCan("bot.editDiary").allowed;
+  const canEdit = useCan("bot.editDiary", bot.workspaceId).allowed;
   const t = useT();
 
   const open = useCallback(
@@ -126,7 +126,7 @@ export function BotDiary({ api, bot }: { api: ApiClient; bot: BotDefinition }) {
           ))}
         </ol>
       ) : null}
-      <RoleNote action="bot.editDiary" does={t("botDiary.roleNote")} />
+      <RoleNote allowed={canEdit} action="bot.editDiary" does={t("botDiary.roleNote")} />
     </section>
   );
 }

@@ -35,4 +35,9 @@ export interface PhaseTimingSample {
   toolName?: string;
   /** Fixed route category; a token-count request must not be mistaken for inference. */
   requestKind?: "messages" | "count_tokens";
+  /**
+   * The model a model proxy span's request was sent upstream for, after any rewrite (ADR-0046
+   * amendment 2 decision 21). Absent on other spans and on proxy spans recorded before it.
+   */
+  model?: string;
 }

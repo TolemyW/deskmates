@@ -10,14 +10,19 @@
 //   POST /approvals/:id/decide  body: ApprovalDecideRequest -> 2xx
 //   GET  /egress                                        -> 200 EgressAllowlistResponse
 //   POST /browser-lock  body: BrowserLockRequest        -> 200 BrowserLockResponse
+//   POST /desktop-lock  body: DesktopLockRequest        -> 200 DesktopLockResponse
 //   POST /messages      body: PostMessageRequest        -> 2xx
 //   GET  /memory/search?q=&scope=                       -> 200 { entries: MemorySearchHit[] }
 //   POST /connectors/:c/describe | validate | submit, GET /connectors/:c/status/:r | receipt/:r
 //        | validations/:v                                -> 200 | typed DeskmatesError body
 //   GET /integrations/apps | connections, POST /integrations/search | guide | execute,
 //   GET /integrations/actions/:actionId/tier             -> 200 | typed DeskmatesError body
+//   GET /vault/entries | entries/:id, POST /vault/fill | request -> 200 references, typed outcome
 //   POST /tasks/:taskId/deliver  body: {summary, artifacts, output?} -> 200 TaskDeliverResponse
 //                                                        | typed DeskmatesError body
+//   GET  /run-stats?windowDays=N                         -> 200 RunStatsReport (ADR-0050)
+//   POST /assistant/bots | bots/:name | groups           -> 2xx AssistantBotResult |
+//        AssistantGroupResult | typed DeskmatesError body (ADR-0051)
 // The protocol file only fixes the message shapes and the `/internal/runs/{runId}/...` prefix;
 // the path suffixes and status conventions above are what this client assumes of the Gateway.
 
@@ -31,6 +36,11 @@ import {
   type ApprovalResponse,
   type AsrOperationRequest,
   type AsrOperationResponse,
+  type AssistantBotCreateRequest,
+  type AssistantBotResult,
+  type AssistantBotUpdateRequest,
+  type AssistantGroupCreateRequest,
+  type AssistantGroupResult,
   type BrowserLockRequest,
   type BrowserLockResponse,
   type BrowserOriginRequest,
@@ -40,7 +50,11 @@ import {
   type ConnectorSubmitResponse,
   DeskmatesError,
   type DeskmatesErrorCode,
+  type DesktopLockRequest,
+  type DesktopLockResponse,
   type EgressAllowlistResponse,
+  type ImageGenerationRequest,
+  type ImageGenerationResponse,
   type IntegrationActionTier,
   type IntegrationAppsResult,
   type IntegrationConnectionsResult,
@@ -59,14 +73,27 @@ import {
   type ReplyPreviewRequest,
   type RunEnded,
   type RunId,
+  type RunStatsReport,
+  type SessionStartedReport,
   type SidecarEvent,
+  type SidecarEventsAck,
   type StoredConnectorValidation,
   type TaskCheckpointRequest,
   type TaskCheckpointResponse,
   type TaskDeliverRequest,
   type TaskDeliverResponse,
+  type VaultFillUseRequest,
+  type VaultListing,
+  type VaultRequestUseRequest,
+  type VaultToolEntry,
+  type VaultUseResult,
+  type WebSearchRequest,
+  type WebSearchResponse,
   isDeskmatesErrorCode,
 } from "@deskmates/contracts";
+
+/** The Gateway's fill command waits 15 s and an HTTP use 20 s (ADR-0045); a little longer here. */
+export const VAULT_USE_TIMEOUT_MS = 30_000;
 
 /**
  * Per-request deadline. Without it a Gateway that accepts the connection and never answers hangs
@@ -86,6 +113,10 @@ export const CONNECTOR_TIMEOUT_MS = 30_000;
 export const LOOK_OPERATION_TIMEOUT_MS = 130_000;
 /** The Gateway waits up to 300 s for one transcription (ADR-0040). */
 export const ASR_OPERATION_TIMEOUT_MS = 310_000;
+/** The Gateway waits up to 300 s for one image generation (ADR-0040 amendment B). */
+export const IMAGE_OPERATION_TIMEOUT_MS = 310_000;
+/** The Gateway waits up to 15 s for one search (ADR-0049 decision 3); the sidecar a little longer. */
+export const WEB_SEARCH_CLIENT_TIMEOUT_MS = 20_000;
 
 export interface GatewayClientOptions {
   /** Per-request timeout; tests shorten it. */
@@ -217,6 +248,64 @@ export class GatewayClient {
     return this.integrationCall("GET", `/actions/${encodeURIComponent(actionId)}/tier${q}`);
   }
 
+  /** `run_stats` (ADR-0050): this run's bot in this run's workspace; the token is the scope. */
+  async runStats(windowDays?: number): Promise<RunStatsReport> {
+    const q = windowDays === undefined ? "" : `?windowDays=${windowDays}`;
+    return this.gatewayCall("GET", `/run-stats${q}`, undefined, "sandbox_unavailable");
+  }
+
+  // Workspace default bot (ADR-0051): only a run of the default bot is answered.
+  async assistantCreateBot(request: AssistantBotCreateRequest): Promise<AssistantBotResult> {
+    return this.gatewayCall("POST", "/assistant/bots", request, "sandbox_unavailable");
+  }
+
+  async assistantUpdateBot(
+    name: string,
+    request: AssistantBotUpdateRequest,
+  ): Promise<AssistantBotResult> {
+    const path = `/assistant/bots/${encodeURIComponent(name)}`;
+    return this.gatewayCall("POST", path, request, "sandbox_unavailable");
+  }
+
+  async assistantCreateGroup(request: AssistantGroupCreateRequest): Promise<AssistantGroupResult> {
+    return this.gatewayCall("POST", "/assistant/groups", request, "sandbox_unavailable");
+  }
+
+  // Vault routes (ADR-0045). References and typed outcomes only: no route returns a value.
+  async vaultList(): Promise<VaultListing> {
+    return this.gatewayCall("GET", "/vault/entries", undefined, "sandbox_unavailable");
+  }
+  /** What the PreToolUse hook builds a credential release's action from: the entry, not the input. */
+  async vaultEntry(entryId: string): Promise<VaultToolEntry & { enabled: boolean }> {
+    return (
+      await this.gatewayCall<{ entry: VaultToolEntry & { enabled: boolean } }>(
+        "GET",
+        `/vault/entries/${encodeURIComponent(entryId)}`,
+        undefined,
+        "sandbox_unavailable",
+      )
+    ).entry;
+  }
+  /** Never retried: a repeat with the same approval gets the recorded answer (decision 6). */
+  async vaultFill(body: VaultFillUseRequest): Promise<VaultUseResult> {
+    return this.gatewayCall(
+      "POST",
+      "/vault/fill",
+      body,
+      "sandbox_unavailable",
+      VAULT_USE_TIMEOUT_MS,
+    );
+  }
+  async vaultRequest(body: VaultRequestUseRequest): Promise<VaultUseResult> {
+    return this.gatewayCall(
+      "POST",
+      "/vault/request",
+      body,
+      "sandbox_unavailable",
+      VAULT_USE_TIMEOUT_MS,
+    );
+  }
+
   /**
    * `task_deliver` (ADR-0021 amendment 2). Not retried: the model sees a refusal and may call
    * again. A refusal comes back as the Gateway's typed error, schema errors in `details.errors`.
@@ -256,6 +345,28 @@ export class GatewayClient {
       req,
       "operation_unavailable",
       ASR_OPERATION_TIMEOUT_MS,
+    );
+  }
+
+  /** `image_generate` (ADR-0040 amendment B): one text-to-image call. */
+  async generateImage(req: ImageGenerationRequest): Promise<ImageGenerationResponse> {
+    return this.gatewayCall<ImageGenerationResponse>(
+      "POST",
+      "/operations/image_generation",
+      req,
+      "operation_unavailable",
+      IMAGE_OPERATION_TIMEOUT_MS,
+    );
+  }
+
+  /** `web_search` (ADR-0049): one bounded query; the Gateway picks the service and filters. */
+  async webSearch(req: WebSearchRequest): Promise<WebSearchResponse> {
+    return this.gatewayCall<WebSearchResponse>(
+      "POST",
+      "/search",
+      req,
+      "operation_unavailable",
+      WEB_SEARCH_CLIENT_TIMEOUT_MS,
     );
   }
 
@@ -371,9 +482,34 @@ export class GatewayClient {
     );
   }
 
-  async postEvents(events: readonly SidecarEvent[]): Promise<void> {
-    if (events.length === 0) return;
-    await this.expectOk(await this.send("POST", "/events", events), "events");
+  /**
+   * The Gateway's acknowledgement says whether it is draining (ADR-0029 decision 2); a body that
+   * is not an acknowledgement (an older Gateway, a proxy) reads as "not draining".
+   */
+  async postEvents(events: readonly SidecarEvent[]): Promise<SidecarEventsAck | undefined> {
+    if (events.length === 0) return undefined;
+    const res = await this.send("POST", "/events", events);
+    await this.expectOk(res, "events");
+    const text = await res.text().catch(() => "");
+    try {
+      const body = JSON.parse(text) as Partial<SidecarEventsAck>;
+      return typeof body.stored === "number"
+        ? { stored: body.stored, ...(body.drain === true ? { drain: true as const } : {}) }
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** ADR-0029 decision 4: the SDK session this attempt runs on, kept off the ledger. */
+  async reportSession(attempt: number, sdkSessionId: string): Promise<void> {
+    const report: SessionStartedReport = {
+      type: "session_started",
+      runId: this.runId,
+      attempt,
+      sdkSessionId,
+    };
+    await this.expectOk(await this.send("POST", "/session", report), "session report");
   }
 
   async postTimings(samples: readonly PhaseTimingSample[], attempt: number): Promise<void> {
@@ -480,6 +616,13 @@ export class GatewayClient {
     const res = await this.send("POST", "/browser-lock", req);
     await this.expectOk(res, "browser lock");
     return (await res.json()) as BrowserLockResponse;
+  }
+
+  /** ADR-0048 amendment 1, A3: a desktop call's shared-screen lease, or the hook's probe. */
+  async desktopLock(req: DesktopLockRequest): Promise<DesktopLockResponse> {
+    const res = await this.send("POST", "/desktop-lock", req);
+    await this.expectOk(res, "desktop lock");
+    return (await res.json()) as DesktopLockResponse;
   }
 
   async browserOrigin(

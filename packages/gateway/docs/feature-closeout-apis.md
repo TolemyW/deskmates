@@ -4,7 +4,7 @@
   and days over the whole range, never rows (#113).
 - `GET /api/costs/rows?cursor=&limit=` (same filters): the Activity rows, one keyset page at a time
   (`day DESC, botName, botId, model`), ten a page, at most 100, with the row count (#113).
-- `GET /api/costs/ranking?by=&metric=&offset=&limit=`: one ranking page (ADR-0032), ten by default.
+- `GET /api/costs/ranking?by=&metric=&offset=&limit=`: one ranking page (ADR-0032), ten by default; `by` is `model`, `bot`, `workspace` or `operation` (money only, ADR-0040 amendment A).
 - Cost alerts (ADR-0018): `cost_alert_rules` and `cost_alerts` (migration `0024`), evaluated in
   `RunLifecycle.ended` right after `UsageStore.record`, inside the same transaction, through the
   cost report's own window query; at most one alert per `(rule, UTC window)`. A firing writes the

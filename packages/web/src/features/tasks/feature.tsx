@@ -7,7 +7,7 @@ import { TasksScreen } from "./tasks.js";
 export const feature = defineFeature(routes, {
   nav: {
     group: "talk",
-    order: 30,
+    order: 20,
     icon: <ClipboardList size={18} />,
     label: "app.nav.tasks",
     href: () => taskHref(),

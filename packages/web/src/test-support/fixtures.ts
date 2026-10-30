@@ -102,7 +102,14 @@ export function browserLock(extra: Partial<BrowserLock> = {}): BrowserLock {
 }
 
 export function workspaceView(extra: Partial<WorkspaceView> = {}): WorkspaceView {
-  return { workspace, bots: [bot], browserLock: null, takeoverScreen: true, ...extra };
+  return {
+    workspace,
+    bots: [bot],
+    browserLock: null,
+    browserLockHeldByMe: false,
+    takeoverScreen: true,
+    ...extra,
+  };
 }
 
 export const thread: Thread = {

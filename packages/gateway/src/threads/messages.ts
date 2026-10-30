@@ -4,17 +4,30 @@
 import {
   type Attachment,
   type BotId,
+  CHAT_PREVIEW_MAX,
   DeskmatesError,
+  type IsoTimestamp,
   type Mention,
   type MessageAuthorKind,
   type MessageId,
   type RunId,
   type ThreadId,
+  type ThreadLastMessage,
   type ThreadMessage,
+  messageExcerpt,
+  messageExcerptSourceChars,
 } from "@deskmates/contracts";
 import { newId, nowIso, parseJson } from "../db/ids.js";
 import type { GatewayDb } from "../db/open.js";
 import { normalizeBody } from "./caps.js";
+
+/**
+ * The seq the thread's message caps count from (ADR-0005 amendment 3, decision 22): the later of
+ * the latest human message and the thread's `budget_reset_seq`. Binds the thread id twice.
+ */
+export const BUDGET_ORIGIN_SQL = `max(
+  coalesce((SELECT max(seq) FROM thread_messages WHERE thread_id = ? AND author_kind = 'human'), 0),
+  coalesce((SELECT budget_reset_seq FROM threads WHERE id = ?), 0))`;
 
 interface MessageRow {
   id: string;
@@ -186,6 +199,27 @@ export class MessageStore {
     return row ? toMessage(row) : undefined;
   }
 
+  /**
+   * The newest message as the chat list shows it (issue #16): the excerpt is derived from a
+   * bounded prefix of the stored body, never from a rewritten one.
+   */
+  lastMessage(threadId: ThreadId): ThreadLastMessage | undefined {
+    const row = this.db
+      .prepare(`SELECT seq, author_kind, author_id, substr(body, 1, ?) AS body, ts
+        FROM thread_messages WHERE thread_id = ? ORDER BY seq DESC LIMIT 1`)
+      .get(messageExcerptSourceChars(CHAT_PREVIEW_MAX), threadId) as
+      | Pick<MessageRow, "seq" | "author_kind" | "author_id" | "body" | "ts">
+      | undefined;
+    if (!row) return undefined;
+    return {
+      seq: row.seq,
+      authorKind: row.author_kind,
+      authorId: row.author_id,
+      excerpt: messageExcerpt(row.body, CHAT_PREVIEW_MAX),
+      ts: row.ts as IsoTimestamp,
+    };
+  }
+
   maxSeq(threadId: ThreadId): number {
     const { seq } = this.db
       .prepare("SELECT coalesce(max(seq), 0) AS seq FROM thread_messages WHERE thread_id = ?")
@@ -231,37 +265,34 @@ export class MessageStore {
     return rows.map(toMessage);
   }
 
-  /** Bot-authored volume since the latest human turn, for ADR-0005's thread budget. */
-  botCountSinceLastHuman(threadId: ThreadId): number {
+  /**
+   * Bot-authored volume since the budget origin, for ADR-0005's thread budget: messages after
+   * both the latest human message and the thread's `budget_reset_seq`, which every unpause moves
+   * (amendment 3, decision 22).
+   */
+  botCountSinceOrigin(threadId: ThreadId): number {
     const row = this.db
       .prepare(
         `SELECT count(*) AS count FROM thread_messages
-         WHERE thread_id = ? AND author_kind = 'bot'
-           AND seq > coalesce(
-             (SELECT max(seq) FROM thread_messages WHERE thread_id = ? AND author_kind = 'human'),
-             0
-           )`,
+         WHERE thread_id = ? AND author_kind = 'bot' AND seq > ${BUDGET_ORIGIN_SQL}`,
       )
-      .get(threadId, threadId) as { count: number };
+      .get(threadId, threadId, threadId) as { count: number };
     return row.count;
   }
 
   /**
    * ADR-0005 amendment 5, decision 40 (repetition): how many messages the author of `message`
-   * posted in its thread since the latest human message whose normalized body equals its own,
-   * itself included.
+   * posted in its thread since the budget origin (amendment 3, decision 22) whose normalized
+   * body equals its own, itself included.
    */
-  botRepeatsSinceLastHuman(message: ThreadMessage): number {
+  botRepeatsSinceOrigin(message: ThreadMessage): number {
     const rows = this.db
       .prepare(
         `SELECT body FROM thread_messages
          WHERE thread_id = ? AND author_kind = 'bot' AND author_id = ? AND seq <= ?
-           AND seq > coalesce(
-             (SELECT max(seq) FROM thread_messages WHERE thread_id = ? AND author_kind = 'human'),
-             0
-           )`,
+           AND seq > ${BUDGET_ORIGIN_SQL}`,
       )
-      .all(message.threadId, message.authorId, message.seq, message.threadId) as {
+      .all(message.threadId, message.authorId, message.seq, message.threadId, message.threadId) as {
       body: string;
     }[];
     const body = normalizeBody(message.body);

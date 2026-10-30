@@ -85,6 +85,14 @@ export class HybridRetrieval {
     return this.settings !== undefined;
   }
 
+  /**
+   * The configured embedding client, for the operator related-task lookup (ADR-0021 A4h), which
+   * records its own calls with corpus `task`; undefined when unconfigured.
+   */
+  get embeddingClient(): EmbeddingClient | undefined {
+    return this.embedding;
+  }
+
   /** A document was published or changed: index it soon. A no-op when unconfigured. */
   kick(): void {
     this.indexer?.kick();
@@ -205,11 +213,11 @@ export class HybridRetrieval {
     if (memoryQueryTokens(options.query).length === 0) return [];
     const now = options.now ?? new Date();
     const scoped = { ...options, now };
-    const lexical = searchMemoryPage(this.deps.db, {
-      ...scoped,
-      limit: settings.candidates,
-      offset: 0,
-    }).hits.map((hit) => hit.id);
+    const lexical = searchMemoryPage(
+      this.deps.db,
+      { ...scoped, limit: settings.candidates, offset: 0 },
+      settings.candidates,
+    ).hits.map((hit) => hit.id);
     const tenantId = this.tenantOfWorkspace(options.workspaceId);
     // An unknown workspace has nothing to fuse and no tenant to attribute a call to.
     if (!tenantId) return lexical.slice(0, FUSED_MAX);

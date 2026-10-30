@@ -6,6 +6,14 @@ with `roundMode: "sequential"` and `@everyone` walks members in join order
 instead, for that message only. Unaddressed messages walk members in join order
 (under `walk-v1`); the next member sees earlier replies and can stay silent.
 
+**Literal mentions (ADR-0056).** Backtick code spans, fenced code, Markdown quote
+lines and escaped at-signs (`\@name`) are text, not addresses; they also produce
+no unknown-name diagnostics, private handoffs or human mention invitations.
+A bot broadcasts with `@everyone` in its leading address list, for example
+`@everyone review these findings` or `@alice, @everyone review these findings`.
+A later occurrence in a report does not broadcast. Human broadcast placement
+and ordinary individual handoffs outside literal regions keep their behavior.
+
 **Request rounds (amendment 4).** Every human message that wakes anyone in a
 chat thread, and every bot `@everyone`, is a durable round
 (`thread_rounds`, keyed by the message id) with its member snapshot and the

@@ -5,17 +5,25 @@ import {
   type DeliverableTask,
   DeskmatesError,
   type RunId,
+  type RunStatus,
   TASK_STATUSES,
+  TERMINAL_RUN_STATUSES,
   type Task,
   type TaskArtifact,
   type TaskCheckpoint,
   type TaskCheckpointDigest,
+  type TaskCheckpointRequest,
+  type TaskCheckpointUnit,
   type TaskDeliverRequest,
   type TaskDelivery,
+  type TaskEvidenceKind,
   type TaskJson,
+  type TaskKindStamp,
   type TaskOutputSchema,
   type TaskScheduleInput,
   type TaskStatus,
+  type TaskTemplate,
+  type TaskToolExample,
   type ThreadId,
   type WorkspaceId,
   deliveredByBot,
@@ -25,8 +33,11 @@ import { newId } from "../db/ids.js";
 import type { GatewayDb } from "../db/open.js";
 import { publishVerifiedFiles } from "../files/file-publications.js";
 import type { VerifiedFile } from "../files/file-verification.js";
-import { outputErrors } from "./output-schema.js";
+import { deliveryRequestHash } from "./delivery-replay.js";
+import { exampleOutput, outputErrors } from "./output-schema.js";
+import { type RunPathContext, checkRunPath, evidenceKind, runWorkDir } from "./task-paths.js";
 import { TaskSchedules } from "./task-schedule.js";
+import { fieldValues, normalizeFieldValue, stampOf, templateBrief } from "./task-templates.js";
 import {
   TASK_LIMITS,
   acceptTaskVersion,
@@ -65,9 +76,12 @@ interface TaskRow {
   accepted_by: string | null;
   scope_version: number;
   deleted_at: string | null;
+  kind: string | null;
+  kind_json: string | null;
 }
 
 interface DeliveryRow {
+  output_json: string | null;
   id: string;
   kind: "complete" | "partial";
   run_id: string | null;
@@ -94,6 +108,8 @@ export interface DeliveryScope {
   workspaceId: WorkspaceId;
   botId: BotId;
   task: Task;
+  /** The request with every artifact path resolved and normalised; verify and deliver these. */
+  input: TaskDeliverRequest;
 }
 
 export class TaskStore {
@@ -225,7 +241,37 @@ export class TaskStore {
         ...(a.run_id === null ? {} : { runId: a.run_id as RunId }),
       }),
     );
-    return toTask(row, { threadIds, runIds, artifacts }, this.schedules.get(row.id));
+    const task = toTask(row, { threadIds, runIds, artifacts }, this.schedules.get(row.id));
+    if (row.kind !== null && row.kind_json !== null) task.kind = this.kindOf(row);
+    return task;
+  }
+
+  /** A templated task's stamp (ADR-0021 A4c): the snapshot plus its current field values. */
+  private kindOf(row: TaskRow): TaskKindStamp {
+    const snapshot = JSON.parse(row.kind_json as string) as Omit<TaskKindStamp, "fields">;
+    const fields = Object.fromEntries(
+      (
+        this.db
+          .prepare(
+            "SELECT field_key, value FROM task_field_values WHERE task_id = ? ORDER BY field_key",
+          )
+          .all(row.id) as { field_key: string; value: string }[]
+      ).map((f) => [f.field_key, f.value]),
+    );
+    return { ...snapshot, fields };
+  }
+
+  /** Replace a templated task's field values. */
+  private writeFields(
+    task: Pick<Task, "id" | "workspaceId">,
+    fields: Record<string, string>,
+  ): void {
+    this.db.prepare("DELETE FROM task_field_values WHERE task_id = ?").run(task.id);
+    const insert = this.db.prepare(`INSERT INTO task_field_values (task_id, workspace_id, field_key,
+      value, normalized) VALUES (?, ?, ?, ?, ?)`);
+    for (const [key, value] of Object.entries(fields))
+      if (value.trim() !== "")
+        insert.run(task.id, task.workspaceId, key, value, normalizeFieldValue(value));
   }
 
   /** Replaces a task's links with the ones the task lists, in its order. */
@@ -253,9 +299,34 @@ export class TaskStore {
   create(
     workspaceId: WorkspaceId,
     raw: unknown,
-    opts: { createKey?: string; schedule?: TaskScheduleInput } = {},
+    opts: {
+      createKey?: string;
+      schedule?: TaskScheduleInput;
+      /** ADR-0021 A4c: stamp the kind, copy the criteria and store the field values. */
+      template?: TaskTemplate;
+      fields?: Record<string, string>;
+    } = {},
   ): Task {
     const input = createTaskInput(raw);
+    let stamp: Omit<TaskKindStamp, "fields"> | undefined;
+    let values: Record<string, string> = {};
+    if (opts.template) {
+      if (opts.template.archivedAt !== null)
+        throw new DeskmatesError("invalid_transition", "An archived template creates no task", {
+          templateId: opts.template.id,
+        });
+      stamp = stampOf(opts.template);
+      values = fieldValues(stamp.fieldDefs, opts.fields, { fillDefaults: true });
+      const brief = templateBrief(stamp, values);
+      const base = (input.description ?? "").trimEnd();
+      input.description = base === "" ? brief : `${base}\n\n${brief}`;
+      if (input.description.length > TASK_LIMITS.description)
+        throw new DeskmatesError(
+          "validation",
+          `description and the template section exceed ${TASK_LIMITS.description} characters`,
+          { key: "description" },
+        );
+    }
     return this.db
       .transaction(() => {
         this.requireWorkspace(workspaceId);
@@ -288,12 +359,21 @@ export class TaskStore {
         this.db
           .prepare(`INSERT INTO tasks (id, workspace_id, title, description, owner_bot_id, status,
         blocked_reason, next_action, version, created_at, updated_at, delivered_at, accepted_at,
-        accepted_by, delivered_by, output_schema_json, output_json, scope_version, create_key)
+        accepted_by, delivered_by, output_schema_json, output_json, scope_version, create_key,
+        kind, kind_json, sla_minutes)
         VALUES (@id, @workspaceId, @title, @description, @ownerBotId, @status,
         @blockedReason, @nextAction, @version, @createdAt, @updatedAt, @deliveredAt, @acceptedAt,
-        @acceptedBy, @deliveredBy, @outputSchema, @output, @scopeVersion, @createKey)`)
-          .run({ ...bindings(task), createKey: opts.createKey ?? null });
+        @acceptedBy, @deliveredBy, @outputSchema, @output, @scopeVersion, @createKey,
+        @kind, @kindJson, @slaMinutes)`)
+          .run({
+            ...bindings(task),
+            createKey: opts.createKey ?? null,
+            kind: stamp?.key ?? null,
+            kindJson: stamp ? JSON.stringify(stamp) : null,
+            slaMinutes: stamp?.slaMinutes ?? null,
+          });
         this.writeLinks(task);
+        if (stamp) this.writeFields(task, values);
         if (opts.schedule) this.schedules.set(workspaceId, task.id, opts.schedule);
         return this.mustGet(workspaceId, task.id);
       })
@@ -306,14 +386,22 @@ export class TaskStore {
    * its original deliverer; one that leaves `delivered` clears every delivery fact. A schedule in
    * the body is an explicit schedule change (A3d), never a rerun.
    */
-  update(workspaceId: WorkspaceId, id: string, raw: unknown, actor = "human:web"): Task {
+  update(
+    workspaceId: WorkspaceId,
+    id: string,
+    raw: unknown,
+    actor = "human:web",
+    options: { revision?: true } = {},
+  ): Task {
     if (!OPERATOR_LABEL.test(actor))
       throw new DeskmatesError("validation", "an edit needs an authenticated operator label");
-    const { schedule, ...input } = updateTaskInput(raw);
+    const { schedule, fields, ...input } = updateTaskInput(raw);
     return this.db
       .transaction(() => {
         const current = this.mustGet(workspaceId, id);
         this.checkVersion(current, input.version);
+        if (options.revision && current.status !== "delivered")
+          throw new DeskmatesError("invalid_transition", "Only a delivered task can be revised");
         const reopening = input.status === "planned" || input.status === "in_progress";
         if ((current.status === "accepted" || current.status === "cancelled") && !reopening) {
           throw new DeskmatesError(
@@ -347,6 +435,7 @@ export class TaskStore {
         }
         // A3f: only a change of what is asked moves the scope; links and state do not.
         const scopeChanged =
+          options.revision === true ||
           next.title !== current.title ||
           next.description !== current.description ||
           JSON.stringify(next.outputSchema) !== JSON.stringify(current.outputSchema);
@@ -361,7 +450,29 @@ export class TaskStore {
         next.acceptedAt = null;
         next.acceptedBy = null;
         this.validateReferences(next);
-        this.write(next, input.version);
+        // A4c: a templated task's field values may be corrected; the description stays as it is.
+        let corrected: Record<string, string> | undefined;
+        if (fields !== undefined) {
+          if (!current.kind)
+            throw new DeskmatesError(
+              "validation",
+              "Only a task created from a template has fields",
+              { key: "fields" },
+            );
+          const defs = current.kind.fieldDefs;
+          corrected = {
+            ...current.kind.fields,
+            ...fieldValues(defs, fields, { fillDefaults: false }),
+          };
+          for (const def of defs)
+            if (def.required && !(corrected[def.key] ?? "").trim())
+              throw new DeskmatesError("validation", `The field ${def.label} is required`, {
+                key: "fields",
+                field: def.key,
+              });
+        }
+        this.write(next, input.version, actor);
+        if (corrected) this.writeFields(next, corrected);
         if (schedule !== undefined) this.schedules.set(workspaceId, id, schedule);
         return this.mustGet(workspaceId, id);
       })
@@ -435,6 +546,7 @@ export class TaskStore {
             acceptedBy,
           },
           version,
+          acceptedBy,
         );
         return this.mustGet(workspaceId, id);
       })
@@ -445,8 +557,9 @@ export class TaskStore {
    * Everything about a run's `task_deliver` that needs no workspace read (ADR-0021 amendment 2,
    * A3f, A3g): the task is in the run's workspace (else not found) and linked to the run or its
    * thread (else forbidden), open, at the scope the run was given, the output fits the schema of
-   * a complete delivery, and every path passes the lexical policy. Run before verification and
-   * again inside the write transaction.
+   * a complete delivery, and every path, resolved against the run's work directory when relative,
+   * passes the lexical policy. Run before verification and again inside the write transaction;
+   * resolving an already resolved request changes nothing. A refusal carries `details.example`.
    */
   deliveryScope(runId: RunId, input: TaskDeliverRequest): DeliveryScope {
     const run = this.runScope(runId);
@@ -477,30 +590,63 @@ export class TaskStore {
           currentScopeVersion: current.scopeVersion,
         },
       );
+    if (TERMINAL_RUN_STATUSES.has(run.status))
+      throw new DeskmatesError("invalid_transition", "A finished run cannot deliver a task", {
+        runId,
+        status: run.status,
+        reason: "run_finished",
+      });
+    const help = () => this.toolHelp(runId, current.id, "task_deliver");
     const complete = (input.outstanding ?? []).length === 0;
     if (current.outputSchema !== null && (complete || input.output !== undefined)) {
       const errors =
         input.output === undefined
-          ? ["output: required by the task's outputSchema"]
+          ? ["output: required by the task's outputSchema; see the example"]
           : outputErrors(current.outputSchema, input.output);
       if (errors.length > 0)
         throw new DeskmatesError(
           "validation",
-          "The output does not match the task's outputSchema",
-          {
-            errors,
-          },
+          input.output === undefined
+            ? "output is required: this task has an outputSchema"
+            : "The output does not match the task's outputSchema",
+          { errors, ...help() },
         );
     }
-    const botNames = this.botNames(run.workspaceId);
-    const unsafe = input.artifacts.filter((a) => workspaceFileRoot(a.path, botNames) === undefined);
-    if (unsafe.length > 0)
+    // Issue #39 item 5: a relative path names a file in the run's work directory.
+    const errors: string[] = [];
+    const artifacts = input.artifacts.map((a) => {
+      // A bare hex name is read as a commit, not as a relative file named like one.
+      const kind = evidenceKind(a.path);
+      if (kind !== "path") {
+        errors.push(
+          `${a.path}: a ${kind === "url" ? "URL" : "commit hash"} is not a file; mention it in the summary, or as task_checkpoint evidence`,
+        );
+        return a;
+      }
+      const checked = checkRunPath(a.path, run.paths);
+      if ("error" in checked) {
+        errors.push(checked.error);
+        return a;
+      }
+      return { ...a, path: checked.path };
+    });
+    if (errors.length > 0)
       throw new DeskmatesError(
         "forbidden",
-        "Artifact paths must be under /work/ or /home/<bot>/ of this workspace",
-        { errors: unsafe.map((a) => `${a.path}: forbidden`) },
+        `Artifact paths must name files under /work/ or /home/${run.paths.botName}/ of this workspace; a relative path is resolved against your work directory ${run.paths.workDir}`,
+        { errors, ...help() },
       );
-    return { workspaceId: run.workspaceId, botId: run.botId, task: current };
+    if (new Set(artifacts.map((a) => a.path)).size !== artifacts.length)
+      throw new DeskmatesError("validation", "artifacts must not repeat a path", {
+        errors: artifacts.map((a) => a.path),
+        ...help(),
+      });
+    return {
+      workspaceId: run.workspaceId,
+      botId: run.botId,
+      task: current,
+      input: { ...input, artifacts },
+    };
   }
 
   /**
@@ -511,17 +657,40 @@ export class TaskStore {
    */
   deliver(
     runId: RunId,
-    input: TaskDeliverRequest,
+    request: TaskDeliverRequest,
     verified: ReadonlyMap<string, VerifiedFile>,
-  ): { task: Task; delivery: TaskDelivery } {
+  ): { task: Task; delivery: TaskDelivery; replayed: boolean } {
     return this.db
       .transaction(() => {
-        const { workspaceId, botId, task: current } = this.deliveryScope(runId, input);
+        const { workspaceId, botId, task: current, input } = this.deliveryScope(runId, request);
         for (const a of input.artifacts)
           if (!verified.has(a.path))
             throw new DeskmatesError("validation", "An artifact was not verified", {
               errors: [`${a.path}: not verified`],
             });
+        const attempt = (
+          this.db.prepare("SELECT attempt FROM runs WHERE id = ?").get(runId) as { attempt: number }
+        ).attempt;
+        const requestHash = deliveryRequestHash(
+          runId,
+          attempt,
+          current.scopeVersion,
+          input,
+          verified,
+        );
+        const previous = this.db
+          .prepare(`SELECT id, request_sha256, task_version FROM task_deliveries
+            WHERE task_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`)
+          .get(current.id) as
+          | { id: string; request_sha256: string | null; task_version: number | null }
+          | undefined;
+        if (previous?.request_sha256 === requestHash && previous.task_version === current.version) {
+          return {
+            task: current,
+            delivery: this.deliveries(current.id).find((d) => d.id === previous.id) as TaskDelivery,
+            replayed: true,
+          };
+        }
         const outstanding = input.outstanding ?? [];
         const kind = outstanding.length === 0 ? "complete" : "partial";
         const stamped = new Map(
@@ -550,7 +719,7 @@ export class TaskStore {
                 updatedAt: at,
                 deliveredAt: at,
                 deliveredBy,
-                output: input.output ?? null,
+                output: input.output === undefined ? current.output : input.output,
                 acceptedAt: null,
                 acceptedBy: null,
               }
@@ -563,18 +732,13 @@ export class TaskStore {
                 updatedAt: at,
               };
         this.validateReferences(next);
-        this.write(next, current.version);
-        const attempt =
-          (
-            this.db.prepare("SELECT attempt FROM runs WHERE id = ?").get(runId) as
-              | { attempt: number }
-              | undefined
-          )?.attempt ?? 1;
+        this.write(next, current.version, deliveredBy);
         const deliveryId = newId("tdl");
         this.db
           .prepare(`INSERT INTO task_deliveries (id, workspace_id, task_id, run_id, attempt,
-            delivered_by, scope_version, kind, summary, outstanding_json, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            delivered_by, scope_version, kind, summary, outstanding_json, created_at,
+            output_json, request_sha256, task_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .run(
             deliveryId,
             workspaceId,
@@ -587,6 +751,9 @@ export class TaskStore {
             input.summary,
             JSON.stringify(outstanding),
             at,
+            JSON.stringify(kind === "complete" ? next.output : (input.output ?? null)),
+            requestHash,
+            next.version,
           );
         publishVerifiedFiles(this.db, {
           workspaceId,
@@ -604,6 +771,7 @@ export class TaskStore {
         return {
           task: this.mustGet(workspaceId, current.id),
           delivery: this.deliveries(current.id).find((d) => d.id === deliveryId) as TaskDelivery,
+          replayed: false,
         };
       })
       .immediate();
@@ -625,6 +793,7 @@ export class TaskStore {
       deliveredBy: row.delivered_by,
       scopeVersion: row.scope_version,
       summary: row.summary,
+      ...(row.output_json === null ? {} : { output: JSON.parse(row.output_json) as TaskJson }),
       outstanding: JSON.parse(row.outstanding_json) as string[],
       createdAt: row.created_at,
       publications: (
@@ -647,14 +816,33 @@ export class TaskStore {
 
   /**
    * `task_checkpoint` (ADR-0021 A3h). Run, attempt and bot come from the run row; evidence paths
-   * get the lexical policy and are stored as pointers. No task state changes; nothing is published.
+   * are resolved against the run's work directory, get the lexical policy and are stored as
+   * pointers, and a commit hash or URL is stored with its kind (issue #39 item 5). No task state
+   * changes; nothing is published. A refusal carries `details.example`.
    */
   recordCheckpoint(runId: RunId, raw: unknown): TaskCheckpoint {
-    const input = checkpointInput(raw);
+    let input: TaskCheckpointRequest;
+    try {
+      input = checkpointInput(raw);
+    } catch (err) {
+      const taskId =
+        typeof raw === "object" && raw !== null ? Reflect.get(raw, "taskId") : undefined;
+      throw withToolHelp(err, () => this.toolHelp(runId, taskId, "task_checkpoint"));
+    }
     return this.db
       .transaction(() => {
         const run = this.runScope(runId);
         const task = this.mustGet(run.workspaceId, input.taskId);
+        if (input.scopeVersion !== undefined && input.scopeVersion !== task.scopeVersion)
+          throw new DeskmatesError(
+            "invalid_transition",
+            "The task scope changed; re-read it before recording progress",
+            {
+              reason: "stale_scope",
+              scopeVersion: input.scopeVersion,
+              currentScopeVersion: task.scopeVersion,
+            },
+          );
         const linked =
           task.runIds.includes(runId) ||
           (run.threadId !== null && task.threadIds.includes(run.threadId));
@@ -664,15 +852,33 @@ export class TaskStore {
             "This run is not linked to the task or to one of its threads",
             { taskId: task.id, runId },
           );
-        const botNames = this.botNames(run.workspaceId);
-        const unsafe = input.completed
-          .flatMap((u) => u.evidence)
-          .filter((path) => workspaceFileRoot(path, botNames) === undefined);
-        if (unsafe.length > 0)
+        // Issue #39 item 5: a commit hash or a URL is typed evidence; a path is resolved against
+        // the run's work directory and must stay under /work/ or a bot home.
+        const errors: string[] = [];
+        const completed = input.completed.map((unit): TaskCheckpointUnit => {
+          const evidence: string[] = [];
+          const evidenceKinds: TaskEvidenceKind[] = [];
+          for (const entry of unit.evidence) {
+            const kind = evidenceKind(entry);
+            if (kind !== "path") {
+              evidence.push(entry);
+              evidenceKinds.push(kind);
+              continue;
+            }
+            const checked = checkRunPath(entry, run.paths);
+            if ("error" in checked) errors.push(checked.error);
+            else {
+              evidence.push(checked.path);
+              evidenceKinds.push("path");
+            }
+          }
+          return { ...unit, evidence, evidenceKinds };
+        });
+        if (errors.length > 0)
           throw new DeskmatesError(
             "forbidden",
-            "Evidence paths must be under /work/ or /home/<bot>/ of this workspace",
-            { errors: unsafe.map((path) => `${path}: forbidden`) },
+            `Evidence must be a file path under /work/ or /home/${run.paths.botName}/ of this workspace (a relative path is resolved against your work directory ${run.paths.workDir}), a commit hash or an http(s) URL`,
+            { errors, ...this.toolHelp(runId, task.id, "task_checkpoint") },
           );
         const attempt =
           (
@@ -693,7 +899,8 @@ export class TaskStore {
             attempt,
             run.botId,
             JSON.stringify({
-              completed: input.completed,
+              scopeVersion: task.scopeVersion,
+              completed,
               outstanding: input.outstanding ?? [],
               note: input.note ?? "",
             }),
@@ -712,7 +919,7 @@ export class TaskStore {
     if (!row) return null;
     const body = JSON.parse(row.body_json) as Pick<
       TaskCheckpoint,
-      "completed" | "outstanding" | "note"
+      "completed" | "outstanding" | "note" | "scopeVersion"
     >;
     return {
       id: row.id,
@@ -720,6 +927,7 @@ export class TaskStore {
       runId: row.run_id as RunId | null,
       attempt: row.attempt,
       botId: row.bot_id as BotId | null,
+      ...(body.scopeVersion === undefined ? {} : { scopeVersion: body.scopeVersion }),
       completed: body.completed,
       outstanding: body.outstanding,
       note: body.note,
@@ -747,6 +955,9 @@ export class TaskStore {
         const digest: TaskCheckpointDigest | undefined = checkpoint
           ? {
               runId: checkpoint.runId,
+              ...(checkpoint.scopeVersion === undefined
+                ? {}
+                : { scopeVersion: checkpoint.scopeVersion }),
               attempt: checkpoint.attempt,
               createdAt: checkpoint.createdAt,
               completed: checkpoint.completed,
@@ -765,17 +976,92 @@ export class TaskStore {
 
   private runScope(runId: RunId): {
     botId: BotId;
+    status: RunStatus;
     threadId: ThreadId | null;
     workspaceId: WorkspaceId;
+    paths: RunPathContext;
   } {
     const row = this.db
-      .prepare("SELECT bot_id, thread_id, workspace_id FROM runs WHERE id = ?")
-      .get(runId) as { bot_id: string; thread_id: string | null; workspace_id: string } | undefined;
+      .prepare(`SELECT r.bot_id, r.status, r.thread_id, r.workspace_id, r.config_json, b.name AS bot_name
+        FROM runs r JOIN bots b ON b.id = r.bot_id WHERE r.id = ?`)
+      .get(runId) as
+      | {
+          bot_id: string;
+          status: RunStatus;
+          thread_id: string | null;
+          workspace_id: string;
+          config_json: string;
+          bot_name: string;
+        }
+      | undefined;
     if (!row) throw new DeskmatesError("not_found", "Run not found", { runId });
+    const workspaceId = row.workspace_id as WorkspaceId;
+    // ADR-0038: the mode the run froze; a row without one ran in `/work` (shared).
+    const config = JSON.parse(row.config_json || "{}") as { botWorkdir?: unknown };
+    const mode = config.botWorkdir === "per-bot" ? "per-bot" : "shared";
     return {
       botId: row.bot_id as BotId,
+      status: row.status,
       threadId: row.thread_id as ThreadId | null,
-      workspaceId: row.workspace_id as WorkspaceId,
+      workspaceId,
+      paths: {
+        workDir: runWorkDir(mode, row.bot_name),
+        botName: row.bot_name,
+        botNames: this.botNames(workspaceId),
+      },
+    };
+  }
+
+  /**
+   * What a refused `task_deliver` or `task_checkpoint` carries in its details (issue #39 item 5):
+   * the run's work directory and a minimal valid call, with `output` keys from the task's schema.
+   * Best effort: an unknown run or task still yields a generic example.
+   */
+  toolHelp(
+    runId: RunId,
+    taskId: unknown,
+    tool: "task_deliver" | "task_checkpoint",
+  ): { workDir?: string; example: TaskToolExample; outputExampleUnavailable?: string } {
+    let workDir: string | undefined;
+    let task: Task | undefined;
+    try {
+      const run = this.runScope(runId);
+      workDir = run.paths.workDir;
+      if (typeof taskId === "string") task = this.mustGet(run.workspaceId, taskId);
+    } catch {
+      // The refusal itself names what was wrong; the example stays generic.
+    }
+    const id = task?.id ?? (typeof taskId === "string" && taskId ? taskId : "<taskId>");
+    const dir = workDir ?? "/work";
+    const output = task?.outputSchema ? exampleOutput(task.outputSchema) : undefined;
+    const example: TaskToolExample =
+      tool === "task_deliver"
+        ? {
+            taskId: id,
+            summary: "<one or two sentences on what was done>",
+            artifacts: [{ label: "<result>", path: `${dir}/result.md` }],
+            ...(output === undefined ? {} : { output }),
+          }
+        : {
+            taskId: id,
+            completed: [
+              {
+                unit: "<criterion done>",
+                outcome: "<what was done>",
+                evidence: [`${dir}/notes.md`, "9489f6a", "https://example.com/pull/1"],
+              },
+            ],
+            outstanding: ["<criterion still open>"],
+          };
+    return {
+      ...(workDir ? { workDir } : {}),
+      example,
+      ...(tool === "task_deliver" && task?.outputSchema && output === undefined
+        ? {
+            outputExampleUnavailable:
+              "No valid output example can be generated for this schema. Review the task output schema before delivering.",
+          }
+        : {}),
     };
   }
 
@@ -849,7 +1135,12 @@ export class TaskStore {
     }
   }
 
-  private write(task: Task, expectedVersion: number): void {
+  private write(task: Task, expectedVersion: number, actor: string | null = null): void {
+    const before = this.db
+      .prepare("SELECT status, owner_bot_id FROM tasks WHERE id = ? AND workspace_id = ?")
+      .get(task.id, task.workspaceId) as
+      | { status: string; owner_bot_id: string | null }
+      | undefined;
     const result = this.db
       .prepare(`UPDATE tasks SET title = @title, description = @description,
       owner_bot_id = @ownerBotId, status = @status, blocked_reason = @blockedReason, next_action = @nextAction,
@@ -864,7 +1155,43 @@ export class TaskStore {
         reason: "version_conflict",
       });
     this.writeLinks(task);
+    // ADR-0021 A4f: status and owner changes are appended for the kind view.
+    const transition = this.db.prepare(`INSERT INTO task_transitions (workspace_id, task_id, field,
+      from_value, to_value, changed_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+    if (before && before.status !== task.status)
+      transition.run(
+        task.workspaceId,
+        task.id,
+        "status",
+        before.status,
+        task.status,
+        actor,
+        task.updatedAt,
+      );
+    if (before && before.owner_bot_id !== task.ownerBotId)
+      transition.run(
+        task.workspaceId,
+        task.id,
+        "owner",
+        before.owner_bot_id,
+        task.ownerBotId,
+        actor,
+        task.updatedAt,
+      );
   }
+}
+
+/**
+ * `err` with the tool's work directory and example added to its details (issue #39 item 5), so
+ * the model sees a valid call next to the refusal. Anything but a `DeskmatesError` passes through.
+ */
+export function withToolHelp(
+  err: unknown,
+  help: () => { workDir?: string; example: TaskToolExample },
+): unknown {
+  if (!(err instanceof DeskmatesError) || "example" in err.details) return err;
+  if (err.code !== "validation" && err.code !== "forbidden") return err;
+  return new DeskmatesError(err.code, err.message, { ...err.details, ...help() });
 }
 
 function bindings(task: Task) {
@@ -873,6 +1200,7 @@ function bindings(task: Task) {
     runIds: _runs,
     artifacts: _artifacts,
     schedule: _schedule,
+    kind: _kind,
     ...row
   } = task;
   return {

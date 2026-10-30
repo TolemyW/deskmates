@@ -55,14 +55,18 @@ export function memoryQueryTokens(query: string): string[] {
   return query.match(/[\p{L}\p{N}_]+/gu)?.slice(0, 16) ?? [];
 }
 
-/** One page of hits and whether another exists after it. */
+/**
+ * One page of hits and whether another exists after it. `maxLimit` caps a page at 50 for the
+ * operator list; the hybrid fuser passes `RETRIEVAL_CANDIDATES` so the recorded knob is what ran.
+ */
 export function searchMemoryPage(
   db: GatewayDb,
   options: MemorySearchOptions,
+  maxLimit = 50,
 ): { hits: MemorySearchHit[]; more: boolean } {
   const tokens = memoryQueryTokens(options.query);
   if (tokens.length === 0) return { hits: [], more: false };
-  const limit = Math.max(1, Math.min(50, Math.floor(options.limit ?? 10) || 10));
+  const limit = Math.max(1, Math.min(maxLimit, Math.floor(options.limit ?? 10) || 10));
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
   const now = (options.now ?? new Date()).toISOString();
   const scope = options.scope ?? null;
@@ -82,11 +86,14 @@ export function searchMemoryPage(
       ? fts.all(match, ...filter, limit + 1, offset)
       : db
           .prepare(
-            `${BASE} WHERE (${like.map(() => "e.body LIKE ?").join(" OR ")}) AND ${FILTER}
+            `${BASE} WHERE (${like.map(() => "e.body LIKE ? ESCAPE '\\'").join(" OR ")})
+               AND ${FILTER}
              ORDER BY e.observed_at DESC, e.id LIMIT ? OFFSET ?`,
           )
           .all(
-            ...like.map((token) => `%${token.replace(/[%_]/g, "")}%`),
+            // Escaped, not stripped: a token of underscores must not become `%%`, which matches
+            // every note of the workspace.
+            ...like.map((token) => `%${token.replace(/[\\%_]/g, "\\$&")}%`),
             ...filter,
             limit + 1,
             offset,

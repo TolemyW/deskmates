@@ -18,7 +18,7 @@ import {
   isRequestedRoundMode,
   normalizeDeadline,
 } from "@deskmates/contracts";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { type Principal, actorLabel } from "../auth/principal.js";
 import { GROUP_ROUTING_DEFAULT } from "../config.js";
 import type { GatewayContext } from "../context.js";
@@ -30,6 +30,7 @@ import { threadsByIds } from "./name-lookup.js";
 import { keysetPage, parseCursorQuery } from "./pagination.js";
 import { requestTenant } from "./route-policy.js";
 import { limitOf, seqParam } from "./seq-slices.js";
+import { changeThreadStatus, threadStatusOf } from "./thread-pause.js";
 import {
   asRecord,
   optionalBoolean,
@@ -102,6 +103,7 @@ export function registerThreadRoutes(
   // amendment 2), so the composer can say what an unaddressed message will do before it is sent.
   // `effectiveTurnBudget` is the turn budget the router enforces (ADR-0005 amendment 5 decision
   // 38): the workspace setting, else the thread row's; `null` when the workspace turned it off.
+  // `workspaceArchived` marks a chat of a workspace in Trash, where a message is refused (#15).
   const detail = (id: ThreadId) => {
     const thread = ctx.threads.mustGet(id);
     return {
@@ -109,30 +111,37 @@ export function registerThreadRoutes(
       members: ctx.threads.members(id),
       groupRouting: ctx.config.groupRouting ?? GROUP_ROUTING_DEFAULT,
       effectiveTurnBudget: ctx.limits.threadCaps(thread.workspaceId, thread.turnBudget).turnBudget,
+      ...(ctx.workspaces.get(thread.workspaceId) ? {} : { workspaceArchived: true as const }),
     };
   };
-  const summarize = (thread: Thread): ThreadSummary => {
-    const latest = ctx.messages.latest(thread.id);
+  const summarize = (thread: Thread, request: FastifyRequest): ThreadSummary => {
+    const storedLastMessage = ctx.messages.lastMessage(thread.id);
+    const humanUserId =
+      storedLastMessage?.authorKind === "human" && storedLastMessage.authorId.startsWith("user:")
+        ? storedLastMessage.authorId.slice("user:".length)
+        : undefined;
+    const humanName = humanUserId ? ctx.auth.users.getUser(humanUserId)?.displayName : undefined;
+    const lastMessage =
+      storedLastMessage && humanName
+        ? { ...storedLastMessage, authorName: humanName }
+        : storedLastMessage;
     const lastHandoff = ctx.privateChats.latest(thread.id);
     const privateChatBotId = ctx.privateChats.boundBot(thread.id);
     const pin = ctx.threadPins.get(thread.id);
+    // Guests read shared chats, but not task records. Do not project task content into a
+    // less-privileged list response (ADR-0022 amendment 6 W6).
+    const task =
+      workspaceRole(ctx, request, thread.workspaceId) === "guest"
+        ? undefined
+        : ctx.tasks.firstLinkedToThread(thread.workspaceId, thread.id);
     return {
       ...thread,
       ...(lastHandoff ? { lastHandoff } : {}),
       ...(privateChatBotId ? { privateChatBotId } : {}),
       ...(pin ? { pinPosition: pin.position } : {}),
+      ...(task ? { taskContext: { id: task.id, title: task.title, status: task.status } } : {}),
       memberIds: ctx.threads.members(thread.id).map((member) => member.botId),
-      ...(latest
-        ? {
-            lastMessage: {
-              seq: latest.seq,
-              authorKind: latest.authorKind,
-              authorId: latest.authorId,
-              excerpt: latest.body.slice(0, 160),
-              ts: latest.ts,
-            },
-          }
-        : {}),
+      ...(lastMessage ? { lastMessage } : {}),
     };
   };
   app.get<{
@@ -152,7 +161,7 @@ export function registerThreadRoutes(
       return {
         threads: threadsByIds(ctx, request, request.query.ids, request.query.workspaceId).map(
           (thread) => ({
-            ...summarize(thread),
+            ...summarize(thread, request),
             unreadHandoffs: ctx.privateChats.unread(thread.id, actor),
           }),
         ),
@@ -198,7 +207,7 @@ export function registerThreadRoutes(
       return {
         threads: visibleOfKind(ctx, request, "thread", [...rail.fixed, ...page.items], "guest").map(
           (thread) => ({
-            ...summarize(thread),
+            ...summarize(thread, request),
             unreadHandoffs: ctx.privateChats.unread(thread.id, actor),
           }),
         ),
@@ -229,7 +238,7 @@ export function registerThreadRoutes(
     // client opens a bot's private chat or draws a preview without one request per thread.
     return {
       threads: threads.map((thread) => ({
-        ...summarize(thread),
+        ...summarize(thread, request),
         unreadHandoffs: ctx.privateChats.unread(thread.id, actorLabel(request.principal)),
       })),
     };
@@ -357,13 +366,19 @@ export function registerThreadRoutes(
     return detail(id);
   });
 
-  // Issue #21: the deadline is the only field a thread patch changes. A deadline already past
-  // takes effect on the scheduler's next pass, which this kicks.
+  // A thread patch changes the deadline (issue #21), the status (ADR-0005 amendment 3, decision
+  // 23: an Owner or Admin pauses or resumes the thread), or both. A deadline already past takes
+  // effect on the scheduler's next pass, which this kicks, as does a resume.
   app.patch<{ Params: { id: string } }>("/api/threads/:id", async (request) => {
     const id = request.params.id as ThreadId;
-    const deadline = deadlineOf(asRecord(request.body));
-    if (deadline === undefined) throw new DeskmatesError("validation", "deadline is required");
-    ctx.threads.setDeadline(id, deadline ?? undefined);
+    const body = asRecord(request.body);
+    const deadline = deadlineOf(body);
+    const status = threadStatusOf(body);
+    if (deadline === undefined && status === undefined)
+      throw new DeskmatesError("validation", "deadline or status is required");
+    ctx.threads.mustGet(id);
+    if (deadline !== undefined) ctx.threads.setDeadline(id, deadline ?? undefined);
+    if (status !== undefined) changeThreadStatus(ctx, id, status, request.principal);
     ctx.bus.publish({ type: "thread_members", threadId: id });
     scheduler.kick();
     return detail(id);

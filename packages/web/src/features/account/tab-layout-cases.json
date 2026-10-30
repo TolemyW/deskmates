@@ -1,0 +1,8 @@
+[
+  {
+    "id": "navigation",
+    "route": "#/account",
+    "container": ".settings-layout",
+    "strip": ".settings-layout > .gb-tab-scroll"
+  }
+]

@@ -1,0 +1,19 @@
+[
+  {
+    "id": "list",
+    "route": "#/tasks"
+  },
+  {
+    "id": "detail",
+    "route": "#/tasks",
+    "steps": [
+      {
+        "selector": "a[href^=\"#/tasks/\"]:not([href=\"#/tasks/new\"])"
+      }
+    ]
+  },
+  {
+    "id": "edit-form",
+    "route": "#/tasks/new"
+  }
+]

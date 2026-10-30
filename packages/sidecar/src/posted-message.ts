@@ -4,15 +4,35 @@
 // wrote "@ g_stock" with a space, ended its run, and the request stopped there. The sidecar
 // computes none of this: it words the Gateway's facts.
 
-import type { PostedMessageRouting, WakeBlockedReason } from "@deskmates/contracts";
+import type {
+  PostedMessageRouting,
+  ThreadPauseState,
+  WakeBlockedReason,
+} from "@deskmates/contracts";
 
 // The Gateway's reason, worded for the run that posted (issue #68).
 const WAKE_BLOCKED: Record<WakeBlockedReason, string> = {
-  relay_count: "the thread's relay cap was reached",
-  turn_budget: "the thread reached its turn budget and is paused until a human messages it",
-  thread_paused: "the thread is paused until a human messages it",
+  // Issue #90: a live lead was told this, mentioned the same bot twice more and declared the work
+  // signed off. The count restarts after a person's message, so that is the way on.
+  relay_count:
+    "the thread's relay cap was reached, so bots cannot wake each other here until a person posts. Mentioning them again wakes nobody; if their part is still needed, say so to the people in this thread and do not report it as done",
+  turn_budget: "the thread reached its turn budget and is paused",
+  thread_paused: "the thread is paused",
   deadline_passed: "the thread is past its deadline",
 };
+
+/**
+ * ADR-0005 amendment 3, decision 27: the Gateway's pause facts, worded for a run. A turn-budget
+ * pause ends by itself at its resume time (rewritten decision 22); an operator pause only when a
+ * person resumes it.
+ */
+export function describePause(paused: ThreadPauseState): string {
+  if (paused.reason === "operator")
+    return "The thread is paused by an operator: your posts are stored and wake nobody until a person resumes it.";
+  return `The thread is paused because it reached its turn budget: your posts are stored and wake nobody until it resumes${
+    paused.resumeAt ? ` by itself at ${paused.resumeAt}` : ""
+  }, or earlier when a human writes or resumes it.`;
+}
 
 /**
  * ADR-0005 amendment 6, decision 50: the Gateway's facts about the recipient's previous final
@@ -75,6 +95,10 @@ export function describePosted(
     parts.push(
       `No member of this thread is called ${routing.unknown.map((name) => `@${name}`).join(", ")}.`,
     );
+  }
+  if (routing.paused) {
+    if (!routing.wakeBlocked) parts.push("Nobody was woken.");
+    parts.push(describePause(routing.paused));
   }
   return parts.join(" ");
 }

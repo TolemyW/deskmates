@@ -1,26 +1,34 @@
 // @vitest-environment jsdom
-// T0: the Integrations navigation entry and screen.
+// T0: the Connections navigation entry (Resources, everyday view) and screen.
 
 import { Plug } from "lucide-react";
+import { expect, it } from "vitest";
 import {
   STUB_CONTEXT,
   describeNavEntry,
   describeRender,
 } from "../../app/testing/feature-expectations.js";
+import { ConnectionsScreen } from "./connections.js";
 import { feature } from "./feature.js";
-import { IntegrationsScreen } from "./integrations.js";
 
 describeNavEntry({
   folder: "integrations",
   feature,
-  group: "operate",
-  order: 30,
+  group: "resources",
+  order: 15,
   icon: Plug,
-  label: "app.nav.integrations",
-  english: "Integrations",
-  href: "#/integrations",
-  currentAt: ["#/integrations"],
+  label: "app.nav.connections",
+  english: "Connections",
+  href: "#/connections/channels",
+  currentAt: ["#/connections", "#/connections/apps", "#/integrations"],
   visibleTo: { manager: true, member: true },
 });
 
-describeRender("integrations", [["#/integrations", IntegrationsScreen, { api: STUB_CONTEXT.api }]]);
+describeRender("integrations", [
+  ["#/connections/channels", ConnectionsScreen, { api: STUB_CONTEXT.api, tab: "channels" }],
+  ["#/integrations", ConnectionsScreen, { api: STUB_CONTEXT.api, tab: "apps" }],
+]);
+
+it("is in the everyday view, not only in Tune", () => {
+  expect(feature.nav?.audience).toBeUndefined();
+});

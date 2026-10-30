@@ -7,6 +7,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button.js";
 import { errorMessage } from "../../../format.js";
 import { useT } from "../../../i18n/i18n-provider.js";
+import { useEditorFocus } from "../../../lib/use-editor-focus.js";
 import { useCan } from "../../../state/session-roles.js";
 import { useOptionalWorkspaceScope } from "../../../state/workspace-scope.js";
 import type { DetailSectionProps } from "../detail-sections.js";
@@ -18,6 +19,8 @@ import {
 
 export function NameSection({ api, entry, onChanged }: DetailSectionProps) {
   const t = useT();
+  const [editing, setEditing] = useState(false);
+  const focus = useEditorFocus(editing);
   const scope = useOptionalWorkspaceScope();
   const can = useCan("workspace.configure", entry.id);
   const [name, setName] = useState(entry.name);
@@ -33,7 +36,8 @@ export function NameSection({ api, entry, onChanged }: DetailSectionProps) {
   const changed = next !== entry.name;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!changed || !workspaceNameAcceptable(name)) return;
+    if (busy || !can.allowed || entry.archivedAt || !changed || !workspaceNameAcceptable(name))
+      return;
     setBusy(true);
     setError(undefined);
     setSaved(false);
@@ -42,6 +46,7 @@ export function NameSection({ api, entry, onChanged }: DetailSectionProps) {
       scope?.update(workspace);
       onChanged({ ...entry, name: workspace.name });
       setSaved(true);
+      setEditing(false);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -53,9 +58,15 @@ export function NameSection({ api, entry, onChanged }: DetailSectionProps) {
     <section className="card workspace-detail-section" aria-labelledby="workspace-name-title">
       <h3 id="workspace-name-title">{t("workspaceManage.identity.title")}</h3>
       {legacy ? <p className="muted small">{t("workspaceManage.identity.legacy")}</p> : null}
-      {editable ? (
-        <form className="stack" onSubmit={submit} aria-label={t("workspaceManage.identity.rename")}>
+      {editable && editing ? (
+        <form
+          ref={focus.form}
+          className="stack"
+          onSubmit={submit}
+          aria-label={t("workspaceManage.identity.rename")}
+        >
           <WorkspaceNameField
+            disabled={busy}
             value={name}
             onChange={(value) => {
               setName(value);
@@ -68,7 +79,6 @@ export function NameSection({ api, entry, onChanged }: DetailSectionProps) {
               {error}
             </p>
           ) : null}
-          {saved ? <output className="small">{t("workspaceManage.identity.saved")}</output> : null}
           <div className="form-actions">
             <Button
               type="submit"
@@ -77,11 +87,42 @@ export function NameSection({ api, entry, onChanged }: DetailSectionProps) {
             >
               {t("workspaceManage.identity.save")}
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setName(entry.name);
+                setError(undefined);
+                setEditing(false);
+              }}
+            >
+              {t("workspaceManage.identity.cancel")}
+            </Button>
           </div>
         </form>
       ) : (
-        <p className="muted small">{t("workspaceManage.identity.renameDenied")}</p>
+        <div className="workspace-name-value">
+          <strong>{entry.name}</strong>
+          {editable ? (
+            <Button
+              ref={focus.button}
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setName(entry.name);
+                setSaved(false);
+                setEditing(true);
+              }}
+            >
+              {t("workspaceManage.identity.change")}
+            </Button>
+          ) : (
+            <p className="muted small">{t("workspaceManage.identity.renameDenied")}</p>
+          )}
+        </div>
       )}
+      {saved ? <output className="small">{t("workspaceManage.identity.saved")}</output> : null}
     </section>
   );
 }

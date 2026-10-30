@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Approval states · Local visual audit</title></head><body><div id="root"></div>
+<script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { App } from '/src/app.tsx';
+import { installMockGateway } from '/src/demo/install.ts';
+import '/src/styles/index.ts';
+installMockGateway();
+const mockFetch = window.fetch.bind(window);
+let failLookup = new URLSearchParams(location.search).has('error');
+window.fetch = async (input, init) => {
+  const url = new URL(typeof input === 'string' ? input : input.url ?? String(input), location.origin);
+  const method = init?.method ?? 'GET';
+  const json = (body, status=200) => new Response(JSON.stringify(body), {status, headers:{'content-type':'application/json'}});
+  if (method !== 'GET') return json({code:'preview_only',message:'Read-only visual fixture'},403);
+  if (url.pathname === '/api/bots' && url.searchParams.has('ids') && failLookup) {
+    failLookup = false;
+    return json({code:'unavailable',message:'Simulated workspace lookup failure'},503);
+  }
+  if (url.pathname === '/api/approval-groups') {
+    const response = await mockFetch('/api/approvals?status=pending');
+    const {approvals} = await response.json();
+    return json({groups: approvals.map((approval,index)=>({key:'visual-'+index,approval,count:index===0?3:1})),totalGroups:approvals.length,totalApprovals:approvals.length+2});
+  }
+  return mockFetch(input, init);
+};
+location.hash = '#/approvals';
+createRoot(document.getElementById('root')).render(React.createElement(App));
+</script></body></html>

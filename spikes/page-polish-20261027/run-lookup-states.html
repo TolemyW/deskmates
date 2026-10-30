@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Run lookup states · Local visual audit</title></head><body><div id="root"></div>
+<script type="module">
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { App } from '/src/app.tsx';
+import { installMockGateway } from '/src/demo/install.ts';
+import '/src/styles/index.ts';
+installMockGateway();
+const mockFetch = window.fetch.bind(window);
+let failLookup = true;
+window.fetch = async (input, init) => {
+  const url = new URL(typeof input === 'string' ? input : input.url ?? String(input), location.origin);
+  const method = init?.method ?? 'GET';
+  const json = (body, status=200) => new Response(JSON.stringify(body), {status, headers:{'content-type':'application/json'}});
+  if (method !== 'GET') return json({code:'preview_only',message:'Read-only visual fixture'},403);
+  if (url.pathname === '/api/threads/thr_000g' && failLookup) {
+    failLookup = false;
+    return json({code:'unavailable',message:'Simulated run thread lookup failure'},503);
+  }
+  return mockFetch(input, init);
+};
+location.hash = '#/runs/run_000l';
+createRoot(document.getElementById('root')).render(React.createElement(App));
+</script></body></html>

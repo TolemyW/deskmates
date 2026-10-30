@@ -27,7 +27,7 @@ it("renders the Drive target and outgoing content in the actual approval card as
     },
   };
   const { container } = render(<ApprovalCard approval={approval} />);
-  fireEvent.click(screen.getByText("View original details"));
+  fireEvent.click(screen.getByText("Details", { selector: "summary" }));
   const preview = screen.getByRole("region", { name: "Proposed Drive action" });
   expect(preview).toBeTruthy();
   expect(within(preview).getByText(/dedicated-folder/)).toBeTruthy();

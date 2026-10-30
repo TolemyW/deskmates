@@ -1,7 +1,7 @@
 // A workspace is one container: one Chromium, one profile, one filesystem, one shell (ADR-0004).
 // Bots in it share everything by default. There is no per-bot grant and no per-bot origin list.
 
-import type { IsoTimestamp, RunId, WorkspaceId } from "./ids.js";
+import type { BotId, IsoTimestamp, RunId, WorkspaceId } from "./ids.js";
 import type { SandboxRestorationRequirement } from "./sandbox.js";
 
 export type SandboxProviderKind = "docker" | "desktop-vm";
@@ -33,12 +33,26 @@ export interface Workspace {
    */
   egressUpdatedAt?: IsoTimestamp;
   createdAt: IsoTimestamp;
+  /**
+   * The bot a person talks to first and a new chat channel connection is bound to by default
+   * (ADR-0051). Absent while the workspace has none, or its default bot is in Trash.
+   */
+  defaultBotId?: BotId;
   /** Informational lifecycle evidence. This never grants trust or restores filesystem state. */
   restorationRequirements?: readonly SandboxRestorationRequirement[];
   /** Present only in Trash views. Archived workspaces reject every trigger and stay stopped. */
   archivedAt?: IsoTimestamp;
   archivedBy?: string;
 }
+
+/**
+ * Whether the workspace container exists on the sandbox host now, as `GET /api/workspaces/:id`
+ * reports it (issue #15). `never_created`: no run here has had a container yet. `removed`: an
+ * earlier run had one and it is gone (removed on the host, or stopped by the Gateway). Either way
+ * the next run of an active workspace creates it; `status` (`ready`) never says this. An archived
+ * workspace is not served by that route: archiving removed its container and it refuses runs.
+ */
+export type WorkspaceContainerState = "present" | "never_created" | "removed";
 
 export type BrowserLockHolderKind = "run" | "human";
 

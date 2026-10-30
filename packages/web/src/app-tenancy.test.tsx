@@ -21,6 +21,8 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.history.replaceState(null, "", "/");
+  // The workspace a test selected is remembered in this browser; each test starts without it.
+  window.localStorage.clear();
 });
 
 function json(body: unknown, status = 200): Response {
@@ -59,8 +61,9 @@ function sessionView(tenantId: keyof typeof TENANTS) {
   };
 }
 
-it("names the tenant on every request and never shows a late answer for the old tenant", async () => {
-  let releaseAlpha: (() => void) | undefined;
+// The organization switcher was removed with the owner's decision of 2026-10-10 (multi-tenancy
+// is not a product feature); a session still names its tenant on every request.
+it("names the tenant on every request and offers no organization switcher", async () => {
   const seen: Array<{ path: string; tenant: string | null }> = [];
   vi.stubGlobal(
     "fetch",
@@ -68,77 +71,21 @@ it("names the tenant on every request and never shows a late answer for the old 
       const path = String(input);
       const tenant = new Headers(init?.headers).get("x-deskmates-tenant");
       seen.push({ path, tenant });
-      if (path === "/auth/session") return json(sessionView((tenant ?? "tnt_a") as "tnt_a"));
-      if (path.startsWith("/api/workspaces")) {
-        const name = tenant === "tnt_b" ? "Beta workspace" : "Alpha workspace";
-        const answer = json({ workspaces: [{ ...workspace, id: `ws_${tenant}`, name }] });
-        // Alpha's answer is held until after the switch to Beta.
-        if (tenant === "tnt_a")
-          return new Promise<Response>((resolve) => {
-            releaseAlpha = () => resolve(answer);
-          });
-        return answer;
-      }
-      if (path === "/api/config")
-        return json({ defaultModel: "m", cheapModel: "c", release: null });
-      return json({ bots: [], threads: [], approvals: [], workspaces: [] });
-    }),
-  );
-  render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "Switch team" }));
-  const switcher = await screen.findByLabelText("Team");
-  await waitFor(() => expect(releaseAlpha).toBeDefined());
-  expect(FakeEventSource.instances.some((es) => es.url.includes("tenant=tnt_a"))).toBe(true);
-  await selectOption(switcher, "Beta");
-  await screen.findByText("Beta workspace");
-  // Alpha's request finally answers: it reaches screens that no longer exist.
-  await act(async () => {
-    releaseAlpha?.();
-    await Promise.resolve();
-  });
-  expect(screen.queryByText("Alpha workspace")).not.toBeInTheDocument();
-  expect(screen.getByText("Beta workspace")).toBeInTheDocument();
-  const apiCalls = seen.filter((call) => call.path.startsWith("/api/"));
-  expect(apiCalls.every((call) => call.tenant === "tnt_a" || call.tenant === "tnt_b")).toBe(true);
-  // Streams of Alpha closed with its screens; Beta's are open with Beta's selector.
-  for (const es of FakeEventSource.instances.filter((s) => s.url.includes("tenant=tnt_a")))
-    expect(es.closed).toBe(true);
-  expect(
-    FakeEventSource.instances.some((es) => es.url.includes("tenant=tnt_b") && !es.closed),
-  ).toBe(true);
-});
-
-it("offers single sign-on for a team this session cannot enter yet", async () => {
-  const assign = vi.fn();
-  vi.stubGlobal("location", { ...window.location, assign });
-  const starts: unknown[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input);
       if (path === "/auth/session") return json(sessionView("tnt_a"));
-      if (path === "/auth/oidc/corp/start") {
-        starts.push({
-          body: JSON.parse(String(init?.body)),
-          csrf: new Headers(init?.headers).get("x-deskmates-csrf"),
-        });
-        return json({ authorizationUrl: "https://idp.example/authorize?x=1" });
-      }
+      if (path.startsWith("/api/workspaces"))
+        return json({ workspaces: [{ ...workspace, id: "ws_a", name: "Alpha workspace" }] });
       if (path === "/api/config")
         return json({ defaultModel: "m", cheapModel: "c", release: null });
       return json({ bots: [], threads: [], approvals: [], workspaces: [] });
     }),
   );
   render(<App />);
-  fireEvent.click(await screen.findByRole("button", { name: "Switch team" }));
-  fireEvent.click(await screen.findByRole("button", { name: "Open Gamma with Corp SSO" }));
-  await waitFor(() => expect(assign).toHaveBeenCalledWith("https://idp.example/authorize?x=1"));
-  expect(starts).toEqual([
-    {
-      body: { purpose: "tenant_grant", tenantId: "tnt_c", returnPath: "/?tenant=tnt_c" },
-      csrf: "csrf-tnt_a",
-    },
-  ]);
+  await screen.findByText("Alpha workspace");
+  expect(screen.queryByRole("button", { name: "Switch organization" })).not.toBeInTheDocument();
+  const apiCalls = seen.filter((call) => call.path.startsWith("/api/"));
+  expect(apiCalls.length).toBeGreaterThan(0);
+  expect(apiCalls.every((call) => call.tenant === "tnt_a")).toBe(true);
+  expect(FakeEventSource.instances.some((es) => es.url.includes("tenant=tnt_a"))).toBe(true);
 });
 
 it("shows SSO providers on the sign-in screen and explains a refused SSO sign-in", async () => {

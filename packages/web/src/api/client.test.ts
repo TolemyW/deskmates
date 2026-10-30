@@ -145,7 +145,7 @@ describe("api client", () => {
     expect(await api.listWorkspaces()).toEqual([workspace]);
     expect(
       await api.createWorkspace({ name: "default", egressAllowlist: ["example.com"] }),
-    ).toEqual(workspace);
+    ).toEqual({ workspace });
     expect(calls[1]).toEqual({
       method: "POST",
       path: "/api/workspaces",

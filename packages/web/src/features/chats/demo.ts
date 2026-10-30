@@ -6,6 +6,7 @@ import {
   type BotId,
   type RoundMemberState,
   type RunStatus,
+  type Thread,
   type ThreadId,
   type ThreadRound,
   type WorkspaceId,
@@ -19,6 +20,19 @@ import { recipients, wake } from "../../demo/team.js";
 import { demoUploadAttachment } from "../files/demo-uploads.js";
 
 export const demo: DemoFeature = { route };
+
+/**
+ * Pause (`operator`) or resume a stored demo thread in place, as the Gateway's row changes: a
+ * resumed thread and an operator pause carry no resume time (ADR-0005 amendment 3).
+ */
+function setPause(thread: Thread, reason: "operator" | undefined): void {
+  const { pauseReason: _reason, resumeAt: _resumeAt, ...rest } = thread;
+  for (const key of Object.keys(thread)) Reflect.deleteProperty(thread, key);
+  Object.assign(
+    thread,
+    reason ? { ...rest, status: "paused", pauseReason: reason } : { ...rest, status: "active" },
+  );
+}
 
 function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undefined {
   const { method, path, query: q, body: b } = req;
@@ -83,6 +97,15 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
   if ((x = m(/^\/api\/threads\/([^/]+)$/))) {
     const thread = s.thread(x[1]);
     if (!thread) return notFound("thread");
+    // ADR-0005 amendment 3, decision 23: Pause records an operator pause; Resume ends either.
+    if (method === "PATCH" && (b.status === "paused" || b.status === "active")) {
+      if (b.status === "paused") setPause(thread, "operator");
+      else if (thread.status === "paused") {
+        s.post(thread, "system", "", "Resumed by you; turn budget reset.");
+        setPause(thread, undefined);
+      }
+      s.emit({ type: "thread_members", threadId: thread.id } as GatewayEvent);
+    }
     return ok(s.detail(thread));
   }
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
@@ -133,7 +156,10 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
       const message = s.post(thread, "human", "operator", String(b.body ?? ""), {
         attachments: attachments as NonNullable<(typeof attachments)[number]>[],
       });
-      if (thread.status === "paused") thread.status = "active";
+      // Decision 24: an operator pause keeps the message and wakes nobody.
+      if (thread.status === "paused" && thread.pauseReason === "operator")
+        return created({ message, runs: [] });
+      if (thread.status === "paused") setPause(thread, undefined);
       const runs = wake(s, thread, message, recipients(s, thread, message.body, undefined), 0);
       return created({ message, runs });
     }

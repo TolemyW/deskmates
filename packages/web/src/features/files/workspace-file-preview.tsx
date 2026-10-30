@@ -4,10 +4,10 @@ import {
   WORKSPACE_FILE_RANGE_BYTES,
   type WorkspaceId,
 } from "@deskmates/contracts";
-import { Download, Eye, FileText, ZoomIn, ZoomOut } from "lucide-react";
+import { Download, ExternalLink, Eye, FileText, ZoomIn, ZoomOut } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
-import { Button } from "../../components/ui/button.js";
+import { Button, ButtonLink } from "../../components/ui/button.js";
 import { DetailPane, DetailPaneContent } from "../../components/ui/detail-pane.js";
 import { DialogDescription, DialogTitle } from "../../components/ui/dialog.js";
 import { errorMessage } from "../../format.js";
@@ -16,9 +16,11 @@ import { currentI18n } from "../../i18n/intl.js";
 import { Markdown } from "../../lib/markdown.js";
 import { CSV_PREVIEW_MAX_COLUMNS, parseDelimited } from "./csv-table.js";
 import { formatFileSize } from "./file-size.js";
+import { HtmlPreview } from "./html-preview.js";
 import { downloadWorkspaceFile } from "./path-links.js";
 import { PdfRangePreview } from "./pdf-range-preview.js";
 import { IMAGE_ZOOM_STEPS, stepZoom } from "./preview-zoom.js";
+import { fileReadHref } from "./route.js";
 import {
   type WorkspaceFileRangeApi,
   WorkspaceFileRangeReader,
@@ -107,7 +109,7 @@ export async function readPreviewBytes(
   return { bytes: joined, fileSize, truncated: joined.byteLength < fileSize, ranges };
 }
 
-function decodeText(bytes: Uint8Array): string {
+export function decodeText(bytes: Uint8Array): string {
   const body = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   if (hasControlBytes(body)) throw new Error(currentI18n().t("workspaceFilePreview.binary"));
   return body;
@@ -188,6 +190,14 @@ function BlobPreview({
           src={url}
           alt={path.slice(path.lastIndexOf("/") + 1)}
           referrerPolicy="no-referrer"
+          onError={() => {
+            URL.revokeObjectURL(url);
+            onImageError?.(
+              currentI18n().t("workspaceFilePreview.imageUnavailable", {
+                name: path.slice(path.lastIndexOf("/") + 1),
+              }),
+            );
+          }}
           style={
             zoom !== undefined && natural
               ? { width: `${natural.width * zoom}px`, height: `${natural.height * zoom}px` }
@@ -425,19 +435,6 @@ function JsonTree({ value, name }: { value: unknown; name?: string }) {
   );
 }
 
-function HtmlPreview({ text, path }: { text: string; path: string }) {
-  const policy = `<meta http-equiv="Content-Security-Policy" content="sandbox; default-src 'none'">`;
-  return (
-    <iframe
-      className="workspace-file-html"
-      title={currentI18n().t("workspaceFilePreview.htmlLabel", { path })}
-      sandbox=""
-      referrerPolicy="no-referrer"
-      srcDoc={`${policy}${text}`}
-    />
-  );
-}
-
 function renderedPreview(
   api: PreviewApi,
   workspaceId: WorkspaceId,
@@ -501,13 +498,19 @@ function offersSourceView(path: string, value: PreviewBytes): boolean {
 }
 
 /** Safe, bounded rich preview of current workspace bytes. */
-export function WorkspaceFilePreview({
+export function WorkspaceFilePreview(props: Parameters<typeof FilePreview>[0]) {
+  return <FilePreview key={JSON.stringify([props.workspaceId, props.path])} {...props} />;
+}
+
+function FilePreview({
   api,
   workspaceId,
   path,
   describeError = errorMessage,
   onRead,
   compact = false,
+  actionsOnly = false,
+  inline = false,
   source,
   sourceId,
   card,
@@ -518,6 +521,10 @@ export function WorkspaceFilePreview({
   describeError?: (err: unknown) => string;
   onRead?: (bytes: number) => void;
   compact?: boolean;
+  /** Parent already displays the file identity. */
+  actionsOnly?: boolean;
+  /** A filename link within chat prose; opens the same preview drawer. */
+  inline?: boolean;
   source?: string;
   sourceId?: string;
   /** A message attachment card (ADR-0014 A5 decision 42): its name and size instead of the path. */
@@ -563,6 +570,8 @@ export function WorkspaceFilePreview({
     controller.current = next;
     setBusy(true);
     setError("");
+    setValue(undefined);
+    setPdfSource(undefined);
     try {
       if (ext === "pdf") {
         pdfSource?.reader.abort();
@@ -588,7 +597,7 @@ export function WorkspaceFilePreview({
       setValue(result);
       onRead?.(result.fileSize);
     } catch (err) {
-      if ((err as { name?: string }).name !== "AbortError") {
+      if (!next.signal.aborted && (err as { name?: string }).name !== "AbortError") {
         setValue(undefined);
         setError(describeError(err));
       }
@@ -622,92 +631,134 @@ export function WorkspaceFilePreview({
     .filter(Boolean)
     .join(" · ");
 
+  const Container = inline ? "span" : "div";
   return (
-    <div
-      className={`workspace-file-preview${compact ? " workspace-file-compact" : ""}${
+    <Container
+      className={`workspace-file-preview${actionsOnly ? " workspace-file-actions" : ""}${inline ? " workspace-file-inline" : ""}${compact ? " workspace-file-compact" : ""}${
         card ? " workspace-file-card" : ""
       }`}
     >
-      <FileText size={20} aria-hidden="true" />
-      {card ? (
-        <span className="workspace-file-label" title={path}>
-          <strong>{card.name}</strong>
-          {card.sizeBytes === undefined ? null : (
-            <span className="muted small">{formatFileSize(card.sizeBytes)}</span>
-          )}
-        </span>
-      ) : compact ? (
-        <details className="workspace-file-identity">
-          <summary title={path} aria-label={`${t("workspaceFilePreview.details")}: ${path}`}>
-            <strong>{shortName}</strong>
-            <span className="muted small">{metadata || t("workspaceFilePreview.details")}</span>
-          </summary>
-          <div className="workspace-file-audit small">
-            <code>{path}</code>
-            {source?.trim() ? <span>{t("chatInfo.fileBy", { name: source })}</span> : null}
-            {sourceId ? <code>{sourceId}</code> : null}
-            <Button
-              onClick={() => {
-                void Promise.resolve()
-                  .then(() =>
-                    navigator.clipboard.writeText([path, sourceId].filter(Boolean).join("\n")),
-                  )
-                  .then(() => setCopyStatus(t("members.copy.done")))
-                  .catch(() => setCopyStatus(t("members.copy.failed")));
-              }}
-            >
-              {t("workspaceFilePreview.copyIdentity")}
-            </Button>
-            <output>{copyStatus}</output>
-          </div>
-        </details>
-      ) : (
-        <span className="workspace-file-label">
-          <strong>{filename}</strong>
-          <span className="muted small" title={path}>
-            {path}
-          </span>
-        </span>
-      )}
-      {supported || compact || card ? (
-        <Button
+      {inline ? (
+        <button
           ref={previewButton}
           type="button"
-          disabled={busy || !supported}
-          aria-label={
-            compact || card ? t("workspaceFilePreview.previewLabel", { path }) : undefined
-          }
-          title={
-            !supported
-              ? t("workspaceFilePreview.unavailableType")
-              : t("workspaceFilePreview.preview")
-          }
-          onClick={() => void loadPreview()}
-        >
-          {compact || card ? (
-            <Eye size={18} aria-hidden="true" />
-          ) : busy ? (
-            t("workspaceFilePreview.loading")
-          ) : (
-            t("workspaceFilePreview.preview")
+          className="workspace-file-link"
+          title={path}
+          aria-label={t(
+            supported ? "workspaceFilePreview.previewLabel" : "workspaceFilePreview.downloadLabel",
+            { path },
           )}
-        </Button>
+          disabled={busy}
+          onClick={() => (supported ? void loadPreview() : download())}
+        >
+          <FileText size={14} aria-hidden="true" />
+          {card?.name ?? filename}
+        </button>
       ) : (
-        <span>{t("workspaceFilePreview.unavailableType")}</span>
+        <>
+          {actionsOnly ? null : <FileText size={20} aria-hidden="true" />}
+          {actionsOnly ? null : card ? (
+            <span className="workspace-file-label" title={path}>
+              <strong>{card.name}</strong>
+              {card.sizeBytes === undefined ? null : (
+                <span className="muted small">{formatFileSize(card.sizeBytes)}</span>
+              )}
+            </span>
+          ) : compact ? (
+            <details className="workspace-file-identity">
+              <summary title={path} aria-label={`${t("workspaceFilePreview.details")}: ${path}`}>
+                <strong>{shortName}</strong>
+                <span className="muted small">{metadata || t("workspaceFilePreview.details")}</span>
+              </summary>
+              <div className="workspace-file-audit small">
+                <code>{path}</code>
+                {source?.trim() ? <span>{t("chatInfo.fileBy", { name: source })}</span> : null}
+                {sourceId ? <code>{sourceId}</code> : null}
+                <Button
+                  onClick={() => {
+                    void Promise.resolve()
+                      .then(() =>
+                        navigator.clipboard.writeText([path, sourceId].filter(Boolean).join("\n")),
+                      )
+                      .then(() => setCopyStatus(t("members.copy.done")))
+                      .catch(() => setCopyStatus(t("members.copy.failed")));
+                  }}
+                >
+                  {t("workspaceFilePreview.copyIdentity")}
+                </Button>
+                <output>{copyStatus}</output>
+              </div>
+            </details>
+          ) : (
+            <span className="workspace-file-label">
+              <strong>{filename}</strong>
+              <span className="muted small" title={path}>
+                {path}
+              </span>
+            </span>
+          )}
+          {supported || compact || card ? (
+            <Button
+              ref={previewButton}
+              type="button"
+              disabled={busy || !supported}
+              aria-label={
+                compact || card ? t("workspaceFilePreview.previewLabel", { path }) : undefined
+              }
+              title={
+                !supported
+                  ? t("workspaceFilePreview.unavailableType")
+                  : t("workspaceFilePreview.preview")
+              }
+              onClick={() => void loadPreview()}
+            >
+              {inline || compact || card ? (
+                <Eye size={18} aria-hidden="true" />
+              ) : busy ? (
+                t("workspaceFilePreview.loading")
+              ) : (
+                t("workspaceFilePreview.preview")
+              )}
+            </Button>
+          ) : (
+            <span>{t("workspaceFilePreview.unavailableType")}</span>
+          )}
+        </>
       )}
-      <Button
-        type="button"
-        aria-label={t("workspaceFilePreview.downloadLabel", { path })}
-        onClick={download}
-      >
-        {compact || card ? (
-          <Download size={18} aria-hidden="true" />
-        ) : (
-          t("workspaceFilePreview.download")
-        )}
-      </Button>
+      {HTML_EXTENSIONS.includes(ext) ? (
+        <ButtonLink
+          href={fileReadHref({ workspaceId, path })}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`${t("workspaceFilePreview.openReader")}: ${path}`}
+          title={t("workspaceFilePreview.openReader")}
+        >
+          {inline || compact || card ? (
+            <ExternalLink size={18} aria-hidden="true" />
+          ) : (
+            t("workspaceFilePreview.openReader")
+          )}
+        </ButtonLink>
+      ) : null}
+      {!inline || !supported ? (
+        <>
+          <Button
+            type="button"
+            aria-label={t("workspaceFilePreview.downloadLabel", { path })}
+            onClick={download}
+          >
+            {inline || compact || card ? (
+              <Download size={18} aria-hidden="true" />
+            ) : (
+              t("workspaceFilePreview.download")
+            )}
+          </Button>
+        </>
+      ) : null}
       {downloadError ? (
-        <p role="alert">{t("workspaceFilePreview.downloadError", { error: downloadError })}</p>
+        <span role="alert">
+          {t("workspaceFilePreview.downloadError", { error: downloadError })}
+        </span>
       ) : null}
       <DetailPane
         open={open}
@@ -736,6 +787,15 @@ export function WorkspaceFilePreview({
           <DialogTitle>{path.split("/").at(-1)}</DialogTitle>
           <DialogDescription className="muted small file-preview-path">{path}</DialogDescription>
           <div className="file-preview-toolbar">
+            {HTML_EXTENSIONS.includes(ext) ? (
+              <ButtonLink
+                href={fileReadHref({ workspaceId, path })}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t("workspaceFilePreview.openReader")}
+              </ButtonLink>
+            ) : null}
             <Button
               aria-label={t("workspaceFilePreview.downloadLabel", { path })}
               onClick={download}
@@ -778,7 +838,14 @@ export function WorkspaceFilePreview({
             aria-label={t("workspaceFilePreview.previewLabel", { path })}
           >
             {busy ? <output>{t("workspaceFilePreview.loading")}</output> : null}
-            {error ? <p role="alert">{t("workspaceFilePreview.previewError", { error })}</p> : null}
+            {error ? (
+              <div role="alert">
+                <p>{t("workspaceFilePreview.previewError", { error })}</p>
+                <Button disabled={busy} onClick={() => void loadPreview()}>
+                  {t("files.retry")}
+                </Button>
+              </div>
+            ) : null}
             {downloadError ? (
               <p role="alert">
                 {t("workspaceFilePreview.downloadError", { error: downloadError })}
@@ -791,6 +858,6 @@ export function WorkspaceFilePreview({
           </section>
         </DetailPaneContent>
       </DetailPane>
-    </div>
+    </Container>
   );
 }

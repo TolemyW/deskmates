@@ -142,8 +142,8 @@ describe("the operator UI in zh-CN", () => {
       try {
         window.location.hash = hash;
         render(<App />);
-        // The signed-in identity, which opens Account settings and preferences.
-        await screen.findByRole("link", { name: /的账户设置和偏好设置$/ });
+        // The signed-in identity, which opens Account settings.
+        await screen.findByRole("link", { name: /的账号设置$/ });
         await waitFor(() => expect(inFlight).toBe(0));
         await new Promise((resolve) => setTimeout(resolve, 20));
         await waitFor(() => expect(inFlight).toBe(0));

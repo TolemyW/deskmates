@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import type { Approval } from "@deskmates/contracts";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ApiClient } from "../../api/client.js";
 import { ApprovalCard } from "./approval-card.js";
 
 const base = {
@@ -23,13 +24,71 @@ describe("approval scope and continuation controls", () => {
     expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Always" })).toBeNull();
   });
+});
 
-  it("previews the effective wildcard scope before confirming Always", () => {
+// ADR-0002 amendment 3, A6: Always proposes the stable target, which the human may edit.
+describe("Always scope (A6)", () => {
+  const shell = {
+    ...base,
+    action: { ...base.action, argumentPattern: "git push*" },
+  } as Approval;
+
+  function fakeApi() {
+    const calls: unknown[][] = [];
+    const api = {
+      latestRunScreenshot: async () => null,
+      decideApproval: async (...args: unknown[]) => {
+        calls.push(args);
+        return { approval: { ...shell, decision: "allow_always" } };
+      },
+    } as unknown as ApiClient;
+    return { api, calls };
+  }
+
+  it("proposes the program and subcommand, never the summary, and sends no edit when kept", async () => {
+    const { api, calls } = fakeApi();
+    render(<ApprovalCard approval={shell} api={api} />);
+    fireEvent.click(screen.getByRole("button", { name: "Always" }));
+    const args = screen.getByRole("textbox", { name: "Details" }) as HTMLInputElement;
+    expect(args.value).toBe("git push*");
+    const origin = screen.getByRole("textbox", { name: "Website" }) as HTMLInputElement;
+    expect(origin.value).toBe("");
+    expect(origin.placeholder).toBe("Any website");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Always" }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual(["approval_1", "allow_always", undefined, undefined]);
+  });
+
+  it("sends an edited scope and warns when it has no wildcard", async () => {
+    const { api, calls } = fakeApi();
+    render(<ApprovalCard approval={shell} api={api} />);
+    fireEvent.click(screen.getByRole("button", { name: "Always" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Details" }), {
+      target: { value: "git push origin main" },
+    });
+    expect(screen.getByTestId("always-warning").textContent).toContain("no *");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm Always" }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]?.[3]).toEqual({ toolName: "Bash", argumentPattern: "git push origin main" });
+  });
+
+  it("refuses a truncated pattern and one that does not match the action", () => {
+    render(<ApprovalCard approval={shell} />);
+    fireEvent.click(screen.getByRole("button", { name: "Always" }));
+    const args = screen.getByRole("textbox", { name: "Details" });
+    const confirm = screen.getByRole("button", { name: "Confirm Always" }) as HTMLButtonElement;
+    fireEvent.change(args, { target: { value: "git push origin ma…" } });
+    expect(screen.getByRole("alert").textContent).toContain("shortened summary");
+    expect(confirm.disabled).toBe(true);
+    fireEvent.change(args, { target: { value: "npm publish*" } });
+    expect(screen.getByRole("alert").textContent).toContain("does not match");
+    expect(confirm.disabled).toBe(true);
+  });
+
+  it("says so when an action has no stable target", () => {
     render(<ApprovalCard approval={base} />);
     fireEvent.click(screen.getByRole("button", { name: "Always" }));
-    expect(screen.getByText("Any origin")).toBeTruthy();
-    expect(screen.getAllByText("git push origin main")).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "Confirm Always" })).toBeTruthy();
+    expect(screen.getByText(/No stable target/)).toBeTruthy();
   });
 });
 

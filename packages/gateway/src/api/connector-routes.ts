@@ -18,6 +18,7 @@ import { requestActorId } from "./actor.js";
 import { parseOffsetQuery } from "./pagination.js";
 import { isPlatformPrincipal, requestTenant } from "./route-policy.js";
 import { asRecord, optionalString, requireString } from "./validate.js";
+import { readableWorkspaceIds } from "./workspace-access.js";
 
 /** Registered connectors: 25 a page, at most 100 (#113). */
 export const CONNECTOR_PAGE: PageLimitPolicy = { default: 25, max: PAGE_LIMIT_MAX };
@@ -76,6 +77,7 @@ export function registerConnectorRoutes(app: FastifyInstance, ctx: GatewayContex
         requestTenant(request),
         offset,
         limit,
+        readableWorkspaceIds(ctx, request, "member"),
       );
       return { connectors: page.connectors, offset, limit, total: page.total };
     },

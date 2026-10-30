@@ -23,7 +23,7 @@ Example for the GPU-host vLLM servers (no authentication), keeping an internal u
 `default`:
 
 ```
-MODEL_UPSTREAMS=[{"id":"gpu-9b","baseUrl":"http://10.20.50.16:8003","models":["qwen3.5-9b"],"protocol":"anthropic"},{"id":"gpu-27b","baseUrl":"http://10.20.50.16:8004","models":["qwen3.8-27b"],"protocol":"anthropic"},{"id":"gpu-vl","baseUrl":"http://10.20.50.16:8005","models":["qwen3.5-9b-vl"],"protocol":"anthropic"}]
+MODEL_UPSTREAMS=[{"id":"gpu-9b","baseUrl":"http://10.0.0.5:8003","models":["qwen3.5-9b"],"protocol":"anthropic"},{"id":"gpu-27b","baseUrl":"http://10.0.0.5:8004","models":["qwen3.8-27b"],"protocol":"anthropic"},{"id":"gpu-vl","baseUrl":"http://10.0.0.5:8005","models":["qwen3.5-9b-vl"],"protocol":"anthropic"}]
 CHEAP_MODEL=qwen3.8-27b
 ```
 

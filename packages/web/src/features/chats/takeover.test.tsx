@@ -3,8 +3,8 @@
 // workspace, offers "Take over" while nobody holds the browser, opens the shared screen through
 // the Gateway's screen proxy on a takeover (never a noVNC address or password; ADR-0022
 // amendment 1, C7), says so while a human holds it, hands back, and follows the
-// `workspace_lock` frame so a second operator tab agrees without a refetch (ADR-0004, design
-// v0.3 §3.3).
+// `workspace_lock` frame so a second operator tab agrees and identity-bound holder state is
+// refreshed (ADR-0004, design v0.3 §3.3).
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,6 +41,13 @@ function routes(extra: RouteTable = {}): RouteTable {
     "GET /api/approvals?status=pending&threadId=thr_1": { approvals: [] },
     "GET /api/approvals?status=decided&threadId=thr_1": { approvals: [] },
     "GET /api/workspaces/ws_1": workspaceView(),
+    "GET /api/bots/bot_1/screen": {
+      botId: "bot_1",
+      workspaceId: WS_ID,
+      state: "ready",
+      humanHeld: true,
+    },
+    "POST /api/bots/bot_1/screen/access": screenTicket({ protocol: "ticket-1" }),
     "POST /api/workspaces/ws_1/takeover/open-screen": screenTicket({ protocol: "ticket-1" }),
     "POST /api/screen-access/acc_1/close": { closed: true },
     ...extra,
@@ -66,7 +73,7 @@ describe("takeover controls", () => {
     expect(screen.queryByText(/a human holds the browser/)).toBeNull();
   });
 
-  it("takes the lease, then streams the shared screen through the proxy with no password", async () => {
+  it("takes the workspace lease, then streams this Bot’s region through the proxy with no password", async () => {
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const { fetch, calls } = fakeFetch(
       routes({ "POST /api/workspaces/ws_1/takeover": { lock: browserLock() } }),
@@ -75,7 +82,7 @@ describe("takeover controls", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Take over" }));
 
-    await screen.findByRole("dialog", { name: "Shared workspace screen" });
+    await screen.findByRole("dialog", { name: "Browser control" });
     await waitFor(() => expect(rfbOpenings).toHaveLength(1));
     const [opening] = rfbOpenings;
     expect(opening?.url).toBe(`ws://${window.location.host}/api/desktop-stream`);
@@ -84,31 +91,39 @@ describe("takeover controls", () => {
     expect(open).not.toHaveBeenCalled();
     const paths = calls.map((c) => `${c.method} ${c.path}`);
     expect(paths).toContain("POST /api/workspaces/ws_1/takeover");
-    expect(paths).toContain("POST /api/workspaces/ws_1/takeover/open-screen");
+    expect(paths).toContain("POST /api/bots/bot_1/screen/access");
+    expect(paths).not.toContain("POST /api/workspaces/ws_1/takeover/open-screen");
     expect(screen.queryAllByRole("link")).toHaveLength(0);
     expect(screen.queryByRole("button", { name: "Take over" })).toBeNull();
   });
 
-  it("shows the no-screen note and opens nothing when the container has not started", async () => {
+  it("omits unavailable computer controls and never takes a hold before the container starts", async () => {
     const { fetch, calls } = fakeFetch(
       routes({
         "GET /api/workspaces/ws_1": workspaceView({ takeoverScreen: false }),
-        "POST /api/workspaces/ws_1/takeover": { lock: browserLock() },
       }),
     );
     render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Take over" }));
-
-    await screen.findByText("no screen yet (the workspace container has not started)");
+    await waitFor(() => expect(calls.map((c) => c.path)).toContain("/api/workspaces/ws_1"));
+    expect(
+      screen.queryByText("no screen yet (the workspace container has not started)"),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Take over" })).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(calls.map((c) => c.path)).not.toContain("/api/workspaces/ws_1/takeover");
     expect(calls.map((c) => c.path)).not.toContain("/api/workspaces/ws_1/takeover/open-screen");
     expect(rfbOpenings).toHaveLength(0);
   });
 
   it("reopens the screen of a hold found on load with a fresh proxy ticket", async () => {
     const { fetch, calls } = fakeFetch(
-      routes({ "GET /api/workspaces/ws_1": workspaceView({ browserLock: browserLock() }) }),
+      routes({
+        "GET /api/workspaces/ws_1": workspaceView({
+          browserLock: browserLock(),
+          browserLockHeldByMe: true,
+        }),
+      }),
     );
     render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
 
@@ -116,10 +131,10 @@ describe("takeover controls", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(openButton);
 
-    await screen.findByRole("dialog", { name: "Shared workspace screen" });
+    await screen.findByRole("dialog", { name: "Browser control" });
     await waitFor(() => expect(rfbOpenings).toHaveLength(1));
     expect(calls.map((call) => `${call.method} ${call.path}`)).toContain(
-      "POST /api/workspaces/ws_1/takeover/open-screen",
+      "POST /api/bots/bot_1/screen/access",
     );
   });
 
@@ -158,17 +173,62 @@ describe("takeover controls", () => {
     );
   });
 
+  it("hands the browser back when the control dialog closes", async () => {
+    const { fetch, calls } = fakeFetch(
+      routes({
+        "POST /api/workspaces/ws_1/takeover": { lock: browserLock() },
+        "POST /api/workspaces/ws_1/handback": { released: true },
+      }),
+    );
+    render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Take over" }));
+    const dialog = await screen.findByRole("dialog", { name: "Browser control" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() =>
+      expect(calls.map((call) => `${call.method} ${call.path}`)).toContain(
+        "POST /api/workspaces/ws_1/handback",
+      ),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("hands the browser back when an open control dialog unmounts", async () => {
+    const { fetch, calls } = fakeFetch(
+      routes({
+        "POST /api/workspaces/ws_1/takeover": { lock: browserLock() },
+        "POST /api/workspaces/ws_1/handback": { released: true },
+      }),
+    );
+    const mounted = render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Take over" }));
+    await screen.findByRole("dialog", { name: "Browser control" });
+    mounted.unmount();
+    await waitFor(() =>
+      expect(calls.map((call) => `${call.method} ${call.path}`)).toContain(
+        "POST /api/workspaces/ws_1/handback",
+      ),
+    );
+  });
+
   it("follows the workspace_lock frame from the unfiltered stream in both directions", async () => {
-    const { fetch } = fakeFetch(routes());
+    let announced = false;
+    const { fetch } = fakeFetch(
+      routes({
+        "GET /api/workspaces/ws_1": () =>
+          workspaceView({ browserLock: announced ? browserLock() : null }),
+      }),
+    );
     render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
     await screen.findByRole("button", { name: "Take over" });
 
     // The frame carries no threadId, so it only arrives on the pane's second, unfiltered stream.
     const es = FakeEventSource.forUrl("/api/events");
+    announced = true;
     es.emit({ type: "workspace_lock", workspaceId: WS_ID, browserLock: browserLock() });
     await screen.findByRole("button", { name: "Hand back" });
 
-    // Another tab hands back: this one follows without a refetch.
+    // Another tab hands back: this one follows the release frame immediately.
+    announced = false;
     es.emit({ type: "workspace_lock", workspaceId: WS_ID, browserLock: null });
     await screen.findByRole("button", { name: "Take over" });
     await waitFor(() => expect(screen.queryByText(/a human holds the browser/)).toBeNull());

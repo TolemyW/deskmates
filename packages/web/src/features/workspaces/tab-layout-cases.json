@@ -1,0 +1,8 @@
+[
+  {
+    "id": "settings",
+    "route": "#/account/workspaces?ws=ws_0001",
+    "container": ".workspace-settings",
+    "strip": ".workspace-settings .gb-tab-scroll"
+  }
+]

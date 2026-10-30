@@ -12,6 +12,7 @@ import {
   createMembersClient,
 } from "../api/members-client.js";
 import { DetailPaneLayout } from "../components/ui/detail-pane.js";
+import { NewWorkspaceDialog } from "../features/workspaces/new-workspace-dialog.js";
 import type { useTheme } from "../lib/theme.js";
 import { ActorDirectoryProvider } from "../state/actor-directory.js";
 import { configureConversationDrafts } from "../state/conversation-drafts.js";
@@ -27,7 +28,6 @@ export function AuthenticatedApp({
   release,
   flows,
   onExpired,
-  onSwitchTenant,
   onPreferences,
   onProfile,
   onSessionRotated,
@@ -38,7 +38,6 @@ export function AuthenticatedApp({
   release: string | null;
   flows: SessionFlows;
   onExpired: () => void;
-  onSwitchTenant: (tenantId: string) => void;
   /** The person's preferences after a change the Gateway stored. */
   onPreferences: (preferences: UserPreferences) => void;
   /** The person's profile after a change the Gateway stored. */
@@ -145,7 +144,10 @@ export function AuthenticatedApp({
       actorId={`user:${session.user.id}`}
       displayName={session.user.displayName}
     >
-      <WorkspaceScopeProvider api={api}>
+      <WorkspaceScopeProvider
+        api={api}
+        newWorkspaceDialog={(controls) => <NewWorkspaceDialog api={api} {...controls} />}
+      >
         <ActorDirectoryProvider
           members={members}
           allowed={session.tenant.role === "owner" || session.tenant.role === "admin"}
@@ -155,10 +157,8 @@ export function AuthenticatedApp({
               api={api}
               members={members}
               account={account}
-              flows={flows}
               session={session}
               release={release}
-              onSwitchTenant={onSwitchTenant}
               onPreferences={onPreferences}
               onProfile={onProfile}
               onSessionRotated={onSessionRotated}

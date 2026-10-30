@@ -33,6 +33,8 @@ export function taintingToolSource(
 ): MemorySourceKind | undefined {
   if (toolName.startsWith(`mcp__${BROWSER_MCP_SERVER}__`)) return "page";
   if (toolName === `mcp__${DESKMATES_MCP_SERVER}__browser_cli_workflow`) return "page";
+  // ADR-0048 decision 8: desktop UI text is untrusted like page text.
+  if (toolName.startsWith("mcp__desktop__")) return "page";
   if (toolName.startsWith(`mcp__${DESKMATES_MCP_SERVER}__connector_`)) return "tool";
   if (toolName === "Bash" && typeof input.command === "string" && isShellFetch(input.command))
     return "page";

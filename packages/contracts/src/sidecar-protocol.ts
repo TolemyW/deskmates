@@ -3,15 +3,23 @@
 
 import type { ApprovalDecision, HookDecision, RiskLevel, ToolAction } from "./approval.js";
 import type { ConnectorToolName } from "./connector.js";
+import type { DefaultBotToolName } from "./default-bot.js";
 import type { ApprovalId, BotId, RunId, ThreadId, WorkspaceId } from "./ids.js";
 import type { IntegrationToolName } from "./integration.js";
 import type { DoNotLearnReason, MemorySourceKind, PinnedMemoryIndex } from "./memory.js";
 import type { NetworkGrant } from "./network-profile.js";
 import type { EffortLevel, ThinkingConfig } from "./reasoning.js";
-import type { RunEventKind, RunSummary, RunUsage } from "./run.js";
+import type {
+  PlatformInterruption,
+  PlatformInterruptionReason,
+  RunEventKind,
+  RunSummary,
+  RunUsage,
+} from "./run.js";
 import type { RunSkill } from "./skill.js";
 import type { DeliverableTask } from "./task.js";
 import type { ThreadMessageTrigger } from "./thread.js";
+import type { VaultToolName } from "./vault.js";
 
 /** Cron and webhook payloads carry plain text; thread wakes carry the unseen message slice. */
 export type TriggerPayload =
@@ -32,8 +40,27 @@ export type TriggerPayload =
        * then the decision is spent. Any other L2 call is judged afresh.
        */
       toolUseId?: string;
-      /** Stable dimensions of the deferred action, from the approval row, for the retry match. */
+      /**
+       * Stable dimensions of the deferred action, from the approval row. The replayed call takes
+       * the decision only when its own dimensions equal these, and so does the retry.
+       */
       deferredAction?: DeferredAction;
+      /**
+       * The approval row's kind (issue #62 H3). An `egress` decision answers only the egress ask
+       * of the replayed call and a `tool` decision only its L2 ask: one call can raise both, and
+       * "allow this site" never approves the call's side effect. Absent from an older Gateway;
+       * the sidecar then relies on `deferredAction` alone.
+       */
+      approvalKind?: "tool" | "egress";
+      /**
+       * Every decided approval of the parked run, the one above first (issue #62 M8). The OpenAI
+       * runtime gates one turn's calls in parallel, so a run can park on several approvals and
+       * people can decide any of them first; the Gateway resumes on any and hands over every
+       * decision made so far. The sidecar applies each to the replayed call with its own tool-use
+       * id, in this order; an unchanged undecided call reuses its pending card. Absent from an
+       * older Gateway; the sidecar then takes the single decision above.
+       */
+      decidedApprovals?: ResumeDecision[];
       /**
        * Origin of the page the parked process had navigated to (`RunEnded.currentOrigin`), so the
        * resumed process derives `targetOrigin` for browser calls before it navigates again.
@@ -42,7 +69,36 @@ export type TriggerPayload =
     }
   | { kind: "continuation"; approvalId: ApprovalId; decision: "continue"; handoffPath?: string }
   /** An Admin continued work the workspace budget parked (ADR-0032 decision 7). */
-  | { kind: "budget_continuation"; handoffPath?: string };
+  | { kind: "budget_continuation"; handoffPath?: string }
+  /**
+   * The platform stopped this run and the Gateway continues it (ADR-0029 decisions 2, 4 and 5).
+   * After a drain the SDK replays the deferred call through the hook, which tiers it as usual;
+   * after a restart `interruptedCall` names a call whose outcome is unknown. With `freshSession`
+   * the old session could not be resumed and this attempt starts a new one from the Gateway's
+   * handoff (decision 10).
+   */
+  | {
+      kind: "platform_resume";
+      reason: PlatformInterruptionReason;
+      interruptedCall?: InterruptedToolCall;
+      /** Harness text the Gateway composed; bot and page text inside it stays wrapped. */
+      freshSession?: { handoff: string };
+      currentOrigin?: string;
+    };
+
+/**
+ * A tool call the ledger shows started (`tool_call`) and never finished (`tool_result`) when the
+ * Gateway restarted (ADR-0029 decision 5). The platform never re-executes it; the resumed attempt
+ * is told what its tier means, and an L2 call with the same stable dimensions asks a human again.
+ */
+export interface InterruptedToolCall {
+  toolUseId: string;
+  toolName: string;
+  riskLevel: RiskLevel;
+  /** Stable dimensions of an L2 call, from its approval row, for the post-interruption ask. */
+  targetOrigin?: string;
+  argumentPattern?: string;
+}
 
 /**
  * A short model job (ADR-0023 amendment 1). `vision_probe`: render `code` as a synthetic PNG and
@@ -69,6 +125,9 @@ export type ModelJobRequest =
         lastConfirmedAt?: string;
       }[];
       activity: string;
+      /** ADR-0053: frozen, redacted supporting sources; absent on legacy jobs. */
+      evidence?: { id: string; at: string; text: string; sha256: string }[];
+      asOf?: string;
     }
   /**
    * ADR-0002 amendment 4, B4: judge one pending L2 request. `reviewPackage` is the JSON the
@@ -103,6 +162,23 @@ export type ModelJobRequest =
 
 /** The part of a `ToolAction` that identifies "the same action" across processes and snapshots. */
 export type DeferredAction = Pick<ToolAction, "toolName" | "targetOrigin" | "argumentPattern">;
+
+/**
+ * One decided approval a resume hands over (issue #62 M8): what the `approval` trigger carries
+ * for its single decision, for one parked call.
+ */
+export interface ResumeDecision {
+  approvalId: ApprovalId;
+  decision: ApprovalDecision;
+  /** SDK tool-use id of the parked call the decision is for. */
+  toolUseId?: string;
+  /** The approval row's kind: an `egress` decision answers only that call's egress ask. */
+  approvalKind: "tool" | "egress";
+  /** Stable dimensions of the deferred action, from the approval row. */
+  deferredAction?: DeferredAction;
+  /** For a deny: the reason as the hook would have given it live (ADR-0002 amendment 3, A7). */
+  reason?: string;
+}
 
 export type BrowserCoordinationMode = "tab-v1" | "origin-v2";
 export type BrowserSnapshotMode = "explicit-v1" | "inline-v2";
@@ -145,21 +221,43 @@ export interface CliSurface {
 
 /** Gateway → sidecar supervisor: start one run as one sidecar process. */
 export interface StartRunRequest {
+  /** Frozen research guidance; absent keeps the prompt of an older run. */
+  researchGuidance?: "verify-v1";
   /** Tool-free, isolated presentation job (ADR-0027). */
   presentationSummary?: boolean;
   /** Which presentation job: an approval (ADR-0028, the default) or an Activity run (ADR-0033). */
   presentationKind?: "approval" | "activity";
   /** Tool-free, one-turn model job (ADR-0023 amendment 1); the trigger is not read. */
   modelJob?: ModelJobRequest;
+  /**
+   * How long the model job may take, in milliseconds: the Gateway's `MODEL_JOB_DEADLINE_MS`
+   * (issue #39 item 8), sent only with `modelJob`. Absent means the sidecar's own default of
+   * 55 s; the Gateway kills the process five seconds after it.
+   */
+  modelJobDeadlineMs?: number;
   runId: RunId;
   botId: BotId;
   botName: string;
+  /**
+   * The bot's configured role, empty when none is set, and its workspace's display name. Both
+   * open the static system prompt as one identity line (issue #39 item 4); bot and workspace
+   * configuration, never per-run state, so the cached prefix stays byte-identical run to run.
+   */
+  botRole: string;
   workspaceId: WorkspaceId;
+  workspaceName: string;
   threadId?: ThreadId;
   /** `/home/<bot>`; holds SOUL.md, MEMORY.md, diary, skills, .claude. */
   botHomeDir: string;
   /** Present on resume; the sidecar passes it to the SDK as `resume`. */
   sdkSessionId?: string;
+  /** Pending cards carried across attempts; reuse only for the same call, kind and action hash. */
+  pendingApprovals?: {
+    approvalId: ApprovalId;
+    toolUseId: string;
+    kind: "tool" | "egress";
+    actionFingerprint: string;
+  }[];
   /**
    * Which sidecar process of this run this is: 1 for the first, one more on every resume. The
    * sidecar's event counter restarts at 1 in every process, so the Gateway dedups redelivered
@@ -214,11 +312,22 @@ export interface StartRunRequest {
    */
   browserCodeApproval?: "effects-v1";
   /**
+   * ADR-0002 amendment 3, A5: the workspace operator's tier overrides, tool name to tier, frozen
+   * on the run row at the first start. Absent (the default) is no override: every tool keeps the
+   * curated table's tier, and the request is exactly the one sent before overrides existed.
+   */
+  toolTierOverrides?: Record<string, RiskLevel>;
+  /**
    * ADR-0023 amendment 2: the run's model cannot see images (or was observed inventing what it
    * saw), so the sidecar replaces image content with a text notice. Absent means images are
    * delivered as before. Frozen on the run row; a resume gets the first attempt's value.
    */
   visionPolicy?: "withhold";
+  /**
+   * ADR-0048 decision 1: the run's bot and workspace have the opt-in native desktop tools, as
+   * frozen on the run row. Absent means no `desktop` MCP server, the tools of every earlier run.
+   */
+  desktopTools?: "lcu-v1";
   /**
    * Set by the Gateway for a run in a `chat` thread with more than one member under `owner-v1`
    * (ADR-0005 amendment 2, decision 13): the sidecar adds the group norm to its guidance. The
@@ -313,8 +422,18 @@ export type SidecarToolName =
   // ADR-0040: offered only where the installation configures the service.
   | "image_describe"
   | "audio_transcribe"
+  // ADR-0040 amendment B: text-to-image, offered only where the installation configures it.
+  | "image_generate"
+  // ADR-0050: offered only to a run that froze `runStats: "self-v1"`.
+  | "run_stats"
+  // ADR-0049: offered only where the installation configures search and the workspace turned it on.
+  | "web_search"
   | ConnectorToolName
-  | IntegrationToolName;
+  | IntegrationToolName
+  // ADR-0045: offered only where the workspace has a usable Vault entry.
+  | VaultToolName
+  // ADR-0051: offered only to a run that froze `workspaceAssistant: "assistant-v1"`.
+  | DefaultBotToolName;
 
 /** Sidecar → Gateway: one ledger event, pushed as it happens. */
 export interface SidecarEvent {
@@ -339,6 +458,12 @@ export interface ApprovalRequest {
   kind?: "egress";
   /** SDK tool-use id of the call, so a later decision resumes that call and no other. */
   toolUseId?: string;
+  /**
+   * ADR-0029 decision 5: the call has the stable dimensions of an L2 call a restart interrupted
+   * with an unknown outcome. The Gateway checks its own record and asks a human even when an
+   * Always rule matches; the flag only lets the card name the interruption.
+   */
+  afterInterruption?: true;
 }
 
 /** Gateway → sidecar: the decision for a pending approval, or a timeout instruction. */
@@ -347,6 +472,21 @@ export interface ApprovalResponse {
   approvalId: ApprovalId;
   decision: HookDecision;
   reason?: string;
+  /**
+   * ADR-0029 decision 2: a `defer` because the Gateway is draining, not because of the approval,
+   * which stays pending. The hook ends its live wait and the run parks as `waiting_platform`.
+   */
+  platform?: "drain";
+}
+
+/**
+ * Gateway → sidecar: the answer to an event batch (`POST /internal/runs/:runId/events`). `drain`
+ * tells the run to park at its next safe point (ADR-0029 decision 2); the sidecar already posts
+ * batches continuously, so this needs no poll of its own.
+ */
+export interface SidecarEventsAck {
+  stored: number;
+  drain?: true;
 }
 
 /**
@@ -409,6 +549,19 @@ export interface PostMessageRequest {
   attachments: readonly { name: string; mimeType: string; ref: string }[];
 }
 
+/**
+ * Sidecar → Gateway (`POST /internal/runs/:runId/session`): the SDK reported the session this
+ * attempt runs on. Kept off the ledger, which carries only a fingerprint of it; the Gateway stores
+ * it on the run row so a restart can resume the session of a run that never reported its end
+ * (ADR-0029 decision 4).
+ */
+export interface SessionStartedReport {
+  type: "session_started";
+  runId: RunId;
+  attempt: number;
+  sdkSessionId: string;
+}
+
 /** Sidecar → Gateway: the process is ending. `deferred` means the run should park. */
 export interface RunEnded {
   type: "run_ended";
@@ -422,10 +575,27 @@ export interface RunEnded {
   error?: string;
   /** Approval the run is parked on when outcome is `deferred`. */
   pendingApprovalId?: ApprovalId;
+  /**
+   * Every approval this process deferred, in order, `pendingApprovalId` (the last) included
+   * (issue #62 M8). The OpenAI runtime gates the calls of one turn in parallel, so one process
+   * can park on more than one; the Gateway marks each as waiting in the parked state.
+   */
+  pendingApprovalIds?: ApprovalId[];
   /** SDK tool-use id of the deferred call; sent back with the `approval` trigger on resume. */
   pendingToolUseId?: string;
   /** Origin of the last allowed navigation when the run parked; the resume starts from it. */
   currentOrigin?: string;
+  /**
+   * ADR-0029 decision 2: with outcome `deferred`, the platform (a drain), not an approval,
+   * deferred the call. `pendingApprovalId` is then set only when the drain ended a live approval
+   * wait; that approval stays pending.
+   */
+  platformInterruption?: PlatformInterruption;
+  /**
+   * ADR-0029 decision 10: the attempt was asked to resume a session and the SDK could not read
+   * it, before any model turn. The Gateway continues on a fresh session with a handoff.
+   */
+  resumeFailed?: true;
   /**
    * Hex sha256 of the system prompt this process passed to the SDK; the Gateway merges it into
    * `runs.config_json` (M3 context plan, Phase 1). Absent when context assembly failed.

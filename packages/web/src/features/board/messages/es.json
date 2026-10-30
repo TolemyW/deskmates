@@ -27,8 +27,10 @@
   "board.post.hide": "Ocultar",
   "board.post.history": "Historial",
   "board.post.historyHide": "Ocultar historial",
+  "board.post.options": "Opciones de la publicación de {name}",
   "board.post.save": "Guardar",
   "board.post.unhide": "Mostrar",
   "board.post.withdraw": "Retirar",
+  "board.retry": "Reintentar",
   "board.title": "Tablón"
 }

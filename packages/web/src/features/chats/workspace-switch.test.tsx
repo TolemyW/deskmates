@@ -152,7 +152,7 @@ describe("ThreadScreen workspace switching (#106)", () => {
       window.location.hash = "#/threads/thr_1";
     });
     await screen.findByText("check the console");
-    await waitFor(() => expect(screen.getByRole("button", { name: /ops/ })).toBeTruthy());
+    await waitFor(() => expect(screen.getByPlaceholderText("Message ops…")).toBeTruthy());
     expect((screen.getByLabelText("Message") as HTMLTextAreaElement).value).toBe("unsent note");
   });
 });

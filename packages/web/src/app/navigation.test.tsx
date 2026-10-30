@@ -10,9 +10,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../app.js";
 import { ENGLISH } from "../i18n/catalogs.js";
 import { I18nProvider } from "../i18n/i18n-provider.js";
+import type { InterfaceView } from "../lib/interface-view.js";
 import { parseRoute } from "../router.js";
-import { installFakeEventSource } from "../test-support/fixtures.js";
-import { NAV_GROUPS, type NavEntry } from "./feature.js";
+import { FakeEventSource, installFakeEventSource } from "../test-support/fixtures.js";
+import { NAV_GROUPS, type NavEntry, isCurrentEntry } from "./feature.js";
 import { featureFor, navigationGroups } from "./features.js";
 import { NavLink } from "./navigation.js";
 import { ROUTE_MODULES } from "./route-registry.js";
@@ -26,7 +27,15 @@ function json(body: unknown): Response {
   });
 }
 
-function stubGateway(role: TenantRole): void {
+/**
+ * `root`: the session is the protected root account. `analyticsUrl`: what `GET /api/config`
+ * reports for the Analytics entry (ADR-0046 decision 8); absent by default, like a Gateway
+ * without `OBSERVABILITY_GRAFANA_URL`.
+ */
+function stubGateway(
+  role: TenantRole,
+  { root = false, analyticsUrl }: { root?: boolean; analyticsUrl?: string } = {},
+): void {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
@@ -34,6 +43,7 @@ function stubGateway(role: TenantRole): void {
       if (path === "/auth/session")
         return json({
           authenticated: true,
+          ...(root ? { root: true } : {}),
           user: { id: "usr_1", displayName: "Olive Owner", loginName: "olive" },
           tenant: { id: "tnt_default", name: "Default Tenant", role },
           session: {
@@ -44,7 +54,8 @@ function stubGateway(role: TenantRole): void {
           csrfToken: "session-csrf-1",
           preferences: { firstRunChecklistDismissed: true },
         });
-      if (path === "/api/config") return json({ release: null });
+      if (path === "/api/config")
+        return json({ release: null, ...(analyticsUrl ? { analyticsUrl } : {}) });
       if (path.startsWith("/api/workspaces")) return json({ workspaces: [] });
       if (path.startsWith("/api/bots")) return json({ bots: [] });
       if (path.startsWith("/api/threads")) return json({ threads: [] });
@@ -66,34 +77,46 @@ function addresses(): string[] {
   return hashes.filter((hash) => parseRoute(hash).name !== "invite");
 }
 
-const GROUP_LABELS = { talk: "Talk", resources: "Resources", operate: "Operate" };
+const GROUP_LABELS = { talk: "Work", resources: "Resources", operate: "System" };
+
+/** Choose the interface view the shell starts in, as the person's browser remembers it. */
+function startIn(view: InterfaceView): void {
+  if (view === "tune") window.localStorage.setItem("deskmates.view", "tune");
+  else window.localStorage.removeItem("deskmates.view");
+}
 
 /**
  * The navigation as the registry says it should look for a role at a route, with the role facts
- * the shell checks (a root-only link is hidden from a non-root Owner).
+ * the shell checks (a root-only link is hidden from a non-root Owner) and the view (a link marked
+ * for tuning shows only in the tune view). A group left with no link is not shown.
  */
-function expectedNavigation(route: Route, role: TenantRole) {
+function expectedNavigation(route: Route, role: TenantRole, view: InterfaceView = "use") {
   const manager = role !== "member";
   const can = (action: Parameters<typeof mayTakeAction>[1]) =>
     mayTakeAction({ tenantRole: role, platformMaintainer: false }, action);
-  return navigationGroups().map(({ group, entries }) => ({
-    label: GROUP_LABELS[group],
-    links: entries
-      .filter(({ nav }) => nav.visible?.({ manager, can }) ?? true)
-      .map(({ nav }) => {
-        const active = nav.active(route);
-        const label = ENGLISH[nav.label];
-        return {
-          href: nav.href(),
-          className: active ? "active" : "",
-          current: active ? "page" : null,
-          name: label,
-          title: label,
-          icon: true,
-          html: `<svg/><span>${label}</span>`,
-        };
-      }),
-  }));
+  return navigationGroups()
+    .map(({ group, entries }) => ({
+      label: GROUP_LABELS[group],
+      links: entries
+        .filter(({ nav }) => nav.visible?.({ manager, can }) ?? true)
+        .filter(({ nav }) => nav.audience !== "tune" || view === "tune")
+        // An external entry is hidden while its address is unknown; this Gateway reports none.
+        .filter(({ nav }) => nav.external === undefined)
+        .map(({ nav }) => {
+          const active = isCurrentEntry(nav, route);
+          const label = ENGLISH[nav.label];
+          return {
+            href: nav.href?.(),
+            className: active ? "active" : "",
+            current: active ? "page" : null,
+            name: label,
+            title: label,
+            icon: true,
+            html: `<svg/><span>${label}</span>`,
+          };
+        }),
+    }))
+    .filter(({ links }) => links.length > 0);
 }
 
 function renderedNavigation(nav: HTMLElement) {
@@ -129,6 +152,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   window.location.hash = "";
+  window.localStorage.removeItem("deskmates.view");
 });
 
 describe("main navigation from the feature registry", () => {
@@ -136,10 +160,17 @@ describe("main navigation from the feature registry", () => {
     expect(NAV_GROUPS).toEqual(["talk", "resources", "operate"]);
   });
 
-  for (const role of ["owner", "admin", "member"] as const) {
-    it(`shows a ${role} every entry it may use, current where the route says, at every address`, async () => {
-      const manager = role !== "member";
+  for (const [role, view] of [
+    ["owner", "use"],
+    ["owner", "tune"],
+    ["admin", "use"],
+    ["admin", "tune"],
+    ["member", "use"],
+    ["member", "tune"],
+  ] as const) {
+    it(`shows a ${role} in the ${view} view every entry it may use, current where the route says, at every address`, async () => {
       stubGateway(role);
+      startIn(view);
       window.location.hash = "";
       render(<App />);
       const nav = await mainNavigation();
@@ -153,13 +184,13 @@ describe("main navigation from the feature registry", () => {
         const route = parseRoute(hash);
         if (featureFor(route)?.drawer === undefined) background = route;
         await waitFor(() =>
-          expect(renderedNavigation(nav), hash).toEqual(expectedNavigation(background, role)),
+          expect(renderedNavigation(nav), hash).toEqual(expectedNavigation(background, role, view)),
         );
       }
     }, 60_000);
   }
 
-  it("a Guest sees only what they may read, and a hidden screen's address shows Chats (ADR-0022 amendment 7 S6)", async () => {
+  it("shows a Guest an explicit permission page without loading a forbidden feature", async () => {
     stubGateway("guest");
     window.location.hash = "#/costs";
     render(<App />);
@@ -176,19 +207,58 @@ describe("main navigation from the feature registry", () => {
         )
         .map(({ nav: entry }) => ENGLISH[entry.label]),
     );
-    expect(expected).toEqual(["Chats", "Contacts", "Board"]);
+    expect(expected).toEqual(["Chats", "Bots", "Board"]);
     await waitFor(() =>
       expect([...nav.querySelectorAll("a")].map((a) => a.getAttribute("aria-label"))).toEqual(
         expected,
       ),
     );
-    // The address names Costs, but the work area shows Chats and never asks for costs.
+    expect(document.querySelector('[data-testid="page-forbidden"]')?.textContent).toContain(
+      "requires any member",
+    );
+    // The address names Costs, but the forbidden feature never asks for its data.
     const calls = (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((call) =>
       String(call[0]),
     );
     await waitFor(() => expect(calls.length).toBeGreaterThan(0));
     expect(calls.some((path) => path.startsWith("/api/costs"))).toBe(false);
     expect(calls.some((path) => path.startsWith("/api/approvals"))).toBe(false);
+  });
+
+  it("shows an explicit not-found page for an unknown address", async () => {
+    stubGateway("owner");
+    window.location.hash = "#/this-page-does-not-exist";
+    render(<App />);
+    await mainNavigation();
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="page-not-found"]')?.textContent).toContain(
+        "Page not found",
+      ),
+    );
+  });
+
+  it("reports the real Gateway stream state and keeps an outage banner visible", async () => {
+    stubGateway("owner");
+    render(<App />);
+    await mainNavigation();
+    const status = document.querySelector(".workspace-health");
+    expect(status?.textContent).toContain("Connecting");
+    const stream = await waitFor(() => {
+      const found = FakeEventSource.instances.find((candidate) =>
+        candidate.url.startsWith("/api/events"),
+      );
+      expect(found).toBeDefined();
+      return found as FakeEventSource;
+    });
+    act(() => stream.open());
+    await waitFor(() => expect(status?.textContent).toContain("Connected"));
+    act(() => stream.drop());
+    await waitFor(() => {
+      expect(status?.textContent).toContain("Offline");
+      expect(document.querySelector(".gateway-offline-banner")?.textContent).toContain(
+        "cannot reach the server",
+      );
+    });
   });
 
   it("keeps the landing screen's entry current when a drawer address is opened directly", async () => {
@@ -201,6 +271,87 @@ describe("main navigation from the feature registry", () => {
     await waitFor(() =>
       expect(renderedNavigation(nav)).toEqual(expectedNavigation({ name: "threads" }, "owner")),
     );
+  });
+});
+
+describe("an external entry: Analytics (ADR-0046 decision 8)", () => {
+  // The Gateway's same-origin relay to Grafana (ADR-0046 amendment 1 decision 16).
+  const GRAFANA = "/analytics/";
+  const external = navigationGroups()
+    .flatMap(({ entries }) => entries)
+    .filter(({ nav }) => nav.external !== undefined);
+  const names = external.map(({ nav }) => `${ENGLISH[nav.label]} (opens in a new tab)`);
+
+  const links = (nav: HTMLElement) =>
+    [...nav.querySelectorAll("a")].filter((a) =>
+      names.includes(a.getAttribute("aria-label") ?? ""),
+    );
+
+  const configAsked = () =>
+    waitFor(() =>
+      expect(
+        (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.some(
+          (call) => String(call[0]) === "/api/config",
+        ),
+      ).toBe(true),
+    );
+
+  it("is the Analytics entry, for the root only", () => {
+    expect(external.map(({ folder }) => folder)).toEqual(["analytics"]);
+    const root = { tenantRole: "owner", platformMaintainer: false, root: true } as const;
+    const owner = { tenantRole: "owner", platformMaintainer: false } as const;
+    for (const { nav } of external) {
+      expect(nav.visible?.({ manager: true, can: (a) => mayTakeAction(root, a) })).toBe(true);
+      expect(nav.visible?.({ manager: true, can: (a) => mayTakeAction(owner, a) })).toBe(false);
+    }
+  });
+
+  it("opens the relayed Grafana in a new tab for the root, and is never current", async () => {
+    stubGateway("owner", { root: true, analyticsUrl: GRAFANA });
+    startIn("tune");
+    window.location.hash = "#/costs";
+    render(<App />);
+    const nav = await mainNavigation();
+    await waitFor(() => expect(links(nav)).toHaveLength(external.length));
+    for (const link of links(nav)) {
+      expect(link.getAttribute("href")).toBe(GRAFANA);
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+      expect(link.getAttribute("aria-current")).toBeNull();
+      expect(link.getAttribute("title")).toBe(link.getAttribute("aria-label"));
+      expect(link.innerHTML.replace(/<svg[\s\S]*?<\/svg>/, "<svg/>")).toBe(
+        "<svg/><span>Analytics</span>",
+      );
+    }
+  });
+
+  it("is hidden from the root in the use view, the URL set", async () => {
+    stubGateway("owner", { root: true, analyticsUrl: GRAFANA });
+    render(<App />);
+    const nav = await mainNavigation();
+    await configAsked();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(links(nav)).toEqual([]);
+  });
+
+  it("is hidden from the root while the Gateway reports no analyticsUrl", async () => {
+    stubGateway("owner", { root: true });
+    startIn("tune");
+    render(<App />);
+    const nav = await mainNavigation();
+    await configAsked();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(links(nav)).toEqual([]);
+  });
+
+  it("is hidden from an Owner who is not the root, with the URL set", async () => {
+    stubGateway("owner", { analyticsUrl: GRAFANA });
+    startIn("tune");
+    render(<App />);
+    const nav = await mainNavigation();
+    await configAsked();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(links(nav)).toEqual([]);
   });
 });
 
@@ -225,10 +376,10 @@ describe("a navigation link", () => {
     expect(link.getAttribute("href")).toBe("#/somewhere");
     expect(link.getAttribute("class")).toBe("active");
     expect(link.getAttribute("aria-current")).toBe("page");
-    expect(link.getAttribute("aria-label")).toBe("Attention, 2 pending");
-    expect(link.getAttribute("title")).toBe("Attention, 2 pending");
+    expect(link.getAttribute("aria-label")).toBe("Approvals, 2 pending");
+    expect(link.getAttribute("title")).toBe("Approvals, 2 pending");
     expect(link.innerHTML).toBe(
-      '<i></i><span>Attention</span><span class="badge" aria-hidden="true">2</span>',
+      '<i></i><span>Approvals</span><span class="badge" aria-hidden="true">2</span>',
     );
   });
 
@@ -242,7 +393,19 @@ describe("a navigation link", () => {
     const link = container.querySelector("a") as HTMLAnchorElement;
     expect(link.getAttribute("class")).toBe("");
     expect(link.getAttribute("aria-current")).toBeNull();
-    expect(link.getAttribute("aria-label")).toBe("Attention");
-    expect(link.innerHTML).toBe("<i></i><span>Attention</span>");
+    expect(link.getAttribute("aria-label")).toBe("Approvals");
+    expect(link.innerHTML).toBe("<i></i><span>Approvals</span>");
+  });
+
+  it("caps a large visible badge at 99+ while keeping the exact accessible count", () => {
+    const busy = { ...entry, badge: { ...entry.badge, useCount: () => 124 } } as NavEntry;
+    const { container } = render(
+      <I18nProvider locale="en">
+        <NavLink entry={busy} active={false} ctx={STUB_CONTEXT} />
+      </I18nProvider>,
+    );
+    const link = container.querySelector("a") as HTMLAnchorElement;
+    expect(link.getAttribute("aria-label")).toBe("Approvals, 124 pending");
+    expect(link.querySelector(".badge")?.textContent).toBe("99+");
   });
 });

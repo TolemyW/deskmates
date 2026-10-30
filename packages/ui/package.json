@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Deskmates-owned HeroUI components and design tokens",
-  "files": ["dist", "README.md", "CHANGELOG.md"],
+  "files": ["dist", "docs", "README.md", "CHANGELOG.md"],
   "sideEffects": ["**/*.css"],
   "exports": {
     ".": {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @deskmates/sidecar CLI. Subcommands: run, mcp-proxy, memory, diary, bot-rename, file-read,
-// file-write.
+// file-write, vault-fill.
 //
 // `deskmates-sidecar run` reads one `StartRunRequest` as JSON from stdin, loads `/run/deskmates/env`
 // (KEY=VALUE, injected by the sandbox provider) into the environment and runs the SDK loop once.
@@ -26,10 +26,18 @@
 // from stdin and writes only under /work/uploads/ (ADR-0014 amendment A5, `file-write.ts`). The
 // Gateway's upload routes are its only caller.
 //
+// `deskmates-sidecar vault-fill` reads one fill request, a Vault value included, from stdin and
+// prints only `{status}` (ADR-0045 decision 5, `vault-fill.ts`). The Gateway's credential use is
+// its only caller.
+//
 // `deskmates-sidecar mcp-proxy -- <command> [args...]` runs that command as a child MCP server and
 // proxies JSON-RPC between it and this process's stdin/stdout, wrapping page text as untrusted
 // and capturing screenshots (`mcp-proxy/proxy.ts`). The SDK launches this, not the browser MCP
 // server directly (`browser-mcp.ts`); it exits with the child's code.
+//
+// `deskmates-sidecar desktop-proxy -- <command> [args...]` does the same for the opt-in LCU desktop
+// server (ADR-0048, `desktop/desktop-proxy.ts`): host-only tools hidden, the workspace lock and
+// takeover epoch, untrusted wrapping, interruption and restart.
 
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
@@ -39,6 +47,7 @@ import { fileURLToPath } from "node:url";
 import { egressAllows } from "@deskmates/contracts";
 import { BOT_RENAME_ROOTS, renameBotDirectories } from "./bot-rename.js";
 import { BROWSER_COORDINATION_ENV, type BrowserCoordinationConfig } from "./browser-state.js";
+import { runDesktopProxyCommand } from "./desktop/desktop-proxy-main.js";
 import { manageDiary } from "./diary-file.js";
 import { RUNTIME_ENV_FILE, parseEnvFile } from "./env-file.js";
 import { fileReadCommand } from "./file-read.js";
@@ -54,6 +63,8 @@ import { createRealDeps } from "./real-deps.js";
 import { runOnce } from "./run-once.js";
 import { SCREENSHOT_DIR_ENV } from "./screenshots.js";
 import { parseStartRunRequest } from "./start-run-request.js";
+import { fileVaultCaptureGuard, vaultCapturePath } from "./vault-capture.js";
+import { DEFAULT_VAULT_CDP_ENDPOINT, cdpFillDeps, vaultFillCommand } from "./vault-fill.js";
 import { VISION_POLICY_ENV } from "./vision-withhold.js";
 
 export { runOnce } from "./run-once.js";
@@ -80,11 +91,13 @@ function usage(): never {
   process.stderr.write(
     "usage: deskmates-sidecar run < start-run-request.json\n" +
       "       deskmates-sidecar mcp-proxy -- <command> [args...]\n" +
+      "       deskmates-sidecar desktop-proxy -- <command> [args...]\n" +
       "       deskmates-sidecar memory < memory-request.json\n" +
       "       deskmates-sidecar diary < diary-request.json\n" +
       "       deskmates-sidecar bot-rename < bot-rename-request.json\n" +
       "       deskmates-sidecar file-read < file-read-request.json\n" +
-      "       deskmates-sidecar file-write < file-write-request.json\n",
+      "       deskmates-sidecar file-write < file-write-request.json\n" +
+      "       deskmates-sidecar vault-fill < vault-fill-request.json\n",
   );
   process.exit(2);
 }
@@ -223,6 +236,10 @@ async function runProxy(argv: readonly string[]): Promise<number> {
         ...(config?.browserExecutionMode === "vision-cli-v2" ? { visionFallback: true } : {}),
         ...(retention ? { retention } : {}),
         ...(process.env[VISION_POLICY_ENV] === "withhold" ? { withholdImages: true } : {}),
+        // ADR-0045 decision 7: masked captures while a Vault fill is on the run's page.
+        ...(config
+          ? { vaultGuard: fileVaultCaptureGuard(vaultCapturePath(config.statePath)) }
+          : {}),
       },
     });
     await timingBuffer?.flush(1_000);
@@ -276,7 +293,14 @@ export async function main(argv: readonly string[]): Promise<number> {
     await new Promise<void>((resolve) => void process.stdout.write(stdout, () => resolve()));
     return exitCode;
   }
+  // ADR-0045 decision 5: the value arrives on stdin and only a status line leaves.
+  if (argv[0] === "vault-fill") {
+    const out = await vaultFillCommand(await readStdin(), cdpFillDeps(DEFAULT_VAULT_CDP_ENDPOINT));
+    process.stdout.write(`${JSON.stringify(out)}\n`);
+    return 0;
+  }
   if (argv[0] === "mcp-proxy") return await runProxy(argv);
+  if (argv[0] === "desktop-proxy") return await runDesktopProxyCommand(argv);
   if (argv[0] !== "run") usage();
   await loadRuntimeEnv();
   installManagedFetchProxy(process.env);

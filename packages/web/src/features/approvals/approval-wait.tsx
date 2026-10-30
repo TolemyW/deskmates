@@ -35,6 +35,8 @@ export function approvalWaitState(
   if (
     runStatus === "waiting_approval" ||
     runStatus === "waiting_continuation" ||
+    // ADR-0029 decision 2: a drain ended the live wait; the request stays open and parked.
+    runStatus === "waiting_platform" ||
     approval.waitMode === "deferred"
   )
     return { kind: "parked" };

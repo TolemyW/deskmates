@@ -158,6 +158,40 @@ describe("thread deadline", () => {
     expect(run.error).toBe(RUN_ERROR_DEADLINE);
   });
 
+  it("closes the approval of a run waiting on it and kills a sidecar that does not exit", async () => {
+    const { thread } = await h.seed();
+    const { ctx, scheduler } = h.app.deskmates;
+    scheduler.cancelGraceMs = 20;
+    let requested = false;
+    h.provider.onRun(async (req, gw) => {
+      await gw.post("approvals", {
+        type: "approval_request",
+        approvalId: "apr-deadline",
+        action: { toolName: "Bash", input: { command: "git push" }, argumentSummary: "git push" },
+        riskLevel: "L2",
+        toolUseId: "toolu_deadline",
+      });
+      requested = true;
+      // Never exits by itself: only the kill ends this process.
+      await new Promise(() => {});
+    });
+    const posted = await h.api<{ runs: RunRecord[] }>(
+      "POST",
+      `/api/threads/${thread.id}/messages`,
+      { body: "push it" },
+    );
+    const runId = posted.json.runs[0]?.id as RunId;
+    await waitFor(() => requested, 3000, "approval requested");
+    ctx.threads.setDeadline(thread.id, PAST);
+    scheduler.tick();
+    expect(ctx.runs.mustGet(runId).status).toBe("cancelled");
+    const approval = ctx.approvals.mustGet("apr-deadline" as never);
+    expect(approval.decision).toBe("deny");
+    expect(approval.decidedBy).toBe("system:deadline");
+    await waitFor(() => h.provider.execCalls[0]?.req.signal?.aborted === true, 3000, "killed");
+    await scheduler.drain();
+  });
+
   it("refuses to start a queued run of a thread past its deadline", async () => {
     const { thread } = await h.seed();
     const { ctx, scheduler } = h.app.deskmates;

@@ -22,3 +22,5 @@
 {"section":"after session","request":"GET /api/bots/bot_001z/screen","status":200,"json":{"botId":"bot_001z","workspaceId":"ws_001w","state":"stopped","humanHeld":false}}
 {"section":"after session","request":"GET /api/bots/bot_0020/screen","status":200,"json":{"botId":"bot_0020","workspaceId":"ws_001w","state":"stopped","humanHeld":false}}
 {"section":"after session","request":"GET /api/bots/bot_003i/screen","status":200,"json":{"botId":"bot_003i","workspaceId":"ws_0001","state":"stopped","humanHeld":false}}
+{"section":"after session","request":"GET /api/bots/bot_003v/screen","status":200,"json":{"botId":"bot_003v","workspaceId":"ws_003u","state":"stopped","humanHeld":false}}
+{"section":"after session","request":"GET /api/bots/bot_003y/screen","status":200,"json":{"botId":"bot_003y","workspaceId":"ws_003x","state":"stopped","humanHeld":false}}

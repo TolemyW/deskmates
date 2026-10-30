@@ -25,10 +25,13 @@ async function operatorRoutes(): Promise<string[]> {
   const app = Fastify();
   apps.push(app);
   const routes: string[] = [];
-  // `/auth/preferences` (issue #22) and the account settings routes (ADR-0022 amendment 3) are
-  // the routes outside `/api` registered behind the guard.
+  // `/auth/preferences` (issue #22), the account settings routes (ADR-0022 amendment 3) and the
+  // analytics relay (ADR-0046 amendment 1) are the routes outside `/api` behind the guard.
   const guarded = (url: string): boolean =>
-    url.startsWith("/api/") || ["/auth/preferences", "/auth/profile", "/auth/avatar"].includes(url);
+    url.startsWith("/api/") ||
+    ["/auth/preferences", "/auth/profile", "/auth/avatar", "/analytics", "/analytics/*"].includes(
+      url,
+    );
   app.addHook("onRoute", (route) => {
     for (const method of [route.method].flat())
       if (method !== "HEAD" && guarded(route.url)) routes.push(`${method} ${route.url}`);

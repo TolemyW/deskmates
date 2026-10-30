@@ -24,9 +24,13 @@
   overflow-wrap: anywhere;
 }
 
-.app-open {
-  max-width: 36rem;
+.card.app-open {
+  flex: 0 1 auto;
+  align-self: flex-start;
+  width: min(36rem, calc(100% - 32px));
+  height: fit-content;
   margin: 24px auto;
+  overflow-wrap: anywhere;
 }
 
 /* The share form and the Files page's Apps entry (owner-decided 2026-10-14). */
@@ -47,7 +51,7 @@
   display: grid;
   justify-items: start;
   gap: 8px;
-  margin-block: 0 12px;
+  margin-block: 0;
 }
 
 .files-apps-panel {

@@ -5,6 +5,8 @@ React 19. The public API, compositions and release notes belong to Deskmates. He
 the default visual design: keep its palette, radii, shadows and component sizing.
 See [ADR-0025](../../docs/adr/0025-owned-heroui-component-library.md).
 
+Design requirements: [Selection and navigation](docs/selection-and-navigation.md).
+
 ## Responsibility and boundaries
 
 - Own reusable presentation and accessible interaction, never application state.
@@ -154,6 +156,10 @@ consumer-owned; this component does not fetch or submit messages.
 
 ## Application chat integration
 
+Mark in-transcript disclosure controls with `data-chat-disclosure` to release bottom-follow
+before they change height. Native pointer and keyboard activation share this behavior; the
+reader can resume following with the existing latest control.
+
 `ChatViewport` accepts an optional `scrollTargetId` to reveal a message after it
 loads, once per target and conversation. Subsequent updates preserve the reader's
 position. `useAutoSizeTextarea(value)` returns a textarea ref for consumers with
@@ -185,3 +191,30 @@ navigation name), `previousLabel`, `nextLabel`, a caller-formatted `range` (for 
 "26–50 of 80", or "26–50 of more" when the source has no cheap total), `hasPrevious`,
 `hasNext` and the two callbacks; `busy` disables both while a page loads. It owns no paging
 state, cursor or strings; the web application's `usePagedQuery` hook owns those.
+
+`PageHeader` gives product pages one title, one-line description and an optional action area.
+Keep at most one primary action in that area; secondary refresh or filter controls may sit beside it.
+`EmptyState` is the matching centred icon, title, sentence and optional next-step action.
+
+`SectionTabs` is the application composition for controlled, in-page sections.
+Pass labelled items, `value`, `onChange`, and either selected `children` or
+`renderPanel(key)`. It provides native HeroUI tabs with arrow/Home/End navigation,
+disabled items and tab/panel relationships. `keepMounted` lazily mounts each panel
+on its first visit and keeps its draft alive while hidden. Without it, inactive
+panels unmount. Labels use content-sized controls within a horizontal scroll strip;
+never constrain them to equal-width cells in a consumer stylesheet.
+
+`TabNavigation` is for separate addresses: items include `href` and the selected
+item gets `aria-current="page"`. It retains real anchors instead of presenting
+route links as in-page tabs. `sidebar` keeps desktop account navigation vertical
+and switches to a horizontal strip on narrow screens. Both compositions share
+layout rules, native visual tokens, and automated browser geometry checks in web.
+
+`ChoiceGroup` owns mutually exclusive filters and display modes. Pass `label`,
+`items`, `value` and `onChange`; items support optional icon, count and disabled.
+`iconOnly` is for named display modes. It uses native standard Button sizing and
+neutral selected/unselected variants; pages must not override its internals.
+
+`HelpTip` places optional explanatory text behind a named question icon with hover,
+focus and activation support. `ControlPopover` holds interactive secondary controls
+in a named native popover dialog. Both keep HeroUI presentation and dismissal.

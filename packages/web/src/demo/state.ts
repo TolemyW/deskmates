@@ -27,6 +27,7 @@ import type {
   Workspace,
   WorkspaceId,
 } from "@deskmates/contracts";
+import { CHAT_PREVIEW_MAX, messageExcerpt } from "@deskmates/contracts";
 import type { GatewayEvent, NamedThreadMember, RunView } from "../api/types.js";
 
 export type Emit = (event: GatewayEvent) => void;
@@ -173,6 +174,7 @@ export class DemoState {
       cheapModel: "demo-small",
       release: "demo",
       cronTimeZone: "UTC",
+      analyticsUrl: null,
       models: [
         { model: "demo-large", upstream: "default" },
         { model: "demo-local", upstream: "local" },
@@ -223,7 +225,7 @@ export class DemoState {
               seq: last.seq,
               authorKind: last.authorKind,
               authorId: last.authorId,
-              excerpt: last.body.slice(0, 160),
+              excerpt: messageExcerpt(last.body, CHAT_PREVIEW_MAX),
               ts: last.ts,
             },
           }

@@ -11,7 +11,7 @@
   "board.history.op.post": "posted",
   "board.history.op.unhide": "shown again",
   "board.history.op.withdraw": "withdrawn",
-  "board.intro": "Notes for everyone in this workspace. A post never starts a bot.",
+  "board.intro": "Notes for everyone in this workspace. A post never starts a Bot.",
   "board.list.empty": "No posts yet.",
   "board.list.label": "Posts",
   "board.list.loading": "Loading posts…",
@@ -27,8 +27,10 @@
   "board.post.hide": "Hide",
   "board.post.history": "History",
   "board.post.historyHide": "Hide history",
+  "board.post.options": "Post options for {name}",
   "board.post.save": "Save",
   "board.post.unhide": "Unhide",
   "board.post.withdraw": "Withdraw",
+  "board.retry": "Retry",
   "board.title": "Board"
 }

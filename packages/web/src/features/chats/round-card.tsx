@@ -42,6 +42,8 @@ function closerState(status: RunStatus | undefined, synthesized: boolean): Round
     case "running":
     case "stalled":
     case "waiting_browser":
+    // ADR-0029: parked by the platform, which continues it without anyone's decision.
+    case "waiting_platform":
       return "running";
     case "waiting_approval":
     case "waiting_approval_live":

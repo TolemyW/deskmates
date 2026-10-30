@@ -20,6 +20,7 @@ function LockHarness({ api }: { api: ApiClient }) {
       <span data-testid="held">{String(browser.held)}</span>
       <span data-testid="screen">{String(browser.hasScreen)}</span>
       <span data-testid="open">{String(browser.screenOpen)}</span>
+      <span data-testid="mine">{String(browser.heldByMe)}</span>
       <button type="button" onClick={browser.takeOver}>
         Take over
       </button>
@@ -64,7 +65,11 @@ describe("useWorkspaceLock", () => {
     const snapshot = new Promise<ReturnType<typeof workspaceView>>((done) => {
       resolve = done;
     });
-    const { fetch } = fakeFetch({ "GET /api/workspaces/ws_1": () => snapshot });
+    let requests = 0;
+    const { fetch } = fakeFetch({
+      "GET /api/workspaces/ws_1": () =>
+        ++requests === 1 ? snapshot : workspaceView({ browserLock: browserLock() }),
+    });
     render(<LockHarness api={createApiClient({ fetch })} />);
 
     FakeEventSource.last.emit({
@@ -75,6 +80,27 @@ describe("useWorkspaceLock", () => {
     resolve(workspaceView({ browserLock: null }));
 
     await waitFor(() => expect(screen.getByTestId("held").textContent).toBe("true"));
+  });
+
+  it("learns whether the signed-in person owns a hold announced by SSE", async () => {
+    let requests = 0;
+    const { fetch } = fakeFetch({
+      "GET /api/workspaces/ws_1": () =>
+        ++requests === 1
+          ? workspaceView()
+          : workspaceView({ browserLock: browserLock(), browserLockHeldByMe: true }),
+    });
+    render(<LockHarness api={createApiClient({ fetch })} />);
+    await waitFor(() => expect(screen.getByTestId("held").textContent).toBe("false"));
+
+    FakeEventSource.last.emit({
+      type: "workspace_lock",
+      workspaceId: WS_ID,
+      browserLock: browserLock(),
+    });
+
+    await waitFor(() => expect(screen.getByTestId("mine").textContent).toBe("true"));
+    expect(requests).toBe(2);
   });
 
   it("refetches lock state on reconnect and opens the screen only while held", async () => {

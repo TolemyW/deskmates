@@ -4,10 +4,11 @@
 // one-use ticket to the app origin in a form, never in an address.
 
 import type { AppShare, WorkspaceDirectoryEntry, WorkspaceId } from "@deskmates/contracts";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { createApiClient } from "../../api/client.js";
 import { AppOpenScreen } from "./app-open-screen.js";
+import { AppSharesPanel } from "./app-shares-panel.js";
 import { AppSharesSection } from "./app-shares-section.js";
 
 afterEach(cleanup);
@@ -154,4 +155,125 @@ it("lets a Member share a running port and lists it first", async () => {
     .getAllByRole("listitem")
     .map((li) => li.querySelector("strong")?.textContent);
   expect(items).toEqual(["Preview", "Todo app"]);
+});
+
+it("submits the one-use ticket once, however often the shell re-renders (#63 M13)", async () => {
+  const { api, calls } = client([]);
+  const submitted: HTMLFormElement[] = [];
+  const view = () => (
+    <AppOpenScreen
+      api={api}
+      workspaceId="ws_1"
+      shareId="app_1"
+      // A new function on every render, as a parent re-render produces.
+      submit={(form) => {
+        submitted.push(form);
+      }}
+    />
+  );
+  const { rerender } = render(view());
+  await waitFor(() => expect(submitted).toHaveLength(1));
+  rerender(view());
+  rerender(view());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(submitted).toHaveLength(1);
+  expect(calls).toEqual(["POST /api/workspaces/ws_1/app-shares/app_1/open"]);
+});
+
+it("keeps a published app when a slower Refresh answers after it (#63 M13)", async () => {
+  let release: (() => void) | undefined;
+  const { api } = client([share()]);
+  const listAppShares = api.listAppShares.bind(api);
+  let slow = false;
+  api.listAppShares = (workspaceId) => {
+    const answer = listAppShares(workspaceId);
+    if (!slow) return answer;
+    return new Promise((resolve) => {
+      release = () => resolve(answer);
+    });
+  };
+  render(<AppSharesSection api={api} entry={entry("member")} onChanged={() => {}} />);
+  await screen.findByText("Todo app");
+  slow = true;
+  fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+  fireEvent.change(screen.getByLabelText("Port"), { target: { value: "5173" } });
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Preview" } });
+  fireEvent.click(screen.getByRole("button", { name: "Share" }));
+  expect(await screen.findByText("Preview")).toBeTruthy();
+  release?.();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(screen.getByText("Preview")).toBeTruthy();
+});
+
+it("recovers an initial list failure without publishing an app", async () => {
+  const { api, calls } = client([share()]);
+  vi.spyOn(api, "listAppShares").mockRejectedValueOnce(new Error("Apps unavailable"));
+  render(<AppSharesSection api={api} entry={entry("member")} onChanged={() => {}} />);
+  expect((await screen.findByRole("alert")).textContent).toContain("Apps unavailable");
+  fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+  expect(await screen.findByText("Todo app")).toBeTruthy();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(calls.every((call) => call.startsWith("GET "))).toBe(true);
+});
+
+it("explains invalid and reserved ports before submitting", async () => {
+  const { api, calls } = client([]);
+  render(<AppSharesSection api={api} entry={entry("member")} onChanged={() => {}} />);
+  const port = await screen.findByLabelText("Port");
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Preview" } });
+  for (const invalid of ["1000", "99999", "6080", "6086"]) {
+    fireEvent.change(port, { target: { value: invalid } });
+    expect(port.getAttribute("aria-invalid")).toBe("true");
+    expect((screen.getByRole("button", { name: "Share" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(screen.getByText(/reserved for the workspace desktop/)).toBeTruthy();
+  }
+  fireEvent.change(port, { target: { value: "5173" } });
+  expect(port.getAttribute("aria-invalid")).toBeNull();
+  expect((screen.getByRole("button", { name: "Share" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(calls.every((call) => call.startsWith("GET "))).toBe(true);
+});
+
+it("keeps an old publish response out of a newly selected workspace", async () => {
+  const { api } = client([share()]);
+  let finish!: (value: Awaited<ReturnType<typeof api.publishAppShare>>) => void;
+  vi.spyOn(api, "publishAppShare").mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const onList = vi.fn();
+  const { rerender } = render(<AppSharesPanel api={api} workspaceId="ws_1" onList={onList} />);
+  await screen.findByText("Todo app");
+  fireEvent.change(screen.getByLabelText("Port"), { target: { value: "5173" } });
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Old draft" } });
+  fireEvent.click(screen.getByRole("button", { name: "Share" }));
+  expect((screen.getByRole("button", { name: "Stop sharing" }) as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+  vi.spyOn(api, "listAppShares").mockResolvedValue({ enabled: true, shares: [] });
+  rerender(<AppSharesPanel api={api} workspaceId="ws_2" onList={onList} />);
+  await screen.findByText(/No apps published yet/);
+  onList.mockClear();
+  await act(async () => finish({ share: share({ label: "Late app" }), existing: false }));
+  expect(screen.queryByText("Late app")).toBeNull();
+  expect((screen.getByLabelText("Port") as HTMLInputElement).value).toBe("");
+  expect(onList).not.toHaveBeenCalled();
+});
+
+it("retries a failed app entry and submits only the successful ticket once", async () => {
+  const { api } = client([]);
+  const open = vi
+    .spyOn(api, "openAppShare")
+    .mockRejectedValueOnce(new Error("App temporarily unavailable"));
+  const submit = vi.fn();
+  render(<AppOpenScreen api={api} workspaceId="ws_1" shareId="app_1" submit={submit} />);
+  await screen.findByRole("alert");
+  expect(submit).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+  expect(open).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole("alert")).toBeNull();
 });

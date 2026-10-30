@@ -134,7 +134,8 @@ describe("the end of a run woken by a must-reply message", () => {
       { body: "answer this", mustReply: true },
     );
     const run = await settled(posted.json.runs[0]?.id as string);
-    expect(run.status).toBe("silent");
+    // It posted, so it is neither `no_reply` nor silent (owner definition, 2026-10-17).
+    expect(run.status).toBe("succeeded");
   });
 
   it("keeps a silent end silent when no delivered message asked for a reply", async () => {

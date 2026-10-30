@@ -10,7 +10,7 @@ import {
   type NetworkRule,
   parseNetworkRules,
 } from "@deskmates/contracts";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button.js";
 import { errorMessage } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
@@ -174,6 +174,10 @@ export function ProfileForm(props: {
 }) {
   const t = useT();
   const { draft, onChange } = props;
+  const nameInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    nameInput.current?.focus();
+  }, []);
   /** The JSON text while the advanced view is on; undefined in the structured view. */
   const [json, setJson] = useState<string>();
   const [problem, setProblem] = useState<string>();
@@ -201,6 +205,7 @@ export function ProfileForm(props: {
   };
 
   const submit = () => {
+    if (props.busy) return;
     setProblem(undefined);
     try {
       props.onSave(inputOf(draft, json));
@@ -222,6 +227,8 @@ export function ProfileForm(props: {
       <label>
         {t("network.name")}
         <input
+          ref={nameInput}
+          disabled={props.busy}
           value={draft.name}
           required
           onChange={(e) => onChange({ ...draft, name: e.target.value })}
@@ -230,11 +237,12 @@ export function ProfileForm(props: {
       <label>
         {t("network.description")}
         <input
+          disabled={props.busy}
           value={draft.description}
           onChange={(e) => onChange({ ...draft, description: e.target.value })}
         />
       </label>
-      <fieldset className="network-expiry-choice">
+      <fieldset className="network-expiry-choice" disabled={props.busy}>
         <legend>{t("network.form.expires")}</legend>
         {(["never", "day", "week", "at"] as const).map((mode) => (
           <label key={mode} className="network-radio">
@@ -256,10 +264,15 @@ export function ProfileForm(props: {
           />
         ) : null}
       </fieldset>
-      <fieldset className="network-targets">
+      <fieldset className="network-targets" disabled={props.busy}>
         <legend>
           {t("network.form.targets")}
-          <button type="button" className="network-link" onClick={toggleAdvanced}>
+          <button
+            type="button"
+            className="network-link"
+            disabled={props.busy}
+            onClick={toggleAdvanced}
+          >
             {json === undefined ? t("network.form.advancedOn") : t("network.form.advancedOff")}
           </button>
         </legend>
@@ -285,7 +298,7 @@ export function ProfileForm(props: {
                 {rule.kind === "subnet" ? (
                   <input
                     aria-label={t("network.form.cidr")}
-                    placeholder="10.20.30.0/24"
+                    placeholder="10.88.30.0/24"
                     value={rule.cidr}
                     onChange={(e) => setRule(rule.key, { cidr: e.target.value })}
                   />
@@ -298,7 +311,7 @@ export function ProfileForm(props: {
                     />
                     <input
                       aria-label={t("network.form.address")}
-                      placeholder="10.20.30.5"
+                      placeholder="10.88.30.5"
                       value={rule.address}
                       onChange={(e) => setRule(rule.key, { address: e.target.value })}
                     />

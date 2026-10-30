@@ -1,0 +1,8 @@
+{
+  "reason": "Existing native dropdowns pending migration to the owned Select; no new instances allowed.",
+  "nativeSelects": {
+    "channel-connections.tsx": 1,
+    "channel-menu.tsx": 1,
+    "channel-setup.tsx": 1
+  }
+}

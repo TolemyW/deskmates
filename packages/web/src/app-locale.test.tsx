@@ -4,7 +4,7 @@
 // switches at once, keeps `<html lang>` in step and stores the choice with
 // `PATCH /auth/preferences`. Appearance sits beside it; the sidebar has no separate Settings.
 import type { UserPreferences } from "@deskmates/contracts";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./app.js";
 import { installFakeEventSource } from "./test-support/fixtures.js";
@@ -70,8 +70,9 @@ function stubBrowserLanguages(languages: string[]): void {
 
 /** Preferences live on Account settings, which the signed-in identity opens in any language. */
 async function openPreferences() {
-  fireEvent.click(await screen.findByRole("link", { name: /Pat/ }));
-  await waitFor(() => expect(window.location.hash).toBe("#/account"));
+  await waitFor(() => expect(document.querySelector("button.sidebar-view-switch")).toBeTruthy());
+  fireEvent.click(document.querySelector("button.sidebar-view-switch") as HTMLButtonElement);
+  await screen.findByRole("dialog");
 }
 
 beforeEach(() => {
@@ -127,6 +128,9 @@ describe("Language control", () => {
     await openPreferences();
     const control = await screen.findByLabelText("Language");
     await selectOption(control, "繁體中文");
+    await waitFor(() =>
+      expect(calls.filter((call) => call.path === "/auth/preferences")).toHaveLength(1),
+    );
     expect(await screen.findByLabelText("語言")).toBeTruthy();
     expect(document.documentElement.lang).toBe("zh-TW");
     await waitFor(() =>
@@ -143,7 +147,7 @@ describe("Language control", () => {
     await openPreferences();
     const control = await screen.findByLabelText("Language");
     fireEvent.click(control);
-    const options = await screen.findAllByRole("option");
+    const options = within(control).getAllByRole("option");
     expect(options.map((option) => option.textContent)).toEqual([
       "English",
       "简体中文",
@@ -166,18 +170,15 @@ describe("Language control", () => {
 });
 
 describe("appearance preferences", () => {
-  it("keeps preferences on Account settings, not behind a sidebar gear, and persists appearance", async () => {
+  it("opens unified preferences from the sidebar and persists appearance without navigating", async () => {
     stubBrowserLanguages(["en-US"]);
     stubGateway({ firstRunChecklistDismissed: true });
     window.localStorage.removeItem("deskmates.theme");
     render(<App />);
     const identity = await screen.findByRole("link", {
-      name: "Account settings and preferences for Pat",
+      name: "Account settings for Pat",
     });
-    expect(identity).toHaveProperty(
-      "title",
-      expect.stringContaining("Account settings and preferences"),
-    );
+    expect(identity).toHaveProperty("title", expect.stringContaining("Account settings"));
     expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
     expect(screen.queryByLabelText("Language")).toBeNull();
     await openPreferences();
@@ -186,7 +187,7 @@ describe("appearance preferences", () => {
     await selectOption("Appearance", "Dark");
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
     expect(window.localStorage.getItem("deskmates.theme")).toBe("dark");
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("dialog")).toBeTruthy();
     await selectOption("Appearance", "Use system setting");
     expect(window.localStorage.getItem("deskmates.theme")).toBeNull();
   });

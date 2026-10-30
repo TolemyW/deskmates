@@ -32,13 +32,19 @@ async function setup() {
 function seedRun(
   harness: Harness,
   botId: BotId,
-  opts: { at: string; status: string; lane?: "interactive" | "background"; error?: string },
+  opts: {
+    at: string;
+    status: string;
+    lane?: "interactive" | "background";
+    error?: string;
+    triggerKind?: "cron" | "model_job";
+  },
 ): RunId {
   const ctx = harness.app.deskmates.ctx;
   const run = ctx.runs.create({
     botId,
     lane: opts.lane ?? "interactive",
-    triggerKind: "cron",
+    triggerKind: opts.triggerKind ?? "cron",
     triggerRef: `cron:${opts.at}`,
   });
   ctx.db
@@ -48,6 +54,24 @@ function seedRun(
 }
 
 describe("run list audit filters (ADR-0042 decision 2)", () => {
+  it("shows and filters a historical SDK model-access failure without rewriting its error", async () => {
+    const { h, ctx, bot } = await setup();
+    const error =
+      "There's an issue with the selected model (unavailable-model). It may not exist or you may not have access to it.";
+    const id = seedRun(h, bot.id, { at: "2026-10-24T00:00:00.000Z", status: "failed", error });
+    const listed = await h.api<{ runs: ListedRun[] }>(
+      "GET",
+      `/api/runs?botId=${bot.id}&failureClass=model_unavailable`,
+    );
+    expect(listed.status).toBe(200);
+    expect(listed.json.runs).toEqual([
+      expect.objectContaining({ id, failureClass: "model_unavailable" }),
+    ]);
+    const detail = await h.api<{ run: ListedRun }>("GET", `/api/runs/${id}`);
+    expect(detail.json.run.failureClass).toBe("model_unavailable");
+    expect(ctx.runs.mustGet(id).error).toBe(error);
+  });
+
   it("composes status, lane, time range, failure class and text, and pages the result", async () => {
     const { h, bot } = await setup();
     const dead = 'API Error: 503 {"error":{"message":"No worker available for model m"}}';
@@ -127,9 +151,36 @@ describe("run list audit filters (ADR-0042 decision 2)", () => {
     expect(aborts.json.runs.map((r) => r.failureClass)).toEqual(["sdk_abort"]);
   });
 
-  it("refuses an unknown status, lane, class or time", async () => {
+  it("filters on the trigger kind, telling model jobs from cron (issue #39 item 7)", async () => {
+    const { h, bot } = await setup();
+    const cron = seedRun(h, bot.id, { at: "2026-10-10T01:00:00.000Z", status: "failed" });
+    const job = seedRun(h, bot.id, {
+      at: "2026-10-10T01:01:00.000Z",
+      status: "failed",
+      triggerKind: "model_job",
+    });
+    const jobs = await h.api<{ runs: (ListedRun & { triggerKind: string })[] }>(
+      "GET",
+      `/api/runs?botId=${bot.id}&triggerKind=model_job`,
+    );
+    expect(jobs.status).toBe(200);
+    expect(jobs.json.runs.map((r) => [r.id, r.triggerKind])).toEqual([[job, "model_job"]]);
+    const crons = await h.api<{ runs: ListedRun[] }>(
+      "GET",
+      `/api/runs?botId=${bot.id}&triggerKind=cron&phase=finished`,
+    );
+    expect(crons.json.runs.map((r) => r.id)).toEqual([cron]);
+  });
+
+  it("refuses an unknown status, lane, trigger kind, class or time", async () => {
     const { h } = await setup();
-    for (const query of ["status=done", "lane=side", "failureClass=bad", "since=yesterday"])
+    for (const query of [
+      "status=done",
+      "lane=side",
+      "triggerKind=job",
+      "failureClass=bad",
+      "since=yesterday",
+    ])
       expect((await h.api("GET", `/api/runs?${query}`)).status, query).toBe(400);
     // Every run status is a filter, the stalled one of issue #9 included.
     expect((await h.api("GET", "/api/runs?status=stalled")).status).toBe(200);

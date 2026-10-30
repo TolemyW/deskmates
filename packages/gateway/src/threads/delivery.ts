@@ -99,6 +99,15 @@ export function buildDelivery(
         recipientBotId: botId,
         recipientName: botNames.get(botId) ?? botId,
         ...(source?.threadId === thread.id ? { sourceMessageSeq: source.seq } : {}),
+        // ADR-0005 amendment 3, decision 27: a run delivered messages of a paused thread is told.
+        ...(thread.status === "paused" && thread.pauseReason
+          ? {
+              paused: {
+                reason: thread.pauseReason,
+                ...(thread.resumeAt ? { resumeAt: thread.resumeAt } : {}),
+              },
+            }
+          : {}),
         ...(group
           ? {
               members: group.members.map((member) => ({

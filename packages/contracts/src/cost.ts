@@ -1,4 +1,5 @@
 import type { BotId, WorkspaceId } from "./ids.js";
+import type { OperationUnit } from "./operations.js";
 
 export type CostStatus = "priced" | "partial" | "unpriced";
 export interface CostQuery {
@@ -60,10 +61,34 @@ export interface CostReport {
   /** Per-day totals over the whole filtered range, oldest first. */
   days?: CostDay[];
   estimate?: CostEstimateInfo;
+  /**
+   * Operation usage over the whole filtered range, one entry per unit (ADR-0040 amendment A,
+   * decision 14); absent when the range has no operation. Its money is already in `totals`.
+   */
+  operations?: CostOperationUsage;
 }
 
-/** What a ranking groups by (ADR-0032 decision 9). */
-export type CostRankingDimension = "model" | "bot" | "workspace";
+/** One operation unit's usage: never summed with another unit or with tokens. */
+export interface CostOperationUnitUsage {
+  unit: OperationUnit;
+  /** Calls forwarded to the service (refusals are not calls). */
+  callCount: number;
+  /** Sum of the known quantities: images, pages or audio seconds. */
+  quantity: number;
+  /** Calls whose quantity is unknown (a failure, or a service that reported none). */
+  unmeasuredCount: number;
+}
+export interface CostOperationUsage {
+  units: CostOperationUnitUsage[];
+  /** Calls refused before the service saw them (budget admission); they cost nothing. */
+  refusedCount: number;
+}
+
+/**
+ * What a ranking groups by (ADR-0032 decision 9). `operation` lists one entry per operation and
+ * model, money only (ADR-0040 amendment A, decision 14).
+ */
+export type CostRankingDimension = "model" | "bot" | "workspace" | "operation";
 /** Money ranks known plus estimated USD; usage ranks total tokens. Units never mix. */
 export type CostRankingMetric = "money" | "usage";
 export interface CostRankingEntry extends CostTotals {

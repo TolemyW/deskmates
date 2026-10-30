@@ -1,0 +1,1461 @@
+{
+  "uid": "deskmates-agent-runs",
+  "title": "Agent runs",
+  "description": "Runs across every workspace: outcomes, failures, cost and bots, and one run in detail. Read from the obs model (ADR-0046); the ledger is never read here.",
+  "tags": [
+    "deskmates"
+  ],
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "timezone": "browser",
+  "links": [
+    {
+      "title": "Deskmates dashboards",
+      "type": "dashboards",
+      "tags": [
+        "deskmates"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "type": "textbox",
+        "name": "run",
+        "label": "Run id",
+        "description": "A run id for the One run section; the run drawer's Analytics link sets it.",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0
+      },
+      {
+        "type": "textbox",
+        "name": "min_similarity",
+        "label": "Min similarity",
+        "description": "Failure retrospective: hide matches below this cosine similarity. A display filter only; every match is stored.",
+        "query": "0",
+        "current": {
+          "text": "0",
+          "value": "0"
+        },
+        "hide": 0
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Overview",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Runs",
+      "description": "Runs created in the time range.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(*) AS runs FROM run_metrics WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}'",
+          "queryText": "SELECT count(*) AS runs FROM run_metrics WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Failed runs",
+      "description": "Runs created in the time range that ended failed.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(*) AS failed FROM run_metrics WHERE status = 'failed' AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}'",
+          "queryText": "SELECT count(*) AS failed FROM run_metrics WHERE status = 'failed' AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Failure rate",
+      "description": "Failed runs as a share of finished runs created in the time range.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT 100.0 * sum(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) / nullif(count(*), 0) AS failure_rate FROM run_metrics WHERE terminal = 1 AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}'",
+          "queryText": "SELECT 100.0 * sum(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) / nullif(count(*), 0) AS failure_rate FROM run_metrics WHERE terminal = 1 AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Median run time",
+      "description": "Median duration of finished runs created in the time range.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT median AS median_duration_ms FROM (SELECT avg(duration_ms) AS median FROM (SELECT duration_ms, row_number() OVER (ORDER BY duration_ms) AS median_rn, count(*) OVER () AS median_n FROM (SELECT duration_ms FROM run_metrics WHERE terminal = 1 AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}') median_src WHERE duration_ms IS NOT NULL) median_ranked WHERE median_rn IN ((median_n + 1) / 2, (median_n + 2) / 2)) m",
+          "queryText": "SELECT median AS median_duration_ms FROM (SELECT avg(duration_ms) AS median FROM (SELECT duration_ms, row_number() OVER (ORDER BY duration_ms) AS median_rn, count(*) OVER () AS median_n FROM (SELECT duration_ms FROM run_metrics WHERE terminal = 1 AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}') median_src WHERE duration_ms IS NOT NULL) median_ranked WHERE median_rn IN ((median_n + 1) / 2, (median_n + 2) / 2)) m",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Cost",
+      "description": "Priced usage of runs created in the time range; unpriced models count 0.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT coalesce(sum(cost_usd), 0) AS cost_usd FROM run_metrics WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}'",
+          "queryText": "SELECT coalesce(sum(cost_usd), 0) AS cost_usd FROM run_metrics WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Marked wrong",
+      "description": "Runs a person marked wrong in the run drawer (ADR-0042).",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT coalesce(sum(marked_wrong), 0) AS marked_wrong FROM run_metrics WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}'",
+          "queryText": "SELECT coalesce(sum(marked_wrong), 0) AS marked_wrong FROM run_metrics WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Over time",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Runs per hour by status",
+      "description": "Runs created per hour, stacked by their latest status.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', created_at) AS time, status, count(*) AS runs FROM run_metrics WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "queryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', created_at) AS time, status, count(*) AS runs FROM run_metrics WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Cost per hour by model",
+      "description": "Priced usage per hour of runs created then, by the run's model.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', created_at) AS time, coalesce(model, 'unknown') AS model, sum(cost_usd) AS cost_usd FROM run_metrics WHERE cost_usd IS NOT NULL AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "queryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', created_at) AS time, coalesce(model, 'unknown') AS model, sum(cost_usd) AS cost_usd FROM run_metrics WHERE cost_usd IS NOT NULL AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Where runs fail",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Failures by class and model",
+      "description": "Failed runs grouped by failure class (ADR-0042), model, run type and trigger. A model the upstream does not serve shows here first.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT coalesce(failure_class, 'unclassified') AS failure_class, coalesce(model, '') AS model, run_type, trigger_kind, count(*) AS runs, max(created_at) AS last_seen FROM run_metrics WHERE status = 'failed' AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}' GROUP BY 1, 2, 3, 4 ORDER BY runs DESC, last_seen DESC LIMIT 50",
+          "queryText": "SELECT coalesce(failure_class, 'unclassified') AS failure_class, coalesce(model, '') AS model, run_type, trigger_kind, count(*) AS runs, max(created_at) AS last_seen FROM run_metrics WHERE status = 'failed' AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}' GROUP BY 1, 2, 3, 4 ORDER BY runs DESC, last_seen DESC LIMIT 50",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Refused model requests",
+      "description": "Model requests the proxy refused, by requested and served model and the refusal.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT model, coalesce(served_model, '') AS served_model, refusal, count(*) AS requests, count(DISTINCT run_id) AS runs, max(ts) AS last_seen FROM requests_named WHERE refusal IS NOT NULL AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1, 2, 3 ORDER BY requests DESC, last_seen DESC LIMIT 50",
+          "queryText": "SELECT model, coalesce(served_model, '') AS served_model, refusal, count(*) AS requests, count(DISTINCT run_id) AS runs, max(ts) AS last_seen FROM requests_named WHERE refusal IS NOT NULL AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1, 2, 3 ORDER BY requests DESC, last_seen DESC LIMIT 50",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Bots",
+      "description": "Per bot: runs, failures, marks, median run time, tool errors and cost, for runs created in the time range.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT b.workspace_name, b.bot_name, b.runs, b.failed, b.marked_wrong, m.median AS median_duration_ms, b.tool_errors, b.cost_usd FROM (SELECT bot_id, max(workspace_name) AS workspace_name, max(bot_name) AS bot_name, count(*) AS runs, sum(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed, sum(marked_wrong) AS marked_wrong, sum(tool_errors) AS tool_errors, sum(cost_usd) AS cost_usd FROM run_metrics WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}' GROUP BY bot_id) b LEFT JOIN (SELECT bot_id, avg(duration_ms) AS median FROM (SELECT bot_id, duration_ms, row_number() OVER (PARTITION BY bot_id ORDER BY duration_ms) AS median_rn, count(*) OVER (PARTITION BY bot_id) AS median_n FROM (SELECT bot_id, duration_ms FROM run_metrics WHERE terminal = 1 AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}') median_src WHERE duration_ms IS NOT NULL) median_ranked WHERE median_rn IN ((median_n + 1) / 2, (median_n + 2) / 2) GROUP BY bot_id) m ON m.bot_id = b.bot_id ORDER BY b.runs DESC, b.bot_name LIMIT 200",
+          "queryText": "SELECT b.workspace_name, b.bot_name, b.runs, b.failed, b.marked_wrong, m.median AS median_duration_ms, b.tool_errors, b.cost_usd FROM (SELECT bot_id, max(workspace_name) AS workspace_name, max(bot_name) AS bot_name, count(*) AS runs, sum(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed, sum(marked_wrong) AS marked_wrong, sum(tool_errors) AS tool_errors, sum(cost_usd) AS cost_usd FROM run_metrics WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}' GROUP BY bot_id) b LEFT JOIN (SELECT bot_id, avg(duration_ms) AS median FROM (SELECT bot_id, duration_ms, row_number() OVER (PARTITION BY bot_id ORDER BY duration_ms) AS median_rn, count(*) OVER (PARTITION BY bot_id) AS median_n FROM (SELECT bot_id, duration_ms FROM run_metrics WHERE terminal = 1 AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}') median_src WHERE duration_ms IS NOT NULL) median_ranked WHERE median_rn IN ((median_n + 1) / 2, (median_n + 2) / 2) GROUP BY bot_id) m ON m.bot_id = b.bot_id ORDER BY b.runs DESC, b.bot_name LIMIT 200",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "median_duration_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_usd"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "Runs to look at",
+      "description": "The newest runs that failed, stayed silent, were cancelled or stopped, or were marked wrong. A run id opens it in One run below.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT created_at, workspace_name, bot_name, trigger_kind, run_type, model, status, failure_class, marked_wrong, tool_errors, refused_requests, duration_ms, cost_usd, run_id FROM run_metrics WHERE (status IN ('failed', 'silent', 'cancelled', 'stopped') OR marked_wrong = 1) AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}' ORDER BY created_at DESC LIMIT 100",
+          "queryText": "SELECT created_at, workspace_name, bot_name, trigger_kind, run_type, model, status, failure_class, marked_wrong, tool_errors, refused_requests, duration_ms, cost_usd, run_id FROM run_metrics WHERE (status IN ('failed', 'silent', 'cancelled', 'stopped') OR marked_wrong = 1) AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}' ORDER BY created_at DESC LIMIT 100",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "duration_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_usd"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this run",
+                    "url": "/d/deskmates-agent-runs/agent-runs?var-run=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "One run (set Run id above)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
+      "panels": []
+    },
+    {
+      "id": 17,
+      "type": "table",
+      "title": "Run",
+      "description": "The run's latest state, totals, error, mark and Activity summary.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT m.run_id, m.workspace_name, m.bot_name, m.trigger_kind, m.run_type, m.lane, m.status, m.failure_class, m.model, m.created_at, m.finished_at, m.queue_ms, m.duration_ms, m.tool_calls, m.tool_errors, m.model_requests, m.refused_requests, m.approvals, m.approval_wait_ms, m.cost_usd, n.error, n.mark_note, n.summary FROM run_metrics m LEFT JOIN runs_named n ON n.run_id = m.run_id WHERE m.run_id = ${run:sqlstring}",
+          "queryText": "SELECT m.run_id, m.workspace_name, m.bot_name, m.trigger_kind, m.run_type, m.lane, m.status, m.failure_class, m.model, m.created_at, m.finished_at, m.queue_ms, m.duration_ms, m.tool_calls, m.tool_errors, m.model_requests, m.refused_requests, m.approvals, m.approval_wait_ms, m.cost_usd, n.error, n.mark_note, n.summary FROM run_metrics m LEFT JOIN runs_named n ON n.run_id = m.run_id WHERE m.run_id = ${run:sqlstring}",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "queue_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "duration_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "approval_wait_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cost_usd"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 18,
+      "type": "table",
+      "title": "Tool calls",
+      "description": "The run's tool calls in order, with their outcome and time.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 49
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT called_at, tool_name, risk_level, outcome, duration_ms FROM tool_calls WHERE run_id = ${run:sqlstring} ORDER BY called_at, tool_use_id",
+          "queryText": "SELECT called_at, tool_name, risk_level, outcome, duration_ms FROM tool_calls WHERE run_id = ${run:sqlstring} ORDER BY called_at, tool_use_id",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "duration_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 19,
+      "type": "table",
+      "title": "Phases",
+      "description": "The run's completed phase-timing spans in the order they ended.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 49
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT ended_at, phase, tool_name, request_kind, outcome, duration_ms FROM phase_spans WHERE run_id = ${run:sqlstring} ORDER BY ended_at, span_id",
+          "queryText": "SELECT ended_at, phase, tool_name, request_kind, outcome, duration_ms FROM phase_spans WHERE run_id = ${run:sqlstring} ORDER BY ended_at, span_id",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "duration_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Model requests",
+      "description": "The run's model requests with their shape and token counts.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 59
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT ts, request_kind, model, served_model, refusal, prompt_tokens, output_tokens, cache_read_tokens, messages_count, tools_count FROM requests_named WHERE run_id = ${run:sqlstring} ORDER BY ts, request_id",
+          "queryText": "SELECT ts, request_kind, model, served_model, refusal, prompt_tokens, output_tokens, cache_read_tokens, messages_count, tools_count FROM requests_named WHERE run_id = ${run:sqlstring} ORDER BY ts, request_id",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 21,
+      "type": "table",
+      "title": "Nearest successful runs",
+      "description": "When this run failed: the succeeded runs of its workspace whose Activity summary is closest to its own (failure retrospective).",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 59
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT rank, similarity, match_bot_name, match_created_at, match_summary, match_run_id FROM failure_matches WHERE failed_run_id = ${run:sqlstring} AND similarity >= coalesce(CAST(nullif(${min_similarity:sqlstring}, '') AS REAL), 0) ORDER BY rank",
+          "queryText": "SELECT rank, similarity, match_bot_name, match_created_at, match_summary, match_run_id FROM failure_matches WHERE failed_run_id = ${run:sqlstring} AND similarity >= coalesce(CAST(nullif(${min_similarity:sqlstring}, '') AS REAL), 0) ORDER BY rank",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "match_run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this run",
+                    "url": "/d/deskmates-agent-runs/agent-runs?var-run=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 22,
+      "type": "table",
+      "title": "Approvals",
+      "description": "The run's decided approvals and how long each waited.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 67
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT created_at, kind, tool_name, risk_level, decision, decided_by, wait_ms FROM approval_waits WHERE run_id = ${run:sqlstring} ORDER BY created_at, approval_id",
+          "queryText": "SELECT created_at, kind, tool_name, risk_level, decision, decided_by, wait_ms FROM approval_waits WHERE run_id = ${run:sqlstring} ORDER BY created_at, approval_id",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "wait_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 23,
+      "type": "row",
+      "title": "Failure retrospective",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 75
+      },
+      "panels": []
+    },
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "Failed runs with matches",
+      "description": "Failed runs created in the time range that have at least one nearest successful run at or above the minimum similarity.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 76
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(DISTINCT failed_run_id) AS failed_runs FROM failure_matches WHERE similarity >= coalesce(CAST(nullif(${min_similarity:sqlstring}, '') AS REAL), 0) AND failed_at >= '${__from:date:iso}' AND failed_at < '${__to:date:iso}'",
+          "queryText": "SELECT count(DISTINCT failed_run_id) AS failed_runs FROM failure_matches WHERE similarity >= coalesce(CAST(nullif(${min_similarity:sqlstring}, '') AS REAL), 0) AND failed_at >= '${__from:date:iso}' AND failed_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 25,
+      "type": "stat",
+      "title": "Median best similarity",
+      "description": "The median similarity of each failed run's closest match, over failed runs created in the time range.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 76
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT median AS median_similarity FROM (SELECT avg(similarity) AS median FROM (SELECT similarity, row_number() OVER (ORDER BY similarity) AS median_rn, count(*) OVER () AS median_n FROM (SELECT similarity FROM failure_matches WHERE rank = 1 AND failed_at >= '${__from:date:iso}' AND failed_at < '${__to:date:iso}') median_src WHERE similarity IS NOT NULL) median_ranked WHERE median_rn IN ((median_n + 1) / 2, (median_n + 2) / 2)) m",
+          "queryText": "SELECT median AS median_similarity FROM (SELECT avg(similarity) AS median FROM (SELECT similarity, row_number() OVER (ORDER BY similarity) AS median_rn, count(*) OVER () AS median_n FROM (SELECT similarity FROM failure_matches WHERE rank = 1 AND failed_at >= '${__from:date:iso}' AND failed_at < '${__to:date:iso}') median_src WHERE similarity IS NOT NULL) median_ranked WHERE median_rn IN ((median_n + 1) / 2, (median_n + 2) / 2)) m",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 26,
+      "type": "table",
+      "title": "Matches by failure class",
+      "description": "Per failure class: failed runs with matches and the median similarity of their closest match.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 76
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT c.failure_class, c.failed_runs, m.median AS median_best_similarity FROM (SELECT failure_class, count(DISTINCT failed_run_id) AS failed_runs FROM failure_matches WHERE similarity >= coalesce(CAST(nullif(${min_similarity:sqlstring}, '') AS REAL), 0) AND failed_at >= '${__from:date:iso}' AND failed_at < '${__to:date:iso}' GROUP BY failure_class) c LEFT JOIN (SELECT failure_class, avg(similarity) AS median FROM (SELECT failure_class, similarity, row_number() OVER (PARTITION BY failure_class ORDER BY similarity) AS median_rn, count(*) OVER (PARTITION BY failure_class) AS median_n FROM (SELECT failure_class, similarity FROM failure_matches WHERE rank = 1 AND failed_at >= '${__from:date:iso}' AND failed_at < '${__to:date:iso}') median_src WHERE similarity IS NOT NULL) median_ranked WHERE median_rn IN ((median_n + 1) / 2, (median_n + 2) / 2) GROUP BY failure_class) m ON m.failure_class = c.failure_class ORDER BY c.failed_runs DESC, c.failure_class",
+          "queryText": "SELECT c.failure_class, c.failed_runs, m.median AS median_best_similarity FROM (SELECT failure_class, count(DISTINCT failed_run_id) AS failed_runs FROM failure_matches WHERE similarity >= coalesce(CAST(nullif(${min_similarity:sqlstring}, '') AS REAL), 0) AND failed_at >= '${__from:date:iso}' AND failed_at < '${__to:date:iso}' GROUP BY failure_class) c LEFT JOIN (SELECT failure_class, avg(similarity) AS median FROM (SELECT failure_class, similarity, row_number() OVER (PARTITION BY failure_class ORDER BY similarity) AS median_rn, count(*) OVER (PARTITION BY failure_class) AS median_n FROM (SELECT failure_class, similarity FROM failure_matches WHERE rank = 1 AND failed_at >= '${__from:date:iso}' AND failed_at < '${__to:date:iso}') median_src WHERE similarity IS NOT NULL) median_ranked WHERE median_rn IN ((median_n + 1) / 2, (median_n + 2) / 2) GROUP BY failure_class) m ON m.failure_class = c.failure_class ORDER BY c.failed_runs DESC, c.failure_class",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 27,
+      "type": "table",
+      "title": "Failure retrospective",
+      "description": "Each failed run with its nearest succeeded runs of the same workspace by Activity summary, most similar first. No private chat's run appears, and a run marked wrong is never offered. Either run id opens the run view.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 80
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT failed_at, workspace_name, bot_name, failure_class, coalesce(failed_summary, failed_error) AS failed_text, failed_run_id, rank, similarity, match_bot_name, match_created_at, match_summary, match_run_id FROM failure_matches WHERE similarity >= coalesce(CAST(nullif(${min_similarity:sqlstring}, '') AS REAL), 0) AND failed_at IS NOT NULL AND failed_at >= '${__from:date:iso}' AND failed_at < '${__to:date:iso}' ORDER BY failed_at DESC, failed_run_id, rank LIMIT 200",
+          "queryText": "SELECT failed_at, workspace_name, bot_name, failure_class, coalesce(failed_summary, failed_error) AS failed_text, failed_run_id, rank, similarity, match_bot_name, match_created_at, match_summary, match_run_id FROM failure_matches WHERE similarity >= coalesce(CAST(nullif(${min_similarity:sqlstring}, '') AS REAL), 0) AND failed_at IS NOT NULL AND failed_at >= '${__from:date:iso}' AND failed_at < '${__to:date:iso}' ORDER BY failed_at DESC, failed_run_id, rank LIMIT 200",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failed_run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this run",
+                    "url": "/d/deskmates-agent-runs/agent-runs?var-run=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "match_run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this run",
+                    "url": "/d/deskmates-agent-runs/agent-runs?var-run=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 28,
+      "type": "row",
+      "title": "Pipeline",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 92
+      },
+      "panels": []
+    },
+    {
+      "id": 29,
+      "type": "table",
+      "title": "Ingest watermarks",
+      "description": "Per obs table: batches and rows committed, the newest batch, and how long ago it was committed. A growing lag means the collector is behind.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 93
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT table_name, batches, rows, last_batch_id, last_closed_at, last_committed_at, ((julianday('now') - julianday(last_committed_at)) * 86400000.0) AS lag_ms FROM watermarks ORDER BY table_name",
+          "queryText": "SELECT table_name, batches, rows, last_batch_id, last_closed_at, last_committed_at, ((julianday('now') - julianday(last_committed_at)) * 86400000.0) AS lag_ms FROM watermarks ORDER BY table_name",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lag_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ]
+}

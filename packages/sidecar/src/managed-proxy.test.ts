@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { createServer } from "node:http";
+import { type Server, createServer } from "node:http";
 import { getGlobalDispatcher, setGlobalDispatcher } from "undici";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -68,22 +68,22 @@ describe("managed sidecar proxy", () => {
     const ipv6Local = createServer((_request, response) => response.end("ipv6-local"));
     proxy.listen(0, "127.0.0.1");
     local.listen(0, "127.0.0.1");
-    ipv6Local.listen(0, "::1");
-    await Promise.all([
-      once(proxy, "listening"),
-      once(local, "listening"),
-      once(ipv6Local, "listening"),
-    ]);
+    await Promise.all([once(proxy, "listening"), once(local, "listening")]);
+    // A host without an IPv6 loopback cannot bind ::1; the IPv6 case is skipped there and every
+    // other assertion still runs (issue #25).
+    const ipv6Available = await listenOrUnavailable(ipv6Local, "::1");
     try {
       const proxyPort = (proxy.address() as { port: number }).port;
       const localPort = (local.address() as { port: number }).port;
-      const ipv6Port = (ipv6Local.address() as { port: number }).port;
       installManagedFetchProxy({ DESKMATES_EGRESS_PROXY: `http://127.0.0.1:${proxyPort}` });
       expect(await (await fetch("http://host.docker.internal:45678/internal/probe")).text()).toBe(
         "proxied",
       );
       expect(await (await fetch(`http://127.0.0.1:${localPort}/local`)).text()).toBe("local");
-      expect(await (await fetch(`http://[::1]:${ipv6Port}/local`)).text()).toBe("ipv6-local");
+      if (ipv6Available) {
+        const ipv6Port = (ipv6Local.address() as { port: number }).port;
+        expect(await (await fetch(`http://[::1]:${ipv6Port}/local`)).text()).toBe("ipv6-local");
+      }
       expect(seen).toEqual(["host.docker.internal:45678", "GET /internal/probe HTTP/1.1"]);
     } finally {
       proxy.closeAllConnections();
@@ -91,7 +91,25 @@ describe("managed sidecar proxy", () => {
       ipv6Local.closeAllConnections();
       proxy.close();
       local.close();
-      ipv6Local.close();
+      if (ipv6Available) ipv6Local.close();
     }
   });
 });
+
+/** Listens on `host`; false when the host has no such address family or address (no IPv6). */
+async function listenOrUnavailable(server: Server, host: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const onError = (error: NodeJS.ErrnoException) => {
+      server.off("listening", onListening);
+      if (error.code === "EAFNOSUPPORT" || error.code === "EADDRNOTAVAIL") resolve(false);
+      else reject(error);
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolve(true);
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(0, host);
+  });
+}

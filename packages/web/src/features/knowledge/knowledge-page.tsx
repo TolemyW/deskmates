@@ -1,3 +1,4 @@
+import { TabNavigation } from "@deskmates/ui";
 // Resources › Knowledge (issue #27): reviewed documents (the former Library) and the dated
 // observations bots learned (the former Facts), as two tabs with their own addresses. Documents
 // are published by a human and shared by the whole team (they are not stored per workspace);
@@ -45,19 +46,11 @@ export function KnowledgePage({ api, tab }: { api: ApiClient; tab: KnowledgeTab 
           name: workspace?.name ?? t("workspace.thisWorkspace"),
         })}
       />
-      <nav className="app-tabs resource-tabs" aria-label={t("knowledgePage.tabsLabel")}>
-        {tabs.map((item) => (
-          <a
-            key={item.key}
-            href={knowledgeHref(item.key)}
-            className={tab === item.key ? "active" : ""}
-            aria-current={tab === item.key ? "page" : undefined}
-          >
-            {item.icon}
-            {item.label}
-          </a>
-        ))}
-      </nav>
+      <TabNavigation
+        label={t("knowledgePage.tabsLabel")}
+        value={tab}
+        items={tabs.map((item) => ({ ...item, href: knowledgeHref(item.key) }))}
+      />
 
       {tab === "documents" ? (
         <div className="workspace-library">

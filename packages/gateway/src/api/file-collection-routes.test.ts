@@ -451,6 +451,78 @@ describe("GET /api/workspaces/:id/assets", () => {
     expect((await as(`/api/workspaces/${B.ids.workspace}/assets`)).statusCode).toBe(404);
   });
 
+  // A7 (issue #16): a listed file links the newest chat message that sent it, a person's input
+  // or a bot's delivery, and another person's private chat is never named, whatever the role.
+  it("links the message that sent a file in chat, and names a private chat only to its person", async () => {
+    const { app, ctx, workspace, nova, thread } = await setup();
+    const { csrfTokenFor } = await import("../auth/tokens.js");
+    const person = async (loginName: string, role: "owner" | "member") => {
+      const user = await ctx.auth.createUser({
+        loginName,
+        displayName: loginName,
+        password: FIXTURE_PASSWORD,
+        role,
+        workspaceId: workspace.id,
+      });
+      const { token } = await ctx.auth.login(loginName, FIXTURE_PASSWORD, loginName);
+      const get = async () => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/workspaces/${workspace.id}/assets`,
+          headers: {
+            cookie: `__Host-deskmates-session=${token}`,
+            host: "gw.test",
+            origin: "http://gw.test",
+            [CSRF_HEADER]: csrfTokenFor(token),
+          },
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return response.json() as WorkspaceFileCollectionPage;
+      };
+      return { user, get };
+    };
+    const pat = await person("pat", "member");
+    const owner = await person("olive", "owner");
+
+    delivers(ctx, nova, thread, ["/work/report.md"]);
+    botSays(ctx, nova, thread, "Here is the report", [attachment("/work/report.md")]);
+    const botReply = ctx.messages.latest(thread.id);
+    humanAttaches(ctx, thread, [attachment("/work/shared.md")]);
+    const mine = ctx.threads.create({ workspaceId: workspace.id, botIds: [nova.id], title: "pat" });
+    ctx.db
+      .prepare("UPDATE threads SET private_to_user_id = ? WHERE id = ?")
+      .run(pat.user.id, mine.id);
+    humanAttaches(ctx, mine, [attachment("/work/private.md")]);
+    const privateMessage = ctx.messages.latest(mine.id);
+
+    const forPat = await pat.get();
+    expect(item(forPat, "/work/report.md").sentInChat).toMatchObject({
+      threadId: thread.id,
+      threadTitle: "Weekly report",
+      messageId: botReply?.id,
+      authorKind: "bot",
+    });
+    expect(item(forPat, "/work/private.md").sentInChat).toMatchObject({
+      threadId: mine.id,
+      messageId: privateMessage?.id,
+      authorKind: "human",
+    });
+    expect(item(forPat, "/work/private.md").references[0]?.threadId).toBe(mine.id);
+
+    // The workspace Owner and the operator credential see the file, never the private chat.
+    for (const page of [await owner.get(), await list(app, workspace.id)]) {
+      expect(paths(page)).toContain("/work/private.md");
+      const hidden = item(page, "/work/private.md");
+      expect(hidden.sentInChat).toBeUndefined();
+      expect(hidden.references[0]).toMatchObject({ kind: "message_attachment" });
+      expect(hidden.references[0]?.threadId).toBeUndefined();
+      expect(hidden.references[0]?.messageId).toBeUndefined();
+      expect(JSON.stringify(page)).not.toContain(mine.id);
+      expect(JSON.stringify(page)).not.toContain(privateMessage?.id ?? "missing");
+      expect(item(page, "/work/shared.md").sentInChat?.threadId).toBe(thread.id);
+    }
+  });
+
   it("caps the scan and says so", async () => {
     const { ctx, workspace, thread } = await setup();
     for (let i = 0; i < 3; i++) humanAttaches(ctx, thread, [attachment(`/work/f${i}.md`)]);

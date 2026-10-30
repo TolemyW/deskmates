@@ -1,0 +1,60 @@
+# ADR-0050: Bot self-observability: a read-only `run_stats` tool scoped to the calling bot
+
+Date: 2026-10-18
+Status: Accepted (owner answer of 2026-10-18 in the coordinator chat on issue #3 item D3, "做，只限Bot自己": build it, limited to the bot's own data). Decisions 1 to 8 are the engineering decisions that carry that answer and stand for owner review. Offering the tool is a strategy change: the paired evaluation of decision 8 is pending, and nothing here claims that it improves results. Implemented 2026-10-18 with T1 tests for every Verification row; not exercised with a real model or on the stable host.
+Builds on: ADR-0002 (the `PreToolUse` gate and risk tiers; run tokens), ADR-0004 (no access control between bots), ADR-0005 (`silent`), ADR-0021 (tasks), ADR-0022 amendment 6 (roles per workspace; a person's private chat), ADR-0029 (parked `waiting_platform` runs), ADR-0032 (how the Gateway prices usage; unpriced usage and the estimate), ADR-0042 (failure classes).
+
+## Context
+
+The long-horizon campaigns of 2026-10-11/12 (issue #3) ran teams of four peer bots unattended for six to seven hours. The teams asked for a way to see how they were doing: how many of their runs failed and why, what they had spent, which of their approvals were still waiting and which of their runs were parked. Operators had to watch from outside the product to see the same things. The roadmap recorded the bots' proposal, `run_stats`, as item D3: "later, with an ADR and workspace scope".
+
+Everything a bot would want is already in the Gateway ledger: run rows with status, lane, error and timestamps; the failure class derived from `runs.error` (ADR-0042 decision 1); the stored per-run usage summaries that Costs prices (ADR-0032 amendment 1); approvals with `decision IS NULL`; parked run statuses; tasks with an owner bot. None of it is reachable from inside a run today, except by reading files in the shared workspace, which hold none of it.
+
+The owner's answer of 2026-10-18 was to build it, limited to the bot itself: a bot sees its own runs and nothing about another bot or another workspace.
+
+## Decision
+
+1. **One read-only L0 tool, `run_stats`, on the in-process `deskmates` MCP server.** Its only input is an optional `windowDays`, an integer from 1 to 30, default 7. The sidecar tiers it L0 (`DESKMATES_READ_TOOLS` in `risk-tier.ts`), so it never asks for approval and never takes the browser lock. It reads; it changes nothing in the ledger, the workspace or the browser.
+
+2. **The run token is the scope.** The sidecar calls `GET /internal/runs/:runId/run-stats?windowDays=N` with its run token, inside the internal scope that refuses another run's token (`token_rejected`). The Gateway reads the bot and the workspace from that run's row, never from the request; every query filters on both `bot_id` and `workspace_id`. A query parameter other than `windowDays` is refused (`validation`), so no crafted parameter can widen the scope. This is a choice about what this tool returns, not access control between bots (AGENTS.md): a bot can still read whatever the shared workspace holds, and nothing here refuses any other tool call.
+
+3. **What it returns.** Two windows of whole UTC days on `runs.created_at`: the current one (the last `windowDays` days, today included) and the previous one of the same length just before it. For each window: the bot's runs by status and by lane; the failure classes of its `failed` runs, by ADR-0042's rule table (a failed run with no error is `other`); how many were Gateway jobs (`run_type` set: reviews, summaries, probes) and how many were in a person's private chat; the durations of the runs that finished (count, median, 90th percentile, maximum and total seconds, from `coalesce(started_at, created_at)` to `finished_at`); and its spend. Spend is the Costs computation itself (`CostQueryStore.summary` for the workspace, the bot and the window's days, ADR-0032): known USD, the estimate for unpriced usage reported apart from it, the priced and unpriced usage counts and the cost status. Unpriced stays unpriced: known cost is `null` when nothing is priced, never zero, and the estimate is never added to it. A trend compares the windows: runs, failed runs, the success share (`succeeded` plus `silent` over terminal runs), known USD and the median duration. Then the bot's state now: its pending approvals (`decision IS NULL`), its parked runs (`PARKED_RUN_STATUSES`), how many of its runs are executing, and its own tasks (`owner_bot_id` is the bot, in the workspace) by status with the open ones listed. Each list holds at most 20 entries and says how many there are in all.
+
+4. **What it never returns.** No transcript, message body, run error text, run summary, reply, approval summary or action input, tool input or output, page content, and nothing about another bot or another workspace. Nothing from a person's private chat but counts: a run in a private chat is counted in the totals and in the private-chat count, and a pending approval or parked run there is listed only by its ids, tool name, kind and status, like every other. The only free text in the answer is the titles of the bot's own open tasks, which are workspace board text (ADR-0021); the sidecar wraps them as untrusted (`<untrusted source="tasks">`, entity-escaped) and keeps them out of the JSON part of the answer.
+
+5. **Computed from the ledger, with no model call and no new store of figures.** The Gateway answers each call from the run rows, approvals, tasks and the usage summaries, which `CostQueryStore` computes and stores when a run has none, as Costs does. The control plane stays thin: no generative model, embedding or rerank service is called, and nothing about the answer is written except the call itself, which the sidecar ledgers as an ordinary tool call.
+
+6. **Per bot, off by default, set by an Owner or Admin.** A row in `bot_run_stats` (migration `202610180420-bot-run-stats.sql`) means the bot has the tool; no row means it has not. `GET /api/bots/:id/run-stats` reads the setting for a Member or above of the bot's workspace and `PUT` with `{enabled}` changes it for an Owner or Admin (`route-policies/run-stats.ts`; role action `bot.setRunStats`). Each change that changes something writes one audit row, `bot.run_stats_set`, with the setting before and after. The bot editor shows the switch in all five locales, says it is off by default, that runs already started keep what they started with, and that it is a strategy change to compare on paired runs.
+
+7. **Frozen on the run row.** When attempt 1 of a run starts, the Gateway writes `runs.config_json.runStats`: `"self-v1"` when the bot has the setting, else `"off"`. Every later process of the run, a resume or a restart continuation, uses the frozen value, whatever the setting says now. A Gateway job (`runType` set) is always `"off"`. A run from before this ADR that is past its first start has no key and is off. The tool is in the start request's `tools` only when the run froze `"self-v1"`; when it is absent the sidecar does not register it, so the model is not told about it. The internal route refuses (`forbidden`) a run that did not freeze `"self-v1"`.
+
+8. **A strategy change, measured before anyone relies on it.** Offering the tool adds one tool definition to the prompt and may change what a bot does: the strategy rule of AGENTS.md applies. It is off by default and on only per bot by a person's choice; `evals/compare.ts` pairs runs by the frozen `runStats` knob. No paired evaluation has been run, and none is authorised as a paid campaign by this ADR; until one says so, nothing claims that `run_stats` makes a team better.
+
+## Alternatives considered
+
+- **Workspace scope** (the roadmap's wording): every bot sees every teammate's figures. The owner limited it to the bot itself; a lead bot that needs the team's state can still ask teammates through the thread.
+- **Write the figures into a file in the bot's directory** on a schedule. Stale between writes, visible to every bot in the workspace, and a Gateway write into the workspace for nothing a tool call cannot answer.
+- **Let the bot read the operator `GET /api/runs` and `/api/costs`** with its run token. Run tokens never authenticate operator routes (ADR-0006, `operator-auth.test.ts`), and those routes are scoped by a person's role, not by a bot.
+- **Include run summaries or error text** so a bot can learn from its failures. Error text can carry page content and private-chat content; failure classes carry the cause without the text. A later decision may add the bot's own summaries outside private chats, with its own evaluation.
+
+## Consequences
+
+- `packages/contracts` gains `run-stats.ts` (the report shape, `RUN_STATS_TOOL`, the modes and the window bounds) and the `run_stats` tool name.
+- `packages/gateway` gains `run-stats/` (the setting store, the freeze, the query module and the routes), one policy file, one line in each of the sorted route, policy and internal-route lists, the migration and the audit action.
+- `packages/sidecar` gains `run-stats-tool.ts`, one L0 entry in `risk-tier.ts`, `wrapTaskContent` in `untrusted.ts` and one client method.
+- `packages/web` gains `features/run-stats/` (its API, demo routes, messages and the bot editor section) and one section line in the bot editor.
+- Every run started after this ADR records `runStats` in `config_json`, so the knob is visible to replay and compare.
+- A bot with the tool sees its own failure classes and spend; what it does with them is its own judgement, guided by its SOUL, not by any rule here.
+
+## Verification
+
+| Decision | Means | Test | Metric |
+| --- | --- | --- | --- |
+| 1 | `run_stats` is registered only when the run's tools include it, takes only `windowDays` and is L0 | T1 `sidecar/src/run-stats-tool.test.ts` "is offered only when the run carries it, and is L0"; T0 `sidecar/src/risk-tier.test.ts` existing tier table checks | `run_stats` calls per run with the tool |
+| 2 | another bot's and another workspace's runs, approvals, tasks and spend never appear, a crafted parameter is refused, and another run's token is refused | T1 `gateway/src/run-stats/run-stats-routes.test.ts` "answers only the calling bot in its own workspace", "refuses crafted parameters", "refuses another run's token" | none |
+| 3 | counts by status and lane, failure classes, job and private-chat counts, durations, spend from the Costs computation, trend, pending approvals, parked runs and tasks | T1 same file "counts runs, failure classes and durations per window", "prices spend as Costs does and keeps unpriced usage unpriced", "lists pending approvals, parked runs and own tasks" | share of `failed` runs reported `other` |
+| 4 | no error text, summary, message body or approval summary in the answer; private-chat runs are counts only; task titles reach the model wrapped untrusted | T1 same file "carries no run text"; T1 `sidecar/src/run-stats-tool.test.ts` "wraps task titles as untrusted" | none |
+| 5 | the answer needs no model, embedding or rerank call | T1 same Gateway file: the fake provider sees no run and no model request during the calls | none |
+| 6 | off by default; an Owner or Admin turns it on and off, a Member cannot, each change is audited | T1 `gateway/src/run-stats/run-stats-routes.test.ts` "is off by default and set by an Owner or Admin, audited"; T1 `gateway/src/api/permission-matrix.test.ts` and `gateway/src/api/role-actions.test.ts` (the PUT is Admin, the GET Member); web `features/run-stats/run-stats-section.test.tsx` | bots with the tool on |
+| 7 | attempt 1 freezes `runStats`, a resume keeps it after the setting changes, a job is off, the tool is absent from the start request when off, and the route refuses a run that froze `off` | T1 `gateway/src/run-stats/run-stats-freeze.test.ts` | runs whose `config_json.runStats` is absent (target 0 after this ADR) |
+| 8 | the knob is in `config_json` for compare; no default turns it on | T1 `gateway/src/run-stats/run-stats-freeze.test.ts` "is off by default on every run" | paired per-bucket success and cost with the tool on and off (pending) |

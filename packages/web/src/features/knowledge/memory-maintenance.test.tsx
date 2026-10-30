@@ -9,7 +9,7 @@ import type {
   MemorySplitProposal,
   WorkspaceId,
 } from "@deskmates/contracts";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { LearnedMemoryEntry } from "../../api/client.js";
 import { MemoryMaintenance, type MemoryMaintenanceApi } from "./memory-maintenance.js";
@@ -206,17 +206,21 @@ it("lands on what needs a person, shows the model's verdict, and switches to all
   renderPanel(api);
   expect(
     await screen.findByText(
-      "Nothing needs a person. The model rechecks the other flagged notes on its own.",
+      "Nothing needs a person. The AI model rechecks the other flagged notes on its own.",
     ),
   ).toBeInTheDocument();
-  expect(screen.getByText("12 of 200 notes rechecked in the last 24 hours.")).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "12 of 200 note checks submitted in the last 24 hours, including failed attempts.",
+    ),
+  ).toBeInTheDocument();
   expect(
     screen.getByText("Last recheck: 9 still true, 2 possibly stale, 1 unclear."),
   ).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "All flagged (7)" }));
   expect(
     await screen.findByText(
-      "Model recheck 2026-10-14: possibly stale. Bob said exports moved to Tuesdays",
+      "AI model recheck 2026-10-14: possibly stale. Bob said exports moved to Tuesdays",
     ),
   ).toBeInTheDocument();
   expect(api.listMemoryRevalidations).toHaveBeenCalledWith(WS, { view: "all" });
@@ -240,14 +244,18 @@ it("saves the maintenance settings and refuses an invalid limit (A34)", async ()
   expect(await screen.findByText("Maintenance settings saved.")).toBeInTheDocument();
 });
 
-it("shows an error when the queue cannot be read", async () => {
-  const api = fakeApi({
-    listMemoryRevalidations: vi.fn(async () => {
-      throw new Error("Gateway unavailable");
-    }),
-  });
+it("keeps failed initial reads distinct from empty maintenance and retries", async () => {
+  const api = fakeApi();
+  vi.mocked(api.listMemoryRevalidations).mockRejectedValueOnce(new Error("Gateway unavailable"));
   renderPanel(api);
   expect(await screen.findByRole("alert")).toHaveTextContent("Gateway unavailable");
+  expect(screen.queryByRole("button", { name: "Save settings" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry maintenance" }));
+  expect(await screen.findByRole("combobox")).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(api.listMemoryRevalidations).toHaveBeenCalledTimes(2);
+  expect(api.updateMemoryMaintenanceSettings).not.toHaveBeenCalled();
 });
 
 it("drafts a document from the trusted notes of one topic only", async () => {
@@ -281,4 +289,65 @@ it("asks for organisation explicitly and accepts, then undoes, a split", async (
   await waitFor(() => expect(api.decideMemorySplit).toHaveBeenCalledWith(WS, "msplit_1", "accept"));
   fireEvent.click(await screen.findByRole("button", { name: "Undo split" }));
   await waitFor(() => expect(api.decideMemorySplit).toHaveBeenCalledWith(WS, "msplit_1", "undo"));
+});
+
+it("preserves settings and document choices when maintenance refreshes", async () => {
+  const api = fakeApi();
+  renderPanel(api);
+  const limit = await screen.findByLabelText("Notes rechecked per day (0 turns it off)");
+  fireEvent.change(limit, { target: { value: "17" } });
+  fireEvent.click(screen.getByLabelText("Organise topics once a day"));
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "vendordb" } });
+  const notes = await screen.findByRole("list", { name: "Notes of this topic" });
+  const boxes = await within(notes).findAllByRole("checkbox");
+  const first = boxes[0];
+  if (!first) throw new Error("Missing trusted note");
+  fireEvent.click(first);
+  fireEvent.change(screen.getByLabelText("Document title"), {
+    target: { value: "My draft title" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: /^All flagged/ }));
+  await waitFor(() => expect(api.listMemoryTopics).toHaveBeenCalledTimes(2));
+  expect(limit).toHaveValue(17);
+  expect(screen.getByLabelText("Organise topics once a day")).not.toBeChecked();
+  expect(screen.getByLabelText("Document title")).toHaveValue("My draft title");
+  expect(boxes[0]).not.toBeChecked();
+  expect(api.listMemoryEntriesPage).toHaveBeenCalledOnce();
+  expect(api.updateMemoryMaintenanceSettings).not.toHaveBeenCalled();
+  expect(api.draftKnowledgeFromObservations).not.toHaveBeenCalled();
+});
+
+it("ignores a delayed older page after changing the flag view", async () => {
+  const api = fakeApi();
+  const original = api.listMemoryRevalidations;
+  type Page = Awaited<ReturnType<MemoryMaintenanceApi["listMemoryRevalidations"]>>;
+  let finish!: (value: Page) => void;
+  api.listMemoryRevalidations = vi.fn(
+    (...args: Parameters<MemoryMaintenanceApi["listMemoryRevalidations"]>) => {
+      const [workspace, filters] = args;
+      if (filters?.cursor)
+        return new Promise<Page>((resolve) => {
+          finish = resolve;
+        });
+      return original(workspace, filters);
+    },
+  );
+  renderPanel(api);
+  const more = await screen.findByRole("button", { name: "Load more" });
+  fireEvent.click(more);
+  expect(more).toBeDisabled();
+  fireEvent.click(more);
+  expect(api.listMemoryRevalidations).toHaveBeenCalledTimes(2);
+  fireEvent.click(screen.getByRole("button", { name: /^All flagged/ }));
+  await waitFor(() => expect(api.listMemoryRevalidations).toHaveBeenCalledTimes(3));
+  await act(async () => {
+    finish({
+      revalidations: [flag("late", { entry: { ...flag("late").entry, body: "Old filtered row" } })],
+      total: 2,
+      needsHuman: 2,
+      byReason: {},
+    });
+  });
+  expect(screen.queryByText("Old filtered row")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Load more" })).toBeEnabled();
 });

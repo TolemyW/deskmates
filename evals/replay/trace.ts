@@ -93,6 +93,9 @@ export interface RunTrace {
     id: RunId;
     botId: BotId;
     botName: string;
+    /** The bot's role and the workspace's name as exported; absent on a trace from an older Gateway. */
+    botRole?: string;
+    workspaceName?: string;
     workspaceId: WorkspaceId;
     threadId?: ThreadId;
     lane: RunLane;
@@ -288,6 +291,7 @@ export interface ApiRunEvent {
 export interface ApiBot {
   id: string;
   name: string;
+  role?: string;
   workspaceId: string;
   model?: string;
   cheapModel?: string;
@@ -296,6 +300,7 @@ export interface ApiBot {
 
 export interface ApiWorkspace {
   id: string;
+  name?: string;
   egressAllowlist?: readonly string[];
 }
 
@@ -423,6 +428,8 @@ export function buildTrace(source: TraceSource): RunTrace {
       id: run.id as RunId,
       botId: run.botId as BotId,
       botName: bot.name,
+      botRole: bot.role ?? "",
+      workspaceName: workspace.name ?? "",
       workspaceId: workspace.id as WorkspaceId,
       lane: run.lane ?? "interactive",
       triggerKind: run.triggerKind,
@@ -462,6 +469,8 @@ export function buildTrace(source: TraceSource): RunTrace {
     deriveRunVisibility({
       ...(run.summary === undefined ? {} : { reply: run.summary.reply }),
       events: trace.events,
+      status: run.status,
+      ...(run.threadId === undefined ? {} : { threadId: run.threadId }),
     });
   if (source.memoryVersions !== undefined) trace.memoryVersions = [...source.memoryVersions];
   if (source.skillVersions !== undefined) trace.skillVersions = [...source.skillVersions];

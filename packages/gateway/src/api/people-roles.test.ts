@@ -3,6 +3,7 @@
 // Owner stay the Owner's; the root is never changed; every People call names its workspace.
 
 import { afterEach, describe, expect, it } from "vitest";
+import { DEFAULT_TENANT_ID } from "../auth/user-store.js";
 import { FAST_AUTH } from "../test-support/browser-session.js";
 import { type Harness, startHarness } from "../test-support/harness.js";
 import { seedRoles } from "../test-support/roles.js";
@@ -83,6 +84,29 @@ describe("people per workspace (ADR-0022 amendment 6)", () => {
     expect(h.app.deskmates.ctx.auth.memberships.roleIn(ws, people.ids.admin as string)).toBe(
       "owner",
     );
+  });
+
+  it("a role and a status in one request are refused, not applied tenant-wide", async () => {
+    h = await startHarness({ auth: FAST_AUTH });
+    const people = await seedRoles(h);
+    const { auth, workspaces } = h.app.deskmates.ctx;
+    const ws = people.workspace.id;
+    const other = workspaces.create({ name: "Other", sandboxProvider: "docker" });
+    const max = people.ids.max as string;
+    // max is Member of W and Owner of the other workspace; oona is Owner of W only.
+    auth.memberships.add(other.id, max, "owner", "test");
+    for (const jar of [people.owner, people.admin]) {
+      const both = await jar.json<{ details?: { reason?: string } }>(
+        "PATCH",
+        `/api/members/${max}`,
+        { body: { workspaceId: ws, role: "member", status: "removed" } },
+      );
+      expect(both.status).toBe(400);
+      expect(both.json.details?.reason).toBe("role_and_status");
+    }
+    expect(auth.memberships.roleIn(other.id, max)).toBe("owner");
+    expect(auth.memberships.roleIn(ws, max)).toBe("member");
+    expect(auth.users.getMembership(DEFAULT_TENANT_ID, max)?.status).toBe("active");
   });
 
   it("people calls name their workspace", async () => {

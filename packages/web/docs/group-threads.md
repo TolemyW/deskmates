@@ -1,5 +1,10 @@
 # M2: group threads
 
+Use inline code, fenced code or a backslash before `@` when discussing mention
+syntax without addressing anyone. A bot's group broadcast starts with
+`@everyone` (optionally beside other leading recipients); mentioning that token
+later in a report does not broadcast. See ADR-0056 for the routing contract.
+
 - **Creation.** The new-thread form selects one to six bots of the current workspace. The first bot is selected by default to preserve the one-bot flow; the form offers no other workspace's bots, so a stale bot id cannot cross the workspace boundary. A workspace with no bots still creates its first bot and a one-member thread in one step.
 - **Membership controls.** The chat header's **Add bot** picker searches existing bots
   of the same workspace by name or role and excludes current members. Adding selected

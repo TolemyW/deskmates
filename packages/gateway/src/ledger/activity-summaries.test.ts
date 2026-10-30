@@ -61,7 +61,12 @@ describe("eligibility (decision 4)", () => {
     const run = s.ended("succeeded", LONG);
     const [job] = s.jobs();
     expect(s.jobs()).toHaveLength(1);
-    expect(job).toMatchObject({ lane: "background", botId: run.botId, status: "queued" });
+    expect(job).toMatchObject({
+      lane: "background",
+      triggerKind: "model_job",
+      botId: run.botId,
+      status: "queued",
+    });
     expect(job?.config).toMatchObject({
       runType: ACTIVITY_SUMMARY,
       sourceRunId: run.id,

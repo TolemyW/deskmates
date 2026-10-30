@@ -161,7 +161,18 @@ export function asCronEntries(raw: unknown): CronEntry[] {
     const entry = asRecord(item, "cron entry");
     const schedule = requireString(entry, "schedule");
     parseCron(schedule);
-    return { schedule, prompt: requireString(entry, "prompt") };
+    const misfire = entry.misfire;
+    if (misfire !== undefined && misfire !== "skip" && misfire !== "run_once") {
+      throw new DeskmatesError("validation", 'cron misfire must be "skip" or "run_once"', {
+        misfire,
+      });
+    }
+    // ADR-0029 decision 11: `skip` is the default, so only the opt-in is stored.
+    return {
+      schedule,
+      prompt: requireString(entry, "prompt"),
+      ...(misfire === "run_once" ? { misfire } : {}),
+    };
   });
 }
 
@@ -367,10 +378,29 @@ export function asRunEnded(runId: RunId, raw: unknown): RunEnded {
   if (typeof body.pendingApprovalId === "string") {
     ended.pendingApprovalId = body.pendingApprovalId as ApprovalId;
   }
+  // Issue #62 M8: every approval the process parked on, when one turn parked on several.
+  if (Array.isArray(body.pendingApprovalIds)) {
+    const ids = (body.pendingApprovalIds as unknown[]).filter(
+      (id): id is string => typeof id === "string",
+    );
+    if (ids.length > 0) ended.pendingApprovalIds = ids.slice(0, 100) as ApprovalId[];
+  }
   if (typeof body.pendingToolUseId === "string") ended.pendingToolUseId = body.pendingToolUseId;
   // The origin the parked process was on; the resume hands it to the new one so its first browser
   // call has a `targetOrigin` before it navigates (ADR-0002 amendment 2, "2, stale snapshot").
   if (typeof body.currentOrigin === "string") ended.currentOrigin = body.currentOrigin;
+  // ADR-0029 decision 2: only a drain is a platform deferral a sidecar can report; a restart is
+  // the Gateway's own finding and never arrives on the wire.
+  const platform = body.platformInterruption as Partial<RunEnded["platformInterruption"]> | null;
+  if (
+    body.outcome === "deferred" &&
+    platform !== null &&
+    typeof platform === "object" &&
+    platform.interruption === "platform" &&
+    platform.reason === "drain"
+  )
+    ended.platformInterruption = { interruption: "platform", reason: "drain" };
+  if (body.resumeFailed === true && body.outcome === "failed") ended.resumeFailed = true;
   // Context observability (M3 context plan, Phase 1). A malformed value is dropped, not an
   // error: it must never turn a finished run into a failed one.
   if (
@@ -449,6 +479,9 @@ export function asToolAction(raw: unknown): ToolAction {
   if (argumentPattern !== undefined) action.argumentPattern = argumentPattern;
   const filePath = optionalString(a, "filePath");
   if (filePath !== undefined) action.filePath = filePath;
+  // ADR-0002 amendment 3, A6: the stable target of a tool that has no other.
+  const inputSha256 = optionalSha256(a, "inputSha256");
+  if (inputSha256 !== undefined) action.inputSha256 = inputSha256;
   const amount = optionalNumber(a, "amount");
   if (amount !== undefined) action.amount = amount;
   if (a.sqlStatementKind !== undefined && a.sqlStatementKind !== null) {
@@ -492,6 +525,7 @@ export function asApprovalRequest(runId: RunId, raw: unknown): ApprovalRequest {
   if (typeof body.toolUseId === "string") req.toolUseId = body.toolUseId;
   // ADR-0020: an egress ask is the only other kind; anything else is a tool call.
   if (body.kind === "egress") req.kind = "egress";
+  if (body.afterInterruption === true) req.afterInterruption = true;
   return req;
 }
 
@@ -503,6 +537,17 @@ export function asApprovalDecision(value: unknown): ApprovalDecision {
     });
   }
   return value as ApprovalDecision;
+}
+
+/** A lower-case SHA-256 hex digest, or undefined when the field is absent. */
+function optionalSha256(body: Record<string, unknown>, field: string): string | undefined {
+  const value = optionalString(body, field);
+  if (value !== undefined && !/^[0-9a-f]{64}$/.test(value)) {
+    throw new DeskmatesError("validation", `${field} must be a lower-case SHA-256 hex digest`, {
+      field,
+    });
+  }
+  return value;
 }
 
 /** An operator-authored rule matcher. Every field is optional; a wrong type is a client error. */
@@ -517,6 +562,8 @@ export function asRuleMatcher(raw: unknown): ApprovalRuleMatcher {
   if (argumentPattern !== undefined) matcher.argumentPattern = argumentPattern;
   const filePath = optionalString(m, "filePath");
   if (filePath !== undefined) matcher.filePath = filePath;
+  const inputSha256 = optionalSha256(m, "inputSha256");
+  if (inputSha256 !== undefined) matcher.inputSha256 = inputSha256;
   const originatingBotId = optionalString(m, "originatingBotId");
   if (originatingBotId !== undefined) matcher.originatingBotId = originatingBotId as BotId;
   const maxAmount = optionalNumber(m, "maxAmount");

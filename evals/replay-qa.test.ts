@@ -40,6 +40,8 @@ function startRequest(): StartRunRequest {
     runId: "run-replay-qa" as RunId,
     botId: "bot-nova" as BotId,
     botName: "nova",
+    botRole: "research assistant",
+    workspaceName: "Ops",
     workspaceId: "ws-1" as WorkspaceId,
     threadId: "thread-1" as ThreadId,
     botHomeDir: HOME,

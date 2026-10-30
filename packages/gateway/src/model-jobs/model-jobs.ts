@@ -8,9 +8,12 @@ import {
   DeskmatesError,
   type ModelJobRequest,
   type RunEnded,
+  type ThinkingConfig,
   type ThreadMessage,
 } from "@deskmates/contracts";
 import { APPROVAL_REVIEW } from "../approvals/auto-review.js";
+import type { GatewayConfig } from "../config.js";
+import { MODEL_JOB_DEADLINE_MS_DEFAULT, MODEL_JOB_KILL_GRACE_MS } from "../config/runs.js";
 import type { GatewayContext } from "../context.js";
 import type { RunRecord } from "../ledger/runs.js";
 import { MEMORY_ORGANIZE, MemoryOrganizer } from "../memory/organize.js";
@@ -103,17 +106,50 @@ export class ModelJobs {
 }
 
 /**
- * The `StartRunRequest` part of a model job. A model-job run whose job cannot be built fails to
+ * The `StartRunRequest` part of a model job: the job and its deadline (issue #39 item 8), which
+ * is frozen on the run row at first start. A model-job run whose job cannot be built fails to
  * start rather than falling through to a full agent run with an empty prompt.
  */
 export function modelJobSettings(
   ctx: GatewayContext,
   run: RunRecord,
   bot: BotDefinition,
-): { modelJob?: ModelJobRequest } {
+): { modelJob?: ModelJobRequest; modelJobDeadlineMs?: number } {
   if (!MODEL_JOB_RUN_TYPES.has(run.config.runType)) return {};
   const modelJob = ctx.modelJobs.request(run, bot);
   if (!modelJob)
     throw new DeskmatesError("invalid_transition", "model job has no request", { runId: run.id });
-  return { modelJob };
+  const frozen = run.config.modelJobDeadlineMs;
+  const modelJobDeadlineMs =
+    typeof frozen === "number" && Number.isSafeInteger(frozen) && frozen > 0
+      ? frozen
+      : (ctx.config.modelJobDeadlineMs ?? MODEL_JOB_DEADLINE_MS_DEFAULT);
+  if (frozen !== modelJobDeadlineMs) ctx.runs.setConfig(run.id, { modelJobDeadlineMs });
+  return { modelJob, modelJobDeadlineMs };
+}
+
+/**
+ * The thinking a model job starts with when its run sets none (issue #39 item 8): disabled
+ * unless `MODEL_JOB_THINKING=sdk-default`, which leaves the SDK's own default.
+ *
+ * A vision probe always keeps the SDK's default. It judges whether runs can be given images, and
+ * those runs send the SDK's default request; SDK 0.3.278 sends a disabled thinking key as no key
+ * at all, and one upstream never answered an image request without the key (every probe of it
+ * timed out from 2026-10-22, while the same image with `adaptive` answered in 5 s).
+ */
+export function modelJobThinking(
+  config: Pick<GatewayConfig, "modelJobThinking">,
+  runType?: unknown,
+): ThinkingConfig | undefined {
+  if (runType === VISION_PROBE) return undefined;
+  return config.modelJobThinking === "sdk-default" ? undefined : { type: "disabled" };
+}
+
+/**
+ * When the Gateway kills a model job's process: `MODEL_JOB_KILL_GRACE_MS` after the job's own
+ * deadline (60 s by default, ADR-0023 amendment 1 decision 5), never after `RUN_TIMEOUT_SECONDS`.
+ */
+export function modelJobKillMs(deadlineMs: number | undefined, runTimeoutSeconds: number): number {
+  const deadline = deadlineMs ?? MODEL_JOB_DEADLINE_MS_DEFAULT;
+  return Math.min(deadline + MODEL_JOB_KILL_GRACE_MS, runTimeoutSeconds * 1000);
 }

@@ -8,6 +8,8 @@ export { Card } from "./card.js";
 export type { CardProps } from "./card.js";
 export { EmptyState } from "./empty-state.js";
 export type { EmptyStateProps } from "./empty-state.js";
+export { PageHeader } from "./page-header.js";
+export type { PageHeaderProps } from "./page-header.js";
 
 // Vetted native components: preserve HeroUI appearance and composition APIs.
 export { Tabs, Slider, Label, Spinner } from "@heroui/react";
@@ -38,3 +40,10 @@ export { ResizeHandle } from "./resize-handle.js";
 export type { ResizeHandleProps } from "./resize-handle.js";
 export { Pager } from "./pager.js";
 export type { PagerProps, PageRange } from "./pager.js";
+export { SectionTabs, TabNavigation } from "./section-tabs.js";
+export type { SectionTab, SectionTabsProps, TabNavigationItem } from "./section-tabs.js";
+
+export { ChoiceGroup } from "./choice-group.js";
+export type { ChoiceItem } from "./choice-group.js";
+
+export { HelpTip, ControlPopover } from "./auxiliary-controls.js";

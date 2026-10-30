@@ -6,7 +6,9 @@ import { newId } from "../db/ids.js";
 import type { GatewayDb } from "../db/open.js";
 import { RetrievalCallError } from "./clients.js";
 
-export type RetrievalCorpus = "knowledge" | "memory";
+/** `retrospective`: the failure retrospective's summary vectors (ADR-0046 amendment 2). */
+/** `task`: the operator related-task lookup (ADR-0021 amendment 4, A4h). */
+export type RetrievalCorpus = "knowledge" | "memory" | "retrospective" | "task";
 
 export interface RetrievalCallRecord {
   tenantId: string;

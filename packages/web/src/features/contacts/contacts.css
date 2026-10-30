@@ -12,46 +12,52 @@
   border-radius: 24px;
   box-shadow: var(--app-shadow-sm);
 }
-/* Profile navigation responds to its column, including an expanded sidebar. */
-.profile {
-  container-type: inline-size;
-}
-.profile > .app-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  width: 100%;
-  overflow: visible;
-}
-.profile > .app-tabs button {
-  justify-content: center;
-  min-width: 0;
-  padding-inline: 8px;
-  margin-bottom: 0;
-}
-.profile > .app-tabs svg {
-  flex-shrink: 0;
-}
-@container (max-width: 480px) {
-  .profile > .app-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    border-radius: 24px;
-  }
-}
 .contacts-main {
   background: var(--background);
+}
+.bot-name-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.contacts-screen .rail-scroll {
+  display: flex;
+  flex-direction: column;
+}
+.contacts-screen .contact-list {
+  flex: 1 0 auto;
+}
+.contacts-screen .rail .gb-pager {
+  position: sticky;
+  bottom: 0;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px;
+  background: var(--background);
+  border-top: 1px solid var(--separator);
+}
+.contacts-screen .rail .gb-pager > span {
+  order: -1;
+  width: 100%;
+  white-space: nowrap;
+  text-align: center;
+}
+.contacts-screen .rail .gb-pager > button {
+  min-width: 0;
+  padding-inline: 4px;
 }
 .contact-list {
   padding: 8px;
 }
 .contact-list li {
-  border-radius: 20px;
-  margin-bottom: 8px;
+  border-radius: 10px;
+  margin-bottom: 2px;
 }
 .contact-list li.selected {
   background: var(--default);
 }
 .contact-row {
-  padding: 16px 12px;
+  padding: 10px;
   grid-template-columns: 32px minmax(0, 1fr);
 }
 .contact-row > .avatar {
@@ -67,6 +73,7 @@
   flex: 1;
   min-width: 0;
 }
+.contact-default,
 .contact-time {
   flex-shrink: 0;
   white-space: nowrap;
@@ -79,8 +86,15 @@
   gap: 8px;
 }
 .contact-status [data-gb-ui="pill"] {
+  min-width: 0;
   max-width: 100%;
   white-space: nowrap;
+  overflow: hidden;
+}
+.contact-status .gb-pill-content {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .contact-name {
   overflow: hidden;
@@ -95,15 +109,8 @@
   padding: 32px;
   overflow: auto;
 }
-.team-overview h1 {
-  font-size: var(--app-text-2xl);
-  letter-spacing: -.7px;
-  font-weight: 600;
-}
-.team-overview > p {
-  color: var(--muted);
-  margin: 8px 0 28px;
-  font-size: var(--app-text-base);
+.team-overview > .gb-page-header {
+  margin-bottom: 28px;
 }
 .team-card-grid {
   display: grid;
@@ -282,6 +289,9 @@
     gap: 12px;
   }
   .new-contact-identity > label {
+    flex: 1;
+  }
+  .new-contact-identity > .bot-name-field {
     flex: 1;
   }
   .management-card,
@@ -702,6 +712,17 @@
     line-height: 1.55;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+  .feed-main > strong {
+    display: -webkit-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
   }
   .feed-links {
     color: var(--app-text-3);
@@ -854,4 +875,274 @@
   display: grid;
   gap: 6px;
   margin-top: 6px;
+}
+
+/* The settings tab is a stack of cards, not a card itself: no outer frame around them. */
+.management-card.bot-settings {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent 0 0;
+  box-shadow: none;
+}
+
+/* One rhythm and one control width for every form in the settings cards. */
+.bot-settings fieldset {
+  display: grid;
+  gap: 12px;
+}
+
+.bot-settings label,
+.bot-settings .gb-select {
+  max-width: none;
+}
+
+.bot-settings fieldset > button,
+.bot-settings .management-subsection > button {
+  justify-self: start;
+}
+
+/* A field's help line belongs to the field above it, not halfway to the next one. */
+.bot-settings fieldset > label + p.muted {
+  margin-top: -6px;
+}
+
+.bot-settings fieldset.bot-allowlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+
+.bot-settings .bot-allowlist legend {
+  float: left;
+  margin-bottom: 0;
+  font-size: var(--app-text-sm);
+  font-weight: 500;
+  color: var(--app-text-2);
+}
+
+.bot-settings .management-schedule {
+  padding: 14px 0 0;
+}
+
+.bot-settings .management-schedule p {
+  margin: 0;
+}
+
+.bot-pause {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--app-border);
+}
+
+.bot-pause > p {
+  flex: 1 1 260px;
+  margin: 0;
+}
+
+/* "At a glance" in a narrow column: an identifier such as the model name stays whole on one line
+   and is cut with an ellipsis rather than broken inside its chip. */
+.kv dd code {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* Below this column width the glance card would squeeze its values into a sliver beside the
+   desktop; it takes its own row instead. */
+@container (max-width: 760px) {
+  .activity-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A roster overview and a detail rail serve different steps, not duplicate lists. */
+.contacts-screen:not(.has-profile) {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+.contacts-screen:not(.has-profile) > .rail {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  flex: none;
+  border: 0;
+  padding: 24px 32px 0;
+  background: transparent;
+}
+.contacts-screen:not(.has-profile) .rail-heading {
+  padding: 0;
+}
+.contacts-screen:not(.has-profile) .rail-search {
+  max-width: 480px;
+  margin: 16px 0 0;
+}
+.contacts-screen:not(.has-profile) .rail-scroll {
+  overflow: visible;
+  flex: none;
+}
+.contacts-screen:not(.has-profile) .contacts-main {
+  display: block;
+  overflow: visible;
+  flex: none;
+}
+.contacts-screen:not(.has-profile) .team-overview {
+  padding-top: 12px;
+}
+.team-intro {
+  margin: 0 0 20px;
+}
+.contacts-screen .team-card {
+  border-radius: 14px;
+  box-shadow: none;
+  padding: 20px;
+}
+.contact-load-error {
+  padding: 12px 0;
+}
+@media (max-width: 720px) {
+  .contacts-screen:not(.has-profile) > .rail {
+    padding: 20px 16px 0;
+  }
+}
+
+.profile-summary {
+  align-self: start;
+}
+.profile-summary > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.profile-summary > .kv {
+  margin-top: 16px;
+}
+
+.team-card-info {
+  display: contents;
+}
+.team-card-name {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+@media (max-width: 720px) {
+  .contacts-screen:not(.has-profile) > .rail {
+    padding: 12px 16px 0;
+  }
+  .contacts-screen:not(.has-profile) .rail-search {
+    margin-top: 8px;
+  }
+  .contacts-screen .team-overview {
+    padding: 12px 16px 16px;
+  }
+  .contacts-screen .team-intro {
+    display: none;
+  }
+  .contacts-screen .team-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .contacts-screen .team-card {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 6px 12px;
+    padding: 12px 0;
+    border: 0;
+    border-bottom: 1px solid var(--app-border);
+    border-radius: 0;
+    background: transparent;
+  }
+  .contacts-screen .team-card > .avatar {
+    width: 40px;
+    height: 40px;
+    grid-row: 1 / 3;
+  }
+  .contacts-screen .team-card-info {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
+  .contacts-screen .team-card h2 {
+    margin: 0;
+    font-size: var(--app-text-base);
+    overflow-wrap: anywhere;
+  }
+  .contacts-screen .team-card p {
+    margin: 0;
+    font-size: var(--app-text-sm);
+    line-height: 1.4;
+  }
+  .contacts-screen .team-card-description {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .contacts-screen .team-card-info > :last-child {
+    justify-self: start;
+  }
+  .contacts-screen .team-card-actions {
+    grid-column: 2;
+    margin: 0;
+  }
+}
+
+/* Collection rows remain compact on desktop; spare width belongs to useful content. */
+@media (min-width: 721px) {
+  .contacts-screen .team-intro {
+    display: none;
+  }
+  .contacts-screen .team-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .contacts-screen .team-card {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border: 0;
+    border-bottom: 1px solid var(--app-border);
+    border-radius: 0;
+    background: transparent;
+  }
+  .contacts-screen .team-card-info {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
+  .contacts-screen .team-card-info > :last-child {
+    justify-self: start;
+  }
+  .contacts-screen .team-card h2 {
+    margin: 0;
+    font-size: var(--app-text-base);
+    overflow-wrap: anywhere;
+  }
+  .contacts-screen .team-card p {
+    margin: 0;
+    font-size: var(--app-text-sm);
+    line-height: 1.4;
+  }
+  .contacts-screen .team-card-description {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .contacts-screen .team-card-actions {
+    margin: 0;
+  }
 }

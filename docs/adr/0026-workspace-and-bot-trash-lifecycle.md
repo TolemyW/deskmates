@@ -106,8 +106,10 @@ part of this decision.
 
 Source: GitHub issue #10 (owner scope: a `paused` flag on the bot; cron, webhook and chat wakes
 skipped with a visible reason; running runs untouched; parked approvals stay parked; distinct from
-Trash). The scheduler's hold of queued work and the webhook's 409 are engineering choices awaiting
-owner review.
+Trash). The scheduler's hold of queued work and the webhook's 409 were engineering choices awaiting
+owner review and are Accepted under owner delegation (2026-10-17): holding queued work loses
+nothing and starts it on resume, and a 409 lets a webhook sender retry instead of queueing work
+behind a pause nobody may lift.
 
 ### Context
 

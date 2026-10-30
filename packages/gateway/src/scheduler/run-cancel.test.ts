@@ -94,6 +94,31 @@ it("does not kill a process that exits inside the grace window", async () => {
   expect(ctx.runs.mustGet(run.id).status).toBe("cancelled");
 });
 
+it("a run that fails closes its pending approvals, so no card stays answerable", async () => {
+  const { thread } = await h.seed();
+  const { ctx } = h.app.deskmates;
+  h.provider.onRun(async (_req, gw) => {
+    await gw.post("approvals", {
+      type: "approval_request",
+      approvalId: "apr-failed",
+      action: { toolName: "Bash", input: { command: "git push" }, argumentSummary: "git push" },
+      riskLevel: "L2",
+      toolUseId: "toolu_failed",
+    });
+    // The sidecar dies without a run_ended.
+    return { exitCode: 137 };
+  });
+  const run = await wake(thread, "push it");
+  await waitFor(() => ctx.runs.mustGet(run.id).status === "failed", 3000, "failed");
+  const approval = ctx.approvals.mustGet("apr-failed" as never);
+  expect(approval.decision).toBe("deny");
+  expect(approval.decidedBy).toBe("system:failed");
+  const decide = await h.api("POST", "/api/approvals/apr-failed/decide", {
+    decision: "allow_once",
+  });
+  expect(decide.status).toBeGreaterThanOrEqual(400);
+});
+
 it("refuses to cancel a terminal run and leaves it as it was", async () => {
   const { thread } = await h.seed();
   const { ctx, scheduler } = h.app.deskmates;

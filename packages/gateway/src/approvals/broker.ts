@@ -16,6 +16,8 @@ import {
   type ApprovalRequest,
   type ApprovalResponse,
   type ApprovalRule,
+  type ApprovalRuleMatcher,
+  type ApprovalRuleWarning,
   type Attachment,
   type BotId,
   DeskmatesError,
@@ -28,7 +30,6 @@ import {
   decidedByReviewer,
   decidedByRule,
   findMatchingRule,
-  matcherFromAction,
   parseApprovalReview,
 } from "@deskmates/contracts";
 import type { BotStore } from "../bots/bots.js";
@@ -41,6 +42,7 @@ import { announceDelegationOutcome } from "../threads/delegation-outcomes.js";
 import type { MessageStore } from "../threads/messages.js";
 import type { ThreadRouter } from "../threads/router.js";
 import type { ThreadStore } from "../threads/threads.js";
+import { alwaysRuleMatcher } from "./always-rule.js";
 import type { ApprovalStore } from "./approvals.js";
 import { type ApprovalReviews, actionHash } from "./auto-review.js";
 import { APPROVAL_EXPIRY_ACTOR, expiryReason } from "./expiry.js";
@@ -95,6 +97,13 @@ export interface DecideResult {
   approval: Approval;
   /** The rule an `allow_always` decision stored. */
   rule?: ApprovalRule;
+  /** Why the stored rule may match less than intended (ADR-0002 amendment 3, A6). */
+  warnings?: ApprovalRuleWarning[];
+}
+
+export interface DecideOptions {
+  /** The human's edit of the proposed Always matcher (A6); absent stores the proposal. */
+  matcher?: ApprovalRuleMatcher;
 }
 
 /** The attachment that ties a thread message to its approval so the UI can draw the card. */
@@ -105,6 +114,29 @@ export function approvalAttachment(approvalId: ApprovalId): Attachment {
 /**
  * The `system` message body. Only the action and the waking instruction; never a tool result.
  */
+/**
+ * ADR-0029 decision 5: whether this request repeats the L2 call a restart interrupted, by the
+ * Gateway's own record on the run (`platformL2Recheck`, written at reconcile for the resumed
+ * attempt), never by the sidecar's flag alone. Such a request is asked of a human even when an
+ * Always rule or the approval mode would answer it: the approval that allowed the call is spent
+ * and its outcome is unknown.
+ */
+export function repeatsInterruptedL2(run: RunRecord, action: ToolAction): boolean {
+  const recheck = run.config.platformL2Recheck;
+  if (!recheck || typeof recheck !== "object") return false;
+  const r = recheck as Record<string, unknown>;
+  return (
+    r.attempt === run.attempt &&
+    r.toolName === action.toolName &&
+    (r.targetOrigin ?? undefined) === action.targetOrigin &&
+    (r.argumentPattern ?? undefined) === action.argumentPattern
+  );
+}
+
+/** The line a post-interruption request carries (decision 5). */
+export const INTERRUPTED_L2_NOTICE =
+  "An earlier attempt of this run was interrupted by a platform restart during this same action, with an unknown outcome. Check whether it already happened before you allow it again.";
+
 export function approvalRequestBody(
   botName: string,
   action: ToolAction,
@@ -194,9 +226,19 @@ export class ApprovalBroker {
     }
     const req: ApprovalRequest = { ...rawReq, action: scrubbed.value };
 
+    // ADR-0029 decision 5: the same action as an L2 call a restart interrupted goes to a human,
+    // past the stored rules, the approval mode and the reviewer.
+    const afterInterruption = req.kind !== "egress" && repeatsInterruptedL2(run, req.action);
+    if (afterInterruption)
+      this.event(run.id, {
+        phase: "interrupted_recheck",
+        approvalId: req.approvalId,
+        toolName: req.action.toolName,
+        riskLevel: req.riskLevel,
+      });
     // An egress ask is answered by the allowlist, never by a tool rule (ADR-0020 decision 2).
     const rule =
-      req.kind === "egress"
+      req.kind === "egress" || afterInterruption
         ? undefined
         : findMatchingRule(this.deps.rules.list(run.botId), req.action, run.botId);
     if (rule) {
@@ -222,6 +264,7 @@ export class ApprovalBroker {
     // ADR-0002 amendment 6, D4: `approve_all` allows every gated action without asking anyone,
     // after the stored rules. An egress ask is allowed only once its host is on the allowlist.
     if (
+      !afterInterruption &&
       this.deps.reviews?.mode(run) === "approve_all" &&
       (req.kind !== "egress" || options.egressHostAdded === true)
     ) {
@@ -263,7 +306,9 @@ export class ApprovalBroker {
     // ADR-0002 amendment 4, B3/B5: with automatic approval on, an eligible request goes to the
     // reviewer first. Nothing is posted and nobody is woken; the requester waits live whoever is
     // online, and a verdict, or an escalation to the thread, follows.
-    const review = this.deps.reviews?.queue(run, approval, { scrubbedSecrets: scrubbed.hits > 0 });
+    const review = afterInterruption
+      ? undefined
+      : this.deps.reviews?.queue(run, approval, { scrubbedSecrets: scrubbed.hits > 0 });
     if (review && "queued" in review) {
       this.event(run.id, {
         phase: "review_queued",
@@ -284,7 +329,7 @@ export class ApprovalBroker {
         reason: review.skipped,
       });
     }
-    this.postForHumans(run, approval);
+    this.postForHumans(run, approval, afterInterruption);
 
     const tenantId = this.deps.runTenant ? (this.deps.runTenant(run.id) ?? "") : undefined;
     if (!this.deps.presence.humanOnline(tenantId)) {
@@ -305,14 +350,15 @@ export class ApprovalBroker {
    * notice is routing-inert (amendment 3, A4): members read it in their next delivery, and no
    * run is woken by it, so approvals never become the team's main source of runs.
    */
-  private postForHumans(run: RunRecord, approval: Approval): void {
+  private postForHumans(run: RunRecord, approval: Approval, afterInterruption = false): void {
     const action = approval.action;
     let messageId: MessageId | undefined;
     if (approval.threadId) {
       const bot = this.deps.bots.mustGet(run.botId);
+      const body = approvalRequestBody(bot.name, action, approval.instruction);
       const posted = this.deps.router.postSystem(
         approval.threadId,
-        approvalRequestBody(bot.name, action, approval.instruction),
+        afterInterruption ? `${body}\n${INTERRUPTED_L2_NOTICE}` : body,
         [approvalAttachment(approval.id)],
         { inert: true },
       );
@@ -359,14 +405,7 @@ export class ApprovalBroker {
       return status;
     }
     const escalate = (why: string): "succeeded" | "failed" => {
-      this.event(approval.runId, {
-        phase: "review_escalated",
-        approvalId: approval.id,
-        reviewRunId: reviewRun.id,
-        reason: why,
-      });
-      const requester = this.deps.runs.get(approval.runId);
-      if (requester && approval.messageId === undefined) this.postForHumans(requester, approval);
+      this.escalateReview(approval, reviewRun, why);
       return status;
     };
     if (reviewRun.config.actionSha256 !== actionHash(approval)) return escalate("action_changed");
@@ -389,6 +428,28 @@ export class ApprovalBroker {
   }
 
   /**
+   * A review job that ended without a `run_ended`: killed at its deadline, crashed, failed to
+   * start or cancelled (ADR-0002 amendment 4, B4). Like a failed job it settles nothing and posts
+   * the request to its thread for humans; an approval already decided is left alone.
+   */
+  reviewLost(reviewRun: RunRecord): void {
+    const approval = this.deps.approvals.get(String(reviewRun.config.approvalId) as ApprovalId);
+    if (!approval || approval.decision) return;
+    this.escalateReview(approval, reviewRun, "review_failed");
+  }
+
+  private escalateReview(approval: Approval, reviewRun: RunRecord, why: string): void {
+    this.event(approval.runId, {
+      phase: "review_escalated",
+      approvalId: approval.id,
+      reviewRunId: reviewRun.id,
+      reason: why,
+    });
+    const requester = this.deps.runs.get(approval.runId);
+    if (requester && approval.messageId === undefined) this.postForHumans(requester, approval);
+  }
+
+  /**
    * Settle a pending approval. `decidedBy` is `human:<authorId>`, `bot:<botId>` or `rule:<id>`.
    * A live wait is released by moving the run back to `running`; a parked run is left for the
    * scheduler, which resumes it on the next pass.
@@ -398,10 +459,11 @@ export class ApprovalBroker {
     decision: ApprovalDecision,
     decidedBy: string,
     reason?: string,
+    options: DecideOptions = {},
   ): DecideResult {
     return this.deps.bus.batch(() =>
       this.deps.approvals.transaction(() =>
-        this.decideWithinTransaction(approvalId, decision, decidedBy, reason),
+        this.decideWithinTransaction(approvalId, decision, decidedBy, reason, options),
       ),
     );
   }
@@ -410,7 +472,8 @@ export class ApprovalBroker {
     approvalId: ApprovalId,
     decision: ApprovalDecision,
     decidedBy: string,
-    reason?: string,
+    reason: string | undefined,
+    options: DecideOptions,
   ): DecideResult {
     const current = this.deps.approvals.mustGet(approvalId);
     const continuation = current.kind === "continuation";
@@ -452,12 +515,26 @@ export class ApprovalBroker {
         throw new DeskmatesError("invalid_transition", "continuation window expired");
       }
     }
+    if (options.matcher !== undefined && (decision !== "allow_always" || continuation || egress))
+      throw new DeskmatesError(
+        "validation",
+        "a matcher goes only with an allow_always tool decision",
+        {
+          field: "matcher",
+        },
+      );
+    // A6: the stable target (or the human's edit of it), checked before anything is decided, so
+    // a refused Always leaves the request pending.
+    const always =
+      decision === "allow_always" && !continuation && !egress
+        ? alwaysRuleMatcher(current.action, current.botId, options.matcher)
+        : undefined;
     const decided = this.deps.approvals.decide(approvalId, decision, decidedBy, reason);
     let rule: ApprovalRule | undefined;
-    if (decision === "allow_always" && !continuation && !egress) {
+    if (always !== undefined) {
       rule = this.deps.rules.create({
         botId: decided.botId,
-        matcher: matcherFromAction(decided.action),
+        matcher: always.matcher,
         decision: "allow_always",
         createdBy: decidedBy,
         createdFromApprovalId: decided.id,
@@ -533,7 +610,11 @@ export class ApprovalBroker {
       }
     }
     if (run?.status === "waiting_approval_live") this.transition(run.id, "running");
-    return { approval, ...(rule === undefined ? {} : { rule }) };
+    return {
+      approval,
+      ...(rule === undefined ? {} : { rule }),
+      ...(always !== undefined && always.warnings.length > 0 ? { warnings: always.warnings } : {}),
+    };
   }
 
   /**

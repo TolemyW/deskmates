@@ -1,0 +1,7 @@
+{
+  "reason": "Existing native dropdowns pending migration to the owned Select; no new instances allowed.",
+  "nativeSelects": {
+    "network.tsx": 1,
+    "profile-form.tsx": 1
+  }
+}

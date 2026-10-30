@@ -3,10 +3,13 @@
 // is what chats and tasks referenced, not every file on the computer, and the screen says so.
 // Opening an item shows its location, its references and the existing inert text preview and
 // authenticated download (decisions 5 and 7). Members and above upload from here (amendment A5);
-// nothing here renders file content as markup or an image, or starts the workspace.
+// nothing here renders file content as markup or an image, or starts the workspace. A chat card's
+// "Show in Files" opens the screen at the file's directory with the file selected, and a file sent
+// in a chat the viewer may read links that message (amendment A7).
 
 import {
   FILE_COLLECTION_PAGE_SIZE,
+  FILE_COLLECTION_QUERY_MAX,
   FILE_COLLECTION_SCAN_LIMIT,
   FILE_KINDS,
   type FileKind,
@@ -17,11 +20,17 @@ import {
   type Workspace,
   type WorkspaceFileCollectionPage,
   type WorkspaceFileItem,
+  type WorkspaceId,
+  fileKindOf,
 } from "@deskmates/contracts";
 import {
   Button,
+  ChoiceGroup,
+  ControlPopover,
   EmptyState,
+  HelpTip,
   Input,
+  PageHeader,
   Pager,
   Pill,
   Select,
@@ -93,9 +102,21 @@ function directoryOf(path: string): string {
   return path.slice(0, path.lastIndexOf("/") + 1);
 }
 
-export function FilesScreen({ api }: { api: ApiClient }) {
+/** A file to open on arrival: a chat card's "Show in Files" (A7). */
+export interface FilesTarget {
+  workspaceId?: string;
+  path?: string;
+}
+
+export function FilesScreen({ api, target }: { api: ApiClient; target?: FilesTarget }) {
   const scope = useWorkspaceScope(api);
   const t = useT();
+  const wanted = target?.workspaceId;
+  const known = scope.workspaces.some((workspace) => workspace.id === wanted);
+  // A link names its workspace; switch to it when it is one of the caller's.
+  useEffect(() => {
+    if (wanted && known && scope.current?.id !== wanted) scope.select(wanted as WorkspaceId);
+  }, [wanted, known, scope.current?.id, scope.select]);
   if (scope.error && !scope.loaded) return <p role="alert">{scope.error}</p>;
   if (!scope.loaded) return <p className="muted">{t("files.loadingWorkspace")}</p>;
   if (!scope.current)
@@ -105,12 +126,15 @@ export function FilesScreen({ api }: { api: ApiClient }) {
       </section>
     );
   // A new workspace mounts a new view: no result, selection or pending answer carries over.
+  const focusPath =
+    target?.path && (wanted === undefined || wanted === scope.current.id) ? target.path : undefined;
   return (
     <WorkspaceFiles
-      key={scope.current.id}
+      key={`${scope.current.id}:${focusPath ?? ""}`}
       api={api}
       workspace={scope.current}
       apps={<FilesAppsEntry api={api} workspaceId={scope.current.id} />}
+      {...(focusPath ? { focusPath } : {})}
     />
   );
 }
@@ -119,23 +143,32 @@ export function WorkspaceFiles({
   api,
   workspace,
   apps,
+  focusPath,
 }: {
   api: FilesApi;
   workspace: Workspace;
   /** The published-apps entry (ADR-0035), owned by the app-shares feature. */
   apps?: ReactNode;
+  /** Open at this file's directory with the file selected (A7). */
+  focusPath?: string;
 }) {
   const t = useT();
+  // The directory is the search, so the list shows the file's neighbours (A7).
+  const directory = focusPath ? directoryOf(focusPath) : "";
+  const initialSearch = directory.length <= FILE_COLLECTION_QUERY_MAX ? directory : "";
   const [type, setType] = useState<FileKindFilter>("all");
   const [source, setSource] = useState<FileSourceFilter>("all");
-  const [search, setSearch] = useState("");
-  const [q, setQ] = useState("");
+  const [search, setSearch] = useState(initialSearch);
+  const [q, setQ] = useState(initialSearch);
   const [offset, setOffset] = useState(0);
   const [view, setView] = useState<"list" | "grid">("list");
   const [page, setPage] = useState<WorkspaceFileCollectionPage>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<WorkspaceFileItem>();
+  const fileOpener = useRef<HTMLButtonElement>(null);
+  // A linked file the collection does not list: a bot's chat delivery is not published (A4).
+  const [unlisted, setUnlisted] = useState<string>();
   const sequence = useRef(0);
 
   // Debounce typing; a changed search starts again from the first page.
@@ -173,6 +206,26 @@ export function WorkspaceFiles({
   useEffect(() => {
     void load();
   }, [load]);
+  // Select the linked file by its exact path; the search is a substring, so look it up whole.
+  useEffect(() => {
+    if (!focusPath) return;
+    let live = true;
+    const lookup =
+      focusPath.length <= FILE_COLLECTION_QUERY_MAX
+        ? api.listWorkspaceFiles(workspace.id, { offset: 0, limit: 100, q: focusPath })
+        : Promise.resolve(undefined);
+    void lookup
+      .then((found) => found?.items.find((candidate) => candidate.path === focusPath))
+      .catch(() => undefined)
+      .then((match) => {
+        if (!live) return;
+        if (match) setSelected(match);
+        else setUnlisted(focusPath);
+      });
+    return () => {
+      live = false;
+    };
+  }, [api, workspace.id, focusPath]);
   // A later answer must never land after the view is gone.
   useEffect(
     () => () => {
@@ -199,6 +252,11 @@ export function WorkspaceFiles({
     setOffset(0);
   };
 
+  const closeDetail = () => {
+    setSelected(undefined);
+    setUnlisted(undefined);
+    requestAnimationFrame(() => fileOpener.current?.focus());
+  };
   const items = page?.items ?? [];
   const filtered = type !== "all" || source !== "all" || q !== "";
   // A secondary path only where two items on this page share a name.
@@ -207,65 +265,60 @@ export function WorkspaceFiles({
   const ambiguous = (item: WorkspaceFileItem) => (names.get(item.name) ?? 0) > 1;
 
   return (
-    <section className="files-screen">
-      <header className="tasks-heading files-heading">
-        <div>
-          <span className="eyebrow">{workspace.name}</span>
-          <h1>
-            <FolderOpen size={24} aria-hidden="true" /> {t("files.title")}
-          </h1>
-          <p className="muted">{t("files.intro")}</p>
-        </div>
-        <FilesUploadControl api={api} workspace={workspace} onUploaded={() => void load()} />
-      </header>
-      {apps}
+    <section className={`files-screen${selected || unlisted ? " has-detail" : ""}`}>
+      {selected || unlisted ? (
+        <Button className="files-back" variant="ghost" onClick={closeDetail}>
+          {t("files.back")}
+        </Button>
+      ) : null}
+      <PageHeader
+        className="files-heading"
+        title={
+          <span className="files-title">
+            {t("files.title")}
+            <HelpTip label={t("files.scopeLabel")}>{t("files.scope")}</HelpTip>
+          </span>
+        }
+        description={t("files.intro")}
+        action={
+          <div className="files-heading-actions" data-control-row data-control-gap="8">
+            {apps}
+            <FilesUploadControl api={api} workspace={workspace} onUploaded={() => void load()} />
+          </div>
+        }
+      />
       <div className="files-toolbar">
         <div className="files-toolbar-row files-toolbar-primary">
-          <fieldset className="app-tabs files-type-filter" aria-label={t("files.filter.type")}>
-            {(["all", ...FILE_KINDS] as const).map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                className={type === kind ? "active" : ""}
-                aria-label={t(KIND_TEXT[kind])}
-                aria-pressed={type === kind}
-                onClick={() => changeType(kind)}
-              >
-                {t(KIND_TEXT[kind])}
-                {page ? (
-                  <span className="files-facet-count" aria-hidden="true">
-                    {kind === "all"
-                      ? Object.values(page.facets.types).reduce((sum, count) => sum + count, 0)
-                      : page.facets.types[kind]}
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </fieldset>
-          <fieldset className="app-tabs files-view-toggle" aria-label={t("files.view")}>
-            <button
-              type="button"
-              className={view === "list" ? "active" : ""}
-              aria-label={t("files.view.list")}
-              title={t("files.view.list")}
-              aria-pressed={view === "list"}
-              onClick={() => setView("list")}
-            >
-              <List size={16} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className={view === "grid" ? "active" : ""}
-              aria-label={t("files.view.grid")}
-              title={t("files.view.grid")}
-              aria-pressed={view === "grid"}
-              onClick={() => setView("grid")}
-            >
-              <LayoutGrid size={16} aria-hidden="true" />
-            </button>
-          </fieldset>
-        </div>
-        <div className="files-toolbar-row">
+          <div className="files-kind-expanded">
+            <ChoiceGroup
+              label={t("files.filter.type")}
+              value={type}
+              onChange={changeType}
+              items={(["all", ...FILE_KINDS] as const).map((kind) => ({
+                key: kind,
+                label: t(KIND_TEXT[kind]),
+                ...(page
+                  ? {
+                      count:
+                        kind === "all"
+                          ? Object.values(page.facets.types).reduce((sum, count) => sum + count, 0)
+                          : page.facets.types[kind],
+                    }
+                  : {}),
+              }))}
+            />
+          </div>
+          <div className="files-kind-compact">
+            <Select
+              aria-label={t("files.filter.type")}
+              value={type}
+              onValueChange={(value) => changeType(value as FileKindFilter)}
+              options={(["all", ...FILE_KINDS] as const).map((kind) => ({
+                value: kind,
+                label: t(KIND_TEXT[kind]),
+              }))}
+            />
+          </div>
           <Input
             className="files-search"
             aria-label={t("files.search")}
@@ -275,19 +328,42 @@ export function WorkspaceFiles({
             onChange={(event) => setSearch(event.currentTarget.value)}
           />
           {page && (page.facets.sources.uploaded > 0 || source !== "all") ? (
-            <Select
-              label={t("files.filter.source")}
-              value={source}
-              onValueChange={(value) => changeSource(value as FileSourceFilter)}
-              options={[
-                { value: "all", label: t("files.source.all") },
-                { value: "bot", label: t("files.source.bot") },
-                ...(page.facets.sources.uploaded > 0
-                  ? [{ value: "uploaded", label: t("files.source.uploaded") }]
-                  : []),
-              ]}
-            />
+            <ControlPopover
+              label={t("files.filters")}
+              trigger={
+                <>
+                  {t("files.filters")}
+                  {source !== "all" ? " · 1" : ""}
+                </>
+              }
+            >
+              <Select
+                label={t("files.filter.source")}
+                value={source}
+                onValueChange={(value) => changeSource(value as FileSourceFilter)}
+                options={[
+                  { value: "all", label: t("files.source.all") },
+                  { value: "bot", label: t("files.source.bot") },
+                  ...(page.facets.sources.uploaded > 0
+                    ? [{ value: "uploaded", label: t("files.source.uploaded") }]
+                    : []),
+                ]}
+              />
+              <Button onClick={() => changeSource("all")} disabled={source === "all"}>
+                {t("files.clearFilters")}
+              </Button>
+            </ControlPopover>
           ) : null}
+          <ChoiceGroup
+            label={t("files.view")}
+            value={view}
+            onChange={setView}
+            iconOnly
+            items={[
+              { key: "list", label: t("files.view.list"), icon: <List size={16} /> },
+              { key: "grid", label: t("files.view.grid"), icon: <LayoutGrid size={16} /> },
+            ]}
+          />
         </div>
         {filtered ? (
           <fieldset className="files-active-filters" aria-label={t("files.activeFilters")}>
@@ -327,8 +403,7 @@ export function WorkspaceFiles({
           </fieldset>
         ) : null}
       </div>
-      <p className="muted small files-scope">{t("files.scope")}</p>
-      {page ? (
+      {page && filtered ? (
         <output className="muted small files-result-count">
           {t("files.resultCount", { count: page.total })}
         </output>
@@ -338,7 +413,7 @@ export function WorkspaceFiles({
           {t("files.truncated", { limit: FILE_COLLECTION_SCAN_LIMIT })}
         </output>
       ) : null}
-      <div className={`files-layout${selected ? " with-detail" : ""}`}>
+      <div className={`files-layout${selected || unlisted ? " with-detail" : ""}`}>
         <div className="files-results">
           {error ? (
             <div className="files-state" role="alert">
@@ -367,7 +442,7 @@ export function WorkspaceFiles({
                           .filter(Boolean)
                           .join(", "),
                       })
-                    : t("files.empty.body")}
+                    : t("files.upload.hint")}
               </p>
             </EmptyState>
           ) : view === "list" ? (
@@ -392,7 +467,10 @@ export function WorkspaceFiles({
                         className="files-name"
                         aria-label={t("files.open", { name: item.path })}
                         aria-expanded={selected?.path === item.path}
-                        onClick={() => setSelected(item)}
+                        onClick={(event) => {
+                          fileOpener.current = event.currentTarget;
+                          setSelected(item);
+                        }}
                       >
                         <KindIcon kind={item.kind} />
                         <span>
@@ -404,6 +482,7 @@ export function WorkspaceFiles({
                           ) : null}
                         </span>
                       </button>
+                      <SentInChat item={item} />
                     </TableCell>
                     <TableCell data-label={t("files.column.type")}>
                       {t(KIND_TEXT[item.kind])}
@@ -427,7 +506,10 @@ export function WorkspaceFiles({
                     className={selected?.path === item.path ? "selected" : ""}
                     aria-label={t("files.open", { name: item.path })}
                     aria-expanded={selected?.path === item.path}
-                    onClick={() => setSelected(item)}
+                    onClick={(event) => {
+                      fileOpener.current = event.currentTarget;
+                      setSelected(item);
+                    }}
                   >
                     <span className={`files-thumb kind-${item.kind}`} aria-hidden="true">
                       <KindIcon kind={item.kind} size={28} />
@@ -446,6 +528,7 @@ export function WorkspaceFiles({
                       <When at={item.lastReferencedAt} />
                     </span>
                   </button>
+                  <SentInChat item={item} />
                 </li>
               ))}
             </ul>
@@ -470,13 +553,21 @@ export function WorkspaceFiles({
             />
           ) : null}
         </div>
+        {unlisted && !selected ? (
+          <UnlistedFileDetail
+            api={api}
+            workspace={workspace}
+            path={unlisted}
+            onClose={closeDetail}
+          />
+        ) : null}
         {selected ? (
           <FileDetail
             key={selected.path}
             api={api}
             workspace={workspace}
             item={selected}
-            onClose={() => setSelected(undefined)}
+            onClose={closeDetail}
             onDeleted={() => {
               setSelected(undefined);
               void load();
@@ -485,6 +576,84 @@ export function WorkspaceFiles({
         ) : null}
       </div>
     </section>
+  );
+}
+
+/** A7: a link to the newest message the viewer may read that sent this file in chat. */
+function SentInChat({ item }: { item: WorkspaceFileItem }) {
+  const t = useT();
+  const sent = item.sentInChat;
+  if (!sent) return null;
+  const label = t("files.sentInChatLabel", { title: sent.threadTitle || sent.threadId });
+  return (
+    <a
+      className="files-sent-in-chat small"
+      href={threadHref(sent.threadId, sent.messageId)}
+      aria-label={label}
+      title={label}
+    >
+      {t("files.sentInChat")}
+    </a>
+  );
+}
+
+/**
+ * A7: a linked path the collection does not list (a bot's chat delivery is not published, A4
+ * decision 22). Location, an honest note, and the same preview and download of current bytes.
+ */
+function UnlistedFileDetail({
+  api,
+  workspace,
+  path,
+  onClose,
+}: {
+  api: FilesApi;
+  workspace: Workspace;
+  path: string;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const kind = fileKindOf(path);
+  const panelRef = useRef<HTMLElement>(null);
+  useEffect(() => panelRef.current?.focus(), []);
+  return (
+    <aside
+      ref={panelRef}
+      tabIndex={-1}
+      className="files-detail"
+      aria-label={t("files.detail.label", { name })}
+    >
+      <div className="files-detail-heading">
+        <h2>
+          <KindIcon kind={kind} size={18} /> <span>{name}</span>
+        </h2>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={t("files.detail.close")}
+          onClick={onClose}
+        >
+          <X size={16} aria-hidden="true" />
+        </Button>
+      </div>
+      <dl className="files-facts">
+        <dt>{t("files.detail.location")}</dt>
+        <dd>
+          <code>{path}</code>
+        </dd>
+        <dt>{t("files.detail.type")}</dt>
+        <dd>{t(KIND_TEXT[kind])}</dd>
+      </dl>
+      <p className="muted small files-note">{t("files.unlisted.note")}</p>
+      <WorkspaceFilePreview
+        api={api as ApiClient}
+        workspaceId={workspace.id}
+        path={path}
+        describeError={(err) => describeReadError(err, t)}
+      />
+    </aside>
   );
 }
 
@@ -576,86 +745,87 @@ function FileDetail({
           <X size={16} aria-hidden="true" />
         </Button>
       </div>
-      <dl className="files-facts">
-        <dt>{t("files.detail.location")}</dt>
-        <dd>
-          <code>{item.path}</code>
-        </dd>
-        <dt>{t("files.detail.type")}</dt>
-        <dd>{t(KIND_TEXT[item.kind])}</dd>
-        <dt>{t("files.detail.size")}</dt>
-        <dd>
-          {size === undefined ? (
-            <span className="muted">{t("files.detail.sizeUnknown")}</span>
-          ) : (
-            t("files.detail.sizeBytes", { bytes: size })
-          )}
-        </dd>
-        <dt>{t("files.column.source")}</dt>
-        <dd>
-          <SourceLabel source={item.source} />
-          {item.source === "unknown" ? (
-            <span className="muted small"> {t("files.detail.unknownSource")}</span>
-          ) : null}
-        </dd>
-        <dt>{t("files.detail.verification")}</dt>
-        <dd>
-          <VerificationLabel item={item} />
-          {item.publication ? (
-            <>
-              <span className="files-note small">
-                {t("files.detail.checked", {
-                  size: item.publication.sizeBytes,
-                  sha: item.publication.sha256.slice(0, 16),
-                  time: formatDateTime(item.publication.checkedAt),
-                  check: item.publication.check,
-                })}
-              </span>
-              <span className="files-note small">
-                {t(
-                  item.publication.taskDeleted
-                    ? "files.detail.publishedFromDeleted"
-                    : "files.detail.publishedFrom",
-                  {
-                    kind: t(`files.detail.kind.${item.publication.deliveryKind}` as MessageKey),
-                    title: item.publication.taskTitle,
-                  },
-                )}
-              </span>
-              {item.publication.supersededCount > 0 ? (
-                <span className="muted small files-note">
-                  {t("files.detail.replaced", { count: item.publication.supersededCount })}
-                </span>
-              ) : null}
-              <span className="muted small files-note">{t("files.detail.checkedNote")}</span>
-            </>
-          ) : (
-            <span className="muted small files-note">
-              {t(
-                item.verification === "input"
-                  ? "files.detail.inputNote"
-                  : "files.detail.unverifiedNote",
-              )}
-            </span>
-          )}
-        </dd>
-        <dt>{t("files.column.updated")}</dt>
-        <dd>
-          {formatDateTime(item.lastReferencedAt)}
-          <span className="muted small files-note">{t("files.detail.lastReferencedNote")}</span>
-        </dd>
-      </dl>
-      <p className="muted small">{t("files.detail.currentBytes")}</p>
-      {canPreviewWorkspacePath(item.path) ? null : (
-        <p className="muted small files-note">{t("files.detail.previewUnsupported")}</p>
-      )}
+      <code className="files-detail-path">{item.path}</code>
       <WorkspaceFilePreview
+        actionsOnly
         api={api as ApiClient}
         workspaceId={workspace.id}
         path={item.path}
         describeError={(err) => describeReadError(err, t)}
         onRead={setSize}
       />
+      <VerificationLabel item={item} />
+      <details className="files-metadata">
+        <summary>{t("files.detail.metadata")}</summary>
+        <dl className="files-facts">
+          <dt>{t("files.detail.type")}</dt>
+          <dd>{t(KIND_TEXT[item.kind])}</dd>
+          <dt>{t("files.detail.size")}</dt>
+          <dd>
+            {size === undefined ? (
+              <span className="muted">{t("files.detail.sizeUnknown")}</span>
+            ) : (
+              t("files.detail.sizeBytes", { bytes: size })
+            )}
+          </dd>
+          <dt>{t("files.column.source")}</dt>
+          <dd>
+            <SourceLabel source={item.source} />
+            {item.source === "unknown" ? (
+              <span className="muted small"> {t("files.detail.unknownSource")}</span>
+            ) : null}
+          </dd>
+          <dt>{t("files.detail.verification")}</dt>
+          <dd>
+            {item.publication ? (
+              <>
+                <span className="files-note small">
+                  {t("files.detail.checked", {
+                    size: item.publication.sizeBytes,
+                    sha: item.publication.sha256.slice(0, 16),
+                    time: formatDateTime(item.publication.checkedAt),
+                    check: item.publication.check,
+                  })}
+                </span>
+                <span className="files-note small">
+                  {t(
+                    item.publication.taskDeleted
+                      ? "files.detail.publishedFromDeleted"
+                      : "files.detail.publishedFrom",
+                    {
+                      kind: t(`files.detail.kind.${item.publication.deliveryKind}` as MessageKey),
+                      title: item.publication.taskTitle,
+                    },
+                  )}
+                </span>
+                {item.publication.supersededCount > 0 ? (
+                  <span className="muted small files-note">
+                    {t("files.detail.replaced", { count: item.publication.supersededCount })}
+                  </span>
+                ) : null}
+                <span className="muted small files-note">{t("files.detail.checkedNote")}</span>
+              </>
+            ) : (
+              <span className="muted small files-note">
+                {t(
+                  item.verification === "input"
+                    ? "files.detail.inputNote"
+                    : "files.detail.unverifiedNote",
+                )}
+              </span>
+            )}
+          </dd>
+          <dt>{t("files.column.updated")}</dt>
+          <dd>
+            {formatDateTime(item.lastReferencedAt)}
+            <span className="muted small files-note">{t("files.detail.lastReferencedNote")}</span>
+          </dd>
+        </dl>
+      </details>
+      <p className="muted small">{t("files.detail.currentBytes")}</p>
+      {canPreviewWorkspacePath(item.path) ? null : (
+        <p className="muted small files-note">{t("files.detail.previewUnsupported")}</p>
+      )}
       <UploadDeleteControl api={api} workspaceId={workspace.id} item={item} onDeleted={onDeleted} />
       <section className="files-references" aria-label={t("files.detail.references")}>
         <h3>

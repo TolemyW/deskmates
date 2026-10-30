@@ -5,6 +5,8 @@
 // marked. The list is paged newest first; "Load older" follows the Gateway's cursor.
 
 import type { BoardPostVersionView, BoardPostView, WorkspaceId } from "@deskmates/contracts";
+import { ActionMenu, EmptyState, PageHeader } from "@deskmates/ui";
+import { MessagesSquare } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { subscribeEvents } from "../../api/events.js";
@@ -46,14 +48,16 @@ export function BoardScreen({ api }: { api: ApiClient }) {
   const workspace = scope.current;
   return (
     <section className="board-screen resource-page page-container">
-      <header>
-        <h1>{t("board.title")}</h1>
-        <p className="muted">{t("board.intro")}</p>
-      </header>
+      <PageHeader title={t("board.title")} description={t("board.intro")} />
+      {scope.error ? (
+        <p className="error" role="alert">
+          {scope.error} <Button onClick={() => void scope.reload()}>{t("board.retry")}</Button>
+        </p>
+      ) : null}
       {workspace ? (
         <Board key={workspace.id} api={api} workspaceId={workspace.id} />
-      ) : scope.loaded ? (
-        <p className="muted">{t("board.noWorkspace")}</p>
+      ) : scope.loaded && !scope.error ? (
+        <EmptyState icon={<MessagesSquare size={22} />} title={t("board.noWorkspace")} />
       ) : null}
     </section>
   );
@@ -66,10 +70,13 @@ function Board({ api, workspaceId }: { api: ApiClient; workspaceId: WorkspaceId 
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [error, setError] = useState<string>();
   const revision = useRef(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [failedPage, setFailedPage] = useState<"newest" | "older">("newest");
 
   /** Reads the newest page again and keeps the older pages already shown. */
   const refresh = useCallback(async () => {
     const request = ++revision.current;
+    setRefreshing(true);
     try {
       const page = await api.listBoardPosts(workspaceId, { limit: BOARD_PAGE_SIZE });
       if (request !== revision.current) return;
@@ -92,8 +99,11 @@ function Board({ api, workspaceId }: { api: ApiClient; workspaceId: WorkspaceId 
     } catch (err) {
       if (request === revision.current) {
         setError(errorMessage(err));
+        setFailedPage("newest");
         setLoaded(true);
       }
+    } finally {
+      if (request === revision.current) setRefreshing(false);
     }
   }, [api, workspaceId]);
 
@@ -132,6 +142,7 @@ function Board({ api, workspaceId }: { api: ApiClient; workspaceId: WorkspaceId 
       setError(undefined);
     } catch (err) {
       setError(errorMessage(err));
+      setFailedPage("older");
     } finally {
       setLoadingOlder(false);
     }
@@ -161,7 +172,13 @@ function Board({ api, workspaceId }: { api: ApiClient; workspaceId: WorkspaceId 
       />
       {error ? (
         <p role="alert" className="error">
-          {error}
+          {error}{" "}
+          <Button
+            disabled={refreshing || loadingOlder}
+            onClick={() => void (failedPage === "older" ? loadOlder() : refresh())}
+          >
+            {t("board.retry")}
+          </Button>
         </p>
       ) : null}
       <ol className="board-posts" aria-label={t("board.list.label")} aria-busy={!loaded}>
@@ -284,23 +301,41 @@ function BoardPost({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [history, setHistory] = useState<BoardPostVersionView[]>();
+  const actionPending = useRef(false);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const rowRef = useRef<HTMLLIElement>(null);
+  const wasEditing = useRef(false);
+  useEffect(() => {
+    if (editing) editorRef.current?.focus();
+    else if (wasEditing.current)
+      rowRef.current?.querySelector<HTMLButtonElement>("button[aria-haspopup]")?.focus();
+    wasEditing.current = editing;
+  }, [editing]);
+
   const hidden = post.state === "hidden";
 
   const act = async (action: () => Promise<BoardPostView>): Promise<boolean> => {
+    if (actionPending.current) return false;
+    actionPending.current = true;
     setBusy(true);
     setError(undefined);
     try {
-      onChanged(await action());
+      const changed = await action();
+      setHistory(undefined);
+      onChanged(changed);
       return true;
     } catch (err) {
       setError(errorMessage(err));
       return false;
     } finally {
+      actionPending.current = false;
       setBusy(false);
     }
   };
   const toggleHistory = async (): Promise<void> => {
+    if (actionPending.current) return;
     if (history) return setHistory(undefined);
+    actionPending.current = true;
     setBusy(true);
     setError(undefined);
     try {
@@ -308,12 +343,14 @@ function BoardPost({
     } catch (err) {
       setError(errorMessage(err));
     } finally {
+      actionPending.current = false;
       setBusy(false);
     }
   };
 
   return (
     <li
+      ref={rowRef}
       className={`board-post card${hidden ? " board-post-hidden" : ""}`}
       data-testid="board-post"
       data-state={post.state}
@@ -338,6 +375,7 @@ function BoardPost({
           }}
         >
           <textarea
+            ref={editorRef}
             aria-label={t("board.post.editLabel")}
             className="board-textarea"
             value={draft}
@@ -349,7 +387,15 @@ function BoardPost({
             <Button variant="primary" type="submit" disabled={busy || draft.trim() === ""}>
               {t("board.post.save")}
             </Button>
-            <Button variant="ghost" type="button" disabled={busy} onClick={() => setEditing(false)}>
+            <Button
+              variant="ghost"
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setEditing(false);
+                setError(undefined);
+              }}
+            >
               {t("board.post.cancel")}
             </Button>
           </div>
@@ -363,56 +409,56 @@ function BoardPost({
           {error}
         </p>
       ) : null}
-      {editing ? null : (
-        <div className="board-actions">
-          {post.mine ? (
-            <>
-              <Button
-                variant="ghost"
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  setDraft(post.body);
-                  setEditing(true);
-                }}
-              >
-                {t("board.post.edit")}
-              </Button>
-              <Button
-                variant="ghost"
-                type="button"
-                disabled={busy}
-                onClick={() => void act(() => api.withdrawBoardPost(workspaceId, post.id))}
-              >
-                {t("board.post.withdraw")}
-              </Button>
-            </>
-          ) : null}
-          {canModerate ? (
-            <Button
-              variant="ghost"
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void act(() => api.moderateBoardPost(workspaceId, post.id, { hidden: !hidden }))
-              }
-            >
-              {hidden ? t("board.post.unhide") : t("board.post.hide")}
-            </Button>
-          ) : null}
-          {post.mine || canModerate ? (
-            <Button
-              variant="ghost"
-              type="button"
-              disabled={busy}
-              aria-expanded={history !== undefined}
-              onClick={() => void toggleHistory()}
-            >
-              {history ? t("board.post.historyHide") : t("board.post.history")}
-            </Button>
-          ) : null}
+      {!editing && (post.mine || canModerate) ? (
+        <div className="board-post-menu">
+          <ActionMenu
+            label={t("board.post.options", { name: post.authorDisplayName })}
+            disabled={busy}
+            items={[
+              ...(post.mine
+                ? [
+                    {
+                      id: "edit",
+                      label: t("board.post.edit"),
+                      onAction: () => {
+                        setDraft(post.body);
+                        setError(undefined);
+                        setEditing(true);
+                      },
+                    },
+                    {
+                      id: "withdraw",
+                      label: t("board.post.withdraw"),
+                      onAction: () => {
+                        void act(() => api.withdrawBoardPost(workspaceId, post.id));
+                      },
+                    },
+                  ]
+                : []),
+              ...(canModerate
+                ? [
+                    {
+                      id: "moderate",
+                      label: hidden ? t("board.post.unhide") : t("board.post.hide"),
+                      onAction: () => {
+                        void act(() =>
+                          api.moderateBoardPost(workspaceId, post.id, { hidden: !hidden }),
+                        );
+                      },
+                    },
+                  ]
+                : []),
+              {
+                id: "history",
+                label: history ? t("board.post.historyHide") : t("board.post.history"),
+                onAction: () => {
+                  void toggleHistory();
+                },
+              },
+            ]}
+          />
         </div>
-      )}
+      ) : null}
       {history ? (
         <ol className="board-history" aria-label={t("board.history.label")}>
           {history.map((version) => (

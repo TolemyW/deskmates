@@ -3,7 +3,11 @@
 // file name, nor page content can choose the model, the prompt template or the output size.
 
 import type { LookMode } from "@deskmates/contracts";
-import type { AsrOperationConfig, LookOperationConfig } from "../config/operations.js";
+import type {
+  AsrOperationConfig,
+  ImageOperationConfig,
+  LookOperationConfig,
+} from "../config/operations.js";
 
 /** Output bound of one `look` call. */
 export const LOOK_MAX_TOKENS = 2048;
@@ -147,6 +151,56 @@ export function asrRequest(
     // fetch sets the multipart content type with its boundary.
     init: { method: "POST", headers: authHeaders(service), body: form },
   };
+}
+
+/**
+ * ADR-0040 amendment B, decision 18: the one OpenAI-compatible image generations body, with the
+ * configured model whatever the request says, and base64 answers only.
+ */
+export function imageRequest(
+  service: ImageOperationConfig,
+  input: { prompt: string; size: string; count: number },
+): UpstreamRequest {
+  return {
+    url: service.url,
+    init: {
+      method: "POST",
+      headers: { "content-type": "application/json", ...authHeaders(service) },
+      body: JSON.stringify({
+        model: service.model,
+        prompt: input.prompt,
+        n: input.count,
+        size: input.size,
+        response_format: "b64_json",
+      }),
+    },
+  };
+}
+
+export interface ImageResult {
+  /** The base64 of each image, in the order the service returned them. */
+  images: string[];
+  revisedPrompt: string | null;
+}
+
+/**
+ * The images of an image generations answer, or undefined when it is not one. An item with only
+ * a `url` is not accepted: the Gateway never fetches an address a service wrote.
+ */
+export function parseImageResponse(body: unknown): ImageResult | undefined {
+  if (!body || typeof body !== "object") return undefined;
+  const data = (body as Record<string, unknown>).data;
+  if (!Array.isArray(data) || data.length === 0) return undefined;
+  const images: string[] = [];
+  let revisedPrompt: string | null = null;
+  for (const item of data) {
+    const record = (item ?? {}) as Record<string, unknown>;
+    if (typeof record.b64_json !== "string" || record.b64_json === "") return undefined;
+    images.push(record.b64_json);
+    if (revisedPrompt === null && typeof record.revised_prompt === "string")
+      revisedPrompt = record.revised_prompt;
+  }
+  return { images, revisedPrompt };
 }
 
 export interface AsrResult {

@@ -32,6 +32,10 @@ export const OPERATOR_ROUTE_RULES: Readonly<Record<string, string>> = {
     "The configured channel provider. The release-bundled plugin authenticates the untouched request envelope before accepting it.",
   "POST /api/channel-webhooks/:workspaceId/:pluginId":
     "The configured channel provider. The release-bundled plugin authenticates the untouched request envelope before accepting it.",
+  "GET /api/channel-webhooks/:workspaceId/:pluginId/:connectionId":
+    "The provider of that one connection (ADR-0047). The release-bundled plugin authenticates the untouched request envelope before accepting it.",
+  "POST /api/channel-webhooks/:workspaceId/:pluginId/:connectionId":
+    "The provider of that one connection (ADR-0047). The release-bundled plugin authenticates the untouched request envelope before accepting it.",
   "POST /hooks/:botId/:token": "The bot's webhook token. Starts a background run of that bot only.",
 };
 
@@ -41,6 +45,8 @@ export const SANDBOX_ROUTE_RULES: Readonly<Record<string, string>> = {
   "POST /v1/*": "A live run token. The model proxy; the token never leaves the sandbox listener.",
   "POST /internal/runs/:runId/events": "That run's token. Appends to its own ledger.",
   "POST /internal/runs/:runId/ended": "That run's token. Ends its own run.",
+  "POST /internal/runs/:runId/session":
+    "That run's token. Records the SDK session its current attempt runs on (ADR-0029 decision 4).",
   "POST /internal/runs/:runId/messages":
     "That run's token. `thread_post` posts in the run's own thread; `message_bot` reaches another bot of the same workspace.",
   "POST /internal/runs/:runId/approvals":
@@ -50,6 +56,8 @@ export const SANDBOX_ROUTE_RULES: Readonly<Record<string, string>> = {
     "That run's token, when its bot is a member of the approval's thread, is not the requesting bot and is not upstream in the requesting run's wake chain; allow_once or deny only (approval_decide; ADR-0002 amendments 2 and 3, A10).",
   "POST /internal/runs/:runId/browser-lock": "That run's token. Its workspace's browser lock.",
   "POST /internal/runs/:runId/browser-origin": "That run's token. Its workspace's origin queue.",
+  "POST /internal/runs/:runId/desktop-lock":
+    "That run's token. Its workspace's shared-screen lease for desktop calls (ADR-0048 amendment 1, A3).",
   "GET /internal/runs/:runId/browser-retention": "That run's token. Its workspace's tabs.",
   "POST /internal/runs/:runId/browser-retention/closed": "That run's token. Its workspace's tabs.",
   "GET /internal/runs/:runId/egress": "That run's token. Its workspace's egress allowlist.",
@@ -60,6 +68,14 @@ export const SANDBOX_ROUTE_RULES: Readonly<Record<string, string>> = {
   "GET /internal/runs/:runId/memory/search": "That run's token. Its workspace's learned memory.",
   "POST /internal/runs/:runId/reply-preview":
     "That run's token, for its current attempt while live. Relays a reply preview to the run's own thread stream; writes no ledger row or message (ADR-0037).",
+  "POST /internal/runs/:runId/assistant/bots":
+    "That run's token, when the run froze `workspaceAssistant: assistant-v1` and its bot is still the default bot of its workspace. Creates a bot in that workspace with a name, role and SOUL only; audited with the run and the requester (bot_create; ADR-0051).",
+  "POST /internal/runs/:runId/assistant/bots/:name":
+    "The same run token and check. Changes another active bot of that workspace: role, SOUL and schedules only, never the default bot itself; audited (bot_update; ADR-0051).",
+  "POST /internal/runs/:runId/assistant/groups":
+    "The same run token and check. Opens a web group chat of that workspace with the default bot and the named bots of that workspace (group_create; ADR-0051).",
+  "GET /internal/runs/:runId/run-stats":
+    "That run's token, when the run froze `runStats: self-v1`. Counts, failure classes, durations, spend, pending approvals, parked runs and tasks of that run's bot in its workspace only; no other parameter than `windowDays` (run_stats; ADR-0050).",
   "POST /internal/runs/:runId/tasks/:taskId/deliver":
     "That run's token, for a task of its workspace linked to the run or its thread (task_deliver; ADR-0021 amendment 2). Files are verified through the workspace before publication (ADR-0014 A4). Never accepts.",
   "POST /internal/runs/:runId/app-shares":
@@ -68,8 +84,20 @@ export const SANDBOX_ROUTE_RULES: Readonly<Record<string, string>> = {
     "That run's token. Forwards one look/OCR request on bytes the sidecar read to the installation's vision service (image_describe; ADR-0040). Never fetches a URL.",
   "POST /internal/runs/:runId/operations/asr":
     "That run's token. Forwards one transcription request on bytes the sidecar read to the installation's speech service (audio_transcribe; ADR-0040).",
+  "POST /internal/runs/:runId/operations/image_generation":
+    "That run's token. Forwards one bounded text-to-image request to the installation's image service and returns the images for the sidecar to write in the bot's own directory (image_generate; ADR-0040 amendment B). Never fetches a URL.",
+  "POST /internal/runs/:runId/search":
+    "That run's token, for a run whose row froze `webSearch: on`. Forwards one bounded query to the installation's SearXNG and returns filtered results (web_search; ADR-0049). Never fetches a result URL.",
   "POST /internal/runs/:runId/tasks/:taskId/checkpoints":
     "That run's token, for a task of its workspace linked to the run or its thread (task_checkpoint; ADR-0021 A3h). Changes no task state; publishes nothing.",
+  "GET /internal/runs/:runId/vault/entries":
+    "That run's token. Its workspace's usable Vault entries, metadata only (vault_list; ADR-0045).",
+  "GET /internal/runs/:runId/vault/entries/:entryId":
+    "That run's token. One entry of its workspace, metadata only; another workspace's is a 404.",
+  "POST /internal/runs/:runId/vault/fill":
+    "That run's token, while it executes, with an allowed approval of that run for the exact entry, revision and origin, spent once (vault_fill; ADR-0045). Answers a status, never a value.",
+  "POST /internal/runs/:runId/vault/request":
+    "That run's token, while it executes, with an allowed approval of that run for the exact definition, spent once (vault_request; ADR-0045). Never retried.",
   "POST /internal/runs/:runId/connectors/:connector/describe":
     "That run's token. A connector of its workspace its bot names.",
   "POST /internal/runs/:runId/connectors/:connector/validate":
@@ -98,6 +126,7 @@ type TenantPolicy = Extract<RoutePolicy, { access: "tenant" }>;
 const ACCESS_ORDER = [
   "platform",
   "root",
+  "root_session",
   "authenticated",
   "owner",
   "admin",
@@ -108,6 +137,8 @@ const ACCESS_ORDER = [
 const ACCESS_TITLE: Record<(typeof ACCESS_ORDER)[number], string> = {
   platform: "Platform maintenance (a platform maintainer, or the operator credential)",
   root: "The root alone (the protected account `admin`, or the operator credential; ADR-0022 amendment 6 W2)",
+  root_session:
+    "The root's own browser session (the protected account `admin` signed in; no bearer credential, the operator credential included; ADR-0046 amendment 1)",
   authenticated: "Any signed-in principal (installation-wide facts, no tenant data)",
   owner:
     "Owner of the workspace every identifier names (naming none: of a workspace of the request's tenant)",
@@ -152,7 +183,12 @@ export function permissionMatrixMarkdown(): string {
       .sort(routeOrder);
     if (keys.length === 0) continue;
     lines.push(`#### ${ACCESS_TITLE[access]} (${keys.length})`, "");
-    if (access === "platform" || access === "root" || access === "authenticated") {
+    if (
+      access === "platform" ||
+      access === "root" ||
+      access === "root_session" ||
+      access === "authenticated"
+    ) {
       lines.push("| Route |", "|---|");
       for (const key of keys) lines.push(`| \`${key}\` |`);
     } else {

@@ -27,8 +27,10 @@
   "board.post.hide": "非表示にする",
   "board.post.history": "履歴",
   "board.post.historyHide": "履歴を閉じる",
+  "board.post.options": "{name} の投稿オプション",
   "board.post.save": "保存",
   "board.post.unhide": "再表示",
   "board.post.withdraw": "取り下げ",
+  "board.retry": "再試行",
   "board.title": "掲示板"
 }

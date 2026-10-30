@@ -7,6 +7,8 @@
 import type { BotId, ThreadId } from "@deskmates/contracts";
 import type { ApiClient } from "../../api/client.js";
 import type { RunView } from "../../api/types.js";
+import { Button } from "../../components/ui/button.js";
+import { useT } from "../../i18n/i18n-provider.js";
 import {
   ActivityCard,
   ActivityTriggerLabel,
@@ -22,6 +24,8 @@ export interface ElsewhereActivity {
   /** Older finished runs exist (#113 slice R). */
   older: OlderRuns | undefined;
   error: string | undefined;
+  loading: boolean;
+  reload: () => Promise<void>;
 }
 
 /** The feed of this chat's one member; no scope (a group, a Guest) reads nothing. */
@@ -31,7 +35,7 @@ export function useElsewhereActivity(
   excludeRuns: readonly string[] = [],
 ): ElsewhereActivity {
   // #113 slice R: unfinished runs plus the newest finished page; older pages on request.
-  const { runs, hasOlder, loadingOlder, loadOlder, error } = useRunFeed(
+  const { runs, hasOlder, loadingOlder, loadOlder, error, loading, reload } = useRunFeed(
     api,
     scope ? { botId: scope.botId } : undefined,
   );
@@ -46,6 +50,8 @@ export function useElsewhereActivity(
     runs: feed,
     older: hasOlder ? { loading: loadingOlder, onLoad: () => void loadOlder() } : undefined,
     error: scope ? error : undefined,
+    loading,
+    reload,
   };
 }
 
@@ -85,5 +91,19 @@ export function ElsewhereActivityOlder({ older }: { older: OlderRuns | undefined
     <li className="transcript-older elsewhere-older">
       <LoadOlderRuns older={older} />
     </li>
+  );
+}
+
+/** Keep failed incidental reads recoverable without refreshing the conversation. */
+export function ElsewhereActivityError({ activity }: { activity: ElsewhereActivity }) {
+  const t = useT();
+  if (!activity.error) return null;
+  return (
+    <p className="error elsewhere-error" role="alert">
+      {activity.error}{" "}
+      <Button variant="ghost" disabled={activity.loading} onClick={() => void activity.reload()}>
+        {t("thread.retry")}
+      </Button>
+    </p>
   );
 }

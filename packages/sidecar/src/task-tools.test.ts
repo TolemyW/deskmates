@@ -27,7 +27,9 @@ function request(overrides: Partial<StartRunRequest> = {}): StartRunRequest {
     runId: "run-1" as RunId,
     botId: "bot-nova" as BotId,
     botName: "nova",
+    botRole: "ops bot",
     workspaceId: "ws-1" as WorkspaceId,
+    workspaceName: "Ops",
     threadId: "thread-1" as ThreadId,
     botHomeDir: HOME,
     attempt: 1,
@@ -190,6 +192,64 @@ describe("task_deliver", () => {
     expect(text).toContain("output.rows: expected integer, got string");
   });
 
+  // Issue #39 item 5: a call without `summary` reaches the Gateway, whose refusal carries the
+  // work directory and an example; the tool result shows both so the next call can be right.
+  it("forwards a call without summary and shows the Gateway's example in the result", async () => {
+    const example = {
+      taskId: "task_1",
+      summary: "<one or two sentences on what was done>",
+      artifacts: [{ label: "<result>", path: "/work/bots/nova/result.md" }],
+      output: { rows: 0 },
+    };
+    const { gateway, deps, calls } = setup(
+      [deliverStep({ summary: undefined }), { type: "end", summary: "" }],
+      {
+        status: 400,
+        body: {
+          code: "validation",
+          message: "summary must be a non-empty string of at most 2000 characters",
+          details: { key: "summary", workDir: "/work/bots/nova", example },
+        },
+      },
+    );
+    const schemas: Record<string, { isOptional(): boolean }>[] = [];
+    const original = deps.createSdkMcpServer;
+    deps.createSdkMcpServer = (options) => {
+      for (const t of options.tools ?? [])
+        if (t.name === "task_deliver")
+          schemas.push(t.inputSchema as Record<string, { isOptional(): boolean }>);
+      return original(options);
+    };
+    await go(deps, request());
+    expect(schemas[0]?.summary?.isOptional()).toBe(true);
+    expect(calls[0]?.body).toMatchObject({ summary: "" });
+    const result = gateway.events.find((e) => e.kind === "tool_result");
+    expect(result?.payload.isError).toBe(true);
+    const text = String(result?.payload.content);
+    expect(text).toContain("summary must be a non-empty string");
+    expect(text).toContain("Your work directory is /work/bots/nova");
+    expect(text).toContain(`Example of a valid call: ${JSON.stringify(example)}`);
+  });
+
+  it("states the required fields and the path rule in the tool descriptions", async () => {
+    const tools: { name: string; description: string }[] = [];
+    const { deps } = setup([{ type: "end", summary: "" }], { status: 200, body: {} });
+    const original = deps.createSdkMcpServer;
+    deps.createSdkMcpServer = (options) => {
+      tools.push(
+        ...(options.tools ?? []).map((t) => ({ name: t.name, description: t.description })),
+      );
+      return original(options);
+    };
+    await go(deps, request());
+    const deliverTool = tools.find((t) => t.name === "task_deliver")?.description ?? "";
+    const checkpointTool = tools.find((t) => t.name === "task_checkpoint")?.description ?? "";
+    expect(deliverTool).toContain("Required: taskId and summary");
+    expect(deliverTool).toContain("relative path is resolved against your work directory");
+    expect(checkpointTool).toContain("Required: taskId and completed");
+    expect(checkpointTool).toMatch(/commit hash or an http\(s\) URL/);
+  });
+
   it("sends a partial, file-less delivery and says the task stays open (A3g)", async () => {
     const { gateway, deps, calls } = setup(
       [
@@ -249,6 +309,7 @@ describe("task_deliver", () => {
       {
         path: "/internal/runs/run-1/tasks/task_1/checkpoints",
         body: {
+          scopeVersion: 3,
           completed: [{ unit: "case 1", outcome: "passed", evidence: ["/work/case1.png"] }],
           outstanding: ["case 2"],
         },

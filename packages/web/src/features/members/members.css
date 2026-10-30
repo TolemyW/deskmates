@@ -142,3 +142,46 @@
     border-bottom: 1px solid var(--app-border);
   }
 }
+
+.members-screen > .card {
+  box-shadow: none;
+}
+@media (max-width: 720px) {
+  .members-table thead {
+    display: none;
+  }
+  .members-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--app-border);
+  }
+  .members-table td {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    min-width: 0;
+  }
+  .members-table td[data-label]::before {
+    content: attr(data-label);
+    min-width: 70px;
+    color: var(--muted);
+  }
+  .members-table td:empty {
+    display: none;
+  }
+  .member-identity {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .invitation-list li {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
+  }
+}

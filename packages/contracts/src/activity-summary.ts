@@ -9,6 +9,13 @@ export const ACTIVITY_SUMMARY_MAX_WORDS = 30;
 export const ACTIVITY_SUMMARY_MAX_LINES = 3;
 /** Decision 6: the job's source is cut here before it is wrapped as untrusted data. */
 export const ACTIVITY_SUMMARY_SOURCE_MAX = 4000;
+/**
+ * The job's output token cap. Decision 3 bounds the reply, not this: the cap leaves room for
+ * thinking, which upstreams that think by default do even when the SDK is asked for
+ * `thinking: disabled` (it omits the key on the wire). At 256, a cheap model's ~300 tokens of
+ * thinking used the whole cap before any text (probe 2026-10-26).
+ */
+export const ACTIVITY_SUMMARY_MAX_OUTPUT_TOKENS = 1024;
 /** Decision 5: at most this many source versions of one run are ever summarized. */
 export const ACTIVITY_SUMMARY_MAX_VERSIONS = 3;
 

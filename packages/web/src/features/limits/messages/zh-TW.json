@@ -11,6 +11,7 @@
   "limits.key.maxTurns": "每次嘗試的模型輪次",
   "limits.key.relayCountMax": "轉發上限（一條訊息鏈的跳數）",
   "limits.key.turnBudget": "輪次預算（自上次人類訊息以來每個對話的機器人訊息數）",
+  "limits.key.turnBudgetResetMinutes": "因回合預算暫停的聊天自動繼續前的分鐘數",
   "limits.loading": "正在載入限制…",
   "limits.off": "關閉",
   "limits.offNeedsBudget": "此工作區要求先設定每週或累計預算（費用頁面），才能關閉限制。",

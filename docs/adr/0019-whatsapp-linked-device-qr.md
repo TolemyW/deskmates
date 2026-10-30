@@ -4,6 +4,10 @@ Date: 2026-10-03
 Status: Accepted for implementation by the product owner on 2026-10-03 ("implement QR onboarding first"); live-phone acceptance pending
 Supersedes: ADR-0017's Cloud-API-only selection and rejection of a linked-device client. Its Gateway contracts, admission, thread routing and approval semantics remain in force.
 
+2026-10-17 update: [ADR-0017 amendment 3](0017-whatsapp-channel-through-cloud-api.md) replaces
+decision 4's explicit allowlist for the release plugin with allow-by-default admission and a
+per-connection blocklist (owner ruling). The standalone QR service keeps the allowlist.
+
 ## Context
 
 The owner expects an existing WhatsApp account to connect by scanning a QR code,

@@ -24,7 +24,9 @@ function request(egressAllowlist: string[]): StartRunRequest {
     runId: "run-1" as RunId,
     botId: "bot-nova" as BotId,
     botName: "nova",
+    botRole: "ops bot",
     workspaceId: "ws-1" as WorkspaceId,
+    workspaceName: "Ops",
     threadId: "thread-1" as ThreadId,
     botHomeDir: HOME,
     attempt: 1,
@@ -57,11 +59,11 @@ function request(egressAllowlist: string[]): StartRunRequest {
 }
 
 const GRANTS: NetworkGrant[] = [
-  { kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [23001] },
+  { kind: "subnet", cidr: "10.88.30.0/24", schemes: ["http"], ports: [23001] },
   {
     kind: "host",
     hostname: "console.vendordb.lan",
-    address: "10.20.36.35",
+    address: "10.88.36.35",
     schemes: ["https"],
     ports: [443],
   },
@@ -106,13 +108,13 @@ describe("pre-tool-use: network-profile grants (ADR-0027 amendment 1)", () => {
   it("admits exactly the granted LAN origins in navigation and shell fetches", async () => {
     const { calls, approvals } = await decide(
       [
-        navigate("http://10.20.30.24:23001/"),
-        curl("http://10.20.30.24:23001/api/health"),
+        navigate("http://10.88.30.24:23001/"),
+        curl("http://10.88.30.24:23001/api/health"),
         navigate("https://console.vendordb.lan/login"),
-        navigate("http://10.20.30.24:23002/"),
-        navigate("https://10.20.30.24:23001/"),
-        curl("http://10.20.31.9:23001/"),
-        curl("'http://10.20.30.24:23001/ok' http://10.0.0.5/"),
+        navigate("http://10.88.30.24:23002/"),
+        navigate("https://10.88.30.24:23001/"),
+        curl("http://10.88.31.9:23001/"),
+        curl("'http://10.88.30.24:23001/ok' http://10.0.0.5/"),
       ],
       ["*.example.test"],
       { egressGrants: () => GRANTS },
@@ -126,7 +128,7 @@ describe("pre-tool-use: network-profile grants (ADR-0027 amendment 1)", () => {
       "deny",
       "deny",
     ]);
-    expect(calls[3]?.hookReason).toContain("egress_blocked: 10.20.30.24");
+    expect(calls[3]?.hookReason).toContain("egress_blocked: 10.88.30.24");
     expect(calls[6]?.hookReason).toContain("shell fetch to 10.0.0.5");
     // A LAN target is never asked for: it is granted or denied (ADR-0020 decision 3 as amended).
     expect(approvals).toHaveLength(0);
@@ -134,7 +136,7 @@ describe("pre-tool-use: network-profile grants (ADR-0027 amendment 1)", () => {
 
   it("never admits a LAN target through the open-internet list", async () => {
     const { calls } = await decide(
-      [navigate("http://10.20.30.24:23001/"), curl("http://10.20.30.24:23001/")],
+      [navigate("http://10.88.30.24:23001/"), curl("http://10.88.30.24:23001/")],
       ["*"],
       {},
     );
@@ -142,12 +144,12 @@ describe("pre-tool-use: network-profile grants (ADR-0027 amendment 1)", () => {
   });
 
   it("drops the grants when the Gateway cannot answer, and denies an expired grant", async () => {
-    const down = await decide([navigate("http://10.20.30.24:23001/")], ["*.example.test"], {
+    const down = await decide([navigate("http://10.88.30.24:23001/")], ["*.example.test"], {
       egressGrants: () => GRANTS,
       egressStatus: 500,
     });
     expect(down.calls.map((c) => c.hookDecision)).toEqual(["deny"]);
-    const expired = await decide([navigate("http://10.20.30.24:23001/")], ["*.example.test"], {
+    const expired = await decide([navigate("http://10.88.30.24:23001/")], ["*.example.test"], {
       egressGrants: () => [{ ...(GRANTS[0] as NetworkGrant), expiresAt: "2000-01-01T00:00:00Z" }],
     });
     expect(expired.calls.map((c) => c.hookDecision)).toEqual(["deny"]);

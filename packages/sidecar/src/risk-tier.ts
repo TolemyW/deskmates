@@ -3,21 +3,44 @@
 // effect. Unknown tools are L2: the safe default is to ask.
 
 import path from "node:path";
-import type { BrowserCodeApproval, RiskLevel } from "@deskmates/contracts";
+import {
+  type BrowserCodeApproval,
+  DESKTOP_MCP_SERVER,
+  DESKTOP_MODEL_TOOLS,
+  type RiskLevel,
+  type StartRunRequest,
+  TOOL_TIER_OVERRIDE_EXCLUDED,
+  isVaultUseTool,
+} from "@deskmates/contracts";
 import {
   type BrowserCodeEffect,
   browserCodeEffects,
   browserToolCode,
   playwrightCliEffects,
 } from "./browser-code-effects.js";
-import { basename, shellArgvs, unwrapArgv } from "./shell-words.js";
+import { basename, isOpaqueCommand, shellArgvs, unwrapArgv } from "./shell-words.js";
 
 /**
  * Policy knobs of the tier function, frozen per run. `browserCode` (ADR-0002 amendment 5):
  * absent or `name-v1` tiers browser code by tool name, `effects-v1` by its effects.
+ * `toolTierOverrides` (amendment 3, A5): the workspace operator's tier per full tool name, which
+ * replaces the table's answer for that tool; absent or empty is no override.
  */
 export interface TierOptions {
   browserCode?: BrowserCodeApproval | undefined;
+  toolTierOverrides?: Readonly<Record<string, RiskLevel>> | undefined;
+}
+
+/** The tier options a run was started with: both knobs come from the run row, never the env. */
+export function tierOptionsOf(
+  request: Pick<StartRunRequest, "browserCodeApproval" | "toolTierOverrides">,
+): TierOptions {
+  return {
+    browserCode: request.browserCodeApproval,
+    ...(request.toolTierOverrides === undefined
+      ? {}
+      : { toolTierOverrides: request.toolTierOverrides }),
+  };
 }
 
 /** Where the workspace's shared files live; writes elsewhere are not reversible by the run. */
@@ -162,7 +185,7 @@ const SIDE_EFFECT_WORDS = /(submit|purchase|pay|send|delete)/i;
  * workspace. Matched as whole words so "Orders tab", "Payment history" and "Transfers report"
  * stay navigation while "Place order", "Pay now" and "Transfer funds" ask.
  */
-const SIDE_EFFECT_PHRASES =
+export const SIDE_EFFECT_PHRASES =
   /\b(place order|checkout|check out|buy|confirm|transfer|publish|approve|submit|purchase|pay|send|delete)\b/i;
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -180,7 +203,7 @@ export function sideEffectPhrase(input: Record<string, unknown>): string | undef
 }
 
 /** curl short options that take a value, so the rest of a combined flag word (or the next word) is it. */
-const CURL_SHORT_WITH_VALUE = new Set([
+export const CURL_SHORT_WITH_VALUE: ReadonlySet<string> = new Set([
   "A",
   "b",
   "c",
@@ -357,10 +380,32 @@ function gitSubcommand(args: readonly string[]): string | undefined {
   return undefined;
 }
 
+/** Words that end the command `find -exec` runs, so a later find option is not read as its. */
+const EXEC_TERMINATORS = new Set([";", "+"]);
+
+/**
+ * Whether a curl or wget word anywhere in the argv is followed by a body, an upload or a mutating
+ * method (#62 M7). Any position counts, as it does for the egress check (`isShellFetch`): a
+ * wrapper the classifier does not know (`find . -exec curl …`, `busybox wget …`) hides the
+ * fetcher from neither. Its options end at a `find -exec` terminator.
+ */
+function fetcherIsL2(argv: readonly string[]): boolean {
+  return argv.some((word, i) => {
+    const name = basename(word);
+    if (name !== "curl" && name !== "wget") return false;
+    const end = argv.findIndex((w, k) => k > i && EXEC_TERMINATORS.has(w));
+    const args = argv.slice(i + 1, end === -1 ? undefined : end);
+    return name === "curl" ? curlIsL2(args) : wgetIsL2(args);
+  });
+}
+
 /** Whether one simple command (an argv) is destructive or reaches outside the workspace. */
 function argvIsL2(argv: readonly string[], opts: TierOptions): boolean {
   // Wrappers that matter by themselves, wherever they sit in the argv.
   if (argv.some((w) => basename(w) === "sudo")) return true;
+  // A command that cannot be read (`$c ...`, `bash s.sh`, `... | sh`, `source f`) may do anything.
+  if (isOpaqueCommand(argv)) return true;
+  if (fetcherIsL2(argv)) return true;
   const cmd = unwrapArgv(argv);
   // ADR-0002 amendment 5, C1 and C3: Playwright CLI code and its L2-mirroring subcommands.
   if (opts.browserCode === "effects-v1") {
@@ -370,10 +415,6 @@ function argvIsL2(argv: readonly string[], opts: TierOptions): boolean {
   const name = basename(cmd[0] ?? "");
   const args = cmd.slice(1);
   switch (name) {
-    case "curl":
-      return curlIsL2(args);
-    case "wget":
-      return wgetIsL2(args);
     case "rm":
       return rmIsL2(args);
     case "git":
@@ -394,7 +435,8 @@ function argvIsL2(argv: readonly string[], opts: TierOptions): boolean {
  * Shell commands that are destructive or reach outside the workspace, judged per simple command
  * after tokenising: quoting, combined short flags, attached values and command substitutions
  * are honoured, so `curl -sSd x`, `rm -r -f`, `git -C /work push` and `$(git push)` all rate L2
- * while `echo 'git push'` stays L1.
+ * while `echo 'git push'` stays L1. A command whose program is not readable (`isOpaqueCommand`)
+ * rates L2.
  */
 function shellIsL2(command: string, opts: TierOptions): boolean {
   return shellArgvs(command).some((argv) => argvIsL2(argv, opts));
@@ -437,6 +479,17 @@ export function isIntegrationExecute(toolName: string): boolean {
 }
 
 /**
+ * ADR-0045 decision 4: `vault_list` is a metadata lookup (L0); `vault_fill` and `vault_request`
+ * release a credential and are L2 under every override. The PreToolUse hook builds their action
+ * from the Gateway's entry, never from the input alone.
+ */
+const VAULT_READ_TOOLS = new Set(["vault_list"]);
+
+export function isVaultUse(toolName: string): boolean {
+  return isVaultUseTool(toolName);
+}
+
+/**
  * Deskmates's own tools on the in-process `deskmates` MCP server (`SidecarToolName` in contracts),
  * other than the connector and integration tools, which have their own tables above.
  * `thread_post` / `message_bot` stay inside the product; the Gateway routes them.
@@ -451,13 +504,26 @@ const DESKMATES_READ_TOOLS = new Set([
   "knowledge_search",
   "knowledge_read",
   "memory_search",
+  // ADR-0050 decision 1: the bot's own figures from the ledger; reads, changes nothing.
+  "run_stats",
+  // ADR-0049 decision 10: a query to the installation's search service; opening a result is a
+  // separate browser or shell call the hook judges on its own.
+  "web_search",
 ]);
 const DESKMATES_WRITE_TOOLS = new Set([
   // ADR-0035 decision 1: a Gateway record whose audience is the workspace's signed-in members.
   "app_publish",
+  // ADR-0040 amendment B, decision 21: new files in the bot's own directory from an
+  // operator-configured service.
+  "image_generate",
   "thread_post",
   "message_bot",
   "approval_decide",
+  // ADR-0051 decision 4: the default bot's Gateway records of a bot, its role, SOUL and
+  // schedules, or a group chat. A person undoes each: Trash restores, a SOUL version restores.
+  "bot_create",
+  "bot_update",
+  "group_create",
   "knowledge_propose",
   "task_checkpoint",
   "task_deliver",
@@ -472,6 +538,11 @@ const DESKMATES_SPECIAL_TOOLS = new Set(["tty_session", "browser_cli_workflow"])
  * spawn adds no safety, every inner action is judged on its own.
  */
 const SDK_SUBAGENT_TOOLS = new Set(["Agent", "Task"]);
+
+/** Whether the call spawns an SDK subagent (`Agent` or `Task`, A5). */
+export function isSubagentSpawn(toolName: string): boolean {
+  return SDK_SUBAGENT_TOOLS.has(toolName);
+}
 
 /** SDK read-only discovery tools (A5): listing the run's own subagents changes nothing. */
 const SDK_DISCOVERY_TOOLS = new Set(["ListAgents"]);
@@ -525,10 +596,23 @@ export const SDK_BUILTIN_TOOLS: ReadonlySet<string> = new Set([
 export interface ToolTier {
   level: RiskLevel;
   unclassified?: true;
+  /** The level is the workspace operator's override, not the table's (A5). */
+  overridden?: true;
+}
+
+/**
+ * ADR-0048 decision 2 (owner ruling of 2026-10-17): LCU's model-visible desktop tools are L1
+ * whatever their code, under every approval mode; their effect labels are recorded on the
+ * `tool_call` event, never used as a tier. Any other name on the `desktop` server is untabled.
+ */
+export function isDesktopTool(toolName: string): boolean {
+  const { server, tool } = splitMcpToolName(toolName);
+  return server === DESKTOP_MCP_SERVER && DESKTOP_MODEL_TOOLS.includes(tool);
 }
 
 /** Whether a tier table names this tool. */
 function isTabledTool(toolName: string): boolean {
+  if (isDesktopTool(toolName)) return true;
   const { server, tool } = splitMcpToolName(toolName);
   if (server === DESKMATES_MCP_SERVER) {
     return (
@@ -536,6 +620,8 @@ function isTabledTool(toolName: string): boolean {
       INTEGRATION_READ_TOOLS.has(tool) ||
       isConnectorSubmit(toolName) ||
       isIntegrationExecute(toolName) ||
+      VAULT_READ_TOOLS.has(tool) ||
+      isVaultUse(toolName) ||
       DESKMATES_READ_TOOLS.has(tool) ||
       DESKMATES_WRITE_TOOLS.has(tool) ||
       DESKMATES_SPECIAL_TOOLS.has(tool)
@@ -609,10 +695,14 @@ export function shellBrowserCodeEffects(
 function tableTier(toolName: string, input: Record<string, unknown>, opts: TierOptions): RiskLevel {
   const { server, tool } = splitMcpToolName(toolName);
 
+  if (isDesktopTool(toolName)) return "L1";
+
   if (server === DESKMATES_MCP_SERVER && CONNECTOR_READ_TOOLS.has(tool)) return "L0";
   if (isConnectorSubmit(toolName)) return "L2";
   if (server === DESKMATES_MCP_SERVER && INTEGRATION_READ_TOOLS.has(tool)) return "L0";
   if (isIntegrationExecute(toolName)) return "L2";
+  if (server === DESKMATES_MCP_SERVER && VAULT_READ_TOOLS.has(tool)) return "L0";
+  if (isVaultUse(toolName)) return "L2";
 
   if (SIDE_EFFECT_WORDS.test(tool)) return "L2";
 
@@ -670,13 +760,25 @@ function tableTier(toolName: string, input: Record<string, unknown>, opts: TierO
 /**
  * The tier of a call and whether a table named its tool (ADR-0002 amendment 3, A5). A tool in no
  * table is still L2, so a new SDK or MCP tool fails closed, but it is labelled `unclassified` so
- * the approval card and the ledger show that nobody tiered it.
+ * the approval card and the ledger show that nobody tiered it. A workspace operator's override
+ * for the tool wins over the table, for every input of that tool; it is a deliberate tier, so the
+ * tool is not `unclassified`. The hook runs its hard denies (egress, the directory guard, the
+ * vision withhold) before it asks for the tier, so no override reaches them.
  */
 export function classifyTool(
   toolName: string,
   input: Record<string, unknown>,
   opts: TierOptions = {},
 ): ToolTier {
+  const overrides = opts.toolTierOverrides;
+  if (
+    overrides !== undefined &&
+    Object.hasOwn(overrides, toolName) &&
+    !TOOL_TIER_OVERRIDE_EXCLUDED.includes(toolName)
+  ) {
+    const override = overrides[toolName];
+    if (override !== undefined) return { level: override, overridden: true };
+  }
   const level = tableTier(toolName, input, opts);
   if (isTabledTool(toolName)) return { level };
   return { level: "L2", unclassified: true };

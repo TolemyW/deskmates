@@ -4,6 +4,7 @@
 // the Gateway's job modules read either the same way.
 
 import {
+  ACTIVITY_SUMMARY_MAX_OUTPUT_TOKENS,
   ACTIVITY_SUMMARY_SOURCE_MAX,
   type ModelJobRequest,
   type RunEnded,
@@ -13,7 +14,7 @@ import {
 } from "@deskmates/contracts";
 import type { SidecarDeps } from "../../deps.js";
 import type { EventSink } from "../../ledger.js";
-import { MODEL_JOB_DEADLINE_MS, jobPrompt } from "../../model-job.js";
+import { jobPrompt, modelJobDeadlineError, modelJobDeadlineMs } from "../../model-job.js";
 import { ACTIVITY_INSTRUCTION, APPROVAL_INSTRUCTION } from "../../presentation-summary.js";
 import { redactText } from "../../redact.js";
 import type { OpenAiCompletionParams, OpenAiCompletionResult } from "./types.js";
@@ -27,6 +28,7 @@ async function oneTurn(
   sink: Sink,
   turn: Omit<OpenAiCompletionParams, "modelBaseUrl" | "modelAuthToken" | "model" | "signal">,
   deadlineMs: number,
+  deadlineError = `model job deadline of ${deadlineMs} ms reached`,
 ): Promise<{ ended: RunEnded; result?: OpenAiCompletionResult }> {
   const ended: RunEnded = { type: "run_ended", runId: request.runId, outcome: "failed", usage: [] };
   if (deps.completeOpenAi === undefined) {
@@ -69,7 +71,7 @@ async function oneTurn(
     return { ended, result };
   } catch (error) {
     ended.error = abort.signal.aborted
-      ? `model job deadline of ${deadlineMs} ms reached`
+      ? deadlineError
       : redactText(String(error), [request.modelAuthToken]);
     return { ended };
   } finally {
@@ -101,12 +103,17 @@ export async function runOpenAiModelJob(
         });
     }
   }
+  // Issue #39 item 8: the Gateway's deadline, and the Claude path's error for it. No reasoning
+  // parameter is sent: Chat Completions has no portable one (`reasoning_effort` is refused by
+  // models that do not reason), and `max_tokens` already bounds the whole completion here.
+  const deadlineMs = modelJobDeadlineMs(request);
   const { ended, result } = await oneTurn(
     request,
     deps,
     sink,
     { systemPrompt: prompt.systemPrompt, content, maxOutputTokens: prompt.maxOutputTokens },
-    MODEL_JOB_DEADLINE_MS,
+    deadlineMs,
+    modelJobDeadlineError([], deadlineMs),
   );
   if (result?.text.trim()) {
     ended.outcome = "completed";
@@ -148,7 +155,7 @@ export async function openAiPresentationSummary(
           text: `<untrusted source="${activity ? "activity" : "approval"}">${escaped}</untrusted>`,
         },
       ],
-      maxOutputTokens: activity ? 256 : 512,
+      maxOutputTokens: activity ? ACTIVITY_SUMMARY_MAX_OUTPUT_TOKENS : 512,
     },
     45_000,
   );

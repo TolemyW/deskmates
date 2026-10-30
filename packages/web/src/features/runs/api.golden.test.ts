@@ -26,6 +26,7 @@ const CASES: GoldenCases<RunsApi> = {
       limit: 20,
       status: ["failed", "cancelled"],
       lane: "background",
+      triggerKind: "model_job",
       since: "2026-10-01T00:00:00.000Z",
       until: "2026-10-08T00:00:00.000Z",
       failureClass: "model_unavailable",
@@ -33,6 +34,7 @@ const CASES: GoldenCases<RunsApi> = {
     }),
   markRun: (a) => a.markRun(RUN, "wrong site"),
   memoryIndexObservation: (a) => a.memoryIndexObservation(WS),
+  resumePlatformRuns: (a) => a.resumePlatformRuns([RUN]),
   unmarkRun: (a) => a.unmarkRun(RUN),
 };
 

@@ -68,7 +68,7 @@ describe("M2 group foundation through the Gateway", () => {
     h.app.deskmates.lifecycle.ended(run.id, ended);
     expect(route).not.toHaveBeenCalled();
     expect(ctx.messages.list(thread.id)).toHaveLength(2);
-    expect(ctx.messages.botCountSinceLastHuman(thread.id)).toBe(1);
+    expect(ctx.messages.botCountSinceOrigin(thread.id)).toBe(1);
     expect(ctx.runs.list({ threadId: thread.id })).toHaveLength(runsBefore);
     expect(ctx.runs.mustGet(run.id).status).toBe("succeeded");
     expect(events.filter((e) => e.type === "thread_message")).toEqual([]);

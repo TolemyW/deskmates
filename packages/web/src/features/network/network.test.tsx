@@ -21,7 +21,7 @@ const profile: NetworkProfile = {
   id: "netp_1",
   name: "VendorDB test environment",
   description: "",
-  rules: [{ kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [23001] }],
+  rules: [{ kind: "subnet", cidr: "10.88.30.0/24", schemes: ["http"], ports: [23001] }],
   revision: 3,
   createdAt: "2026-10-14T00:00:00Z",
   updatedAt: "2026-10-14T00:00:00Z",
@@ -65,6 +65,14 @@ function fakeApi(overrides: Record<string, unknown> = {}, available: NetworkProf
       },
     })),
     getNetworkOverlaps: vi.fn(async () => ({ checked: true, networks: [], overlaps: [] })),
+    getHostResources: vi.fn(async () => ({
+      checked: true,
+      checkedAt: "2026-10-17T00:00:00Z",
+      findings: [],
+      healthy: 0,
+    })),
+    reattachHostResource: vi.fn(),
+    removeHostResource: vi.fn(),
     setWorkspaceNetworkSettings: vi.fn(async (_id: WorkspaceId, allowed: boolean) => ({
       network: { ...view(false), profilesOnOpenInternet: allowed },
     })),
@@ -77,7 +85,7 @@ function fakeApi(overrides: Record<string, unknown> = {}, available: NetworkProf
 
 it("summarizes host and subnet rules", () => {
   expect(ruleSummary(profile.rules[0] as NetworkProfile["rules"][number])).toBe(
-    "http 10.20.30.0/24 :23001",
+    "http 10.88.30.0/24 :23001",
   );
   expect(
     ruleSummary({
@@ -94,9 +102,11 @@ it("selects a profile for the workspace at hand and shows the acknowledged outco
   const api = fakeApi();
   render(<NetworkScreen api={api as never} />);
   expect(
-    await screen.findByRole("heading", { name: `What ${workspace.name} can reach on the LAN` }),
+    await screen.findByRole("heading", {
+      name: `What ${workspace.name} can reach on the internal network`,
+    }),
   ).toBeInTheDocument();
-  expect(await screen.findByText("No LAN access")).toBeInTheDocument();
+  expect(await screen.findByText("No internal network access")).toBeInTheDocument();
   expect(screen.getAllByText("Reload closes.").length).toBeGreaterThan(0);
   const apply = screen.getByRole("button", { name: "Apply" });
   // Nothing changed yet, so there is nothing to apply.
@@ -156,18 +166,23 @@ it("runs a preflight for the workspace and names the failing layer", async () =>
   const check = await screen.findByRole("button", { name: "Check" });
   expect(check).toBeDisabled();
   fireEvent.change(screen.getByRole("textbox", { name: "URL to check" }), {
-    target: { value: "http://10.20.30.24:23001/health" },
+    target: { value: "http://10.88.30.24:23001/health" },
   });
   fireEvent.click(check);
   expect(await screen.findByText("Failed at: TCP")).toBeInTheDocument();
   expect(screen.getByText(/ECONNREFUSED/)).toBeInTheDocument();
   expect(preflightWorkspaceNetwork).toHaveBeenCalledWith(
     workspace.id,
-    "http://10.20.30.24:23001/health",
+    "http://10.88.30.24:23001/health",
   );
+  fireEvent.change(screen.getByRole("textbox", { name: "URL to check" }), {
+    target: { value: "http://10.88.30.24:23001/other" },
+  });
+  expect(screen.queryByText("Failed at: TCP")).toBeNull();
+  expect(preflightWorkspaceNetwork).toHaveBeenCalledTimes(1);
 });
 
-it("sums up LAN targets inside a Docker network in one line, marks the row, and is silent without one", async () => {
+it("sums up internal network targets inside a Docker network in one line, marks the row, and is silent without one", async () => {
   const api = fakeApi({
     getNetworkOverlaps: vi.fn(async () => ({
       checked: true,
@@ -176,7 +191,7 @@ it("sums up LAN targets inside a Docker network in one line, marks the row, and 
         {
           source: "profile",
           label: "VendorDB test environment",
-          cidr: "10.20.30.0/24",
+          cidr: "10.88.30.0/24",
           network: "vendordb-demo-net",
           networkCidr: "172.18.0.0/16",
         },
@@ -186,12 +201,12 @@ it("sums up LAN targets inside a Docker network in one line, marks the row, and 
   render(<NetworkScreen api={api as never} />);
   expect(
     await screen.findByText(
-      "1 LAN target sits inside a Docker network on this host and cannot be reached.",
+      "1 internal network target sits inside a Docker network on this host and cannot be reached.",
     ),
   ).toBeInTheDocument();
   expect(
     screen.getByText(
-      "10.20.30.0/24 (VendorDB test environment) overlaps vendordb-demo-net (172.18.0.0/16)",
+      "10.88.30.0/24 (VendorDB test environment) overlaps vendordb-demo-net (172.18.0.0/16)",
     ),
   ).toBeInTheDocument();
   const table = screen.getByRole("table", { name: "All profiles" });
@@ -281,12 +296,12 @@ it("names a bad row before asking the Gateway, and switches to JSON and back", a
   fireEvent.change(json, {
     target: {
       value: JSON.stringify([
-        { kind: "subnet", cidr: "10.20.31.0/24", schemes: ["https"], ports: [8443] },
+        { kind: "subnet", cidr: "10.88.31.0/24", schemes: ["https"], ports: [8443] },
       ]),
     },
   });
   fireEvent.click(within(form).getByRole("button", { name: "Back to the form" }));
-  expect(within(form).getByLabelText("Subnet (CIDR)")).toHaveValue("10.20.31.0/24");
+  expect(within(form).getByLabelText("Subnet (CIDR)")).toHaveValue("10.88.31.0/24");
   expect(within(form).getByLabelText("https")).toBeChecked();
   expect(within(form).getByLabelText("Ports")).toHaveValue("8443");
 });
@@ -323,4 +338,52 @@ it("turns the open-internet switch off and on (decision 13)", async () => {
     expect(api.setWorkspaceNetworkSettings).toHaveBeenCalledWith(workspace.id, false),
   );
   await waitFor(() => expect(toggle).not.toBeChecked());
+});
+
+it("keeps a failed profile list out of a permanent loading state", async () => {
+  const api = fakeApi();
+  api.listNetworkProfiles.mockRejectedValueOnce(new Error("Profiles unavailable"));
+  render(<NetworkScreen api={api as never} />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Profiles unavailable");
+  expect(
+    within(screen.getByRole("region", { name: "All profiles" })).queryByText("Loading…"),
+  ).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  expect(await screen.findByRole("table", { name: "All profiles" })).toBeInTheDocument();
+});
+
+it("keeps a pending profile edit intact and restores focus after discarding a refused save", async () => {
+  let rejectSave!: (reason: Error) => void;
+  const api = fakeApi({
+    replaceNetworkProfile: vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectSave = reject;
+        }),
+    ),
+  });
+  render(<NetworkScreen api={api as never} />);
+  const edit = await screen.findByRole("button", { name: "Edit" });
+  fireEvent.click(edit);
+  const form = screen.getByRole("form", { name: "Edit profile" });
+  const name = within(form).getByLabelText("Name");
+  expect(name).toHaveFocus();
+  expect(edit).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+  fireEvent.change(name, { target: { value: "Renamed lab" } });
+  fireEvent.click(within(form).getByRole("button", { name: "Save profile" }));
+  expect(name).toBeDisabled();
+  expect(within(form).getByLabelText("Subnet (CIDR)")).toBeDisabled();
+  expect(within(form).getByLabelText("In 7 days")).toBeDisabled();
+  expect(within(form).getByRole("button", { name: "Advanced: edit as JSON" })).toBeDisabled();
+  expect(within(form).getByRole("button", { name: "Cancel" })).toBeDisabled();
+  rejectSave(new Error("Profile changed on the server"));
+  await screen.findByText("Profile changed on the server");
+  expect(name).toHaveValue("Renamed lab");
+  expect(name).toBeEnabled();
+  fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
+  expect(edit).toHaveFocus();
+  expect(screen.queryByText("Profile changed on the server")).not.toBeInTheDocument();
+  fireEvent.click(edit);
+  expect(screen.getByLabelText("Name")).toHaveValue(profile.name);
 });

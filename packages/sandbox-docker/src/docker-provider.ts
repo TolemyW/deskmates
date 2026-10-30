@@ -11,9 +11,13 @@ import {
   type EgressProbeResult,
   type ExecRequest,
   type ExecResult,
+  type HostResource,
+  type HostResourceInventory,
+  type HostResourceTarget,
   NOVNC_CONTAINER_PORT,
   type NetworkGrant,
   type PrivateEgressTarget,
+  RUN_MARKER_ENV,
   type SandboxHandle,
   type SandboxImageDrift,
   type SandboxNetworkSubnet,
@@ -29,8 +33,18 @@ import { DockerClient, dockerApiError } from "./docker-client.js";
 import { type DockerEndpoint, resolveDockerEndpoint } from "./docker-endpoint.js";
 import { DockerStreamDemuxer } from "./docker-stream.js";
 import { ENV_FILE_PATH, renderEnvFile } from "./env-file.js";
-import { type NetworkSummary, networkSubnetsOf, topologyProblem } from "./network-topology.js";
+import {
+  type NetworkSummary,
+  formerNameNetwork,
+  networkSubnetsOf,
+  topologyProblem,
+} from "./network-topology.js";
 
+/**
+ * The prefix of every name and label below. A former product name used the same rule under its
+ * own prefix; `formerNameNetwork` finds what it left behind (ADR-0006 amendment 5).
+ */
+export const RESOURCE_PREFIX = "deskmates";
 /** Label that ties a container to its workspace so `attach` can find it after a Gateway restart. */
 export const WORKSPACE_LABEL = "deskmates.workspace";
 /** Label that marks a container as ours; `attach` refuses anything without it. */
@@ -147,6 +161,27 @@ interface NetworkInspect {
   Internal: boolean;
   Labels?: Record<string, string>;
   IPAM?: { Config?: { Subnet?: string; Gateway?: string }[] };
+  /** Attached endpoints, by container id; present on inspect only. */
+  Containers?: Record<string, unknown> | null;
+}
+
+/** The `/networks` list shape. */
+interface NetworkListEntry extends NetworkSummary {
+  Id: string;
+  Created?: string;
+  Labels?: Record<string, string> | null;
+}
+
+/** The `/volumes` list shape. */
+interface VolumeListEntry {
+  Name: string;
+  CreatedAt?: string;
+  Labels?: Record<string, string> | null;
+}
+
+/** The part of `/info` the address-pool headroom reads. */
+interface DaemonInfo {
+  DefaultAddressPools?: { Base: string; Size: number }[] | null;
 }
 
 interface VolumeInspect {
@@ -157,7 +192,12 @@ interface VolumeInspect {
 /** The `/containers/json` list shape; a summary, not the full inspect. */
 interface ContainerSummary {
   Id: string;
+  Names?: string[];
   State: string;
+  /** Unix seconds. */
+  Created?: number;
+  /** Bytes of the writable layer; only with `size=true`. */
+  SizeRw?: number;
   /** Content ID (`sha256:…`) of the image the container was created from. */
   ImageID?: string;
   Labels?: Record<string, string>;
@@ -540,6 +580,28 @@ export class DockerProvider implements SandboxProvider {
     }
   }
 
+  async isPresent(handle: SandboxHandle): Promise<boolean> {
+    const path = `/containers/${encodeURIComponent(handle.providerRef)}/json`;
+    const response = await this.client.request("GET", path);
+    if (response.status === 404) return false;
+    if (response.status !== 200) throw dockerApiError("GET", path, response);
+    let container: ContainerInspect | null;
+    try {
+      container = JSON.parse(response.body) as ContainerInspect | null;
+    } catch {
+      throw new DeskmatesError("sandbox_unavailable", "Docker returned an invalid inspection");
+    }
+    const labels = container?.Config?.Labels;
+    if (
+      labels?.[WORKSPACE_LABEL] !== handle.workspaceId ||
+      labels?.[MANAGED_LABEL] !== "true" ||
+      labels?.[ROLE_LABEL] !== "workspace"
+    ) {
+      throw this.networkError(handle.workspaceId, "cached workspace ownership is mismatched");
+    }
+    return true;
+  }
+
   async attach(workspaceId: WorkspaceId, tenantId?: string): Promise<SandboxHandle | undefined> {
     const filters = encodeURIComponent(
       JSON.stringify({
@@ -589,11 +651,20 @@ export class DockerProvider implements SandboxProvider {
         "workspace is attached to a legacy or mismatched network",
       );
     }
+    // A network or proxy recreated here carries the workspace container's owner label, as
+    // `create` would have set it; without it preflight, restart, the image upgrade and permanent
+    // deletion refuse the workspace as mismatched (ADR-0022 DOCKER-01).
+    const ownerTenant = found.Labels?.[TENANT_LABEL];
     await this.ensureOutboundNetwork();
-    await this.ensureWorkspaceNetwork(workspaceId);
+    await this.ensureWorkspaceNetwork(workspaceId, ownerTenant);
     await this.assertWorkspaceNetwork(workspaceId, found.Id, inspect);
     const pinnedProxyIp = proxyIpFromExtraHosts(inspect.HostConfig?.ExtraHosts);
-    let attachedProxy = await this.findAndValidateProxy(workspaceId, true, pinnedProxyIp);
+    let attachedProxy = await this.findAndValidateProxy(
+      workspaceId,
+      true,
+      pinnedProxyIp,
+      ownerTenant,
+    );
     let attachedProxyIp =
       attachedProxy.NetworkSettings.Networks?.[networkName(workspaceId)]?.IPAddress;
     if (pinnedProxyIp !== undefined && attachedProxyIp !== pinnedProxyIp) {
@@ -672,9 +743,30 @@ export class DockerProvider implements SandboxProvider {
   async exec(handle: SandboxHandle, req: ExecRequest): Promise<ExecResult> {
     if (req.cmd.length === 0) throw new DeskmatesError("validation", "exec: cmd must not be empty");
     const marker = randomUUID();
-    const result = await this.runExec(handle.providerRef, req, marker);
+    let result: ExecResult;
+    try {
+      result = await this.runExec(handle.providerRef, req, marker);
+    } catch (error) {
+      // Losing the Docker stream does not stop its process either. Do not leave
+      // a run executing merely because its output/exit receipt was lost.
+      await this.killByMarker(handle.providerRef, marker);
+      throw error;
+    }
     if (result.timedOut) await this.killByMarker(handle.providerRef, marker);
     return result;
+  }
+
+  /**
+   * ADR-0029 decision 4: the sidecar of a run whose Gateway is gone. The scheduler sets
+   * `RUN_MARKER_ENV=<runId>` on every sidecar exec, so this finds it by environment like the
+   * deadline kill finds an exec by its marker. New images drain the matching subreaper
+   * before legacy cleanup, so detached descendants need no inherited marker. A run id is a Gateway id (`[A-Za-z0-9_-]`); anything
+   * else is refused rather than put in a shell pattern.
+   */
+  async killRun(handle: SandboxHandle, runId: string): Promise<void> {
+    if (!/^[A-Za-z0-9_.-]+$/.test(runId))
+      throw new DeskmatesError("validation", "killRun: not a run id", { runId });
+    await this.killByEnv(handle.providerRef, RUN_MARKER_ENV, runId);
   }
 
   async injectEnv(handle: SandboxHandle, env: Readonly<Record<string, string>>): Promise<void> {
@@ -766,6 +858,266 @@ export class DockerProvider implements SandboxProvider {
       hostAlias: DEFAULT_HOST_TARGET,
     });
     if (problem !== undefined) throw this.networkError(workspaceId, problem);
+  }
+
+  /**
+   * ADR-0006 amendment 5 decision 11: every container, network and volume labelled as ours,
+   * the networks a former product name left behind, and the daemon's address pools. GET only.
+   */
+  async listHostResources(): Promise<HostResourceInventory> {
+    const label = encodeURIComponent(JSON.stringify({ label: [`${MANAGED_LABEL}=true`] }));
+    const { json: containers } = await this.client.expect<ContainerSummary[]>(
+      "GET",
+      `/containers/json?all=true&size=true&filters=${label}`,
+    );
+    const resources: HostResource[] = [];
+    for (const c of containers) {
+      const workspaceId = c.Labels?.[WORKSPACE_LABEL];
+      const role = c.Labels?.[ROLE_LABEL];
+      if (c.Labels?.[MANAGED_LABEL] !== "true" || workspaceId === undefined) continue;
+      const resource: HostResource = {
+        kind: "container",
+        name: (c.Names?.[0] ?? c.Id).replace(/^\//, ""),
+        id: c.Id,
+        workspaceId,
+        ...(role === undefined ? {} : { role }),
+        ...(c.Created === undefined ? {} : { createdAt: new Date(c.Created * 1000).toISOString() }),
+        ...(c.SizeRw === undefined ? {} : { sizeBytes: c.SizeRw }),
+        state: c.State,
+      };
+      if (role === "workspace") {
+        const problem = await this.topologyOf(c.Id, workspaceId as WorkspaceId);
+        if (problem !== undefined) resource.topologyProblem = problem;
+        if (c.State === "running") resource.sidecarProcesses = await this.sidecarProcesses(c.Id);
+      }
+      resources.push(resource);
+    }
+    const { json: networks } = await this.client.expect<NetworkListEntry[]>("GET", "/networks");
+    for (const n of networks) {
+      const own = n.Labels?.[MANAGED_LABEL] === "true" ? n.Labels?.[WORKSPACE_LABEL] : undefined;
+      const former = own === undefined ? formerNameNetwork(n, RESOURCE_PREFIX) : undefined;
+      if (own === undefined && former === undefined) continue;
+      const inspected = await this.inspectNetwork(n.Name);
+      const workspaceId = own ?? former?.workspaceId;
+      resources.push({
+        kind: "network",
+        name: n.Name,
+        id: n.Id,
+        ...(workspaceId === undefined ? {} : { workspaceId }),
+        role: own === undefined ? "legacy" : "workspace",
+        ...(n.Created === undefined ? {} : { createdAt: new Date(n.Created).toISOString() }),
+        attachedContainers: Object.keys(inspected?.Containers ?? {}).length,
+      });
+    }
+    const { json: volumes } = await this.client.expect<{ Volumes?: VolumeListEntry[] | null }>(
+      "GET",
+      `/volumes?filters=${label}`,
+    );
+    const sizes = await this.volumeSizes();
+    for (const v of volumes.Volumes ?? []) {
+      const workspaceId = v.Labels?.[WORKSPACE_LABEL];
+      if (v.Labels?.[MANAGED_LABEL] !== "true" || workspaceId === undefined) continue;
+      const size = sizes.get(v.Name);
+      resources.push({
+        kind: "volume",
+        name: v.Name,
+        id: v.Name,
+        workspaceId,
+        role: "volume",
+        ...(v.CreatedAt === undefined ? {} : { createdAt: new Date(v.CreatedAt).toISOString() }),
+        ...(size === undefined ? {} : { sizeBytes: size }),
+      });
+    }
+    const { json: info } = await this.client.expect<DaemonInfo>("GET", "/info");
+    const pools = (info.DefaultAddressPools ?? []).map((p) => ({ base: p.Base, size: p.Size }));
+    return {
+      resources,
+      ...(pools.length > 0 ? { addressPools: pools } : {}),
+      subnets: networkSubnetsOf(networks),
+    };
+  }
+
+  /**
+   * Decision 13: remove what a finding names, each piece's ownership checked again. A workspace:
+   * its containers (the workspace container first, then the proxy), its labelled networks, then
+   * its labelled volumes unless they are kept. A former-name network: only while nothing is
+   * attached, and only when the former-name rule still matches it.
+   */
+  async removeHostResources(target: HostResourceTarget): Promise<HostResource[]> {
+    const removed: HostResource[] = [];
+    if (target.kind === "network") {
+      const network = await this.inspectNetwork(target.name);
+      if (network === undefined) return removed;
+      if (formerNameNetwork(network, RESOURCE_PREFIX) === undefined)
+        throw new DeskmatesError(
+          "validation",
+          `network ${target.name} is not a former-name network`,
+        );
+      if (Object.keys(network.Containers ?? {}).length > 0)
+        throw new DeskmatesError(
+          "invalid_transition",
+          `network ${target.name} still has containers attached`,
+          { reason: "network_in_use" },
+        );
+      await this.removeNetwork(network.Name);
+      return [{ kind: "network", name: network.Name, id: network.Id, role: "legacy" }];
+    }
+    const { workspaceId } = target;
+    const owned = (labels: Record<string, string> | null | undefined) =>
+      labels?.[WORKSPACE_LABEL] === workspaceId && labels?.[MANAGED_LABEL] === "true";
+    const filters = encodeURIComponent(
+      JSON.stringify({ label: [`${WORKSPACE_LABEL}=${workspaceId}`, `${MANAGED_LABEL}=true`] }),
+    );
+    const { json: containers } = await this.client.expect<ContainerSummary[]>(
+      "GET",
+      `/containers/json?all=true&filters=${filters}`,
+    );
+    const rank = (c: ContainerSummary) =>
+      c.Labels?.[ROLE_LABEL] === "workspace"
+        ? 0
+        : c.Labels?.[ROLE_LABEL] === EGRESS_PROXY_ROLE
+          ? 1
+          : 2;
+    for (const c of containers.filter((c) => owned(c.Labels)).sort((a, b) => rank(a) - rank(b))) {
+      await this.removeContainer(c.Id);
+      removed.push({
+        kind: "container",
+        name: (c.Names?.[0] ?? c.Id).replace(/^\//, ""),
+        id: c.Id,
+        workspaceId,
+        ...(c.Labels?.[ROLE_LABEL] === undefined ? {} : { role: c.Labels[ROLE_LABEL] }),
+      });
+    }
+    const { json: networks } = await this.client.expect<NetworkListEntry[]>(
+      "GET",
+      `/networks?filters=${filters}`,
+    );
+    for (const n of networks.filter((n) => owned(n.Labels))) {
+      await this.removeNetwork(n.Name);
+      removed.push({ kind: "network", name: n.Name, id: n.Id, workspaceId, role: "workspace" });
+    }
+    if (target.keepVolumes) return removed;
+    const { json: volumes } = await this.client.expect<{ Volumes?: VolumeListEntry[] | null }>(
+      "GET",
+      `/volumes?filters=${filters}`,
+    );
+    for (const v of (volumes.Volumes ?? []).filter((v) => owned(v.Labels))) {
+      const res = await this.client.request(
+        "DELETE",
+        `/volumes/${encodeURIComponent(v.Name)}?force=true`,
+      );
+      if (![204, 404].includes(res.status))
+        throw dockerApiError("DELETE", `/volumes/${v.Name}`, res);
+      removed.push({ kind: "volume", name: v.Name, id: v.Name, workspaceId, role: "volume" });
+    }
+    return removed;
+  }
+
+  /**
+   * Decision 13: `repinProxy` generalised to any network. The workspace container and its proxy
+   * leave every network that is not theirs, the workspace network is created when missing, both
+   * join it with their aliases (the proxy at the address the workspace pins, when the daemon can
+   * give it), and the container is inspected again. Nothing is recreated.
+   */
+  async reattachWorkspaceNetwork(workspaceId: WorkspaceId): Promise<{ problem?: string }> {
+    const found = await this.findManagedContainer(workspaceId, "workspace");
+    if (found === undefined)
+      throw new DeskmatesError("not_found", `workspace ${workspaceId} has no container`, {
+        workspaceId,
+      });
+    const workspace = await this.inspect(found.Id);
+    const expected = networkName(workspaceId);
+    await this.ensureOutboundNetwork();
+    await this.ensureWorkspaceNetwork(workspaceId, workspace.Config.Labels?.[TENANT_LABEL]);
+    const endpoints = workspace.NetworkSettings.Networks ?? {};
+    let aliases: string[] = [];
+    for (const [name, endpoint] of Object.entries(endpoints)) {
+      if (name === expected) continue;
+      // Docker lists the container's own short id among the aliases; it adds that one itself.
+      if (aliases.length === 0)
+        aliases = (endpoint.Aliases ?? []).filter((alias) => !workspace.Id.startsWith(alias));
+      await this.disconnectNetwork(name, workspace.Id);
+    }
+    if (endpoints[expected] === undefined)
+      await this.connectNetwork(
+        expected,
+        workspace.Id,
+        aliases.length === 0 ? undefined : { Aliases: aliases },
+      );
+    const pinned = proxyIpFromExtraHosts(workspace.HostConfig?.ExtraHosts);
+    const proxySummary = await this.findManagedContainer(workspaceId, EGRESS_PROXY_ROLE);
+    if (proxySummary !== undefined) {
+      const proxy = await this.inspect(proxySummary.Id);
+      const proxyEndpoints = proxy.NetworkSettings.Networks ?? {};
+      for (const name of Object.keys(proxyEndpoints))
+        if (name !== expected && name !== EGRESS_OUTBOUND_NETWORK)
+          await this.disconnectNetwork(name, proxy.Id);
+      if (proxyEndpoints[expected] === undefined) {
+        try {
+          await this.connectNetwork(expected, proxy.Id, {
+            Aliases: ["egress-proxy"],
+            ...(pinned === undefined ? {} : { IPAMConfig: { IPv4Address: pinned } }),
+          });
+        } catch (error) {
+          // The pinned address belongs to another subnet or is taken: join without it, and let
+          // the inspection below report the stale pin rather than leave the proxy off-network.
+          if (pinned === undefined) throw error;
+          await this.connectNetwork(expected, proxy.Id, { Aliases: ["egress-proxy"] });
+        }
+      }
+      if (proxyEndpoints[EGRESS_OUTBOUND_NETWORK] === undefined)
+        await this.connectNetwork(EGRESS_OUTBOUND_NETWORK, proxy.Id);
+    }
+    const problem = await this.topologyOf(workspace.Id, workspaceId);
+    if (problem !== undefined) return { problem };
+    const proxyNow = proxySummary === undefined ? undefined : await this.inspect(proxySummary.Id);
+    if (
+      pinned === undefined ||
+      proxyNow?.NetworkSettings.Networks?.[expected]?.IPAddress !== pinned
+    )
+      return { problem: "workspace egress-proxy address is missing or stale" };
+    return {};
+  }
+
+  /** The topology rule `verifyTopology` applies, as a verdict; undefined when accepted. */
+  private async topologyOf(id: string, workspaceId: WorkspaceId): Promise<string | undefined> {
+    return topologyProblem(await this.inspect(id), {
+      labels: {
+        [WORKSPACE_LABEL]: workspaceId,
+        [MANAGED_LABEL]: "true",
+        [ROLE_LABEL]: "workspace",
+      },
+      network: networkName(workspaceId),
+      hostAlias: DEFAULT_HOST_TARGET,
+    });
+  }
+
+  /** Sidecar processes in a running container: some Gateway's run is executing there. */
+  private async sidecarProcesses(id: string): Promise<number> {
+    const res = await this.client.request("GET", `/containers/${id}/top`);
+    if (res.status !== 200) return 0;
+    const top = JSON.parse(res.body) as { Titles?: string[]; Processes?: string[][] | null };
+    const column = Math.max(
+      0,
+      (top.Titles ?? []).findIndex((t) => t === "CMD" || t === "COMMAND"),
+    );
+    return (top.Processes ?? []).filter((p) =>
+      (p[column] ?? p.join(" ")).includes("deskmates-sidecar"),
+    ).length;
+  }
+
+  /** Volume sizes from the daemon's disk usage; empty when it cannot tell. */
+  private async volumeSizes(): Promise<Map<string, number>> {
+    const sizes = new Map<string, number>();
+    const res = await this.client.request("GET", "/system/df?type=volume");
+    if (res.status !== 200) return sizes;
+    const df = JSON.parse(res.body) as {
+      Volumes?: { Name: string; UsageData?: { Size?: number } | null }[] | null;
+    };
+    for (const v of df.Volumes ?? [])
+      if (v.UsageData?.Size !== undefined && v.UsageData.Size >= 0)
+        sizes.set(v.Name, v.UsageData.Size);
+    return sizes;
   }
 
   async snapshot(handle: SandboxHandle): Promise<SandboxSnapshot> {
@@ -1138,6 +1490,7 @@ export class DockerProvider implements SandboxProvider {
     workspaceId: WorkspaceId,
     repairMissing = false,
     repairInternalIp?: string,
+    repairTenantId?: string,
   ): Promise<ContainerInspect> {
     let found = await this.findManagedContainer(workspaceId, EGRESS_PROXY_ROLE);
     if (found === undefined && repairMissing) {
@@ -1147,7 +1500,7 @@ export class DockerProvider implements SandboxProvider {
           "cannot safely repair proxy without its pinned address",
         );
       }
-      const id = await this.createProxy(workspaceId, [], repairInternalIp);
+      const id = await this.createProxy(workspaceId, [], repairInternalIp, repairTenantId);
       found = { Id: id, State: "running", Labels: {} };
     }
     if (found === undefined)
@@ -1292,6 +1645,24 @@ export class DockerProvider implements SandboxProvider {
   private async restart(id: string): Promise<void> {
     const res = await this.client.request("POST", `/containers/${id}/restart?t=10`);
     if (res.status !== 204) throw dockerApiError("POST", `/containers/${id}/restart`, res);
+  }
+
+  /**
+   * An image's labels on this daemon; inspect only, never a pull (ADR-0048 decision 11: the
+   * Gateway reads the desktop capability before the tools can be enabled).
+   */
+  async imageLabels(image: string): Promise<Readonly<Record<string, string>>> {
+    const path = `/images/${encodeURIComponent(image)}/json`;
+    const res = await this.client.request("GET", path);
+    if (res.status === 404) {
+      throw new DeskmatesError("sandbox_unavailable", `image not found: ${image}`, {
+        reason: "image_missing",
+        image,
+      });
+    }
+    if (res.status !== 200) throw dockerApiError("GET", path, res);
+    const inspect = JSON.parse(res.body) as { Config?: { Labels?: Record<string, string> | null } };
+    return inspect.Config?.Labels ?? {};
   }
 
   /** The content ID an image reference names on this daemon; inspect only, never a pull. */
@@ -1506,18 +1877,32 @@ export class DockerProvider implements SandboxProvider {
 
   /** Kill every process in the container whose environment carries the exec marker. */
   private async killByMarker(containerId: string, marker: string): Promise<void> {
+    await this.killByEnv(containerId, EXEC_MARKER_ENV, marker);
+  }
+
+  /** Kill every process in the container whose environment has `key=value`. */
+  private async killByEnv(containerId: string, key: string, value: string): Promise<void> {
     // tr + grep -x rather than grep -z: busybox grep (alpine) has no -z.
     const script =
-      'for p in /proc/[0-9]*; do tr "\\0" "\\n" < "$p/environ" 2>/dev/null | grep -qx "DESKMATES_EXEC_ID=$0" ' +
+      "if test -f /usr/local/lib/deskmates/run-supervisor.py; then " +
+      'exec python3 /usr/local/lib/deskmates/run-supervisor.py stop "$0" "$1"; fi; ' +
+      'for p in /proc/[0-9]*; do tr "\\0" "\\n" < "$p/environ" 2>/dev/null | grep -qx "$0=$1" ' +
       '&& kill -9 "${p#/proc/}" 2>/dev/null; done; exit 0';
     try {
-      await this.runExec(
+      const result = await this.runExec(
         containerId,
-        { cmd: ["/bin/sh", "-c", script, marker], timeoutMs: 10_000 },
+        { cmd: ["/bin/sh", "-c", script, key, value], timeoutMs: 10_000 },
         randomUUID(),
       );
-    } catch {
-      // Best effort: the container may already be gone.
+      if (result.timedOut || result.exitCode !== 0)
+        throw new DeskmatesError("sandbox_unavailable", "run descendant cleanup not confirmed", {
+          reason: "cleanup_failed",
+          stderr: result.stderr,
+        });
+    } catch (error) {
+      // A disappeared container has no surviving descendants; other cleanup errors matter.
+      const inspect = await this.client.request("GET", `/containers/${containerId}/json`);
+      if (inspect.status !== 404) throw error;
     }
   }
 }

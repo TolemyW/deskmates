@@ -8,11 +8,11 @@ import {
 } from "./network-profile.js";
 import { egressAllows } from "./workspace.js";
 
-const subnet = { kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [23001] };
+const subnet = { kind: "subnet", cidr: "10.88.30.0/24", schemes: ["http"], ports: [23001] };
 const host = {
   kind: "host",
   hostname: "console.vendordb.lan",
-  address: "10.20.36.35",
+  address: "10.88.36.35",
   schemes: ["https"],
   ports: [443, 8443],
 };
@@ -25,7 +25,7 @@ describe("network rule parsing (ADR-0027 amendment 1 decision 9)", () => {
         host,
       ]),
     ).toEqual([
-      { kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http", "https"], ports: [80, 8080] },
+      { kind: "subnet", cidr: "10.88.30.0/24", schemes: ["http", "https"], ports: [80, 8080] },
       host,
     ]);
     expect(parseNetworkRules([{ ...subnet, cidr: "10.0.0.0/8" }])[0]).toMatchObject({
@@ -37,7 +37,7 @@ describe("network rule parsing (ADR-0027 amendment 1 decision 9)", () => {
   it.each([
     ["public cidr", { ...subnet, cidr: "8.8.8.0/24" }],
     ["cidr wider than its block", { ...subnet, cidr: "172.0.0.0/8" }],
-    ["host bits set", { ...subnet, cidr: "10.20.30.1/24" }],
+    ["host bits set", { ...subnet, cidr: "10.88.30.1/24" }],
     ["CGNAT", { ...subnet, cidr: "100.64.0.0/10" }],
     ["link-local metadata", { ...subnet, cidr: "169.254.169.254/32" }],
     ["loopback", { ...subnet, cidr: "127.0.0.0/8" }],
@@ -50,7 +50,7 @@ describe("network rule parsing (ADR-0027 amendment 1 decision 9)", () => {
     ["too many ports", { ...subnet, ports: Array.from({ length: 17 }, (_, i) => i + 1) }],
     ["no ports", { ...subnet, ports: [] }],
     ["wildcard host", { ...host, hostname: "*.vendordb.lan" }],
-    ["IP-literal hostname", { ...host, hostname: "10.20.36.35" }],
+    ["IP-literal hostname", { ...host, hostname: "10.88.36.35" }],
     ["reserved host", { ...host, hostname: "host.docker.internal" }],
     ["localhost name", { ...host, hostname: "a.localhost" }],
     ["uppercase host", { ...host, hostname: "Console.vendordb.lan" }],
@@ -80,18 +80,18 @@ describe("network rule parsing (ADR-0027 amendment 1 decision 9)", () => {
 describe("network grant matching (decisions 10 and 11)", () => {
   const grants = parseNetworkRules([subnet, host]) as NetworkGrant[];
   it.each([
-    ["http://10.20.30.24:23001/", true],
-    ["http://10.20.30.24:23001/path?q=1", true],
-    ["https://10.20.30.24:23001/", false],
-    ["http://10.20.30.24/", false],
-    ["http://10.20.31.24:23001/", false],
-    ["http://0x0a.20.30.24:23001/", true],
+    ["http://10.88.30.24:23001/", true],
+    ["http://10.88.30.24:23001/path?q=1", true],
+    ["https://10.88.30.24:23001/", false],
+    ["http://10.88.30.24/", false],
+    ["http://10.88.31.24:23001/", false],
+    ["http://0x0a.88.30.24:23001/", true],
     ["https://console.vendordb.lan/", true],
     ["https://console.vendordb.lan:8443/x", true],
     ["http://console.vendordb.lan/", false],
     ["https://sub.console.vendordb.lan/", false],
     ["https://user:pw@console.vendordb.lan/", false],
-    ["ftp://10.20.30.24:23001/", false],
+    ["ftp://10.88.30.24:23001/", false],
     ["not a url", false],
   ])("%s -> %s", (url, allowed) => {
     expect(networkGrantAllowsUrl(grants, url)).toBe(allowed);
@@ -99,13 +99,13 @@ describe("network grant matching (decisions 10 and 11)", () => {
 
   it("denies an expired grant", () => {
     const expiring = [{ ...(grants[0] as NetworkGrant), expiresAt: "2026-10-14T00:00:00Z" }];
-    const target = { scheme: "http", host: "10.20.30.24", port: 23001 };
+    const target = { scheme: "http", host: "10.88.30.24", port: 23001 };
     expect(networkGrantFor(expiring, target, Date.parse("2026-10-13T23:59:59Z"))).toBeDefined();
     expect(networkGrantFor(expiring, target, Date.parse("2026-10-14T00:00:00Z"))).toBeUndefined();
   });
 
   it("never lets the public allowlist admit a private target", () => {
-    expect(egressAllows("10.20.30.24", ["*"])).toBe(false);
-    expect(networkGrantAllowsUrl([], "http://10.20.30.24:23001/")).toBe(false);
+    expect(egressAllows("10.88.30.24", ["*"])).toBe(false);
+    expect(networkGrantAllowsUrl([], "http://10.88.30.24:23001/")).toBe(false);
   });
 });

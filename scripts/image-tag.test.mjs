@@ -52,7 +52,15 @@ describe("image inputs", () => {
     put("images/connector-postgres/Dockerfile", "FROM node\n");
     put("package.json", "{}");
     put("package-lock.json", "{}");
-    for (const pkg of ["channels", "gateway", "golden-site", "sandbox-docker", "testkit", "web"])
+    for (const pkg of [
+      "channels",
+      "gateway",
+      "golden-site",
+      "observability-dashboards",
+      "sandbox-docker",
+      "testkit",
+      "web",
+    ])
       put(`packages/${pkg}/package.json`, "{}");
     put("packages/channels/deskmates-agent-mcp/package.json", "{}");
     put("packages/connector-postgres/package.json", "{}");
@@ -110,6 +118,22 @@ describe("input hash", () => {
     expect(inputHash(root, "base")).not.toBe(base);
     expect(inputHash(root, "workspace")).not.toBe(appChanged);
     expect(imageInputs(root, "base")).toEqual(["images/workspace-base/Dockerfile"]);
+  });
+
+  it("hashes the Grafana image from images/grafana alone, not the provisioning it mounts", () => {
+    put("images/grafana/Dockerfile", "FROM grafana\n");
+    put("observability/grafana/sqlite/dashboards/agent-runs.json", "{}");
+    expect(imageInputs(root, "grafana")).toEqual(["images/grafana/Dockerfile"]);
+    const grafana = inputHash(root, "grafana");
+    put("observability/grafana/sqlite/dashboards/agent-runs.json", '{"changed":true}');
+    put("packages/sidecar/dist/index.js", "changed");
+    expect(inputHash(root, "grafana")).toBe(grafana);
+    put("images/grafana/Dockerfile", "FROM grafana\nARG SQLITE_DATASOURCE_VERSION=2\n");
+    expect(inputHash(root, "grafana")).not.toBe(grafana);
+    expect(imageTag("grafana", "amd64", "0123456789ab")).toBe(
+      "deskmates/grafana:amd64-0123456789ab",
+    );
+    expect(sourceInputs("grafana")).toEqual(["images/grafana"]);
   });
 
   it("keeps the egress hash independent of the sidecar", () => {

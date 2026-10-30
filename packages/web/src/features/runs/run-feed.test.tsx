@@ -25,6 +25,11 @@ function Feed({ api, scope }: { api: ApiClient; scope: RunFeedScope }) {
   const feed = useRunFeed(api, scope);
   return (
     <div>
+      {feed.loading ? <output>Loading feed</output> : null}
+      {feed.error ? <p role="alert">{feed.error}</p> : null}
+      <button type="button" onClick={() => void feed.reload()}>
+        reload
+      </button>
       <ul>
         {[...feed.runs]
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -50,6 +55,24 @@ const BOT_B = "bot_b" as BotId;
 describe("run feed (#113 R)", () => {
   beforeEach(() => installFakeEventSource());
   afterEach(() => cleanup());
+
+  it("recovers a failed first page with its older-page cursor", async () => {
+    const listRuns = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("temporarily unavailable"))
+      .mockResolvedValueOnce({ runs: [r("recovered", 8)], nextCursor: "older-cursor" })
+      .mockResolvedValueOnce({ runs: [r("older", 1)] });
+    render(<Feed api={{ listRuns } as unknown as ApiClient} scope={{ botId: BOT_A }} />);
+    expect(screen.getByText("Loading feed")).toBeInTheDocument();
+    await screen.findByRole("alert");
+    expect(screen.queryByText("Loading feed")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "reload" }));
+    await screen.findByText("recovered:succeeded");
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "older" }));
+    await screen.findByText("older:succeeded");
+    expect(listRuns).toHaveBeenLastCalledWith({ botId: BOT_A, cursor: "older-cursor" });
+  });
 
   it("appends older pages by cursor and merges a live run on top", async () => {
     const listRuns = vi.fn(async (filter: { cursor?: string }) =>

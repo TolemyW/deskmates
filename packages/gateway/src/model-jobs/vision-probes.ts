@@ -250,7 +250,7 @@ export class VisionProbes {
       const run = this.ctx.runs.create({
         botId: host.id,
         lane: "background",
-        triggerKind: "cron",
+        triggerKind: "model_job",
         triggerRef: `${VISION_PROBE}:${id}`,
         triggerPayload: { prompt: "" },
         config: {

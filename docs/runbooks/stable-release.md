@@ -16,11 +16,22 @@ moves only between tagged releases, and every move can be undone.
 | 3. Ship | workstation | `scripts/stable/ship.sh vX.Y.Z` | manifest names the tag's commit and the base by digest and image ID; base transferred only if the host lacks it |
 | 4. Install | Testbox | `stable.sh install vX.Y.Z` | `npm ci`, Gateway, release-bundled channel plugin manifest and Web build; source hashes to the manifest's base; app and egress images built offline |
 | 5. Verify | Testbox | `stable.sh verify vX.Y.Z` | T0/T1 (`npm test`) in the release directory, then T2 against exactly those image IDs, no model credentials: the smoke subset for a patch tag, the full suite for `vX.Y.0` (`T2_SCOPE=full\|smoke` overrides) |
-| 6. Activate | Testbox | `stable.sh activate vX.Y.Z` | no active runs; new release reports its version, else automatic rollback |
+| 6. Activate | Testbox | `stable.sh activate vX.Y.Z` | a drain parks every active run at a safe point (ADR-0029); new release reports its version, else automatic rollback |
 
 `scripts/stable/ship.sh vX.Y.Z --run` does 3 to 6 in one go.
 `stable.sh` lives inside each release, at
 `~/Data/deskmates-stable/releases/vX.Y.Z/scripts/stable/stable.sh`.
+
+**Packaging is not host acceptance.** `release-manifest.json` is immutable packaging
+metadata. Its `gates.t2` says `external`, not a lasting `pending` or a predicted
+`passed`: packaging does not run the host gate. The authoritative latest host
+result is `.release/t2.json` (version, scope, exit code and exact image IDs), with
+test/file counts and conditional skips in `.release/t2.log`. `stable.sh status`
+reports that receipt as passed, failed or unknown, alongside lifecycle markers.
+A missing, unreadable, mismatched or malformed receipt is unknown, never a pass;
+a failed full repeat is shown even if an older passed marker remains. A successful
+receipt does not mean conditional tests ran. Old published manifests are not
+rewritten; use their host receipts and dated release records too.
 
 **One command for a patch of `main`.** From the workstation, right after a merge:
 
@@ -47,6 +58,9 @@ Pass `LOCAL_BASE=1` to `ship.sh` too when the workstation cannot pull from GHCR:
 `ship.sh` retries the pull five times before giving up. A base built on the host downloads its
 Ubuntu packages there; set `APT_MIRROR` in the deployment's `.env` to a nearby mirror (the
 official archive ran at about 70 KB/s from Testbox on 2026-10-14, 33 minutes for one build).
+Its global npm packages come from the `npm_config_registry` that `install` runs with (the
+official registry reset the connection on the large SDK packages from the stable host on
+2026-10-27, twice in a row, while the mirror answered in 0.1 s).
 
 Measured on 2026-10-12 for v0.5.9 (frontend only), merge to live by hand: `main` ci 5.2 min,
 release workflow 3.0 min, ship 0.6 min, install 0.4 min, T2 smoke 0.8 min, activate under 0.1
@@ -140,7 +154,7 @@ Testbox stores no GitHub credential.
 
 The Gateway serves the built UI on the operator listener
 (`OPERATOR_BIND=0.0.0.0`, port 18381), so colleagues open
-`http://10.20.40.132:18381/` and paste the operator token. The sandbox
+`http://10.88.40.132:18381/` and paste the operator token. The sandbox
 listener is on 18380. There is one shared operator token: whoever has it has
 full operator rights. Rotate it by editing `shared/.env` and restarting the
 unit.
@@ -229,7 +243,11 @@ prints every change without touching anything.
    one run per workspace and check the browser login state and `/work` files survived. Then
    `import-legacy-instance.sh retire` removes the legacy workspace containers and networks and
    disables the legacy unit. Legacy volumes and root stay for rollback; remove them by hand later.
-   Repoint anything that read the legacy database path (collectors, dashboards).
+   Repoint anything that read the legacy database path (collectors, dashboards). Former-name
+   networks `retire` did not reach (workspaces no longer in the legacy database, the former
+   egress network) are listed on the Network page under Host resources as "Network of a former
+   product name"; Remove them there once no container is attached
+   ([host resources](../../packages/gateway/docs/host-resources.md)).
 
 Rollback before `retire`: stop the new unit, start the legacy unit; nothing of the legacy
 instance was changed. After `retire`: restore the legacy root's hand-over backup and start its
@@ -237,14 +255,58 @@ unit again; runs and messages written to the new instance since the cutover are 
 
 ## Upgrading
 
-`scripts/stable/ship.sh vX.Y.Z --run`. Activation waits up to
-`DRAIN_TIMEOUT` seconds (default 600) for executing runs to finish; parked
-approval runs do not block it and resume on the new release. `FORCE=1`
-stops anyway. The database is copied (with its WAL) while the Gateway is
-stopped, then the new release starts and applies its migrations. On its
-first use after the switch, the Gateway recreates each workspace container
-whose image is not the release's, keeping the named volumes, so browser
-profile, files and home directory survive.
+`scripts/stable/ship.sh vX.Y.Z --run`. Activation drains the running Gateway
+to a safe point first ([ADR-0029](../adr/0029-upgrade-drain-and-restart-recovery.md)):
+
+1. `POST /api/runtime/drain`. From now on the Gateway starts and resumes no run,
+   while messages, approval decisions, webhooks and cron ticks are still accepted
+   and recorded; their runs wait in the queue for the next Gateway.
+2. Each active run hears of the drain on its next ledger batch and parks at its
+   next tool call as `waiting_platform`. The call has not run; the new Gateway
+   resumes the run on its SDK session and the hook judges the call again. A run
+   in a live approval wait parks the same way and keeps its approval open.
+   Parked approval runs never block the drain.
+3. When `GET /api/runtime` reports no active run, the Gateway stops, the database
+   is copied (with its WAL), the new release starts, applies its migrations and
+   resumes every run the drain parked as attempt n+1.
+4. A run that has no safe point within `DRAIN_BUDGET` seconds (default 120: a long
+   tool call or model turn) makes the script end the drain (`DELETE
+   /api/runtime/drain`) so the Gateway launches again, wait
+   `UPGRADE_RETRY_BACKOFF` seconds (default 600) and try again, `UPGRADE_ATTEMPTS`
+   times in all (default 3). After the last attempt it exits non-zero naming the
+   runs, and the old release keeps running. `DRAIN_POLL` (default 5) is the poll
+   interval. `DRAIN_TIMEOUT` is still read as the budget when `DRAIN_BUDGET` is
+   unset.
+5. `FORCE=1` stops the Gateway at the first budget miss without ending the drain.
+   The runs still active are then parked by the new Gateway's restart recovery:
+   their old sidecars are killed by run marker, their tokens revoked, and each is
+   resumed on its session; an interrupted tool call is never repeated by the
+   platform, and an interrupted L2 call asks a human again.
+
+A Gateway from before the drain route is waited on the old way: until no run is
+active or the budget passes. On its first use after the switch, the Gateway
+recreates each workspace container whose image is not the release's, keeping the
+named volumes, so browser profile, files and home directory survive.
+
+Cron minutes that pass while no Gateway runs are skipped, not fired later; the
+new Gateway logs them per entry. An entry with `misfire: "run_once"` fires one
+catch-up round instead. A cron round queued during the drain that cannot start
+before its minute is `CRON_MISFIRE_GRACE` minutes old (default 5) is cancelled as
+`cron_misfire`.
+
+More than three Gateway starts within ten minutes trip the restart breaker: live
+runs are parked as above but none resumes. `GET /api/runtime` reports
+`restartBreaker.tripped` and the held runs; the run drawer in the UI shows the
+hold to a platform operator, and `POST /api/runtime/platform-resume` (or the
+drawer's button) lets them go once the cause is fixed.
+
+**A release that changes the pinned Agent SDK** must pass the resume-compatibility
+check before activation: `acceptance/sdk-resume-compat.container.test.ts`, run
+with `DESKMATES_OLD_WORKSPACE_IMAGE` set to the current release's workspace image.
+A session parked by the old image has to resume on the new one. If it cannot,
+say in the release notes that parked runs will continue on a fresh session: the
+Gateway falls back to that by itself when a resume cannot read its session,
+handing the new session a handoff written from the ledger (ADR-0029 decision 10).
 
 ## Rolling back
 
@@ -386,7 +448,8 @@ The same Docker daemon runs test campaigns and other agents' instances.
   checkout's workspaces.
 - Never prune images or the build cache on Testbox.
 - T2 during `verify` starts its own short-lived containers; it does not touch
-  the running instance.
+  the running instance. While it runs, the instance's Host resources section lists its
+  workspaces as "No such workspace"; leave them, `stopStack` removes them when T2 ends.
 
 ## Operations
 
@@ -395,6 +458,9 @@ The same Docker daemon runs test campaigns and other agents' instances.
 - Logs: `journalctl --user -u deskmates-stable-gateway -f`.
 - Restart after editing `shared/.env`:
   `systemctl --user restart deskmates-stable-gateway`.
+- Grafana for run observability: `stable.sh grafana init|start|stop|status`, a container beside
+  the unit; after an `activate`, `grafana init` and `grafana start` move it to the new release's
+  dashboards ([Grafana runbook](grafana.md)).
 
 ## Verification records
 
@@ -410,3 +476,17 @@ demo instances) must remove its workspaces when it ends, by the ids in its
 own database, as `scripts/deploy-local.sh purge` does. Otherwise each leaked
 workspace keeps one Docker network, and the daemon's default address pools
 (about 30 networks) run out.
+
+T2 cleans up after itself: `stopStack` removes every resource labelled with each workspace the
+stack created, also when the test or the stack's start failed. Set
+`DESKMATES_T2_KEEP_WORKSPACE=1` to keep them for inspection; the teardown prints the ids it kept.
+
+To find what is left anyway, sign in as `admin` and open the Network page: Host resources lists
+every managed container, network and volume whose workspace is not in the database, archived
+workspaces whose runtime is still up, containers on the wrong network and networks of a former
+product name, with size, age and one action each (Remove, Re-attach), refused while a run is
+live. Before removing on a shared daemon, check `docker ps` and `docker network ls`: another
+Gateway's workspaces (a T2 run, a demo instance) are orphans to this one. The same report warns
+at Gateway start when the address pools run low, and `GET /api/runtime` reports `addressPools`;
+set `default-address-pools` in `/etc/docker/daemon.json` before they run out
+([2026-10-16 v0.7.2](../releases/2026-10-16-v0.7.2.md)).

@@ -1,4 +1,5 @@
 {
+  "computer.allowedDomains.manage": "Cambiar en la configuración del espacio de trabajo",
   "computer.context": "{name} · El navegador, los archivos y la shell que comparten todos los bots de este espacio de trabajo",
   "computer.desktops.intro": "La pantalla de cada bot y la opción de tomar el control del escritorio compartido están en su perfil.",
   "computer.desktops.loading": "Cargando bots…",
@@ -39,6 +40,9 @@
   "desktopView.live.control": "TIENES EL CONTROL",
   "desktopView.live.view": "EN DIRECTO · SOLO VISUALIZACIÓN",
   "desktopView.reconnect": "Volver a conectar",
+  "desktopView.screen": "Pantalla",
+  "desktopView.sharedFallback": "La pantalla de este Bot aún no está lista. Se muestra todo el espacio de trabajo; inicia su escritorio o actualiza la imagen para usar su pantalla.",
+  "desktopView.workspace": "Todo el espacio de trabajo",
   "desktops.empty.body": "Crea un espacio de trabajo y añade tu primer bot para empezar.",
   "desktops.empty.setup": "Configura tu espacio de trabajo",
   "desktops.empty.title": "Aquí aparecerán las pantallas de tu equipo.",

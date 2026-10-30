@@ -21,7 +21,7 @@ function pathForInject(path: string): string {
 }
 
 describe("operator authentication", () => {
-  it("rejects every registered /api route without the operator credential", async () => {
+  it("rejects every registered /api and /analytics route without the operator credential", async () => {
     const sandbox = buildGateway(testConfig(), new FakeProvider(), { startCron: false });
     apps.push(sandbox);
     await sandbox.ready();
@@ -30,8 +30,9 @@ describe("operator authentication", () => {
     routeApp.addHook("onRoute", (route) => {
       const methods = Array.isArray(route.method) ? route.method : [route.method];
       for (const method of methods) {
+        // The analytics relay to Grafana sits outside `/api` in the same guarded scope.
         if (
-          route.url.startsWith("/api/") &&
+          (route.url.startsWith("/api/") || route.url.startsWith("/analytics")) &&
           method !== "HEAD" &&
           !(`${method} ${route.url}` in OPERATOR_ROUTE_RULES)
         )
@@ -42,6 +43,7 @@ describe("operator authentication", () => {
     await routeApp.ready();
     try {
       expect(routes.length).toBeGreaterThan(20);
+      expect(routes.filter((route) => route.url.startsWith("/analytics")).length).toBe(10);
       for (const route of routes) {
         const response = await routeApp.inject({
           method: route.method as "GET",
@@ -126,6 +128,37 @@ describe("operator authentication", () => {
         })
       ).statusCode,
     ).toBe(200);
+
+    // ADR-0029 decision 1: the drain and the breaker's resume are operator routes. A run token,
+    // the credential a draining run holds, starts or ends no drain, and the sandbox listener
+    // serves neither.
+    for (const [method, url] of [
+      ["POST", "/api/runtime/drain"],
+      ["DELETE", "/api/runtime/drain"],
+      ["POST", "/api/runtime/platform-resume"],
+    ] as const) {
+      const asRun = await operator.inject({
+        method,
+        url,
+        headers: { authorization: `Bearer ${runToken}` },
+      });
+      expect(asRun.statusCode, `${method} ${url} with a run token`).toBe(401);
+      const onSandbox = await sandbox.inject({
+        method,
+        url,
+        headers: { authorization: `Bearer ${runToken}` },
+      });
+      expect(onSandbox.statusCode, `${method} ${url} on the sandbox listener`).toBe(404);
+    }
+    expect(sandbox.deskmates.scheduler.draining).toBe(false);
+    const drained = await operator.inject({
+      method: "POST",
+      url: "/api/runtime/drain",
+      headers: { authorization: `Bearer ${TEST_OPERATOR_TOKEN}` },
+    });
+    expect(drained.statusCode).toBe(200);
+    expect(sandbox.deskmates.scheduler.draining).toBe(true);
+    sandbox.deskmates.scheduler.endDrain();
 
     expect((await sandbox.inject({ method: "GET", url: "/api/workspaces" })).statusCode).toBe(404);
     expect(

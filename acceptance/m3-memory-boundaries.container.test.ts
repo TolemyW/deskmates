@@ -120,6 +120,7 @@ describe.skipIf(!available)("M3 learned memory trust and workspace boundaries (T
     // Workspace B is a Gateway row with no container: its memory lives in the Gateway database,
     // which is the boundary under test, and nothing here runs in B.
     const other = await stack.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+      defaultBot: false,
       name: "m0-m3-memory-b",
       egressAllowlist: [],
     });

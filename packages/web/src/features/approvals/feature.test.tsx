@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// T0: the Attention navigation entry, its pending-count badge, and the inbox screen.
+// T0: the Approvals navigation entry, its pending-count badge, and the inbox screen.
 
 import type { ApprovalId } from "@deskmates/contracts";
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
@@ -22,10 +22,10 @@ describeNavEntry({
   folder: "approvals",
   feature,
   group: "talk",
-  order: 40,
+  order: 30,
   icon: ShieldCheck,
   label: "app.nav.attention",
-  english: "Attention",
+  english: "Approvals",
   href: "#/approvals",
   currentAt: ["#/approvals"],
   visibleTo: { manager: true, member: true },
@@ -45,5 +45,5 @@ it("counts the pending approvals and names the link with the count", async () =>
   const ctx = { ...STUB_CONTEXT, api: createApiClient({ fetch }) };
   const { result } = renderHook(() => badge?.useCount(ctx));
   await waitFor(() => expect(result.current).toBe(2));
-  expect(badge?.name(currentI18n().t, 2)).toBe("Attention, 2 pending");
+  expect(badge?.name(currentI18n().t, 2)).toBe("Approvals, 2 pending");
 });

@@ -7,14 +7,28 @@ import type { ProposedSkill } from "./skill.js";
 /** Interactive: chat threads and approval replies. Background: cron, webhook, bus threads. */
 export type RunLane = "interactive" | "background";
 
-/** `manual`: an operator's "Run now" on one cron entry (ADR-0043); a background run like cron. */
-export type RunTriggerKind =
-  | "thread_message"
-  | "cron"
-  | "webhook"
-  | "approval"
-  | "welcome"
-  | "manual";
+/**
+ * What created a run. `manual`: an operator's "Run now" on one cron entry (ADR-0043); a
+ * background run like cron. `model_job`: a Gateway model job (ADR-0023 amendment 1: round
+ * triage, SOUL proposals, status inquiries, vision probes, approval review and presentation,
+ * Activity summaries, memory recheck, organisation and consolidation), so analytics never count
+ * one as a cron run (issue #39 item 7). Its `runs.config_json.runType` names the job.
+ */
+export const RUN_TRIGGER_KINDS = [
+  "thread_message",
+  "cron",
+  "webhook",
+  "approval",
+  "welcome",
+  "manual",
+  "model_job",
+] as const;
+
+export type RunTriggerKind = (typeof RUN_TRIGGER_KINDS)[number];
+
+export function isRunTriggerKind(value: unknown): value is RunTriggerKind {
+  return typeof value === "string" && (RUN_TRIGGER_KINDS as readonly string[]).includes(value);
+}
 
 export type RunStatus =
   | "queued"
@@ -24,6 +38,7 @@ export type RunStatus =
   | "waiting_approval"
   | "waiting_browser"
   | "waiting_continuation"
+  | "waiting_platform"
   | "succeeded"
   | "silent"
   | "failed"
@@ -38,11 +53,16 @@ export const TERMINAL_RUN_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>(
   "stopped",
 ]);
 
-/** Statuses in which the run is parked and its sidecar process may have exited. */
+/**
+ * Statuses in which the run is parked and its sidecar process may have exited. `waiting_platform`
+ * is a run the platform stopped at a safe point or a restart, not its own work (ADR-0029
+ * decisions 2 and 4); the Gateway continues it on its own.
+ */
 export const PARKED_RUN_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>([
   "waiting_approval",
   "waiting_browser",
   "waiting_continuation",
+  "waiting_platform",
 ]);
 
 /**
@@ -64,6 +84,8 @@ export const EXECUTING_RUN_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>
  *   running → waiting_approval → running
  *   running → waiting_browser → running
  *   running → stalled → running (issue #9; never terminal, never a kill)
+ *   running → waiting_platform → running | waiting_approval (ADR-0029: a drain or a restart)
+ *   running → queued (ADR-0029 decision 4: a restart requeues a run that never reached the SDK)
  *
  * A `stalled` run may go wherever a `running` one may: its next event can be its end.
  * `cancelled` is reachable from every non-terminal state; `failed` from every non-terminal state
@@ -73,6 +95,7 @@ export const EXECUTING_RUN_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>
 const RUN_TRANSITIONS: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
   queued: ["running", "failed", "cancelled"],
   running: [
+    "queued",
     "succeeded",
     "silent",
     "failed",
@@ -82,8 +105,10 @@ const RUN_TRANSITIONS: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
     "waiting_approval",
     "waiting_browser",
     "waiting_continuation",
+    "waiting_platform",
   ],
   stalled: [
+    "queued",
     "running",
     "succeeded",
     "silent",
@@ -93,11 +118,21 @@ const RUN_TRANSITIONS: Readonly<Record<RunStatus, readonly RunStatus[]>> = {
     "waiting_approval",
     "waiting_browser",
     "waiting_continuation",
+    "waiting_platform",
   ],
-  waiting_approval_live: ["running", "waiting_approval", "failed", "cancelled"],
+  waiting_approval_live: [
+    "queued",
+    "running",
+    "waiting_approval",
+    "waiting_platform",
+    "failed",
+    "cancelled",
+  ],
   waiting_approval: ["running", "failed", "cancelled"],
   waiting_browser: ["running", "failed", "cancelled"],
   waiting_continuation: ["running", "stopped", "failed", "cancelled"],
+  // A drained run whose approval is still pending waits on that approval once the drain ends.
+  waiting_platform: ["running", "waiting_approval", "failed", "cancelled"],
   succeeded: [],
   silent: [],
   failed: [],
@@ -147,16 +182,49 @@ export interface RunStallLogPayload {
  * `deadline`: the run's thread passed its deadline before the run ended, so it is `cancelled`.
  * `turn_budget`: a bot message reached the thread's turn budget, which paused the thread and
  * cancelled this queued run (ADR-0005 item 6; issue #68).
+ * `operator_pause`: an Owner or Admin paused the run's thread, which cancelled this queued run
+ * (ADR-0005 amendment 3, decision 23).
  * Other `error` values are free text from the sidecar or the scheduler.
  */
 export const RUN_ERROR_NO_REPLY = "no_reply";
 export const RUN_ERROR_DEADLINE = "deadline";
 export const RUN_ERROR_TURN_BUDGET = "turn_budget";
+export const RUN_ERROR_OPERATOR_PAUSE = "operator_pause";
+/**
+ * `gateway_restarted`: a platform interruption (a drain, a Gateway restart, a forced stop during
+ * an upgrade) stopped the run and it could not be continued: its fourth interruption, or no
+ * resumable state (ADR-0029 decisions 6 and 7).
+ */
+export const RUN_ERROR_GATEWAY_RESTARTED = "gateway_restarted";
+/**
+ * `cron_misfire`: a cron round queued during a drain could launch only after its minute was
+ * older than `CRON_MISFIRE_GRACE`, so it was cancelled instead (ADR-0029 decision 11).
+ */
+export const RUN_ERROR_CRON_MISFIRE = "cron_misfire";
 
 export type RunErrorReason =
   | typeof RUN_ERROR_NO_REPLY
   | typeof RUN_ERROR_DEADLINE
-  | typeof RUN_ERROR_TURN_BUDGET;
+  | typeof RUN_ERROR_TURN_BUDGET
+  | typeof RUN_ERROR_OPERATOR_PAUSE
+  | typeof RUN_ERROR_GATEWAY_RESTARTED
+  | typeof RUN_ERROR_CRON_MISFIRE;
+
+/**
+ * Why the platform parked a run as `waiting_platform` (ADR-0029): `drain`, the run reached a safe
+ * point while the Gateway was draining for an upgrade; `restart`, a Gateway start found it live
+ * with no process of its own.
+ */
+export type PlatformInterruptionReason = "drain" | "restart";
+
+/** The payload of `run_ended(deferred)` when the platform, not an approval, deferred the call. */
+export interface PlatformInterruption {
+  interruption: "platform";
+  reason: PlatformInterruptionReason;
+}
+
+/** How many times a run may be continued after a platform interruption (ADR-0029 decision 6). */
+export const PLATFORM_RESUME_LIMIT = 3;
 
 export interface Run {
   id: RunId;
@@ -165,7 +233,12 @@ export interface Run {
   threadId?: ThreadId;
   lane: RunLane;
   triggerKind: RunTriggerKind;
-  /** Message id for `thread_message`, cron entry index for `cron`, request id for `webhook`, approval id for `approval`, unique request id for `welcome`. */
+  /**
+   * Message id for `thread_message`, cron entry index for `cron`, request id for `webhook`,
+   * approval id for `approval`, unique request id for `welcome`, and for `model_job` the job kind
+   * and its subject, `<runType>:<subject id>` (for example `approval_review:<approval id>`,
+   * `round_triage:<message id>`, `activity_summary:<run id>:<version>`).
+   */
   triggerRef: string;
   status: RunStatus;
   /** Number of sidecar processes started for this run so far: 1, then one more per resume. */
@@ -181,6 +254,13 @@ export interface Run {
 export interface RunResumePayload {
   sdkSessionId: string;
   approvalId?: string;
+  /**
+   * Every approval of this run whose decision no process has received yet, `approvalId` included
+   * (issue #62 M8). One OpenAI turn can park on several; a decision on any of them resumes the
+   * run, and the resume hands over each one decided by then. A resume keeps here the ones still
+   * undecided, and the next park carries those whose call is parked again.
+   */
+  approvalIds?: string[];
   /** Tool-use id of the deferred call, so the decision resumes that call (or its retry) and no other. */
   toolUseId?: string;
   /** `RunEnded.currentOrigin` of the parked process, handed to the resumed one. */
@@ -192,6 +272,12 @@ export interface RunResumePayload {
    * Admin's explicit continue resumes it with a `budget_continuation` turn.
    */
   budget?: true;
+  /**
+   * The platform parked this run (ADR-0029): the Gateway resumes it on its own, as attempt n+1 on
+   * the same session, once nothing drains and the restart breaker is not tripped. With an
+   * `approvalId` the drain ended a live approval wait; the run then waits on that approval.
+   */
+  platform?: PlatformInterruptionReason;
 }
 
 /** Structured end-of-run summary emitted by the agent (design v0.3 §3.2). */
@@ -221,11 +307,14 @@ export interface RunSummary {
 }
 
 /**
- * What a run did that someone else can see, reported beside its status (issue #70). `silent`
- * keeps its ADR-0005 decision 3 meaning, an empty final `reply`; a silent run may still have
- * answered through `thread_post`, handed off with `message_bot`, decided an approval or
- * delivered a task. These flags say which, so a measurement can tell such a run from one that
- * did nothing (measurement §3.6, `silent_run_cost_share` v2).
+ * What a run did that someone else can see, reported beside its status (issue #70). These flags
+ * say whether a run answered with a final reply, through `thread_post` or `message_bot`, decided
+ * an approval or delivered a task, so a measurement can tell such a run from one that did
+ * nothing (measurement §3.6). `silent` is the owner's definition of 2026-10-17 (ADR-0005,
+ * "Definition of `silent`"): a thread run that ended successfully without posting a message. A
+ * failed, cancelled or stopped run that posted nothing is counted under its own status, never as
+ * silent. Runs recorded before that date may carry the stored status `silent` although they
+ * posted through `thread_post`; the flag is derived, so it classifies them by the same rule.
  *
  * Every flag is derived from what the Gateway itself wrote: the final reply on the run row and
  * the ledger events the Gateway appends when it accepts a post, a decision or a delivery. A
@@ -246,6 +335,12 @@ export interface RunVisibility {
   deliveredTask: boolean;
   /** Any of the above: the run left an outcome someone can see. */
   visibleOutcome: boolean;
+  /**
+   * The run counts as silent (`isSilentOutcome`): a thread run whose status is `succeeded` or
+   * `silent` with neither a final reply nor a posted message. False for every other status, and
+   * for a run with no thread.
+   */
+  silent: boolean;
 }
 
 /** The ledger fields `deriveRunVisibility` reads; a `RunEvent` or a trace event satisfies it. */
@@ -261,6 +356,26 @@ function hasId(payload: Record<string, unknown>, key: string): boolean {
 }
 
 /**
+ * The owner's definition of a silent run (2026-10-17, issue #3 item A2): a run woken in a thread
+ * that ended successfully (`succeeded` or `silent`) without posting a message, neither a final
+ * reply nor a `thread_post` or `message_bot` post. The run lifecycle chooses between the two
+ * statuses with it, and `deriveRunVisibility` classifies any stored run with it.
+ */
+export function isSilentOutcome(input: {
+  status: RunStatus;
+  threadId?: string;
+  finalReply: boolean;
+  postedToThread: boolean;
+}): boolean {
+  return (
+    (input.status === "succeeded" || input.status === "silent") &&
+    input.threadId !== undefined &&
+    !input.finalReply &&
+    !input.postedToThread
+  );
+}
+
+/**
  * Derives `RunVisibility` from the run's final reply and its ledger. The shapes matched are the
  * Gateway-written records: `log` `{tool: "thread_post" | "message_bot", messageId}`, `log`
  * `{tool: "task_deliver", taskId}` and `approval` `{phase: "decided_by_tool", approvalId}`.
@@ -268,6 +383,9 @@ function hasId(payload: Record<string, unknown>, key: string): boolean {
 export function deriveRunVisibility(input: {
   reply?: string;
   events: readonly RunVisibilityEvent[];
+  /** The run's status and thread, from which `silent` is derived with the flags. */
+  status: RunStatus;
+  threadId?: string;
 }): RunVisibility {
   const finalReply = (input.reply ?? "").trim() !== "";
   let postedToThread = false;
@@ -292,6 +410,12 @@ export function deriveRunVisibility(input: {
     decidedApproval,
     deliveredTask,
     visibleOutcome: finalReply || postedToThread || decidedApproval || deliveredTask,
+    silent: isSilentOutcome({
+      status: input.status,
+      ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
+      finalReply,
+      postedToThread,
+    }),
   };
 }
 

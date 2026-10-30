@@ -15,6 +15,7 @@ import { parseOffsetQuery } from "./pagination.js";
 export const TRASH_PAGE: PageLimitPolicy = { default: 25, max: PAGE_LIMIT_MAX };
 import { requestTenant } from "./route-policy.js";
 import { asRecord, requireString } from "./validate.js";
+import { readableWorkspaceIds } from "./workspace-access.js";
 
 export function registerTrashRoutes(
   app: FastifyInstance,
@@ -28,13 +29,17 @@ export function registerTrashRoutes(
   app.get<{ Querystring: Record<string, unknown> }>("/api/trash", async (request) => {
     const tenantId = requestTenant(request);
     const { offset, limit } = parseOffsetQuery(request.query, TRASH_PAGE);
-    const page = trash.workspacePage(tenantId, offset, limit);
+    // Only the workspaces the caller is Admin or Owner of (ADR-0022 amendment 6 W1, W4).
+    const readable = readableWorkspaceIds(ctx, request, "admin");
+    const page = trash.workspacePage(tenantId, offset, limit, readable);
     return {
       workspaces: page.workspaces,
       offset,
       limit,
       total: page.total,
-      bots: ctx.bots.listArchived(tenantId),
+      bots: ctx.bots
+        .listArchived(tenantId)
+        .filter((bot) => readable === undefined || readable.has(bot.workspaceId)),
     };
   });
 
@@ -45,7 +50,7 @@ export function registerTrashRoutes(
     ),
   }));
   app.post<{ Params: { id: string } }>("/api/workspaces/:id/restore", async (request) => ({
-    workspace: trash.restoreWorkspace(
+    workspace: await trash.restoreWorkspace(
       request.params.id as WorkspaceId,
       requestActorId(request, request.body),
     ),

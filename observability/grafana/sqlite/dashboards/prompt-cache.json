@@ -1,0 +1,786 @@
+{
+  "uid": "deskmates-prompt-cache",
+  "title": "Prompt cache",
+  "description": "Cache-read share of inference requests per model, workspace and hour. Requests whose provider reported no cache count are shown as not reported and left out of every share. Read from the obs model (ADR-0046).",
+  "tags": [
+    "deskmates"
+  ],
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "timezone": "browser",
+  "links": [
+    {
+      "title": "Deskmates dashboards",
+      "type": "dashboards",
+      "tags": [
+        "deskmates"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Overview",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Cache-read share",
+      "description": "Prompt tokens read from the cache as a share of all prompt tokens (input, cache read and cache write), over requests that reported a cache-read count.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT 100.0 * sum(cache_read_tokens) / nullif(sum(reported_prompt_tokens), 0) AS cache_read_share FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}'",
+          "queryText": "SELECT 100.0 * sum(cache_read_tokens) / nullif(sum(reported_prompt_tokens), 0) AS cache_read_share FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Requests with a cache hit",
+      "description": "Reporting requests that read any tokens from the cache, as a share.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT 100.0 * sum(CASE WHEN cache_status = 'hit' THEN 1 ELSE 0 END) / nullif(count(*), 0) AS hit_rate FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}'",
+          "queryText": "SELECT 100.0 * sum(CASE WHEN cache_status = 'hit' THEN 1 ELSE 0 END) / nullif(count(*), 0) AS hit_rate FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Reporting requests",
+      "description": "Inference requests whose provider reported a cache-read count, 0 included.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(*) AS reporting FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}'",
+          "queryText": "SELECT count(*) AS reporting FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Not reported",
+      "description": "Requests whose provider reported usage without a cache-read count. They are left out of every share on this dashboard; they are not misses.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(*) AS not_reported FROM request_cache WHERE cache_status = 'not_reported' AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}'",
+          "queryText": "SELECT count(*) AS not_reported FROM request_cache WHERE cache_status = 'not_reported' AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "No usage",
+      "description": "Requests with no usage at all: the response never reported it, or the run ended first.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(*) AS no_usage FROM request_cache WHERE cache_status = 'no_usage' AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}'",
+          "queryText": "SELECT count(*) AS no_usage FROM request_cache WHERE cache_status = 'no_usage' AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Cache-write tokens",
+      "description": "Prompt tokens written to the cache by reporting requests.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT coalesce(sum(cache_create_tokens), 0) AS cache_write_tokens FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}'",
+          "queryText": "SELECT coalesce(sum(cache_create_tokens), 0) AS cache_write_tokens FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Over time",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Cache-read share per hour by model",
+      "description": "The cache-read share of each model's reporting requests per hour. An hour with only not-reported requests has no point, never a 0.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', ts) AS time, coalesce(model, 'unknown') AS model, 100.0 * sum(cache_read_tokens) / nullif(sum(reported_prompt_tokens), 0) AS cache_read_share FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "queryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', ts) AS time, coalesce(model, 'unknown') AS model, 100.0 * sum(cache_read_tokens) / nullif(sum(reported_prompt_tokens), 0) AS cache_read_share FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Requests per hour by cache status",
+      "description": "Inference requests per hour stacked by hit, write, miss, not reported, no usage and refused. Not reported is its own band.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', ts) AS time, cache_status, count(*) AS requests FROM request_cache WHERE ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "queryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', ts) AS time, cache_status, count(*) AS requests FROM request_cache WHERE ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Cache-read share per hour by workspace",
+      "description": "The cache-read share of each workspace's reporting requests per hour.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', ts) AS time, coalesce(workspace_name, workspace_id, 'unknown') AS workspace, 100.0 * sum(cache_read_tokens) / nullif(sum(reported_prompt_tokens), 0) AS cache_read_share FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "queryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', ts) AS time, coalesce(workspace_name, workspace_id, 'unknown') AS workspace, 100.0 * sum(cache_read_tokens) / nullif(sum(reported_prompt_tokens), 0) AS cache_read_share FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Prompt tokens per hour",
+      "description": "Reporting requests' prompt tokens per hour: read from the cache, written to it, and uncached input.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', ts) AS time, sum(cache_read_tokens) AS cache_read, sum(coalesce(cache_create_tokens, 0)) AS cache_write, sum(coalesce(input_tokens, 0)) AS uncached_input FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1 ORDER BY 1",
+          "queryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', ts) AS time, sum(cache_read_tokens) AS cache_read, sum(coalesce(cache_create_tokens, 0)) AS cache_write, sum(coalesce(input_tokens, 0)) AS uncached_input FROM request_cache WHERE cache_reported = 1 AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1 ORDER BY 1",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "By model and workspace",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "panels": []
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Models",
+      "description": "Per model: requests by cache status, the hit rate and the cache-read share of reporting requests, and the tokens behind them.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT coalesce(model, 'unknown') AS model, count(*) AS requests, sum(cache_reported) AS reporting, sum(CASE WHEN cache_status = 'not_reported' THEN 1 ELSE 0 END) AS not_reported, sum(CASE WHEN cache_status = 'no_usage' THEN 1 ELSE 0 END) AS no_usage, sum(CASE WHEN cache_status = 'hit' THEN 1 ELSE 0 END) AS hits, 100.0 * sum(CASE WHEN cache_status = 'hit' THEN 1 ELSE 0 END) / nullif(sum(cache_reported), 0) AS hit_rate, sum(CASE WHEN cache_reported = 1 THEN cache_read_tokens END) AS cache_read_tokens, sum(reported_prompt_tokens) AS reported_prompt_tokens, 100.0 * sum(cache_read_tokens) / nullif(sum(reported_prompt_tokens), 0) AS cache_read_share, sum(CASE WHEN cache_reported = 1 THEN cache_create_tokens END) AS cache_write_tokens FROM request_cache WHERE ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1 ORDER BY requests DESC, model",
+          "queryText": "SELECT coalesce(model, 'unknown') AS model, count(*) AS requests, sum(cache_reported) AS reporting, sum(CASE WHEN cache_status = 'not_reported' THEN 1 ELSE 0 END) AS not_reported, sum(CASE WHEN cache_status = 'no_usage' THEN 1 ELSE 0 END) AS no_usage, sum(CASE WHEN cache_status = 'hit' THEN 1 ELSE 0 END) AS hits, 100.0 * sum(CASE WHEN cache_status = 'hit' THEN 1 ELSE 0 END) / nullif(sum(cache_reported), 0) AS hit_rate, sum(CASE WHEN cache_reported = 1 THEN cache_read_tokens END) AS cache_read_tokens, sum(reported_prompt_tokens) AS reported_prompt_tokens, 100.0 * sum(cache_read_tokens) / nullif(sum(reported_prompt_tokens), 0) AS cache_read_share, sum(CASE WHEN cache_reported = 1 THEN cache_create_tokens END) AS cache_write_tokens FROM request_cache WHERE ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1 ORDER BY requests DESC, model",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hit_rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cache_read_share"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "Workspaces",
+      "description": "The same per workspace.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT coalesce(workspace_name, workspace_id, 'unknown') AS workspace, count(*) AS requests, sum(cache_reported) AS reporting, sum(CASE WHEN cache_status = 'not_reported' THEN 1 ELSE 0 END) AS not_reported, sum(CASE WHEN cache_status = 'no_usage' THEN 1 ELSE 0 END) AS no_usage, sum(CASE WHEN cache_status = 'hit' THEN 1 ELSE 0 END) AS hits, 100.0 * sum(CASE WHEN cache_status = 'hit' THEN 1 ELSE 0 END) / nullif(sum(cache_reported), 0) AS hit_rate, sum(CASE WHEN cache_reported = 1 THEN cache_read_tokens END) AS cache_read_tokens, sum(reported_prompt_tokens) AS reported_prompt_tokens, 100.0 * sum(cache_read_tokens) / nullif(sum(reported_prompt_tokens), 0) AS cache_read_share, sum(CASE WHEN cache_reported = 1 THEN cache_create_tokens END) AS cache_write_tokens FROM request_cache WHERE ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1 ORDER BY requests DESC, workspace",
+          "queryText": "SELECT coalesce(workspace_name, workspace_id, 'unknown') AS workspace, count(*) AS requests, sum(cache_reported) AS reporting, sum(CASE WHEN cache_status = 'not_reported' THEN 1 ELSE 0 END) AS not_reported, sum(CASE WHEN cache_status = 'no_usage' THEN 1 ELSE 0 END) AS no_usage, sum(CASE WHEN cache_status = 'hit' THEN 1 ELSE 0 END) AS hits, 100.0 * sum(CASE WHEN cache_status = 'hit' THEN 1 ELSE 0 END) / nullif(sum(cache_reported), 0) AS hit_rate, sum(CASE WHEN cache_reported = 1 THEN cache_read_tokens END) AS cache_read_tokens, sum(reported_prompt_tokens) AS reported_prompt_tokens, 100.0 * sum(cache_read_tokens) / nullif(sum(reported_prompt_tokens), 0) AS cache_read_share, sum(CASE WHEN cache_reported = 1 THEN cache_create_tokens END) AS cache_write_tokens FROM request_cache WHERE ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1 ORDER BY requests DESC, workspace",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hit_rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cache_read_share"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 16,
+      "type": "table",
+      "title": "Where cache counts are not reported",
+      "description": "Requested and served models whose provider reported usage without a cache-read count, and when that was last seen. These requests are in no share above.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT coalesce(model, 'unknown') AS model, coalesce(served_model, '') AS served_model, count(*) AS requests, count(DISTINCT run_id) AS runs, max(ts) AS last_seen FROM request_cache WHERE cache_status = 'not_reported' AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY requests DESC, last_seen DESC LIMIT 50",
+          "queryText": "SELECT coalesce(model, 'unknown') AS model, coalesce(served_model, '') AS served_model, count(*) AS requests, count(DISTINCT run_id) AS runs, max(ts) AS last_seen FROM request_cache WHERE cache_status = 'not_reported' AND ts >= '${__from:date:iso}' AND ts < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY requests DESC, last_seen DESC LIMIT 50",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ]
+}

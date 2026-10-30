@@ -25,6 +25,8 @@ export interface StateStore {
   get(threadId: string): BoundThread | undefined;
   byRecipient(to: string): BoundThread | undefined;
   put(entry: BoundThread): void;
+  /** Forget a thread the connection no longer serves (an older binding generation). */
+  remove(threadId: string): void;
 }
 
 export class MemoryStateStore implements StateStore {
@@ -45,6 +47,10 @@ export class MemoryStateStore implements StateStore {
 
   put(entry: BoundThread): void {
     this.entries.set(entry.threadId, { ...entry });
+  }
+
+  remove(threadId: string): void {
+    this.entries.delete(threadId);
   }
 }
 
@@ -68,6 +74,16 @@ export class FileStateStore extends MemoryStateStore {
 
   override put(entry: BoundThread): void {
     super.put(entry);
+    this.write();
+  }
+
+  override remove(threadId: string): void {
+    if (!this.entries.has(threadId)) return;
+    super.remove(threadId);
+    this.write();
+  }
+
+  private write(): void {
     const file: StateFile = { version: 1, threads: this.all() };
     mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
     chmodSync(dirname(this.path), 0o700);

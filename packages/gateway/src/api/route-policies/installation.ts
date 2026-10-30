@@ -7,4 +7,8 @@ export const installationRoutePolicies: PolicyTable = {
   "PUT /api/prices": platform,
   "GET /api/config": authenticated,
   "GET /api/runtime": platform,
+  // ADR-0029 decisions 1 and 6: the upgrade drain and the restart breaker's operator action.
+  "POST /api/runtime/drain": platform,
+  "DELETE /api/runtime/drain": platform,
+  "POST /api/runtime/platform-resume": platform,
 };

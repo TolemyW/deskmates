@@ -8,14 +8,40 @@ module are SHA-256 pinned. A release points the Gateway at that bundled manifest
 `ChannelPlugin` entry point in process. It never downloads channel code or accepts an arbitrary
 third-party entry path (ADR-0017 amendment 1).
 
+New providers are built on ChannelPlugin ABI 2 (ADR-0047): each connection is one verified
+external identity bound to one Bot, a plugin may hold several connections in a workspace, and the
+Gateway hands each connection a host scoped to it and checks every call. WhatsApp is on ABI 2 too
+(ADR-0047 amendment 1), with one connection per workspace; it admits every sender unless the
+connection's blocklist names them (ADR-0017 amendment 3), which the host enforces. Provider SDKs are declared and lazily loaded only through
+`src/provider-dependencies.ts`.
+
+## Docs
+
+- [Discord channel plugin (ADR-0047)](docs/discord.md): one bot per connection, DMs over the Gateway websocket, capability matrix, restart and resume
+- [Slack (ABI 2)](docs/slack.md): Socket Mode app setup, identity, what is handled, delivery, what is verified
+- [Telegram (ADR-0047)](docs/telegram.md): one bot per connection, long polling, capability matrix, delivery, restart, revoke
+- [WeChat (development, ADR-0047)](docs/wechat.md): native iLink QR binding, private text, recovery and live release gates
+- [Writing an ABI-2 provider plugin (ADR-0047)](docs/abi-2-provider-plugins.md): the contract, the host, the send gate, dependencies, testing
+
+## WhatsApp
+
 The product's **Integrations → Channels** screen owns setup and lifecycle. One workspace has at
 most one WhatsApp connection and one default Bot. Choose either **QR linked device** or
 **Business Cloud API**; changing method requires Disconnect first. The screen shows status and a
-current QR, sends a test message, reconnects, relinks QR sessions and disconnects. Only private
+current QR, sends a test message, reconnects, relinks QR sessions, disconnects and keeps the
+connection's blocklist: anyone who messages the account reaches its Bot unless blocked (ADR-0017
+amendment 3; an allowlist stored before that change was dropped and nobody was blocked). Only private
 chats are handled; groups are ignored. Secret fields are encrypted by the Gateway's generic
 Secrets Store. QR credentials and relay cursors live under `CHANNEL_STATE_DIR` in a 0700
 connection directory with 0600 files, outside every workspace. A normal Gateway restart retains
 them; Disconnect removes them.
+
+The connection's identity is its number: a Cloud API number is checked against the Graph API when
+it is connected (`whatsapp:cloud:<phone number id>`), a linked device's number is claimed after
+the scan (`whatsapp:linked:<number>`). One number serves one Agent in the installation; a number
+connected elsewhere, or a relink to a different number, is refused with a visible reason.
+Connections made before the ABI-2 plugin (version 2.0.0) are moved in place by the Gateway's
+migration and claim their number on restart; nothing is re-linked.
 
 Build and enable the release plugin from the repository root:
 
@@ -77,8 +103,9 @@ dedicated HTTP(S) proxy. Proxy credentials remain operator-side and are not logg
 
 Only newly notified direct text messages reach the configured bots. History sync,
 groups, broadcasts, status updates, edits, reactions and outgoing echoes are
-ignored. LID senders require a client-supplied phone mapping. Self-chat works when
-your own number is in the explicit allowlist. An empty allowlist admits nobody.
+ignored. LID senders require a client-supplied phone mapping. The standalone
+`deskmates-whatsapp-web` diagnostic keeps an explicit allowlist: self-chat works when your own
+number is in it, and an empty list admits nobody.
 Channel replies and approval commands reuse the existing Gateway semantics.
 Bindings/cursors are separated by linked account, so the Cloud API history is not
 replayed. Delivery is at least once: a lost send acknowledgment can cause a retry.
@@ -97,7 +124,7 @@ See [ADR-0019](../../docs/adr/0019-whatsapp-linked-device-qr.md) and
 
 The plugin speaks the WhatsApp Business Platform Cloud API: Meta webhooks enter through
 `/api/channel-webhooks/:workspaceId/whatsapp`, and Graph API `messages` carry replies. Configure
-the phone number id, allowlist and secrets in Integrations. The standalone `deskmates-whatsapp`
+the phone number id and secrets in Integrations. The standalone `deskmates-whatsapp`
 binary and environment variables below remain available for development diagnostics. Read
 [ADR-0017](../../docs/adr/0017-whatsapp-channel-through-cloud-api.md) before changing it; the
 decisions below are its numbered items.
@@ -106,7 +133,9 @@ decisions below are its numbered items.
   `channel = whatsapp`, `externalKey = <phone_number_id>:<wa_id>`, created on the first accepted
   message in `WHATSAPP_WORKSPACE_ID` with `WHATSAPP_BOT_IDS` as members. Mentions are `@name` in the
   text, parsed by the Gateway as for any human message.
-- **Admission (4).** Deny-by-default: `WHATSAPP_ALLOWED_SENDERS` lists who may drive the bots; a
+- **Admission (4; standalone binary only).** The release plugin admits by default with a
+  blocklist since amendment 3. The standalone binary keeps decision 4's deny-by-default:
+  `WHATSAPP_ALLOWED_SENDERS` lists who may drive the bots; a
   message from anyone else, or for another phone number id, is acknowledged and dropped. The human
   message carries `authorId = whatsapp:<wa_id>`; the profile name never leaves the adapter. The list
   works both ways: a number removed from it receives nothing further, its cursor still advances, and
@@ -153,5 +182,8 @@ table and are recorded as not run until an account exists.
 
 ## Not in scope
 
-Slack is deferred (C43). Telegram is not a required M3 deliverable. WhatsApp groups, media,
-templates and several business numbers per adapter are out of scope for this adapter.
+For WhatsApp: groups, media, templates and several business numbers per adapter are out of scope.
+Telegram, Discord and Slack are the first wave of ABI-2 plugins (ADR-0047, owner ruling
+2026-10-17, which also withdrew C43's condition on Slack); personal WeChat now has a development-only
+native plugin (owner authorization 2026-10-27), excluded from releases until its live gates pass.
+Groups, channels, threads and topics are not implemented for any provider in this version.

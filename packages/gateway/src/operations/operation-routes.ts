@@ -1,13 +1,21 @@
-// The operation proxy (ADR-0040): `POST /internal/runs/:runId/operations/look` and `/asr`, run
-// token scoped by the internal scope's preHandler. A sidecar tool sends a normalized request with
-// the file's bytes; the Gateway checks it, builds the one upstream request, forwards it once with
-// no retry, records the call and returns the text. It never starts an operation on its own.
+// The operation proxy (ADR-0040): `POST /internal/runs/:runId/operations/look`, `/asr` and
+// `/image_generation` (amendment B), run token scoped by the internal scope's preHandler. A sidecar
+// tool sends a normalized request; the Gateway checks it, builds the one upstream request,
+// forwards it once with no retry, records the call and returns the result. It never starts an
+// operation on its own.
 
 import { createHash } from "node:crypto";
 import {
   ASR_LANGUAGE,
   type AsrOperationResponse,
   DeskmatesError,
+  type GeneratedImage,
+  IMAGE_MAX_COUNT,
+  IMAGE_OUTPUT_MAX_BYTES,
+  IMAGE_PROMPT_MAX_CHARS,
+  IMAGE_SIDE_MAX,
+  IMAGE_SIDE_MIN,
+  type ImageGenerationResponse,
   LOOK_IMAGE_MAX_BYTES,
   LOOK_QUESTION_MAX_CHARS,
   type LookMode,
@@ -18,18 +26,27 @@ import {
   type OperationUsage,
   type RunId,
   type WorkspaceId,
+  imageDimensions,
+  parseImageSize,
   sniffAudio,
+  sniffGeneratedImage,
   sniffLookImage,
 } from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
-import type { AsrOperationConfig, LookOperationConfig } from "../config/operations.js";
+import type {
+  AsrOperationConfig,
+  ImageOperationConfig,
+  LookOperationConfig,
+} from "../config/operations.js";
 import type { GatewayContext } from "../context.js";
 import type { RunRecord } from "../ledger/runs.js";
 import {
   type UpstreamRequest,
   asrRequest,
+  imageRequest,
   lookRequest,
   parseAsrResponse,
+  parseImageResponse,
   parseLookResponse,
 } from "./operation-adapters.js";
 import { OperationStore } from "./operation-store.js";
@@ -38,6 +55,8 @@ import { OperationStore } from "./operation-store.js";
 export const LOOK_TIMEOUT_MS = 120_000;
 /** One `asr` call: a 30-minute file on a CPU whisper can take minutes. */
 export const ASR_TIMEOUT_MS = 300_000;
+/** One `image_generation` call: up to four images from a diffusion model (amendment B). */
+export const IMAGE_TIMEOUT_MS = 300_000;
 
 interface OperationModule {
   store: OperationStore;
@@ -155,6 +174,15 @@ function record(
       model: call.service.model,
     },
   });
+  // ADR-0040 amendment A, decision 12: a forwarded call is charged to the budget as soon as it is
+  // recorded; a refusal never reached the service and charges nothing.
+  if (outcome.status !== "refused") {
+    try {
+      call.ctx.budget.charge(call.run.id);
+    } catch {
+      // Accounting only; the operation already happened and its row is the receipt.
+    }
+  }
   return { id, usage };
 }
 
@@ -401,6 +429,105 @@ async function asr(
   };
 }
 
+/** One generated image the service returned, checked (amendment B, decision 19), or undefined. */
+function decodeGenerated(data: string): GeneratedImage | undefined {
+  if (data.length === 0 || data.length % 4 !== 0 || !BASE64.test(data)) return undefined;
+  const bytes = Buffer.from(data, "base64");
+  if (bytes.length === 0 || bytes.length > IMAGE_OUTPUT_MAX_BYTES) return undefined;
+  const mediaType = sniffGeneratedImage(bytes);
+  if (!mediaType) return undefined;
+  const size = imageDimensions(bytes);
+  return {
+    mediaType,
+    data,
+    bytes: bytes.length,
+    sha256: sha256(bytes),
+    width: size?.width ?? null,
+    height: size?.height ?? null,
+  };
+}
+
+/** ADR-0040 amendment B: one text-to-image call on the installation's image service. */
+async function imageGeneration(
+  ctx: GatewayContext,
+  service: ImageOperationConfig,
+  runId: string,
+  raw: unknown,
+): Promise<ImageGenerationResponse> {
+  const body = (raw ?? {}) as Record<string, unknown>;
+  if (
+    typeof body.prompt !== "string" ||
+    body.prompt.trim() === "" ||
+    body.prompt.length > IMAGE_PROMPT_MAX_CHARS
+  )
+    throw new DeskmatesError(
+      "validation",
+      `prompt must be text of 1 to ${IMAGE_PROMPT_MAX_CHARS} characters`,
+    );
+  const size = body.size === undefined ? service.defaultSize : body.size;
+  if (typeof size !== "string" || !parseImageSize(size))
+    throw new DeskmatesError(
+      "validation",
+      `size must be <width>x<height>, each side ${IMAGE_SIDE_MIN} to ${IMAGE_SIDE_MAX} and a multiple of 64`,
+      { size: typeof size === "string" ? size : null },
+    );
+  const count = body.count === undefined ? 1 : body.count;
+  if (
+    typeof count !== "number" ||
+    !Number.isSafeInteger(count) ||
+    count < 1 ||
+    count > IMAGE_MAX_COUNT
+  )
+    throw new DeskmatesError("validation", `count must be 1 to ${IMAGE_MAX_COUNT}`);
+  const { run, workspaceId } = runOf(ctx, runId);
+  const call: Call = {
+    ctx,
+    run,
+    workspaceId,
+    operation: "image_generation",
+    mode: null,
+    service,
+    unit: "image",
+    // The prompt is the input: its size and hash are recorded, its text is not.
+    bytes: Buffer.from(body.prompt, "utf8"),
+  };
+  admit(call);
+  const request = imageRequest(service, { prompt: body.prompt, size, count });
+  const { body: answer, latencyMs } = await forward(call, request, IMAGE_TIMEOUT_MS);
+  const parsed = parseImageResponse(answer);
+  const images =
+    parsed && parsed.images.length <= count ? parsed.images.map(decodeGenerated) : undefined;
+  if (!parsed || !images || images.some((image) => image === undefined)) {
+    record(call, {
+      status: "failed",
+      errorCode: "answered_malformed",
+      quantity: null,
+      measured: "unknown",
+      latencyMs,
+    });
+    throw new DeskmatesError(
+      "operation_unavailable",
+      "the image_generation service answered_malformed",
+      { reason: "answered_malformed", operation: "image_generation" },
+    );
+  }
+  const checked = images as GeneratedImage[];
+  const { id, usage } = record(call, {
+    status: "succeeded",
+    errorCode: null,
+    quantity: checked.length,
+    measured: "computed",
+    latencyMs,
+  });
+  return {
+    operationId: id,
+    model: service.model,
+    images: checked,
+    revisedPrompt: parsed.revisedPrompt,
+    usage,
+  };
+}
+
 /** Registered inside the internal scope, whose preHandler checks the run token against the path. */
 export function registerOperationInternalRoutes(app: FastifyInstance, ctx: GatewayContext): void {
   type Params = { Params: { runId: string } };
@@ -422,4 +549,9 @@ export function registerOperationInternalRoutes(app: FastifyInstance, ctx: Gatew
       return asr(ctx, service, request.params.runId, request.body);
     },
   );
+  app.post<Params>("/internal/runs/:runId/operations/image_generation", async (request) => {
+    const service = ctx.config.operations?.image_generation;
+    if (!service) return notConfigured("image_generation");
+    return imageGeneration(ctx, service, request.params.runId, request.body);
+  });
 }
