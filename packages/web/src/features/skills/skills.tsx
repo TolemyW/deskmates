@@ -2,8 +2,8 @@
 // is given as a skill, what waits in "needs your confirmation" with the scan's findings, and the
 // human actions: install by hash, confirm or reject, assign, move a stage, pin, undo. Rows carry
 // name, description, stage, enabled bots and last use; origin, hash, scan findings and history
-// are in the detail panel; the install form opens on demand. Members see everything here; the
-// Gateway refuses the changes to anyone below Admin. This page changes no skill semantics:
+// are in the detail panel; the install form opens on demand for Admins. Members can read
+// the records; both the UI and Gateway restrict changes to Admins. No skill semantics change:
 // provisional skills stay with their author, and spreading one is a human assignment.
 
 import {
@@ -29,6 +29,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ApiClient, SkillsView } from "../../api/client.js";
 import { NoWorkspace, ResourceHeading } from "../../components/resource-page.js";
 import { Button } from "../../components/ui/button.js";
+import { Dialog, DialogContent, DialogTitle } from "../../components/ui/dialog.js";
 import { Pill } from "../../components/ui/pill.js";
 import { errorMessage } from "../../format.js";
 import type { MessageKey } from "../../i18n/catalogs.js";
@@ -36,6 +37,7 @@ import { useT } from "../../i18n/i18n-provider.js";
 import { PageBar } from "../../lib/page-bar.js";
 import { usePagedQuery } from "../../lib/use-paged-query.js";
 import { useRememberBots } from "../../state/bot-avatars.js";
+import { useCan } from "../../state/session-roles.js";
 import { useWorkspaceScope } from "../../state/workspace-scope.js";
 import type { PendingSkillVersion } from "./api.js";
 
@@ -172,6 +174,7 @@ export function SkillsPanel({
   bots: readonly BotDefinition[];
 }) {
   const t = useT();
+  const canManage = useCan("skills.manage", workspaceId).allowed;
   // The static starter catalog and the queue's size arrive with each page of skills.
   const [catalog, setCatalog] = useState<Pick<SkillsView, "starterPack" | "starterSkills">>({
     starterPack: { version: "", sha256: "" },
@@ -224,14 +227,30 @@ export function SkillsPanel({
   const pendingTotal = pendingPages.page?.total ?? view.pending.length;
   const skillsTotal = skillPages.page?.total ?? view.skills.length;
   const loaded = skillPages.page !== undefined || Boolean(skillPages.error);
-  const loadError = skillPages.error
-    ? errorMessage(skillPages.error)
-    : pendingPages.error
-      ? errorMessage(pendingPages.error)
-      : "";
   const [selectedId, setSelectedId] = useState<string>();
+  const rowButtons = useRef(new Map<string, HTMLButtonElement>());
+  const returnToSkill = useRef<string | undefined>(undefined);
+  const closeDetail = () => {
+    returnToSkill.current = selectedId;
+    setSelectedId(undefined);
+  };
+  useEffect(() => {
+    if (selectedId || !returnToSkill.current) return;
+    rowButtons.current.get(returnToSkill.current)?.focus();
+    returnToSkill.current = undefined;
+  }, [selectedId]);
   const [assigning, setAssigning] = useState<{ skill: Skill; botIds: string[] }>();
   const [installing, setInstalling] = useState(false);
+  const installButton = useRef<HTMLButtonElement | null>(null);
+  const returnToInstall = useRef(false);
+  useEffect(() => {
+    if (installing) returnToInstall.current = true;
+    else if (!busy && returnToInstall.current) {
+      installButton.current?.focus();
+      returnToInstall.current = false;
+    }
+  }, [installing, busy]);
+  const mutationPending = useRef(false);
   const live = useRef(true);
   // Set on every mount: StrictMode mounts, unmounts and mounts again in development.
   useEffect(() => {
@@ -245,6 +264,8 @@ export function SkillsPanel({
 
   /** Runs one change and reloads the pages shown, keeping their position. */
   const perform = async (operation: () => Promise<unknown>, done: string) => {
+    if (!canManage || mutationPending.current) return;
+    mutationPending.current = true;
     setBusy(true);
     setError("");
     setNotice("");
@@ -256,6 +277,7 @@ export function SkillsPanel({
     } catch (err) {
       if (live.current) setError(errorMessage(err));
     } finally {
+      mutationPending.current = false;
       if (live.current) setBusy(false);
     }
   };
@@ -308,7 +330,10 @@ export function SkillsPanel({
         {
           id: "assign",
           label: t("skills.assign.button"),
-          onAction: () => setAssigning({ skill, botIds: skill.assignments.map((a) => a.botId) }),
+          onAction: () => {
+            setError("");
+            setAssigning({ skill, botIds: skill.assignments.map((a) => a.botId) });
+          },
         },
         {
           id: "pin",
@@ -331,26 +356,39 @@ export function SkillsPanel({
               t("skills.notice.undone", { name: skill.name }),
             ),
         },
-      ]}
+      ].filter((item) => canManage || item.id === "details")}
     />
   );
 
   return (
     <section
-      className="workspace-screen resource-page skills-page page-container"
+      className={`workspace-screen resource-page skills-page page-container${selected ? " skill-selected" : ""}`}
       aria-label={t("skills.label")}
     >
+      {selected ? (
+        <Button className="skills-back" variant="ghost" onClick={closeDetail}>
+          {t("skillsPage.back")}
+        </Button>
+      ) : null}
       <ResourceHeading
         title={t("skills.title")}
         context={t("skillsPage.context", { name: workspaceName })}
         action={
-          <Button variant="primary" disabled={installing} onClick={() => setInstalling(true)}>
-            <Plus size={16} aria-hidden="true" /> {t("skillsPage.installButton")}
-          </Button>
+          canManage ? (
+            <Button
+              variant="primary"
+              ref={installButton}
+              disabled={installing || busy}
+              onClick={() => setInstalling(true)}
+            >
+              <Plus size={16} aria-hidden="true" /> {t("skillsPage.installButton")}
+            </Button>
+          ) : undefined
         }
       />
 
-      {installing ? (
+      {!canManage ? <p className="muted small">{t("skillsPage.readOnly")}</p> : null}
+      {installing && canManage ? (
         <InstallSkillForm
           bots={bots}
           busy={busy}
@@ -367,17 +405,39 @@ export function SkillsPanel({
         />
       ) : null}
 
-      {loadError ? (
-        <p role="alert" className="error">
-          {loadError}
-        </p>
+      {skillPages.error ? (
+        <div role="alert" className="skills-load-error">
+          <p className="error">{errorMessage(skillPages.error)}</p>
+          <Button onClick={() => skillPages.reload()}>{t("skillsPage.retrySkills")}</Button>
+        </div>
       ) : null}
-      {error ? (
+      {pendingPages.error ? (
+        <div role="alert" className="skills-load-error">
+          <p className="error">{errorMessage(pendingPages.error)}</p>
+          <Button onClick={() => pendingPages.reload()}>{t("skillsPage.retryQueue")}</Button>
+        </div>
+      ) : null}
+      {error && !assigning ? (
         <p role="alert" className="error">
           {error}
         </p>
       ) : null}
       {notice ? <output className="notice">{notice}</output> : null}
+
+      {view.starterSkills.length > 0 || skillsTotal > 0 || query !== "" || pendingTotal > 0 ? (
+        <div className="resource-toolbar">
+          <label className="resource-search">
+            <Search size={15} aria-hidden="true" />
+            <input
+              type="search"
+              aria-label={t("skillsPage.search.label")}
+              placeholder={t("skillsPage.search.placeholder")}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+        </div>
+      ) : null}
 
       {view.starterSkills.length > 0 ? (
         <section className="starter-skills" aria-label={t("skills.starter.label")}>
@@ -415,7 +475,7 @@ export function SkillsPanel({
               <PendingVersion
                 key={`${version.skillId}@${version.version}`}
                 version={version}
-                busy={busy}
+                busy={busy || !canManage}
                 onConfirm={() =>
                   void perform(
                     () => api.confirmSkillVersion(version.skillId, version.version),
@@ -435,32 +495,14 @@ export function SkillsPanel({
         </section>
       ) : null}
 
-      {view.starterSkills.length > 0 || skillsTotal > 0 || query !== "" || pendingTotal > 0 ? (
-        <div className="resource-toolbar">
-          <label className="resource-search">
-            <Search size={15} aria-hidden="true" />
-            <input
-              type="search"
-              aria-label={t("skillsPage.search.label")}
-              placeholder={t("skillsPage.search.placeholder")}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-          {pendingTotal > 0 ? (
-            <Pill tone="warning">{t("skillsPage.waiting", { count: pendingTotal })}</Pill>
-          ) : null}
-        </div>
-      ) : null}
-
       <div className={`resource-browser${selected ? " has-detail" : ""}`}>
         <div className="resource-list-column">
           {!loaded ? (
             <p className="muted resource-status" aria-busy="true">
               {t("skillsPage.loading")}
             </p>
-          ) : loadError ? null : skillsTotal === 0 && !searched ? (
-            pendingTotal === 0 ? (
+          ) : skillPages.error ? null : skillsTotal === 0 && !searched ? (
+            pendingTotal === 0 && view.starterSkills.length === 0 ? (
               <p className="muted resource-status">{t("skillsPage.empty")}</p>
             ) : null
           ) : shown.length === 0 ? (
@@ -485,6 +527,10 @@ export function SkillsPanel({
                     <button
                       type="button"
                       className="resource-row-main"
+                      ref={(element) => {
+                        if (element) rowButtons.current.set(skill.id, element);
+                        else rowButtons.current.delete(skill.id);
+                      }}
                       aria-expanded={skill.id === selectedId}
                       onClick={() =>
                         setSelectedId((current) => (current === skill.id ? undefined : skill.id))
@@ -529,7 +575,7 @@ export function SkillsPanel({
             key={selected.id}
             api={api}
             skill={selected}
-            busy={busy}
+            busy={busy || !canManage}
             origin={
               selected.authorBotId
                 ? t("skills.origin.byBot", {
@@ -539,10 +585,11 @@ export function SkillsPanel({
                 : wordsFor(t, ORIGIN_TEXT, selected.origin)
             }
             enabledFor={enabledFor(selected)}
-            onClose={() => setSelectedId(undefined)}
-            onAssign={() =>
-              setAssigning({ skill: selected, botIds: selected.assignments.map((a) => a.botId) })
-            }
+            onClose={closeDetail}
+            onAssign={() => {
+              setError("");
+              setAssigning({ skill: selected, botIds: selected.assignments.map((a) => a.botId) });
+            }}
             onStage={(stage) =>
               void perform(
                 () => api.updateSkill(selected.id, { stage }),
@@ -557,51 +604,75 @@ export function SkillsPanel({
       </div>
 
       {assigning ? (
-        <dialog
+        <Dialog
           open
-          className="resource-dialog"
-          aria-label={t("skills.assign.label", { name: assigning.skill.name })}
+          onOpenChange={(open) => {
+            if (!open && !mutationPending.current) setAssigning(undefined);
+          }}
         >
-          <h3>{t("skills.assign.title", { name: assigning.skill.name })}</h3>
-          {bots.map((bot) => (
-            <label key={bot.id} className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={assigning.botIds.includes(bot.id)}
-                onChange={(e) =>
-                  setAssigning({
-                    ...assigning,
-                    botIds: e.target.checked
-                      ? [...assigning.botIds, bot.id]
-                      : assigning.botIds.filter((id) => id !== bot.id),
-                  })
+          <DialogContent
+            scroll
+            style={{ width: "min(480px, calc(100vw - 24px))" }}
+            aria-label={t("skills.assign.label", { name: assigning.skill.name })}
+            aria-describedby={undefined}
+            aria-labelledby={undefined}
+            closeLabel={t("skills.assign.close")}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              rowButtons.current.get(assigning.skill.id)?.focus();
+            }}
+          >
+            <DialogTitle className="mb-4 pr-8 font-semibold">
+              {t("skills.assign.title", { name: assigning.skill.name })}
+            </DialogTitle>
+            {error ? (
+              <p role="alert" className="resource-error">
+                {error}
+              </p>
+            ) : null}
+            {bots.map((bot) => (
+              <label key={bot.id} className="checkbox-row min-h-10">
+                <input
+                  type="checkbox"
+                  disabled={busy}
+                  checked={assigning.botIds.includes(bot.id)}
+                  onChange={(e) =>
+                    setAssigning({
+                      ...assigning,
+                      botIds: e.target.checked
+                        ? [...assigning.botIds, bot.id]
+                        : assigning.botIds.filter((id) => id !== bot.id),
+                    })
+                  }
+                />
+                {bot.name}
+              </label>
+            ))}
+            <div className="resource-detail-actions">
+              <Button
+                variant="primary"
+                disabled={busy}
+                onClick={() =>
+                  void perform(
+                    async () => {
+                      await api.assignSkill(
+                        assigning.skill.id,
+                        assigning.botIds as BotDefinition["id"][],
+                      );
+                      if (live.current) setAssigning(undefined);
+                    },
+                    t("skills.notice.assigned", { name: assigning.skill.name }),
+                  )
                 }
-              />
-              {bot.name}
-            </label>
-          ))}
-          <div className="resource-detail-actions">
-            <Button
-              variant="primary"
-              disabled={busy}
-              onClick={() =>
-                void perform(
-                  async () => {
-                    await api.assignSkill(
-                      assigning.skill.id,
-                      assigning.botIds as BotDefinition["id"][],
-                    );
-                    if (live.current) setAssigning(undefined);
-                  },
-                  t("skills.notice.assigned", { name: assigning.skill.name }),
-                )
-              }
-            >
-              {t("skills.assign.save")}
-            </Button>
-            <Button onClick={() => setAssigning(undefined)}>{t("skills.assign.cancel")}</Button>
-          </div>
-        </dialog>
+              >
+                {t("skills.assign.save")}
+              </Button>
+              <Button disabled={busy} onClick={() => setAssigning(undefined)}>
+                {t("skills.assign.cancel")}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       ) : null}
     </section>
   );
@@ -668,17 +739,24 @@ function SkillDetail({
   onStage: (stage: SkillStage) => void;
 }) {
   const t = useT();
+  const detailRef = useRef<HTMLElement>(null);
+  useEffect(() => detailRef.current?.focus(), []);
   // Newest first; a long history is read a bounded page at a time with "Load older" (#113).
   const [history, setHistory] = useState<SkillVersion[]>();
   const [olderCursor, setOlderCursor] = useState<string>();
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const historyRequest = useRef(0);
+  const [readRevision, setReadRevision] = useState(0);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [failedPage, setFailedPage] = useState<"newest" | "older">("newest");
   // Reload the history when the current version changes (undo, confirm, a new install).
   // biome-ignore lint/correctness/useExhaustiveDependencies: version and pending count are the triggers.
   useEffect(() => {
     const request = ++historyRequest.current;
     setHistoryError("");
+    setLoadingHistory(true);
+    setLoadingOlder(false);
     api
       .listSkillVersions(skill.id, { limit: SKILLS_PAGE_SIZE })
       .then((page) => {
@@ -687,16 +765,23 @@ function SkillDetail({
         setOlderCursor(page.nextCursor);
       })
       .catch((err: unknown) => {
-        if (request === historyRequest.current) setHistoryError(errorMessage(err));
+        if (request === historyRequest.current) {
+          setHistoryError(errorMessage(err));
+          setFailedPage("newest");
+        }
+      })
+      .finally(() => {
+        if (request === historyRequest.current) setLoadingHistory(false);
       });
     return () => {
       historyRequest.current += 1;
     };
-  }, [api, skill.id, skill.version, skill.pendingVersions]);
+  }, [api, skill.id, skill.version, skill.pendingVersions, readRevision]);
   const loadOlder = () => {
-    if (!olderCursor) return;
+    if (!olderCursor || loadingOlder || loadingHistory) return;
     const request = ++historyRequest.current;
     setLoadingOlder(true);
+    setHistoryError("");
     api
       .listSkillVersions(skill.id, { cursor: olderCursor, limit: SKILLS_PAGE_SIZE })
       .then((page) => {
@@ -705,13 +790,23 @@ function SkillDetail({
         setOlderCursor(page.nextCursor);
       })
       .catch((err: unknown) => {
-        if (request === historyRequest.current) setHistoryError(errorMessage(err));
+        if (request === historyRequest.current) {
+          setHistoryError(errorMessage(err));
+          setFailedPage("older");
+        }
       })
-      .finally(() => setLoadingOlder(false));
+      .finally(() => {
+        if (request === historyRequest.current) setLoadingOlder(false);
+      });
   };
 
   return (
-    <aside className="resource-detail" aria-label={t("skillsPage.detail.label")}>
+    <aside
+      ref={detailRef}
+      tabIndex={-1}
+      className="resource-detail"
+      aria-label={t("skillsPage.detail.label")}
+    >
       <header className="resource-detail-head">
         <h2>{skill.name}</h2>
         <button
@@ -739,8 +834,6 @@ function SkillDetail({
             }))}
           />
         </dd>
-        <dt>{t("skillsPage.detail.origin")}</dt>
-        <dd>{origin}</dd>
         <dt>{t("skills.table.enabledFor")}</dt>
         <dd>{enabledFor}</dd>
         <dt>{t("skillsPage.detail.version")}</dt>
@@ -750,29 +843,46 @@ function SkillDetail({
             : null}
           {skill.pinned ? ` · ${t("skills.pinned")}` : null}
         </dd>
-        <dt>{t("skillsPage.detail.hash")}</dt>
-        <dd>
-          <code className="resource-hash">{skill.sha256 ?? t("skills.sha.none")}</code>
-        </dd>
-        <dt>{t("skillsPage.detail.provenance")}</dt>
-        <dd>{skill.provenance ?? t("skillsPage.detail.provenanceNone")}</dd>
-        <dt>{t("skillsPage.detail.listedSince")}</dt>
-        <dd>{skill.listedSince.slice(0, 10)}</dd>
       </dl>
       <div className="resource-detail-actions">
         <Button disabled={busy} onClick={onAssign}>
           {t("skills.assign.button")}
         </Button>
       </div>
+      <details className="skill-audit">
+        <summary>{t("skillsPage.detail.audit")}</summary>
+        <dl className="resource-facts">
+          <dt>{t("skillsPage.detail.origin")}</dt>
+          <dd>{origin}</dd>
+          <dt>{t("skillsPage.detail.hash")}</dt>
+          <dd>
+            <code className="resource-hash">{skill.sha256 ?? t("skills.sha.none")}</code>
+          </dd>
+          <dt>{t("skillsPage.detail.provenance")}</dt>
+          <dd>{skill.provenance ?? t("skillsPage.detail.provenanceNone")}</dd>
+          <dt>{t("skillsPage.detail.listedSince")}</dt>
+          <dd>{skill.listedSince.slice(0, 10)}</dd>
+        </dl>
+      </details>
       <section className="resource-versions" aria-label={t("skillsPage.history.label")}>
         <h3>{t("skillsPage.history.label")}</h3>
         {historyError ? (
           <p role="alert" className="error">
-            {historyError}
+            {historyError}{" "}
+            <Button
+              disabled={loadingHistory || loadingOlder}
+              onClick={() =>
+                failedPage === "older" ? loadOlder() : setReadRevision((value) => value + 1)
+              }
+            >
+              {t("skillsPage.history.retry")}
+            </Button>
           </p>
-        ) : history === undefined ? (
+        ) : null}
+        {history === undefined && loadingHistory ? (
           <p className="muted small">{t("skillsPage.history.loading")}</p>
-        ) : (
+        ) : null}
+        {history ? (
           <ol>
             {history.map((version) => (
               <li key={version.version}>
@@ -792,9 +902,9 @@ function SkillDetail({
               </li>
             ))}
           </ol>
-        )}
+        ) : null}
         {history && olderCursor ? (
-          <Button disabled={loadingOlder} onClick={loadOlder}>
+          <Button disabled={loadingOlder || loadingHistory} onClick={loadOlder}>
             {t("skillsPage.history.loadOlder")}
           </Button>
         ) : null}
@@ -856,6 +966,10 @@ function InstallSkillForm({
 }) {
   const t = useT();
   const none = t("skills.sha.none");
+  const contentInput = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    contentInput.current?.focus();
+  }, []);
   const [skillMd, setSkillMd] = useState("");
   const [expectedSha, setExpectedSha] = useState("");
   const [computedSha, setComputedSha] = useState("");
@@ -879,13 +993,18 @@ function InstallSkillForm({
     <section aria-label={t("skills.install.label")} className="card resource-form">
       <h2>{t("skills.install.title")}</h2>
       <p className="muted small">{t("skills.install.intro")}</p>
-      <textarea
-        aria-label={t("skills.install.skillMd")}
-        rows={8}
-        value={skillMd}
-        onChange={(e) => setSkillMd(e.target.value)}
-        placeholder={t("skills.install.skillMdPlaceholder")}
-      />
+      <label>
+        {t("skills.install.skillMd")}
+        <textarea
+          ref={contentInput}
+          disabled={busy}
+          aria-label={t("skills.install.skillMd")}
+          rows={8}
+          value={skillMd}
+          onChange={(e) => setSkillMd(e.target.value)}
+          placeholder={t("skills.install.skillMdPlaceholder")}
+        />
+      </label>
       <p className="muted small">
         {front
           ? t("skills.install.frontmatter", { name: front.name, description: front.description })
@@ -895,21 +1014,30 @@ function InstallSkillForm({
           code: (chunks) => <code>{chunks}</code>,
         })}
       </p>
-      <input
-        aria-label={t("skills.install.reviewedSha")}
-        value={expectedSha}
-        onChange={(e) => setExpectedSha(e.target.value.trim())}
-        placeholder={t("skills.install.reviewedShaPlaceholder")}
-      />
-      <input
-        aria-label={t("skills.install.provenance")}
-        value={provenance}
-        onChange={(e) => setProvenance(e.target.value)}
-        placeholder={t("skills.install.provenancePlaceholder")}
-      />
+      <label>
+        {t("skills.install.reviewedSha")}
+        <input
+          disabled={busy}
+          aria-label={t("skills.install.reviewedSha")}
+          value={expectedSha}
+          onChange={(e) => setExpectedSha(e.target.value.trim())}
+          placeholder={t("skills.install.reviewedShaPlaceholder")}
+        />
+      </label>
+      <label>
+        {t("skills.install.provenance")}
+        <input
+          disabled={busy}
+          aria-label={t("skills.install.provenance")}
+          value={provenance}
+          onChange={(e) => setProvenance(e.target.value)}
+          placeholder={t("skills.install.provenancePlaceholder")}
+        />
+      </label>
       {bots.map((bot) => (
         <label key={bot.id} className="checkbox-row">
           <input
+            disabled={busy}
             type="checkbox"
             aria-label={t("skills.install.for", { name: bot.name })}
             checked={installFor.includes(bot.id)}
@@ -939,7 +1067,9 @@ function InstallSkillForm({
         >
           {t("skills.install.button")}
         </Button>
-        <Button onClick={onCancel}>{t("skillsPage.install.cancel")}</Button>
+        <Button disabled={busy} onClick={onCancel}>
+          {t("skillsPage.install.cancel")}
+        </Button>
       </div>
     </section>
   );

@@ -11,6 +11,6 @@ import zhTW from "./zh-TW.json";
 
 export const commonMessages = defineMessages({
   owner: "i18n/common",
-  prefixes: ["actor", "avatar", "dialog", "format", "markdown", "pager", "pill"],
+  prefixes: ["actor", "avatar", "dialog", "format", "markdown", "pager", "passwordField", "pill"],
   locales: { en, "zh-CN": zhCN, "zh-TW": zhTW, ja, es },
 });

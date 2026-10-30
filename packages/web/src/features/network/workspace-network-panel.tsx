@@ -56,13 +56,19 @@ function selectionExpiry(view: WorkspaceNetworkView): Record<string, string> {
   return Object.fromEntries(view.selections.map((s) => [s.profileId, toLocalInput(s.expiresAt)]));
 }
 
-export function WorkspaceNetworkPanel(props: {
+interface WorkspaceNetworkPanelProps {
   api: PanelApi;
   workspaceId: WorkspaceId;
   /** Every profile, when the caller is the root and may select any. */
   extraProfiles?: readonly NetworkProfile[];
   note?: string | undefined;
-}) {
+}
+
+export function WorkspaceNetworkPanel(props: WorkspaceNetworkPanelProps) {
+  return <ScopedNetworkPanel key={props.workspaceId} {...props} />;
+}
+
+function ScopedNetworkPanel(props: WorkspaceNetworkPanelProps) {
   const { api, workspaceId } = props;
   const t = useT();
   const [view, setView] = useState<WorkspaceNetworkView>();
@@ -72,6 +78,7 @@ export function WorkspaceNetworkPanel(props: {
   const [error, setError] = useState<string>();
   const [outcome, setOutcome] = useState<NetworkPublication>();
   const [busy, setBusy] = useState(false);
+  const [loadRevision, setLoadRevision] = useState(0);
 
   const show = useCallback((next: WorkspaceNetworkView) => {
     setView(next);
@@ -79,7 +86,10 @@ export function WorkspaceNetworkPanel(props: {
     setExpiry(selectionExpiry(next));
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadRevision requests a local retry.
   useEffect(() => {
+    let active = true;
+    setError(undefined);
     setOutcome(undefined);
     setView(undefined);
     // Through a promise, so a client without this domain is an error line, not a broken page.
@@ -87,12 +97,16 @@ export function WorkspaceNetworkPanel(props: {
       .then(() => api.getWorkspaceNetwork(workspaceId))
       .then(
         (next) => {
-          show(next);
-          setError(undefined);
+          if (active) show(next);
         },
-        (err: unknown) => setError(errorMessage(err)),
+        (err: unknown) => {
+          if (active) setError(errorMessage(err));
+        },
       );
-  }, [api, workspaceId, show]);
+    return () => {
+      active = false;
+    };
+  }, [api, workspaceId, show, loadRevision]);
 
   const act = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -118,7 +132,7 @@ export function WorkspaceNetworkPanel(props: {
       setOutcome(result.publication);
     });
   const toggleOpenInternet = (allowed: boolean) =>
-    act(async () => show((await api.setWorkspaceNetworkSettings(workspaceId, allowed)).network));
+    act(async () => setView((await api.setWorkspaceNetworkSettings(workspaceId, allowed)).network));
 
   const options = view ? selectableProfiles(view, props.extraProfiles) : [];
   const dirty =
@@ -130,12 +144,13 @@ export function WorkspaceNetworkPanel(props: {
       ));
   return (
     <div className="network-selection">
+      {!view && !error ? <output>{t("network.loading")}</output> : null}
       {view ? (
         <>
           <p className="network-badge" data-trusted={view.trustedTest}>
             {view.trustedTest ? t("network.trustedTest") : t("network.noGrants")}
           </p>
-          {options.length === 0 ? <p className="muted">{t("network.noneAvailable")}</p> : null}
+          {options.length === 0 ? <p className="muted">{t("network.empty")}</p> : null}
           <ul className="network-choices" aria-label={t("network.selection")}>
             {options.map((option) => {
               const expired = isExpired(option.profile?.expiresAt);
@@ -178,6 +193,7 @@ export function WorkspaceNetworkPanel(props: {
                       {t("network.selectionEnds")}
                       <input
                         type="datetime-local"
+                        disabled={busy}
                         value={expiry[option.id] ?? ""}
                         onChange={(e) => setExpiry({ ...expiry, [option.id]: e.target.value })}
                       />
@@ -209,7 +225,20 @@ export function WorkspaceNetworkPanel(props: {
           </div>
         </>
       ) : null}
-      {error ? <p className="error">{error}</p> : null}
+      {error ? (
+        <div className="error" role="alert">
+          {error}
+          {!view ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLoadRevision((value) => value + 1)}
+            >
+              {t("network.refresh")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {outcome ? <Publications publications={[outcome]} /> : null}
       <details className="network-preflight-block">
         <summary>{t("network.preflight.title")}</summary>
@@ -261,7 +290,12 @@ function Preflight({ api, workspaceId }: { api: PanelApi; workspaceId: Workspace
           type="url"
           aria-label={t("network.preflight.url")}
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          disabled={busy}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setResult(undefined);
+            setError(undefined);
+          }}
         />
         <Button type="submit" disabled={busy || url.trim() === ""}>
           {t("network.preflight.run")}

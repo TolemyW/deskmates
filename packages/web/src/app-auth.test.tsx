@@ -293,7 +293,9 @@ it("identifies an unreachable Gateway at startup and retries", async () => {
   const gw = fakeGateway({ signedIn: true });
   gw.state.offline = true;
   render(<App />);
-  expect(await screen.findByRole("alert")).toHaveTextContent("Cannot connect to the Gateway");
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Cannot connect to the server. Check that it is running, then try again.",
+  );
   gw.state.offline = false;
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
   await screen.findByText("Olive Owner");

@@ -26,7 +26,7 @@ describe("one-line ledger rows (issue #9)", () => {
         cacheReadTokens: 40000,
         cacheCreateTokens: null,
       }),
-      "turn 3 · m-large · input 1,200 · output 56 · cache read 40,000 · cache write —",
+      "step 3 · m-large · input 1,200 · output 56 · cache read 40,000 · cache write —",
     ],
     [
       runEvent(2, "model_switch", { from: "m-large", to: "m-small", source: "auto" }),
@@ -34,11 +34,11 @@ describe("one-line ledger rows (issue #9)", () => {
     ],
     [
       runEvent(3, "compact_boundary", { trigger: "auto", preTokens: 150000, postTokens: 40000 }),
-      "compacted (auto): 150,000 → 40,000 tokens",
+      "compacted (auto): 150,000 → 40,000 AI usage",
     ],
     [
       runEvent(4, "compact_boundary", { trigger: "manual", preTokens: 90000 }),
-      "compacted (manual) at 90,000 tokens",
+      "compacted (manual) at 90,000 AI usage",
     ],
     [runEvent(5, "skill_used", { skill: "deploy-check", toolUseId: "t" }), "skill deploy-check"],
     [

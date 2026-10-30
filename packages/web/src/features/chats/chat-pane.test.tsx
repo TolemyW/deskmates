@@ -3,6 +3,7 @@
 // messages are download buttons; a click starts a same-origin attachment download so the browser
 // can stream up to the 1 GiB bound without buffering the file in a page-owned Blob.
 
+import { RUN_ERROR_GATEWAY_RESTARTED } from "@deskmates/contracts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../../api/client.js";
@@ -81,10 +82,11 @@ describe("workspace path links in the transcript", () => {
     const { fetch } = fetchWithFiles(() => new Response("x"));
     render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
 
-    const human = await screen.findByText("/work/in.md");
-    expect(human.closest(".body")?.textContent).toContain("/work/in.md");
-    const bot = screen.getByText("/home/ops/out.csv");
-    expect(bot.closest(".body")?.textContent).toContain("/home/ops/out.csv");
+    const human = await screen.findByRole("button", { name: "Preview of /work/in.md" });
+    expect(human.getAttribute("title")).toBe("/work/in.md");
+    expect(human.closest(".body")?.textContent).toContain("in.md，thanks");
+    const bot = screen.getByRole("button", { name: "Preview of /home/ops/out.csv" });
+    expect(bot.getAttribute("title")).toBe("/home/ops/out.csv");
     expect(screen.queryByRole("button", { name: "work/relative.md" })).toBeNull();
     expect(screen.queryByRole("button", { name: "/work/system.md" })).toBeNull();
     expect(screen.getByText("system note about /work/system.md")).toBeTruthy();
@@ -97,10 +99,13 @@ describe("workspace path links in the transcript", () => {
     render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
     const before = window.location.href;
 
-    fireEvent.click(await screen.findByRole("button", { name: "Download /home/ops/out.csv" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Preview of /home/ops/out.csv" }));
+    const download = await screen.findByRole("button", { name: "Download /home/ops/out.csv" });
+    const requestsBeforeDownload = fileRequests.length;
+    fireEvent.click(download);
 
     await waitFor(() => expect(clicked).toHaveLength(1));
-    expect(fileRequests).toHaveLength(0);
+    expect(fileRequests).toHaveLength(requestsBeforeDownload);
     expect(clicked[0]?.download).toBe("out.csv");
     expect(clicked[0]?.getAttribute("href")).toBe(
       `${FILES_PREFIX}${encodeURIComponent("/home/ops/out.csv")}`,
@@ -113,14 +118,54 @@ describe("workspace path links in the transcript", () => {
     const { fetch, fileRequests } = fetchWithFiles(() => new Response("not fetched"));
     render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Download /work/in.md" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Preview of /work/in.md" }));
+    const download = await screen.findByRole("button", { name: "Download /work/in.md" });
+    const requestsBeforeDownload = fileRequests.length;
+    fireEvent.click(download);
 
     await waitFor(() => expect(clicked).toHaveLength(1));
-    expect(fileRequests).toHaveLength(0);
+    expect(fileRequests).toHaveLength(requestsBeforeDownload);
     expect(clicked[0]?.download).toBe("in.md");
     expect(clicked[0]?.getAttribute("href")).toBe(
       `${FILES_PREFIX}${encodeURIComponent("/work/in.md")}`,
     );
+  });
+});
+
+describe("a failed run's outcome row (#63 M14)", () => {
+  afterEach(cleanup);
+
+  it("says what a recorded reason means instead of showing its code", async () => {
+    installFakeEventSource();
+    const { fetch } = fakeFetch(
+      routes({
+        "GET /api/runs?threadId=thr_1": {
+          runs: [run({ status: "failed", error: RUN_ERROR_GATEWAY_RESTARTED })],
+        },
+      }),
+    );
+    const { container } = render(
+      <ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />,
+    );
+    expect(
+      await screen.findByText(/The server restarted before the work could continue/),
+    ).toBeTruthy();
+    expect(container.querySelector(".run-outcome")?.textContent).not.toContain(
+      RUN_ERROR_GATEWAY_RESTARTED,
+    );
+  });
+});
+
+describe("deleted conversation", () => {
+  it("shows a terminal 404 state with no composer or retry", async () => {
+    installFakeEventSource();
+    const { fetch } = fakeFetch({});
+    render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
+    expect((await screen.findByTestId("deleted-object")).textContent).toContain(
+      "This item is no longer available",
+    );
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: /retry/i })).toBeNull();
   });
 });
 
@@ -141,11 +186,11 @@ describe("Stop in an open chat (issue #76)", () => {
     );
     render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "1 run of ops" }));
-    fireEvent.click(await screen.findByRole("button", { name: /^Stop ops \(running\)/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Stop run" }));
+    fireEvent.click(await screen.findByRole("button", { name: "1 work item for ops" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Stop ops \(working\)/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Stop work" }));
 
-    await screen.findByText("ops's run was cancelled. Other work in this chat keeps going.");
+    await screen.findByText("ops's work was cancelled. Other work in this chat keeps going.");
     expect(calls.filter((c) => c.method === "POST").map((c) => c.path)).toEqual([
       "/api/runs/run_1/cancel",
     ]);
@@ -156,7 +201,7 @@ describe("Stop in an open chat (issue #76)", () => {
   it("offers no Stop when nothing is running", async () => {
     const { fetch } = fakeFetch(routes());
     render(<ChatPane threadId={THREAD_ID} api={createApiClient({ fetch })} />);
-    await screen.findByText("/work/in.md");
+    await screen.findByRole("button", { name: "Preview of /work/in.md" });
     expect(screen.queryByTestId("typing")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Stop/ })).toBeNull();
   });

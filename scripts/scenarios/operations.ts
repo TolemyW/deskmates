@@ -147,6 +147,8 @@ export async function importScenario(
       sandboxProvider: w.sandboxProvider,
       egressAllowlist: w.egressAllowlist,
       ...(w.probe ? { probeUrl: w.probe.url, probeExpectText: w.probe.expectText } : {}),
+      // A scenario declares its own bots; the workspace default bot (ADR-0051) would be extra.
+      defaultBot: false,
     });
     receipt.workspaceId = workspace.id;
     await save(receipt);

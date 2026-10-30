@@ -24,6 +24,8 @@ function argumentsOf(elements: MessageFormatElement[], into = new Set<string>())
 
 const english = CATALOGS.en;
 const englishKeys = Object.keys(english).sort();
+const INTERNAL_STATUS_CODE =
+  /\b(?:waiting_approval(?:_live)?|waiting_browser|waiting_continuation|waiting_platform|thread_message|in_progress|allow_once|allow_always)\b/;
 
 describe("message catalogs", () => {
   it("has a catalog for each of the five UI locales", () => {
@@ -58,6 +60,13 @@ describe("message catalogs", () => {
           }
         }
         expect(broken).toEqual([]);
+      });
+
+      it("does not expose internal status or event codes in user-facing copy", () => {
+        const exposed = Object.entries(catalog)
+          .filter(([, message]) => INTERNAL_STATUS_CODE.test(message))
+          .map(([key, message]) => `${key}: ${message}`);
+        expect(exposed).toEqual([]);
       });
 
       it("uses the arguments and tags of the English message", () => {

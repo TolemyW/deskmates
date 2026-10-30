@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { runEvent } from "../../test-support/fixtures.js";
+import { desktopDenials } from "./desktop-denials.js";
 import { describeTool, firstLine, storyOf, thoughtHeading } from "./run-story.js";
 
 describe("storyOf", () => {
@@ -170,5 +171,40 @@ describe("firstLine and thoughtHeading", () => {
       truncated: true,
     });
     expect(thoughtHeading("One line only")).toEqual({ text: "One line only", truncated: false });
+  });
+});
+
+describe("desktop network denials (ADR-0048 amendment 1, A4)", () => {
+  it("are a step naming the host and the reason, and are counted", () => {
+    const events = [
+      runEvent(1, "tool_call", {
+        toolUseId: "tu_1",
+        toolName: "mcp__desktop__js",
+        riskLevel: "L1",
+        input: { code: "await fetch('http://10.0.0.5/')" },
+      }),
+      runEvent(2, "log", {
+        source: "desktop",
+        op: "egress_denied",
+        level: "warn",
+        host: "10.0.0.5",
+        kind: "hard_deny",
+        reason: "egress_blocked: desktop code names 10.0.0.5",
+        toolName: "mcp__desktop__js",
+        toolUseId: "tu_1",
+      }),
+      runEvent(3, "tool_result", { toolUseId: "tu_1", content: "denied", isError: true }),
+    ];
+    const steps = storyOf(events).flatMap((s) => s.steps);
+    expect(steps.map((s) => [s.verb, s.values, s.tone, s.text])).toEqual([
+      ["runStory.verb.usedTool", undefined, "error", undefined],
+      [
+        "runStory.verb.desktopEgressDenied",
+        { host: "10.0.0.5" },
+        "error",
+        "egress_blocked: desktop code names 10.0.0.5",
+      ],
+    ]);
+    expect(desktopDenials(events)).toEqual({ count: 1, hosts: ["10.0.0.5"] });
   });
 });

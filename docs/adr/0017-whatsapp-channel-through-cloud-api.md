@@ -1,7 +1,7 @@
 # ADR-0017: The WhatsApp channel is a standalone adapter on the WhatsApp Business Platform Cloud API
 
 Date: 2026-10-02
-Status: Accepted for implementation, including amendment 1 on 2026-10-11 and amendment 2 on 2026-10-12; live-account rows remain pending
+Status: Accepted for implementation, including amendment 1 on 2026-10-11, amendment 2 on 2026-10-12 and amendment 3 on 2026-10-17 (owner ruling; it supersedes decision 4's deny-by-default admission for the release plugin); live-account rows remain pending
 
 2026-10-03 update: [ADR-0019](0019-whatsapp-linked-device-qr.md) supersedes the
 Cloud-API-only selection and rejection of QR-linked clients following the owner's
@@ -145,7 +145,7 @@ private-directory backups is outside the first version's backup contract.
 | P3 | one generic API/UI flow renders fake manifest schema/status and drives lifecycle/webhook commands without provider branches | T1 generic channel routes with fake plugin; T0 web tests with fake manifests | lifecycle failures by plugin/method |
 | P4 | a workspace cannot create a second WhatsApp connection or share one; method switch requires disconnect; every admitted private sender maps to the same configured Bot while groups create nothing | T1 connection/routing tests for both methods, duplicate requests and two workspaces | accepted/dropped conversations by reason |
 | P5 | QR and Cloud API complete connect/status/test/reconnect/disconnect against fakes; no test requires an undecided template/proactive policy | T1 lifecycle suite; manual real-phone journeys remain pending | connection state transitions |
-| P6 | secret plaintext is absent from database dumps, responses and logs; QR state has 0700/0600, survives restart/archive, and is removed on disconnect/delete | T1 secret-store/log tests; temporary-directory permission/lifecycle tests | relink-required transitions |
+| P6 | secret plaintext is absent from database dumps, responses and logs; QR state has 0700/0600, survives restart/archive, and is removed on disconnect/delete; archive stops every connection of the workspace (host stale, provider session closed without logout, no inbound admitted, nothing sent, Integrations card shows it stopped) and restore reopens it with the same binding generation and no relink | T1 secret-store/log tests; temporary-directory permission/lifecycle tests; T1 `packages/gateway/src/channels/workspace-archive.test.ts` (fake ABI-2 provider: archive, restore, purge after archive) and `whatsapp-abi2.test.ts` (QR connection archived across a Gateway restart, restored, purged); T0 `packages/channels/src/whatsapp/plugin.test.ts` (an archive close keeps the link); T0 web `channel-integrations.test.tsx`, `channel-connections.test.tsx` (stopped state) | relink-required transitions; connections stopped by archive |
 
 ## Amendment 2 (2026-10-12): a channel-bound thread is a read-only Web mirror
 
@@ -192,3 +192,67 @@ connection; it is not conversation from the Web thread.
 | M2 | A WhatsApp-bound thread renders its history and a channel badge but no composer textbox, Send, Add bot or Allow once; a Web thread keeps them; the notice is localized | T1 `packages/web/src/features/chats/chat-pane-channel-mirror.test.tsx`; T0 `packages/contracts/src/channel.test.ts` for the predicate | none |
 | M3 | An Admin's and a Member's session post and a service principal's post to a WhatsApp-bound thread get 403 `channel_thread_read_only` and leave message and run counts unchanged; the operator credential still posts (201); an `agent:*` submission thread still accepts a follow-up | T1 `packages/gateway/src/api/thread-channel-mirror.test.ts`; existing in-process plugin tests in `packages/gateway/src/channels/` and `packages/channels` keep passing | refused Web posts to mirror threads (reported) |
 | M4 | A pending approval in a mirror thread shows a note pointing to Approvals or the phone instead of buttons; phone-side approval commands still decide | T1 chat-pane mirror test; existing T1 adapter/plugin approval tests; manual stable phone journey **not run** | approvals decided from WhatsApp (reported) |
+
+## Amendment 3 (2026-10-17): WhatsApp admits every sender unless the connection blocks them
+
+The owner ruled on 2026-10-17 ("发件人默认放行", issue deskmates-private#4, answering ADR-0047
+amendment 1 question A3) that WhatsApp senders are allowed by default, with the per-connection
+blocklist, like the other ABI-2 providers (ADR-0047 decision 13). This supersedes decision 4's
+deny-by-default admission and its `WHATSAPP_ALLOWED_SENDERS` list for the release plugin loaded
+by the Gateway, and ADR-0019 decision 4's "explicit phone-number allowlist ... an empty list
+admits nobody" for the same plugin. Everything else in decision 4 stands: the human message
+carries `authorId = whatsapp:<wa_id>`, the profile name never enters a thread or model context,
+and a message for another `phone_number_id` is acknowledged and dropped.
+
+S1. **Allow by default, blocklist in both directions.** Every private sender of a WhatsApp
+connection is admitted unless their `wa_id` (E.164 digits, the id the thread's author id carries)
+is on that connection's blocklist, which only a workspace Owner or Admin changes, in Integrations
+(audited `channel.sender_block` and `channel.sender_unblock`). The connection-scoped host
+enforces it exactly as decision 4 enforced its list: a blocked sender's message is acknowledged to
+the provider (200 for the Cloud API) and dropped with no thread, message, run, decision or
+notice (the text-only notice and the approval refusal are not sent either, because the plugin asks
+`admits` first); nothing further is sent to a blocked person's thread, its relay cursor moves past
+what was not sent, so unblocking does not replay it, and the thread and its history stay. The
+manifest declares `senderAdmission: { mode: "blocklist" }` and has no `allowedSenders` field.
+
+S2. **Existing allowlists are dropped; nobody is blocked.** One forward data migration removes
+`allowedSenders` from every WhatsApp connection's config and stamps the connection with the time
+its admission changed (`admission_changed_at`). No listed or unlisted number becomes a block: a
+list of who was allowed says nothing about whom the owner wants kept out, and inferring blocks
+from it, or from earlier delistings, would block people for a reason nobody gave. A person who had
+been removed from a list is therefore admitted again from their next message; what they missed
+is not replayed, because their thread's cursor already moved past it. The dropped list is not kept
+anywhere else; it was only phone numbers. The Integrations card of a stamped connection says once,
+to each Owner or Admin viewing it, that every sender is now admitted and how to block one; the
+viewer dismisses it (a per-browser convenience), and the stamp stays as the record of the change.
+A connection created after the change has no stamp and shows no notice.
+
+S3. **Approvals from the phone keep decision 7.** A matching command decides only an approval
+whose thread is the sender's own bound thread (of the connection's current binding generation),
+only `allow_once` or `deny`, never `allow_always`, with `authorId whatsapp:<wa_id>`; the host also
+refuses a decision from a blocked sender or from anyone who has not written in that thread
+(ADR-0047 decision 9). What changes is who has such a thread: anyone who writes to the number now
+gets one, and can answer the approvals that their own conversation raises. That is the exposure
+the owner accepted for Telegram, Discord and Slack in ADR-0047 decision 13; it is stated here
+because WhatsApp used to limit it to listed numbers. The workspace's approval mode (ADR-0002
+amendment 6), budget and loop breaker apply as before, and an approval in a WhatsApp thread can
+still be decided from the global Approvals surface (amendment 2 M4).
+
+S4. **The test message goes to any number that is not blocked.** It was limited to listed
+numbers; it remains an Owner or Admin action from the Integrations card.
+
+S5. **The standalone diagnostic binaries keep their list.** `deskmates-whatsapp` and
+`deskmates-whatsapp-web` (amendment 1 P5's diagnostics, not the product path) have no blocklist
+UI and run with the operator credential, so they keep decision 4 and ADR-0019 decision 4 as
+written: `WHATSAPP_ALLOWED_SENDERS`, deny by default, an empty list admits nobody.
+
+### Verification for amendment 3
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| S1 | the release manifest declares the blocklist mode and no `allowedSenders` field; a sender never seen before is admitted, gets a thread and a reply; a blocked sender's text, image and approval command create no thread, message, decision or notice, and a blocked person's thread sends nothing, also after unblocking; the blocklist routes accept a WhatsApp connection | T1 `packages/channels/src/whatsapp/plugin.test.ts`; T1 `packages/gateway/src/channels/whatsapp-abi2.test.ts` | dropped senders by reason |
+| S2 | after the migration a WhatsApp connection's config has no `allowedSenders`, carries `admissionChangedAt`, has no block, and a formerly listed and a never-listed number are both admitted; a connection created afterwards has no stamp; the single-connection card shows the notice once per viewer and offers the blocklist to Owners and Admins only | T1 `whatsapp-abi2.test.ts`; `db/schema-conventions.test.ts`; T0 `packages/web/src/features/integrations/channel-integrations.test.tsx` | none |
+| S3 | an admitted sender decides an approval of their own thread only, `allow_once` or `deny`; a blocked sender decides nothing and gets no refusal notice | T1 `plugin.test.ts`; T1 `whatsapp-abi2.test.ts` | approvals decided from WhatsApp (reported) |
+| S4 | a test message to a blocked number is refused; to another number it is sent | T1 `plugin.test.ts` | none |
+| S5 | the standalone adapters still drop an unlisted sender | existing T1 `packages/channels/src/whatsapp/adapter.test.ts`, `packages/channels/src/whatsapp-web/relay.test.ts` | none |
+| live | an unknown phone reaches the Bot on a real QR link and a real Cloud API number; a blocked phone gets nothing | manual stable phone journey; **not run** | journeys by result |

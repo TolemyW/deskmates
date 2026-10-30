@@ -154,7 +154,7 @@ export class MemoryOrganizer {
       const run = this.ctx.runs.create({
         botId: bot.id,
         lane: "background",
-        triggerKind: "cron",
+        triggerKind: "model_job",
         triggerRef: `${MEMORY_ORGANIZE}:${id}`,
         triggerPayload: { prompt: "" },
         config: {

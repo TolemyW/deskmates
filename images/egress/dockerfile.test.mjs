@@ -21,4 +21,12 @@ describe("images/egress/Dockerfile", () => {
     const needed = [...localImports("egress-proxy.mjs")];
     expect(needed.filter((name) => !copied.has(name))).toEqual([]);
   });
+
+  // #63 L20: a floating base tag changes the image under an unchanged Dockerfile, so
+  // scripts/image-tag.mjs cannot see it. The digest makes a new base a change to this file.
+  it("pins its base image by digest", () => {
+    expect([...read("Dockerfile").matchAll(/^FROM (\S+)/gm)].map((m) => m[1])).toEqual([
+      expect.stringMatching(/^node:22-bookworm-slim@sha256:[0-9a-f]{64}$/),
+    ]);
+  });
 });

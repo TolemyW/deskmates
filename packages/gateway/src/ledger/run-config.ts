@@ -1,7 +1,7 @@
 // The knob configuration stamped on every run row (AGENTS.md: `runs.config_json`). Built from
 // the Gateway config once; `buildContext` hands the function to the router and the lifecycle.
 
-import { BOT_WORKDIR_DEFAULT } from "@deskmates/contracts";
+import { BOT_WORKDIR_DEFAULT, MEMORY_VALUE_POLICY } from "@deskmates/contracts";
 import {
   CONNECTOR_VALIDATION_TTL_SECONDS_DEFAULT,
   GROUP_ROUTING_DEFAULT,
@@ -25,6 +25,7 @@ export function createRunConfig(config: GatewayConfig): () => Record<string, unk
     threadPayloadMaxTokens: config.threadPayloadMaxTokens,
     browserRuntimeVersion: 1,
     knowledgeVersion: 1,
+    researchGuidance: "verify-v1",
     ttyVersion: 1,
     browserTabRetentionVersion: 1,
     browserRetainedTabs: config.browserRetainedTabs ?? 20,
@@ -67,5 +68,6 @@ export function createRunConfig(config: GatewayConfig): () => Record<string, unk
     // ADR-0011: pinned index in the first user turn, memory_search, learned writes. The budgets
     // and the exact version set of each run are stamped at start (decision 12).
     memoryVersion: 1,
+    memoryValuePolicy: MEMORY_VALUE_POLICY,
   });
 }

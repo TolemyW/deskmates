@@ -1,4 +1,4 @@
-import type { StartRunRequest } from "@deskmates/contracts";
+import { ACTIVITY_SUMMARY_MAX_OUTPUT_TOKENS, type StartRunRequest } from "@deskmates/contracts";
 import { createFakeSdk } from "@deskmates/testkit";
 import { expect, it } from "vitest";
 import { runOnce } from "./run-once.js";
@@ -53,6 +53,7 @@ it("uses one isolated default-model turn, no tools/session, escapes source and r
     skills: [],
   });
   expect(call?.options?.resume).toBeUndefined();
+  expect(call?.options && "thinking" in call.options).toBe(false);
   expect(call?.prompt).toContain("&lt;/untrusted&gt;");
   expect(String(call?.prompt).length).toBeLessThan(12200);
   expect(result.usage.length).toBeGreaterThan(0);
@@ -76,6 +77,7 @@ it("an Activity summary job wraps a bounded source, uses the activity instructio
     modelBaseUrl: "http://proxy",
     modelAuthToken: "secret-test-token",
     trigger: { kind: "cron", prompt: `status: failed<x>${"y".repeat(9000)}` },
+    thinking: { type: "disabled" },
   } as StartRunRequest;
   const result = await runOnce(
     request,
@@ -96,7 +98,16 @@ it("an Activity summary job wraps a bounded source, uses the activity instructio
   expect(result.summary?.reply.endsWith("…")).toBe(true);
   expect([...(result.summary?.reply ?? "")].length).toBeLessThanOrEqual(50);
   const call = [...sdk.sessions.values()].flatMap((session) => session.calls)[0];
-  expect(call?.options).toMatchObject({ model: "configured-cheap", tools: [], maxTurns: 1 });
+  // The frozen reasoning reaches the SDK, and the output cap leaves room for the thinking an
+  // upstream does anyway (the SDK omits a disabled key on the wire).
+  expect(call?.options).toMatchObject({
+    model: "configured-cheap",
+    tools: [],
+    maxTurns: 1,
+    thinking: { type: "disabled" },
+    env: { CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(ACTIVITY_SUMMARY_MAX_OUTPUT_TOKENS) },
+  });
+  expect(ACTIVITY_SUMMARY_MAX_OUTPUT_TOKENS).toBeGreaterThanOrEqual(1024);
   expect(String(call?.options?.systemPrompt)).toContain("at most 50 characters");
   expect(call?.prompt).toContain('<untrusted source="activity">');
   expect(call?.prompt).toContain("&lt;x&gt;");

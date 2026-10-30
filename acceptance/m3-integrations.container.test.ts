@@ -306,6 +306,7 @@ describe.skipIf(!available)("M3 integrations through the real runtime (ADR-0013)
     const s = stack as Stack;
     const ctx = s.app.deskmates.ctx;
     const ws = await s.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+      defaultBot: false,
       name: `m3-int-b-${nonce}`,
     });
     const bot = await s.api<{ bot: BotDefinition; welcomeRun: { id: string } }>(

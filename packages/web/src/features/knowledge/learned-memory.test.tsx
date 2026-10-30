@@ -1,3 +1,4 @@
+import "@testing-library/jest-dom/vitest";
 import type { MemoryVersion } from "@deskmates/contracts";
 // @vitest-environment jsdom
 // ADR-0011 consequences: the "Learned memory" page lists entries per workspace and per bot with
@@ -290,7 +291,7 @@ it("clears a selected conversation and pending edit when the workspace changes",
   await selectOption("Finish task notes", "Refund review");
   const fact = screen.getByText(/S3 price JSON/).closest("tr") as HTMLElement;
   fireEvent.click(within(fact).getByRole("button", { name: "Edit" }));
-  await selectOption("Workspace", "lab");
+  await selectOption(screen.getByLabelText("Workspace", { selector: "button" }), "lab");
   expect(screen.getByLabelText("Finish task notes").textContent).toContain("Choose a conversation");
   expect(screen.getByRole("button", { name: "Finish task notes" }).hasAttribute("disabled")).toBe(
     true,
@@ -338,4 +339,20 @@ it("shows the latest workspace run's memory inclusion and omission counts", asyn
   expect((await screen.findByText(/4 of 9 entries pinned/)).textContent).toContain(
     "2 untrusted, 2 over budget",
   );
+});
+
+it("keeps failed forgetting in its modal and returns focus without deleting on cancel", async () => {
+  const { typed, api } = fakeApi();
+  api.forgetMemoryEntry.mockRejectedValueOnce(new Error("Could not forget"));
+  render(<LearnedMemoryScreen api={typed} now={() => NOW} />);
+  const row = (await screen.findByText(/quota page lists 40/)).closest("tr") as HTMLElement;
+  const opener = within(row).getByRole("button", { name: "Forget" });
+  fireEvent.click(opener);
+  const dialog = screen.getByRole("dialog", { name: "Permanently forget memory" });
+  await waitFor(() => expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus());
+  fireEvent.click(within(dialog).getByRole("button", { name: "Permanently forget" }));
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent("Could not forget");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(opener).toHaveFocus());
+  expect(api.forgetMemoryEntry).toHaveBeenCalledTimes(1);
 });

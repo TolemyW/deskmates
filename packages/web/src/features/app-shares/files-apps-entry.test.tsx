@@ -19,7 +19,7 @@ it("opens the apps panel on demand", async () => {
           workspaceId: "ws_1",
           port: 3000,
           label: "Todo app",
-          url: "https://abc.10.20.40.132.nip.io:18443/",
+          url: "https://abc.10.88.40.132.nip.io:18443/",
           botId: "bot_1",
           runId: "run_1",
           publishedBy: null,
@@ -35,12 +35,12 @@ it("opens the apps panel on demand", async () => {
     revokeAppShare: vi.fn(),
   };
   render(<FilesAppsEntry api={api} workspaceId="ws_1" />);
-  const toggle = screen.getByRole("button", { name: "Apps" });
+  const toggle = screen.getByRole("button", { name: "Shared apps" });
   expect(toggle.getAttribute("aria-expanded")).toBe("false");
   expect(api.listAppShares).not.toHaveBeenCalled();
   fireEvent.click(toggle);
   expect(await screen.findByText("Todo app")).toBeTruthy();
-  expect(screen.getByText("https://abc.10.20.40.132.nip.io:18443/")).toBeTruthy();
+  expect(screen.getByText("https://abc.10.88.40.132.nip.io:18443/")).toBeTruthy();
   expect(screen.getByRole("button", { name: "Stop sharing" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "Share" })).toBeTruthy();
   expect(api.listAppShares).toHaveBeenCalledWith("ws_1");

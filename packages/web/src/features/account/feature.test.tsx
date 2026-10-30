@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // T0: Account settings has no navigation entry (the identity link opens it) and gets the
-// session, its client and the preference callbacks.
+// session and its account client; global preferences belong to the shell.
 
 import { expect, it } from "vitest";
 import {
@@ -26,12 +26,6 @@ describeRender("account", [
       onProfile: STUB_CONTEXT.onProfile,
       onSessionRotated: STUB_CONTEXT.onSessionRotated,
       onSignOut: STUB_CONTEXT.onSignOut,
-      preferences: {
-        locale: "en",
-        onLocaleChange: STUB_CONTEXT.changeLocale,
-        theme: "system",
-        onThemeChange: STUB_CONTEXT.theme.setPreference,
-      },
     },
   ],
 ]);

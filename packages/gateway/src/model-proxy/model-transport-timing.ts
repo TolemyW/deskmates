@@ -10,6 +10,8 @@ export type TimingRecorder = (sample: PhaseTimingSample) => unknown;
 export interface ModelTransportTimingOptions {
   record?: TimingRecorder;
   requestKind?: PhaseTimingSample["requestKind"];
+  /** The model the request goes upstream for; named on every span (ADR-0046 amendment 2). */
+  model?: string;
   wallNow?: () => Date;
   monotonicNow?: () => number;
   spanId?: () => string;
@@ -36,6 +38,7 @@ export class ModelTransportTiming {
   private readonly monotonicNow: () => number;
   private readonly nextSpanId: () => string;
   private readonly requestKind?: PhaseTimingSample["requestKind"];
+  private readonly model?: string;
   private readonly request: OpenSpan;
   private readonly headers: OpenSpan;
   private readonly firstByte: OpenSpan;
@@ -47,6 +50,7 @@ export class ModelTransportTiming {
     this.monotonicNow = opts.monotonicNow ?? (() => performance.now());
     this.nextSpanId = opts.spanId ?? randomUUID;
     this.requestKind = opts.requestKind;
+    if (opts.model) this.model = opts.model;
 
     this.request = this.start("model_request");
     this.headers = this.start("model_headers", this.request.id);
@@ -101,6 +105,7 @@ export class ModelTransportTiming {
       at: this.wallNow().toISOString(),
       ...(parentSpanId ? { parentSpanId } : {}),
       ...(this.requestKind ? { requestKind: this.requestKind } : {}),
+      ...(this.model ? { model: this.model } : {}),
     });
     return span;
   }
@@ -119,6 +124,7 @@ export class ModelTransportTiming {
       outcome,
       ...(span.parentSpanId ? { parentSpanId: span.parentSpanId } : {}),
       ...(this.requestKind ? { requestKind: this.requestKind } : {}),
+      ...(this.model ? { model: this.model } : {}),
     });
   }
 

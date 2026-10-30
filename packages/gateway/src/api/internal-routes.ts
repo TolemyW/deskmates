@@ -5,29 +5,43 @@
 import {
   type ApprovalDecideRequest,
   type ApprovalId,
+  type ApprovalResponse,
   type BrowserLockRequest,
+  DESKTOP_INPUT_BLOCKS_BROWSER_MESSAGE,
   DeskmatesError,
   type EgressAllowlistResponse,
   type PostMessageRequest,
   type PostedMessageRouting,
   RUN_EVENT_KINDS,
   type RunId,
+  type SessionStartedReport,
   type SidecarEvent,
+  type SidecarEventsAck,
   decidedByBot,
+  isExecuting,
   mentionDiagnostics,
 } from "@deskmates/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { registerAppShareInternalRoutes } from "../app-shares/app-share-routes.js";
 import { allowEgressForApproveAll } from "../approvals/approve-all.js";
-import { assertBotMayDecide } from "../approvals/bot-decision.js";
+import { announceRefusedBotDecision, assertBotMayDecide } from "../approvals/bot-decision.js";
 import type { GatewayContext } from "../context.js";
+import { registerDefaultBotInternalRoutes } from "../default-bot/default-bot-routes.js";
+import { recordDesktopDenials } from "../desktop/desktop-denials.js";
+import { desktopInputLocks } from "../desktop/desktop-input-lock.js";
+import { registerDesktopInternalRoutes } from "../desktop/desktop-internal-routes.js";
 import { bearerToken } from "../model-proxy/model-proxy.js";
 import { networkProfiles } from "../network/network-policy.js";
 import { registerOperationInternalRoutes } from "../operations/operation-routes.js";
+import { registerRunStatsInternalRoutes } from "../run-stats/run-stats-routes.js";
+import { noteSdkVersion } from "../scheduler/platform-recovery.js";
 import type { RunLifecycle } from "../scheduler/run-lifecycle.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
+import { registerSearchInternalRoutes } from "../search/search-routes.js";
 import { postDirectMessage } from "../threads/direct-messages.js";
-import { applyEgressDecision } from "../workspaces/egress-policy.js";
+import { pauseStateOf } from "../threads/router.js";
+import { assertBotMayDecideVaultRelease } from "../vault/approval-policy.js";
+import { decideWithEgress } from "../workspaces/egress-policy.js";
 import { registerBrowserOriginRoutes } from "./browser-origin-routes.js";
 import { registerBrowserRetentionRoutes } from "./browser-retention-routes.js";
 import { registerConnectorInternalRoutes } from "./connector-routes.js";
@@ -43,6 +57,7 @@ import {
   asRecord,
   asRunEnded,
 } from "./validate.js";
+import { registerVaultInternalRoutes } from "./vault-routes.js";
 
 /** The contracts list, which the `run_events.kind` CHECK constraint (0015) matches. */
 const EVENT_KINDS: ReadonlySet<string> = new Set<string>(RUN_EVENT_KINDS);
@@ -78,11 +93,16 @@ export function registerInternalRoutes(
     registerAppShareInternalRoutes(scope, ctx);
     registerBrowserOriginRoutes(scope, ctx);
     registerBrowserRetentionRoutes(scope, ctx);
+    registerDefaultBotInternalRoutes(scope, ctx, () => scheduler.kick());
+    registerDesktopInternalRoutes(scope, ctx);
     registerKnowledgeInternalRoutes(scope, ctx);
     registerMemoryInternalRoutes(scope, ctx);
     registerOperationInternalRoutes(scope, ctx);
     registerReplyPreviewRoutes(scope, ctx);
+    registerRunStatsInternalRoutes(scope, ctx);
+    registerSearchInternalRoutes(scope, ctx);
     registerTaskInternalRoutes(scope, ctx);
+    registerVaultInternalRoutes(scope, ctx);
 
     scope.post<RunParams>(EVENTS_ROUTE, async (request) => {
       const runId = request.params.runId as RunId;
@@ -138,7 +158,21 @@ export function registerInternalRoutes(
                 event.payload.browserEpoch === ctx.locks.epoch(workspaceId))),
         ),
       );
-      return { stored: stored.length };
+      // ADR-0029 decision 10: the SDK build the run started on, from its init log.
+      for (const event of stored)
+        if (
+          event.kind === "log" &&
+          event.payload.source === "sdk" &&
+          typeof event.payload.cliVersion === "string"
+        )
+          noteSdkVersion(ctx, ctx.runs.mustGet(runId), event.payload.cliVersion, run.attempt);
+      // ADR-0048 amendment 1, A4: a desktop network denial is audited as well as ledgered.
+      recordDesktopDenials(ctx, run, stored);
+      // ADR-0029 decision 2: a drain reaches a live run through this acknowledgement; its next
+      // PreToolUse hook defers instead of deciding.
+      const ack: SidecarEventsAck = { stored: stored.length };
+      if (scheduler.draining) ack.drain = true;
+      return ack;
     });
 
     scope.post<RunParams>("/internal/runs/:runId/browser-lock", async (request) => {
@@ -151,6 +185,16 @@ export function registerInternalRoutes(
       }
       const req: BrowserLockRequest = { type: "browser_lock", runId, op: body.op };
       if (typeof body.tabId === "string") req.tabId = body.tabId;
+      // ADR-0048 amendment 1, A3: no browser action starts while a desktop call holds the shared
+      // screen for raw input; renewals of actions already in flight are not refused.
+      if (req.op === "acquire" && desktopInputLocks(ctx).exclusiveHeld(bot.workspaceId))
+        return {
+          type: "browser_lock_result",
+          runId,
+          granted: false,
+          waitMessage: DESKTOP_INPUT_BLOCKS_BROWSER_MESSAGE,
+          epoch: ctx.locks.epoch(bot.workspaceId),
+        };
       const previous = ctx.locks
         .list(bot.workspaceId)
         .find((lock) => lock.holderRunId === runId)?.tabId;
@@ -239,6 +283,10 @@ export function registerInternalRoutes(
           // A mention the Gateway did not deliver is said where it was written (issue #68); a
           // message that mentions nobody would have woken nobody anyway.
           if (wakeBlocked && message.mentions.length > 0) routing.wakeBlocked = wakeBlocked;
+          // ADR-0005 amendment 3, decision 27: a post into a paused thread is told so, with the
+          // reason and, for a turn-budget pause, when it resumes; it woke nobody.
+          const paused = pauseStateOf(ctx.threads.mustGet(message.threadId));
+          if (paused) routing.paused = paused;
           const handoffs = ctx.privateChats.results(message.id);
           if (handoffs.length > 0) {
             routing.handoffs = handoffs.map((h) => ({
@@ -285,7 +333,21 @@ export function registerInternalRoutes(
             approvalId: request.params.approvalId,
           });
         }
-        if (!approval.decision) return reply.code(202).send();
+        if (!approval.decision) {
+          // ADR-0029 decision 2: a drain ends a live approval wait as a platform `defer`; the
+          // approval stays pending and the run parks as `waiting_platform`.
+          if (scheduler.draining) {
+            const drained: ApprovalResponse = {
+              type: "approval_response",
+              approvalId: approval.id,
+              decision: "defer",
+              reason: "The Gateway is draining for an upgrade; the request stays open.",
+              platform: "drain",
+            };
+            return drained;
+          }
+          return reply.code(202).send();
+        }
         return ctx.broker.response(approval);
       },
     );
@@ -314,9 +376,22 @@ export function registerInternalRoutes(
           );
         }
         // ADR-0002 amendment 3, A10: not the requester, not its delegator, and never Always.
-        assertBotMayDecide(ctx, approval, run.botId, decision);
-        await applyEgressDecision(ctx, approval.id, decision, decidedByBot(run.botId));
-        const result = ctx.broker.decide(approval.id, decision, decidedByBot(run.botId), reason);
+        // Issue #89: a refusal is also said in the thread, so no post can claim otherwise.
+        try {
+          assertBotMayDecide(ctx, approval, run.botId, decision);
+          assertBotMayDecideVaultRelease(ctx, approval);
+        } catch (error) {
+          if (error instanceof DeskmatesError && error.code === "forbidden")
+            announceRefusedBotDecision(ctx, approval, run.botId, decision, error);
+          throw error;
+        }
+        const result = await decideWithEgress(
+          ctx,
+          approval.id,
+          decision,
+          decidedByBot(run.botId),
+          () => ctx.broker.decide(approval.id, decision, decidedByBot(run.botId), reason),
+        );
         ctx.events.append({
           runId,
           kind: "approval",
@@ -326,6 +401,25 @@ export function registerInternalRoutes(
         return { approval: result.approval };
       },
     );
+
+    // ADR-0029 decision 4: the session the attempt runs on, for a restart to resume. A report of an
+    // attempt that is not the run's current one, or of a run no longer executing, is ignored.
+    scope.post<RunParams>("/internal/runs/:runId/session", async (request) => {
+      const runId = request.params.runId as RunId;
+      const run = ctx.runs.mustGet(runId);
+      const body = asRecord(request.body, "session_started") as Partial<SessionStartedReport>;
+      if (
+        body.type !== "session_started" ||
+        typeof body.sdkSessionId !== "string" ||
+        body.sdkSessionId === "" ||
+        body.sdkSessionId.length > 200 ||
+        !Number.isSafeInteger(body.attempt)
+      )
+        throw new DeskmatesError("validation", "expected a SessionStartedReport");
+      const stored = body.attempt === run.attempt && isExecuting(run.status);
+      if (stored) ctx.runs.setSession(runId, body.sdkSessionId, run.attempt);
+      return { stored };
+    });
 
     scope.post<RunParams>("/internal/runs/:runId/ended", async (request) => {
       const runId = request.params.runId as RunId;

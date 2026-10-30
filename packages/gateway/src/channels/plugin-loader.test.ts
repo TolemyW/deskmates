@@ -12,7 +12,12 @@ afterEach(async () => {
 
 const hash = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 
-async function fixture(apiVersion = 1) {
+const V1_MANIFEST = (apiVersion: number) =>
+  `{ apiVersion: ${apiVersion}, id: "fake", version, displayName: "Fake", description: "Fake", capabilities: { directMessages: true, groups: false, testMessage: true }, methods: [], statusVocabulary: [] }`;
+const V2_MANIFEST = (groups: string) =>
+  `{ apiVersion: 2, id: "fake", version, displayName: "Fake", description: "Fake", multipleConnections: true, capabilities: { directMessages: "available", groups: "${groups}", inboundImages: "available", inboundOtherMedia: "disabled", outboundReply: "available", proactiveMessages: "unavailable", streaming: "disabled", approvals: "available", testMessage: "unavailable" }, methods: [{ id: "token", label: "Token", description: "Token", fields: [] }], statusVocabulary: ["connected"] }`;
+
+async function fixture(apiVersion = 1, manifestSource = V1_MANIFEST(apiVersion)) {
   const root = await mkdtemp(join(tmpdir(), "deskmates-channel-plugin-"));
   roots.push(root);
   const helper = join(root, "helper.mjs");
@@ -22,7 +27,7 @@ async function fixture(apiVersion = 1) {
     entry,
     `import { version } from "./helper.mjs";
 export const channelPlugin = {
-  manifest: { apiVersion: ${apiVersion}, id: "fake", version, displayName: "Fake", description: "Fake", capabilities: { directMessages: true, groups: false, testMessage: true }, methods: [], statusVocabulary: [] },
+  manifest: ${manifestSource},
   create: async () => ({ connect: async () => ({phase:"connected"}), restore: async () => ({phase:"connected"}), status: async () => ({phase:"connected"}), command: async () => ({phase:"connected"}), webhook: async () => ({status:200}), stop: async () => {} })
 };\n`,
   );
@@ -73,9 +78,23 @@ describe("release channel plugin loader (ADR-0017 amendment 1 P1/P2)", () => {
   });
 
   it("degrades an incompatible API version without importing it", async () => {
-    const fx = await fixture(2);
+    const fx = await fixture(3);
     const loaded = await loadReleaseChannelPlugins(fx.manifest);
     expect(loaded.plugins.size).toBe(0);
     expect(loaded.failures[0]?.message).toContain("incompatible");
+  });
+
+  it("loads an ABI-2 plugin whose manifest declares every capability row (ADR-0047)", async () => {
+    const fx = await fixture(2, V2_MANIFEST("unavailable"));
+    const loaded = await loadReleaseChannelPlugins(fx.manifest);
+    expect(loaded.failures).toEqual([]);
+    expect(loaded.plugins.get("fake")?.manifest.apiVersion).toBe(2);
+  });
+
+  it("refuses an ABI-2 plugin that declares groups, which this version does not implement", async () => {
+    const fx = await fixture(2, V2_MANIFEST("disabled"));
+    const loaded = await loadReleaseChannelPlugins(fx.manifest);
+    expect(loaded.plugins.size).toBe(0);
+    expect(loaded.failures[0]?.message).toContain("groups must be unavailable");
   });
 });

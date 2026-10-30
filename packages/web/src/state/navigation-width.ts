@@ -4,16 +4,17 @@ import { usePanelWidth } from "./panel-width.js";
 /** Two stable stages; pointer hysteresis prevents jitter near the collapse boundary. */
 export function useNavigationWidth() {
   const panel = usePanelWidth("navigation", 240, 200, (vw) => Math.min(320, vw - 620));
-  const [compact, setCompact] = useState(() => {
+  const [preferredCompact, setCompact] = useState(() => {
     try {
       const mode = localStorage.getItem("deskmates.navigation.compact");
       if (mode !== null) return mode === "true";
       const old = Number(localStorage.getItem("deskmates.panel.navigation"));
-      return old > 0 ? old < 180 : window.innerWidth <= 1100;
+      return old > 0 ? old < 180 : true;
     } catch {
-      return window.innerWidth <= 1100;
+      return true;
     }
   });
+  const compact = preferredCompact;
   const mode = (next: boolean) => {
     setCompact(next);
     try {
@@ -23,6 +24,10 @@ export function useNavigationWidth() {
     }
   };
   return {
+    compact,
+    toggle() {
+      mode(!compact);
+    },
     width: compact ? 64 : panel.width,
     min: 64,
     max: panel.max,

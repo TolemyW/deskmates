@@ -17,8 +17,6 @@ import {
 } from "react";
 import type { ApiClient } from "../api/client.js";
 import { subscribeEvents } from "../api/events.js";
-import type { WorkspacesApi } from "../features/workspaces/api.js";
-import { NewWorkspaceDialog } from "../features/workspaces/new-workspace-dialog.js";
 import { errorMessage } from "../format.js";
 import { BotAvatarsProvider } from "./bot-avatars.js";
 
@@ -40,7 +38,15 @@ export interface WorkspaceScope {
    * The paged, authorized directory (ADR-0034). `workspaces` above is the shell's name map; a
    * screen that lists workspaces for people to browse reads the directory instead.
    */
-  directory?: Pick<WorkspacesApi, "listWorkspaceDirectory">;
+  directory?: Pick<ApiClient, "listWorkspaceDirectory">;
+}
+
+/** What the provider hands the new-workspace dialog the shell renders for it. */
+export interface NewWorkspaceDialogControls {
+  open: boolean;
+  onReturnFocus?: () => void;
+  onClose: () => void;
+  onCreated: (workspace: Workspace) => void;
 }
 
 const STORAGE_KEY = "deskmates.workspace";
@@ -121,11 +127,17 @@ function useWorkspaceList(api: ApiClient, enabled = true) {
 export function WorkspaceScopeProvider({
   api,
   initialWorkspaceId,
+  newWorkspaceDialog,
   children,
 }: {
   api: ApiClient;
   /** Test hook: the workspace to select once the list loads, instead of the stored one. */
   initialWorkspaceId?: WorkspaceId | undefined;
+  /**
+   * The dialog `openCreate` opens. The workspaces feature owns it and the shell passes it in,
+   * so this shared state imports no feature; without it `openCreate` shows nothing.
+   */
+  newWorkspaceDialog?: (controls: NewWorkspaceDialogControls) => ReactNode;
   children: ReactNode;
 }) {
   const { workspaces, upsertWorkspace, loaded, error, reload } = useWorkspaceList(api);
@@ -133,7 +145,18 @@ export function WorkspaceScopeProvider({
     () => initialWorkspaceId ?? loadSelection(),
   );
   const selectedRef = useRef(selectedId);
+  const selectionRequest = useRef(0);
+  const selecting = useRef<WorkspaceId | undefined>(undefined);
+  const [selectionError, setSelectionError] = useState<string>();
   const [creating, setCreating] = useState(false);
+  const createOpener = useRef<HTMLElement | null>(null);
+
+  useEffect(
+    () => () => {
+      selectionRequest.current += 1;
+    },
+    [],
+  );
 
   useEffect(() => {
     let active = true;
@@ -165,17 +188,50 @@ export function WorkspaceScopeProvider({
     }
   }, [loaded, selectedId, current?.id]);
 
-  const select = useCallback((id: WorkspaceId) => {
+  const commitSelection = useCallback((id: WorkspaceId) => {
     selectedRef.current = id;
     setSelectedId(id);
     saveSelection(id);
   }, []);
+  const select = useCallback(
+    (id: WorkspaceId) => {
+      setSelectionError(undefined);
+      if (workspaces.some((workspace) => workspace.id === id)) {
+        selectionRequest.current += 1;
+        selecting.current = undefined;
+        commitSelection(id);
+        return;
+      }
+      if (selecting.current === id) return;
+      // Directory rows can be newer than the shell's initial name map (another tab/API create).
+      // Resolve the authorized full row before selecting; never fall back to the old workspace.
+      selecting.current = id;
+      const request = ++selectionRequest.current;
+      void api
+        .getWorkspace(id)
+        .then(({ workspace }) => {
+          if (request !== selectionRequest.current) return;
+          upsertWorkspace(workspace);
+          commitSelection(workspace.id);
+        })
+        .catch((err: unknown) => {
+          if (request === selectionRequest.current) setSelectionError(errorMessage(err));
+        })
+        .finally(() => {
+          if (request === selectionRequest.current) selecting.current = undefined;
+        });
+    },
+    [api, workspaces, commitSelection, upsertWorkspace],
+  );
   const add = useCallback(
     (workspace: Workspace) => {
+      selectionRequest.current += 1;
+      selecting.current = undefined;
+      setSelectionError(undefined);
       upsertWorkspace(workspace);
-      select(workspace.id);
+      commitSelection(workspace.id);
     },
-    [select, upsertWorkspace],
+    [commitSelection, upsertWorkspace],
   );
   const update = useCallback(
     (workspace: Workspace) => {
@@ -183,14 +239,18 @@ export function WorkspaceScopeProvider({
     },
     [upsertWorkspace],
   );
-  const openCreate = useCallback(() => setCreating(true), []);
+  const openCreate = useCallback(() => {
+    createOpener.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setCreating(true);
+  }, []);
 
   const value = useMemo<WorkspaceScope>(
     () => ({
       workspaces,
       current,
       loaded,
-      error,
+      error: selectionError ?? error,
       reload,
       select,
       add,
@@ -198,21 +258,35 @@ export function WorkspaceScopeProvider({
       openCreate,
       directory: api,
     }),
-    [workspaces, current, loaded, error, reload, select, add, update, openCreate, api],
+    [
+      workspaces,
+      current,
+      loaded,
+      error,
+      selectionError,
+      reload,
+      select,
+      add,
+      update,
+      openCreate,
+      api,
+    ],
   );
 
   return (
     <WorkspaceScopeContext.Provider value={value}>
       <BotAvatarsProvider>{children}</BotAvatarsProvider>
-      <NewWorkspaceDialog
-        api={api}
-        open={creating}
-        onClose={() => setCreating(false)}
-        onCreated={(created) => {
+      {newWorkspaceDialog?.({
+        open: creating,
+        onReturnFocus: () => {
+          if (createOpener.current?.isConnected) createOpener.current.focus();
+        },
+        onClose: () => setCreating(false),
+        onCreated: (created) => {
           setCreating(false);
           add(created);
-        }}
-      />
+        },
+      })}
     </WorkspaceScopeContext.Provider>
   );
 }

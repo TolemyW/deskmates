@@ -1,0 +1,8 @@
+[
+  {
+    "id": "profile",
+    "route": "#/contacts/bot_0002",
+    "container": ".profile",
+    "strip": ".profile .gb-tab-scroll"
+  }
+]

@@ -19,7 +19,7 @@ const profile: NetworkProfile = {
   name: "VendorDB test environment",
   description: "the test box",
   rules: [
-    { kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [23001] },
+    { kind: "subnet", cidr: "10.88.30.0/24", schemes: ["http"], ports: [23001] },
     {
       kind: "host",
       hostname: "console.lab.test",
@@ -52,7 +52,7 @@ describe("draftOf and inputOf", () => {
   it("reads ports as typed, in any separator, and lets the Gateway's parser judge the rest", () => {
     const [row] = draftOf(profile).rules;
     expect(rawRulesOf([{ ...(row as RuleDraft), ports: " 80;443 8080, 1" }])).toEqual([
-      { kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [80, 443, 8080, 1] },
+      { kind: "subnet", cidr: "10.88.30.0/24", schemes: ["http"], ports: [80, 443, 8080, 1] },
     ]);
     const bad = { ...draftOf(profile), rules: [{ ...(row as RuleDraft), cidr: "8.8.8.0/24" }] };
     expect(() => inputOf(bad, undefined)).toThrow(/RFC1918/);
@@ -85,7 +85,7 @@ describe("draftOf and inputOf", () => {
     expect(fromLocalInput(draft.expiry.at)).toBe("2026-10-20T03:30:00.000Z");
     expect(fromLocalInput("  ")).toBeUndefined();
     expect(ruleDraftOf(profile.rules[0] as NetworkProfile["rules"][number]).cidr).toBe(
-      "10.20.30.0/24",
+      "10.88.30.0/24",
     );
   });
 });

@@ -285,16 +285,23 @@ export class UserStore {
     return row?.password_hash;
   }
 
-  /** Store a password hash; a new one clears the forced change unless `mustChange` says so. */
-  setPasswordHash(loginId: string, passwordHash: string, mustChange = false): void {
+  /** Store a password hash; a self-set password has no forced-change reason. */
+  setPasswordHash(
+    loginId: string,
+    passwordHash: string,
+    mustChangeReason: "default" | "administrator" | null = null,
+  ): void {
     this.db
       .prepare(
-        `INSERT INTO local_credentials (login_id, password_hash, must_change, updated_at)
-         VALUES (?, ?, ?, ?)
+        `INSERT INTO local_credentials
+           (login_id, password_hash, must_change, password_change_reason, updated_at)
+         VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(login_id) DO UPDATE SET password_hash = excluded.password_hash,
-           must_change = excluded.must_change, updated_at = excluded.updated_at`,
+           must_change = excluded.must_change,
+           password_change_reason = excluded.password_change_reason,
+           updated_at = excluded.updated_at`,
       )
-      .run(loginId, passwordHash, mustChange ? 1 : 0, this.now());
+      .run(loginId, passwordHash, mustChangeReason === null ? 0 : 1, mustChangeReason, this.now());
   }
 
   /** Whether this login still has a default password it must change first (ADR-0031 8). */
@@ -384,7 +391,15 @@ export class UserStore {
              VALUES (?, ?, 'local', ?, ?, ?)`,
           )
           .run(loginId, userId, LOCAL_ISSUER, loginName, at);
-        this.setPasswordHash(loginId, input.passwordHash, input.mustChangePassword === true);
+        this.setPasswordHash(
+          loginId,
+          input.passwordHash,
+          input.mustChangePassword === true
+            ? input.protectedRoot
+              ? "default"
+              : "administrator"
+            : null,
+        );
         this.db
           .prepare(
             `INSERT INTO tenant_memberships (tenant_id, user_id, status, created_at, updated_at)

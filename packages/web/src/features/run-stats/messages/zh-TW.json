@@ -1,0 +1,14 @@
+{
+  "runStats.disable": "關閉執行統計",
+  "runStats.enable": "開啟執行統計",
+  "runStats.frozen": "已開始的執行保留其開始時的設定。",
+  "runStats.intro": "為 {name} 提供一個唯讀工具 run_stats，顯示它自己最近的執行、失敗原因、耗時、花費、待核准事項、暫停中的執行和任務。只包含這個機器人在本工作區的資料；絕不包含其他機器人的資料，也絕不包含任何人私人聊天的內容。",
+  "runStats.loading": "正在載入執行統計…",
+  "runStats.off": "關閉（預設）",
+  "runStats.on": "開啟",
+  "runStats.retry": "重試",
+  "runStats.roleNote": "變更執行統計",
+  "runStats.state": "執行統計工具",
+  "runStats.strategyNote": "給機器人這個工具會改變它的工作方式；依賴它之前請先用配對執行進行比較。",
+  "runStats.title": "執行統計"
+}

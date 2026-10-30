@@ -1,0 +1,7 @@
+{
+  "route": "resources/files",
+  "ready": "tbody tr",
+  "rows": "tbody tr",
+  "maxRowHeight": 140,
+  "minRows": 1
+}

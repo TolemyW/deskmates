@@ -3,6 +3,7 @@
 // Gateway's cursor; a post carries a request id that a retry reuses; edit and withdraw show only
 // on the session's own posts; hide and unhide only when the Gateway says the session moderates.
 import "@testing-library/jest-dom/vitest";
+import "../../test-support/select.js";
 import type { BoardPageView, BoardPostView, Workspace } from "@deskmates/contracts";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -111,11 +112,14 @@ it("offers edit and withdraw only on the session's own posts", async () => {
   const list = await screen.findByRole("list", { name: "Posts" });
   await waitFor(() => expect(within(list).getAllByTestId("board-post")).toHaveLength(2));
   const [mine, theirs] = within(list).getAllByTestId("board-post") as [HTMLElement, HTMLElement];
-  expect(within(theirs).queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+  expect(
+    within(theirs).queryByRole("button", { name: "Post options for Alex" }),
+  ).not.toBeInTheDocument();
   expect(within(theirs).queryByRole("button", { name: "Withdraw" })).not.toBeInTheDocument();
   expect(within(theirs).queryByRole("button", { name: "Hide" })).not.toBeInTheDocument();
 
-  fireEvent.click(within(mine).getByRole("button", { name: "Edit" }));
+  fireEvent.click(within(mine).getByRole("button", { name: "Post options for Alex" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
   fireEvent.change(within(mine).getByLabelText("Edit post"), {
     target: { value: "Mine, edited" },
   });
@@ -123,7 +127,8 @@ it("offers edit and withdraw only on the session's own posts", async () => {
   await within(list).findByText("Mine, edited");
   expect(api.editBoardPost).toHaveBeenCalledWith(WS.id, "bp_1", "Mine, edited");
 
-  fireEvent.click(within(list).getAllByRole("button", { name: "Withdraw" })[0] as HTMLElement);
+  fireEvent.click(within(mine).getByRole("button", { name: "Post options for Alex" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Withdraw" }));
   await waitFor(() => expect(within(list).getAllByTestId("board-post")).toHaveLength(1));
   expect(api.withdrawBoardPost).toHaveBeenCalledWith(WS.id, "bp_1");
 });
@@ -138,10 +143,104 @@ it("offers hide and unhide only when the session moderates, and marks hidden pos
   await waitFor(() => expect(within(list).getAllByTestId("board-post")).toHaveLength(2));
   const [visible, hidden] = within(list).getAllByTestId("board-post") as [HTMLElement, HTMLElement];
   expect(hidden).toHaveTextContent("Hidden by a moderator");
-  expect(within(hidden).getByRole("button", { name: "Unhide" })).toBeInTheDocument();
-  fireEvent.click(within(visible).getByRole("button", { name: "Hide" }));
+  fireEvent.click(within(hidden).getByRole("button", { name: "Post options for Alex" }));
+  expect(await screen.findByRole("menuitem", { name: "Unhide" })).toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+  fireEvent.click(within(visible).getByRole("button", { name: "Post options for Alex" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Hide" }));
   await waitFor(() =>
     expect(api.moderateBoardPost).toHaveBeenCalledWith(WS.id, "bp_1", { hidden: true }),
   );
   await waitFor(() => expect(within(list).getAllByText("Hidden by a moderator")).toHaveLength(2));
+});
+
+it("recovers a failed board read while preserving the composer draft", async () => {
+  const { api, client } = fakeApi({ first: { posts: [post(1)], canModerate: false } });
+  api.listBoardPosts.mockRejectedValueOnce(new Error("Board unavailable"));
+  render(<BoardScreen api={client} />);
+  await screen.findByRole("alert");
+  expect(screen.queryByText("No posts yet.")).toBeNull();
+  fireEvent.change(screen.getByRole("textbox", { name: "New post" }), {
+    target: { value: "Keep this draft" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await screen.findByText("Note 1");
+  expect(screen.getByRole("textbox", { name: "New post" })).toHaveValue("Keep this draft");
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(api.createBoardPost).not.toHaveBeenCalled();
+});
+
+it("retries the failed older page without discarding current posts", async () => {
+  const { api, client } = fakeApi({
+    first: { posts: [post(1)], nextCursor: "older", canModerate: false },
+    older: { posts: [post(2)], canModerate: false },
+  });
+  render(<BoardScreen api={client} />);
+  await screen.findByText("Note 1");
+  api.listBoardPosts.mockRejectedValueOnce(new Error("Older posts unavailable"));
+  fireEvent.click(screen.getByRole("button", { name: "Load older" }));
+  await screen.findByRole("alert");
+  expect(screen.getByText("Note 1")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await screen.findByText("Note 2");
+  expect(api.listBoardPosts).toHaveBeenLastCalledWith(WS.id, { before: "older", limit: 50 });
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("keeps a failed edit draft, prevents duplicate saves, and clears the error on cancel", async () => {
+  const { api, client } = fakeApi({
+    first: { posts: [post(1, { mine: true, body: "Original" })], canModerate: false },
+  });
+  let rejectSave: (reason: Error) => void = () => {};
+  api.editBoardPost.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectSave = reject;
+      }),
+  );
+  render(<BoardScreen api={client} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Post options for Alex" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+  const editor = screen.getByLabelText("Edit post");
+  expect(editor).toHaveFocus();
+  fireEvent.change(editor, { target: { value: "Keep my edit" } });
+  const form = editor.closest("form");
+  if (!form) throw new Error("Missing edit form");
+  fireEvent.submit(form);
+  fireEvent.submit(form);
+  expect(api.editBoardPost).toHaveBeenCalledOnce();
+  expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  rejectSave(new Error("Save unavailable"));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Save unavailable");
+  expect(editor).toHaveValue("Keep my edit");
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.getByText("Original")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Post options for Alex" })).toHaveFocus();
+});
+
+it("recovers history reads and invalidates the snapshot after editing a post", async () => {
+  const { api, client } = fakeApi({
+    first: { posts: [post(1, { mine: true })], canModerate: false },
+  });
+  api.boardPostHistory.mockRejectedValueOnce(new Error("History unavailable"));
+  api.editBoardPost.mockResolvedValue(post(1, { mine: true, body: "Updated note", version: 2 }));
+  render(<BoardScreen api={client} />);
+  const options = await screen.findByRole("button", { name: "Post options for Alex" });
+  fireEvent.click(options);
+  fireEvent.click(await screen.findByRole("menuitem", { name: "History" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("History unavailable");
+  fireEvent.click(options);
+  fireEvent.click(await screen.findByRole("menuitem", { name: "History" }));
+  await screen.findByRole("list", { name: "Versions" });
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  fireEvent.click(options);
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+  fireEvent.change(screen.getByLabelText("Edit post"), { target: { value: "Updated note" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByText("Updated note");
+  expect(screen.queryByRole("list", { name: "Versions" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Post options for Alex" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "History" }));
+  await waitFor(() => expect(api.boardPostHistory).toHaveBeenCalledTimes(3));
 });

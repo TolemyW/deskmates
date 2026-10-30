@@ -1,0 +1,32 @@
+# Deskmates' SearXNG settings (ADR-0049 decision 14). Everything not named here is SearXNG's
+# default, including the engines it queries; choosing other engines is the operator's edit of the
+# instance, outside Deskmates. The only client is the Gateway's search proxy on the same host.
+use_default_settings: true
+
+general:
+  instance_name: "Deskmates search"
+  # No statistics page, no per-engine timing kept for anyone to read.
+  enable_metrics: false
+
+search:
+  # The Gateway asks for format=json (ADR-0049 decision 3); html stays for an operator's own check.
+  formats:
+    - html
+    - json
+  safe_search: 1
+  autocomplete: ""
+
+server:
+  # Overridden by SEARXNG_PORT and SEARXNG_BIND_ADDRESS, which stable.sh sets; loopback either way.
+  port: 18710
+  bind_address: "127.0.0.1"
+  # Replaced by SEARXNG_SECRET at run time; SearXNG refuses to start with this placeholder.
+  secret_key: "ultrasecretkey"
+  # One trusted client: no bot detection, no rate limiting, no Valkey/Redis needed.
+  limiter: false
+  public_instance: false
+  # Result images are not proxied: the Gateway returns text only.
+  image_proxy: false
+
+ui:
+  static_use_hash: true

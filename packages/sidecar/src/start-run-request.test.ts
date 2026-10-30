@@ -7,7 +7,9 @@ const VALID = {
   runId: "run-1",
   botId: "bot-nova",
   botName: "nova",
+  botRole: "ops bot",
   workspaceId: "ws-1",
+  workspaceName: "Ops",
   threadId: "thread-1",
   botHomeDir: "/home/nova",
   attempt: 1,
@@ -114,6 +116,29 @@ describe("parseStartRunRequest accepts what the Gateway sends", () => {
     ).toBe(false);
   });
 
+  it("keeps a paused thread's state through stdin (ADR-0005 amendment 3, decision 27)", () => {
+    const trigger = {
+      ...VALID.trigger,
+      routing: {
+        version: 1,
+        recipientBotId: "bot-nova",
+        recipientName: "nova",
+        paused: { reason: "turn_budget", resumeAt: "2026-10-17T13:00:00.000Z" },
+      },
+    };
+    const result = parseStartRunRequest(json({ ...VALID, trigger }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.trigger).toEqual(trigger);
+    expect(
+      parseStartRunRequest(
+        withField("trigger", {
+          ...trigger,
+          routing: { ...trigger.routing, paused: { reason: "tired" } },
+        }),
+      ).ok,
+    ).toBe(false);
+  });
+
   it("accepts a round triage job with a bounded roster", () => {
     const job = {
       kind: "round_triage",
@@ -177,7 +202,7 @@ describe("parseStartRunRequest accepts what the Gateway sends", () => {
     expect(parseStartRunRequest(withField("trigger", trigger)).ok).toBe(true);
   });
 
-  it("keeps the resume hand-over: deferredAction and currentOrigin survive the stdin path", () => {
+  it("keeps the resume hand-over: deferredAction, approvalKind and currentOrigin survive the stdin path", () => {
     // zod strips unknown keys, so a field the contract has and this schema lacks is silently
     // lost between the Gateway and the process. Every field added to StartRunRequest gets a
     // round-trip case here for that reason.
@@ -192,6 +217,25 @@ describe("parseStartRunRequest accepts what the Gateway sends", () => {
         argumentPattern: "*submit*",
       },
       reason: "Nobody approved this within 15 minutes.",
+      approvalKind: "tool",
+      // Issue #62 M8: every decided approval of a run one turn parked on several.
+      decidedApprovals: [
+        {
+          approvalId: "ap-1",
+          decision: "allow_once",
+          toolUseId: "toolu_1",
+          approvalKind: "tool",
+          deferredAction: { toolName: "mcp__browser__browser_click", argumentPattern: "*submit*" },
+        },
+        {
+          approvalId: "ap-2",
+          decision: "deny",
+          toolUseId: "toolu_2",
+          approvalKind: "egress",
+          deferredAction: { toolName: "Bash", argumentPattern: "new.example.org" },
+          reason: "Nobody approved this within 15 minutes.",
+        },
+      ],
       currentOrigin: "http://shop.example.test:8080",
     };
     const result = parseStartRunRequest(withField("trigger", trigger));
@@ -417,7 +461,10 @@ describe("parseStartRunRequest rejects what would fail later and obscurely", () 
     "runId",
     "botId",
     "botName",
+    // Issue #39 item 4: the identity line of the static prompt.
+    "botRole",
     "workspaceId",
+    "workspaceName",
     "botHomeDir",
     "attempt",
     "trigger",
@@ -619,4 +666,29 @@ it("round-trips the isolated presentation job flag", () => {
   const result = parseStartRunRequest(json({ ...VALID, presentationSummary: true }));
   expect(result.ok).toBe(true);
   if (result.ok) expect(result.value.presentationSummary).toBe(true);
+});
+
+it("preserves checkpoint scope attribution through stdin validation", () => {
+  const parsed = parseStartRunRequest(
+    json({
+      ...VALID,
+      deliverableTasks: [
+        {
+          id: "task-1",
+          title: "Report",
+          scopeVersion: 2,
+          latestCheckpoint: {
+            runId: "run-old",
+            attempt: 1,
+            scopeVersion: 1,
+            createdAt: "2026-10-13T10:00:00Z",
+            completed: [],
+            outstanding: [],
+          },
+        },
+      ],
+    }),
+  );
+  expect(parsed.ok).toBe(true);
+  if (parsed.ok) expect(parsed.value.deliverableTasks?.[0]?.latestCheckpoint?.scopeVersion).toBe(1);
 });

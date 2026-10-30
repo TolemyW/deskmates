@@ -1,0 +1,15 @@
+[
+  {
+    "id": "main",
+    "route": "#/vault"
+  },
+  {
+    "id": "edit-form",
+    "route": "#/vault",
+    "steps": [
+      {
+        "name": "Add a credential"
+      }
+    ]
+  }
+]

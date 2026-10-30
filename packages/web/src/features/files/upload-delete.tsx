@@ -4,7 +4,7 @@
 
 import type { WorkspaceFileItem, WorkspaceId } from "@deskmates/contracts";
 import { Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { Button } from "../../components/ui/button.js";
 import { errorMessage } from "../../format.js";
@@ -32,9 +32,24 @@ export function UploadDeleteControl({
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const pending = useRef(false);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const cancel = useRef<HTMLButtonElement | null>(null);
+  const returnFocus = useRef(false);
+  useEffect(() => {
+    if (confirming) {
+      returnFocus.current = true;
+      cancel.current?.focus();
+    } else if (returnFocus.current) {
+      opener.current?.focus();
+      returnFocus.current = false;
+    }
+  }, [confirming]);
   const uploadId = uploadIdOf(item);
   if (uploadId === undefined || !can.allowed) return null;
   const remove = async () => {
+    if (pending.current) return;
+    pending.current = true;
     setBusy(true);
     setError("");
     try {
@@ -44,6 +59,7 @@ export function UploadDeleteControl({
     } catch (err) {
       setError(errorMessage(err));
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
@@ -61,13 +77,29 @@ export function UploadDeleteControl({
             >
               {busy ? t("files.delete.deleting") : t("files.delete.confirmButton")}
             </Button>
-            <Button type="button" disabled={busy} onClick={() => setConfirming(false)}>
+            <Button
+              ref={cancel}
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setError("");
+                setConfirming(false);
+              }}
+            >
               {t("files.delete.cancel")}
             </Button>
           </div>
         </div>
       ) : (
-        <Button type="button" variant="outline" onClick={() => setConfirming(true)}>
+        <Button
+          ref={opener}
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setError("");
+            setConfirming(true);
+          }}
+        >
           <Trash2 size={14} aria-hidden="true" /> {t("files.delete.button")}
         </Button>
       )}

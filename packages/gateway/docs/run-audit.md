@@ -4,7 +4,7 @@ Issue #11. What the Gateway gives an operator who has to find out why runs faile
 
 ## Failure class
 
-`src/ledger/failure-class.ts` derives a class from `runs.error`: `model_unavailable`, `model_deadline`, `tool_allowlist`, `egress_blocked`, `approval_denied`, `wall_clock`, `sdk_abort`, `no_reply`, `budget_limit`, `other`. Nothing is stored; every run view carries `failureClass` when the run has an error, and the run list filters on it in SQL. One ordered table of lower-case substrings (`FAILURE_RULES`) is applied by `classifyFailure` and rendered by `failureClassSql`; the first rule that matches wins, so a root cause ("model not found", "no worker available", a 5xx the SDK retried) is named before the deadline that ran out waiting for it.
+`src/ledger/failure-class.ts` derives a class from `runs.error`: `model_unavailable`, `model_deadline`, `tool_allowlist`, `egress_blocked`, `approval_denied`, `wall_clock`, `sdk_abort`, `no_reply`, `budget_limit`, `platform_interruption` (ADR-0029), `sandbox_unavailable` (the workspace's computer could not be prepared), `sidecar_exit` (the sidecar ended without reporting, and its stderr tail names no other cause), `other`. Nothing is stored; every run view carries `failureClass` when the run has an error, and the run list filters on it in SQL. One ordered table of lower-case substrings (`FAILURE_RULES`) is applied by `classifyFailure` and rendered by `failureClassSql`; the first rule that matches wins, so a root cause ("model not found", "no worker available", a 5xx the SDK retried) is named before the deadline that ran out waiting for it.
 
 A new error shape lands in `other`. To classify it, add its substring to the right rule and a real-shaped string to the corpus in `failure-class.test.ts`; the test checks every corpus string in code and in SQL, and with every model job name, current and old, around it.
 
@@ -16,11 +16,12 @@ A new error shape lands in `other`. To classify it, add its substring to the rig
 | --- | --- |
 | `status` | one run status, or several separated by commas |
 | `lane` | `interactive` or `background` |
+| `triggerKind` | one `RunTriggerKind`; `model_job` is a Gateway model job, never counted as `cron` (issue #39) |
 | `since`, `until` | ISO 8601 times on `created_at`; `until` is exclusive |
 | `failureClass` | one class above |
 | `q` | case-insensitive substring of `error`, at most 200 characters used |
 
-They compose with each other and with the workspace and private-chat scoping in SQL, so a page is never short, and they are part of the cursor's scope: a cursor from another filter is refused. An unknown status, lane, class or time is 400.
+They compose with each other and with the workspace and private-chat scoping in SQL, so a page is never short, and they are part of the cursor's scope: a cursor from another filter is refused. An unknown status, lane, trigger kind, class or time is 400.
 
 ## What a run changed
 

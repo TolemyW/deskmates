@@ -20,6 +20,12 @@ describe("splitWorkspacePaths", () => {
     ],
     // A non-ASCII name ends the token right after the prefix, so nothing is linked.
     ["结果在 /work/报告.md", [text("结果在 /work/报告.md")]],
+    [
+      "说明在 /work/bots/editor/editor_复核说明.md",
+      [text("说明在 /work/bots/editor/editor_复核说明.md")],
+    ],
+    ["`/work/final_报告.md`", [text("`/work/final_报告.md`")]],
+    ["/home/nova/cafe\u0301.md", [text("/home/nova/cafe\u0301.md")]],
     ["见 /work/a.md，谢谢", [text("见 "), path("/work/a.md"), text("，谢谢")]],
     ["写入 /work/a.md。", [text("写入 "), path("/work/a.md"), text("。")]],
     ["（/work/a.md）", [text("（"), path("/work/a.md"), text("）")]],

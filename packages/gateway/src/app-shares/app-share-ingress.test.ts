@@ -365,10 +365,10 @@ describe("streams and revocation (decisions 6 and 8)", () => {
 describe("an IP-literal operator and a nip.io base behind a TLS proxy (decision 11)", () => {
   it("matches the Host with the public port, sets a __Host- Secure grant and checks Origin", async () => {
     const w = await world({
-      baseUrl: "https://10.20.40.132.nip.io:18443",
-      operatorOrigin: "https://10.20.40.132:18443",
+      baseUrl: "https://10.88.40.132.nip.io:18443",
+      operatorOrigin: "https://10.88.40.132:18443",
     });
-    expect(w.host).toMatch(/^[0-9a-f]{32}\.10\.20\.40\.132\.nip\.io:18443$/);
+    expect(w.host).toMatch(/^[0-9a-f]{32}\.10\.88\.40\.132\.nip\.io:18443$/);
     // Caddy keeps the Host; a request for the base host without its port names nothing.
     expect((await appRequest(w.port, { host: w.host.replace(":18443", "") })).status).toBe(404);
     const { res } = await enter(w, w.r.member, "/board");
@@ -404,7 +404,7 @@ describe("an IP-literal operator and a nip.io base behind a TLS proxy (decision 
       method: "POST",
       path: "/__deskmates/enter",
       headers: {
-        origin: "https://10.20.40.132",
+        origin: "https://10.88.40.132",
         "content-type": "application/x-www-form-urlencoded",
       },
       body: `ticket=${opened.json.ticket}`,

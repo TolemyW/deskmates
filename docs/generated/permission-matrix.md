@@ -14,7 +14,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 
 ### Operator API (the `/api` guard), from `ROUTE_POLICY`
 
-#### Platform maintenance (a platform maintainer, or the operator credential) (7)
+#### Platform maintenance (a platform maintainer, or the operator credential) (10)
 
 | Route |
 |---|
@@ -25,16 +25,38 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/knowledge/versions/cleanup` |
 | `PUT /api/prices` |
 | `GET /api/runtime` |
+| `DELETE /api/runtime/drain` |
+| `POST /api/runtime/drain` |
+| `POST /api/runtime/platform-resume` |
 
-#### The root alone (the protected account `admin`, or the operator credential; ADR-0022 amendment 6 W2) (5)
+#### The root alone (the protected account `admin`, or the operator credential; ADR-0022 amendment 6 W2) (9)
 
 | Route |
 |---|
 | `GET /api/network-overlaps` |
+| `GET /api/observability/status` |
+| `GET /api/runtime/resources` |
+| `POST /api/runtime/resources/reattach` |
+| `POST /api/runtime/resources/remove` |
 | `GET /api/service-principals` |
 | `POST /api/service-principals` |
 | `POST /api/service-principals/:id/disable` |
 | `POST /api/service-principals/:id/rotate` |
+
+#### The root's own browser session (the protected account `admin` signed in; no bearer credential, the operator credential included; ADR-0046 amendment 1) (10)
+
+| Route |
+|---|
+| `DELETE /analytics` |
+| `GET /analytics` |
+| `PATCH /analytics` |
+| `POST /analytics` |
+| `PUT /analytics` |
+| `DELETE /analytics/*` |
+| `GET /analytics/*` |
+| `PATCH /analytics/*` |
+| `POST /analytics/*` |
+| `PUT /analytics/*` |
 
 #### Any signed-in principal (installation-wide facts, no tenant data) (11)
 
@@ -61,7 +83,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `DELETE /api/network-profiles/:id` | handler: the root, or the Owner who created the profile; anyone else 403 profile_owner |
 | `PUT /api/network-profiles/:id` | handler: the root, or the Owner who created the profile; anyone else 403 profile_owner |
 
-#### Admin or Owner of the workspace every identifier names (naming none: of a workspace of the request's tenant) (87)
+#### Admin or Owner of the workspace every identifier names (naming none: of a workspace of the request's tenant) (107)
 
 | Route | Identifiers the guard resolves to the tenant and to their workspace |
 |---|---|
@@ -79,6 +101,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/bots/:id/memory/consolidate` | path `id`: bot |
 | `POST /api/bots/:id/restore` | path `id`: bot |
 | `POST /api/bots/:id/rule-versions/:file/:version/restore` | path `id`: bot; handler: file is soul or memory; versions are read only under the guarded bot; version is a number of that bot's own history |
+| `PUT /api/bots/:id/run-stats` | path `id`: bot |
 | `PATCH /api/bots/:id/soul` | path `id`: bot |
 | `POST /api/bots/:id/soul-proposals` | path `id`: bot |
 | `POST /api/bots/:id/soul-proposals/:proposalId/apply` | path `id`: bot; handler: the proposal must belong to the bot in the path |
@@ -124,6 +147,8 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/workspaces/:id/archive` | path `id`: workspace |
 | `PUT /api/workspaces/:id/auto-approval` | path `id`: workspace |
 | `POST /api/workspaces/:id/board/:postId/moderate` | path `id`: workspace; handler: people only (a service principal is refused); the post is looked up in the workspace |
+| `PUT /api/workspaces/:id/default-bot` | path `id`: workspace |
+| `PUT /api/workspaces/:id/desktop-tools` | path `id`: workspace |
 | `PUT /api/workspaces/:id/limits` | path `id`: workspace |
 | `POST /api/workspaces/:id/memory-review/batches` | path `id`: workspace |
 | `POST /api/workspaces/:id/memory-review/preview` | path `id`: workspace |
@@ -143,20 +168,39 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `GET /api/workspaces/:id/restart-preflight` | path `id`: workspace |
 | `POST /api/workspaces/:id/restore` | path `id`: workspace |
 | `POST /api/workspaces/:id/skills` | path `id`: workspace; body `botIds`: bot[] |
+| `DELETE /api/workspaces/:id/tool-tiers/:toolName` | path `id`: workspace; handler: toolName is a tool name, not a row id: the override is keyed by the guarded workspace |
+| `PUT /api/workspaces/:id/tool-tiers/:toolName` | path `id`: workspace; handler: toolName is a tool name, not a row id: the override is keyed by the guarded workspace |
 | `DELETE /api/workspaces/:id/uploads/:uploadId/file` | path `id`: workspace; handler: the upload is looked up inside the guarded workspace |
+| `POST /api/workspaces/:id/vault` | path `id`: workspace |
+| `DELETE /api/workspaces/:id/vault/:entryId` | path `id`: workspace; handler: the vault entry is looked up inside the guarded workspace; another's is a 404 |
+| `PATCH /api/workspaces/:id/vault/:entryId` | path `id`: workspace; handler: the vault entry is looked up inside the guarded workspace; another's is a 404 |
+| `PUT /api/workspaces/:id/vault/:entryId/requests` | path `id`: workspace; handler: the vault entry is looked up inside the guarded workspace; another's is a 404 |
+| `PUT /api/workspaces/:id/vault/:entryId/value` | path `id`: workspace; handler: the vault entry is looked up inside the guarded workspace; another's is a 404 |
+| `PUT /api/workspaces/:id/web-search` | path `id`: workspace |
 | `PUT /api/workspaces/:id/workdir` | path `id`: workspace |
+| `GET /api/workspaces/:workspaceId/channel-connections/:connectionId/blocks` | path `workspaceId`: workspace; handler: connectionId is resolved inside the guarded workspace (ChannelStore.mustGetInWorkspace) |
+| `POST /api/workspaces/:workspaceId/channel-connections/:connectionId/blocks` | path `workspaceId`: workspace; handler: connectionId is resolved inside the guarded workspace (ChannelStore.mustGetInWorkspace) |
+| `DELETE /api/workspaces/:workspaceId/channel-connections/:connectionId/blocks/:senderId` | path `workspaceId`: workspace; handler: connectionId is resolved inside the guarded workspace (ChannelStore.mustGetInWorkspace) |
+| `POST /api/workspaces/:workspaceId/channel-connections/:connectionId/command-menu` | path `workspaceId`: workspace; handler: connectionId is resolved inside the guarded workspace (ChannelStore.mustGetInWorkspace) |
+| `POST /api/workspaces/:workspaceId/channel-connections/:connectionId/commands/:command` | path `workspaceId`: workspace; handler: connectionId is resolved inside the guarded workspace (ChannelStore.mustGetInWorkspace); command against the fixed command set |
+| `POST /api/workspaces/:workspaceId/channel-connections/:connectionId/rebind` | path `workspaceId`: workspace; body `botId`: bot; handler: connectionId is resolved inside the guarded workspace (ChannelStore.mustGetInWorkspace) |
 | `POST /api/workspaces/:workspaceId/channels/:pluginId/commands/:command` | path `workspaceId`: workspace; handler: pluginId is resolved against the release-bundled channel catalog and command against the fixed command set |
 | `POST /api/workspaces/:workspaceId/channels/:pluginId/connect` | path `workspaceId`: workspace; body `botId`: bot; handler: pluginId is resolved against the release-bundled channel catalog |
+| `POST /api/workspaces/:workspaceId/task-templates` | path `workspaceId`: workspace |
+| `DELETE /api/workspaces/:workspaceId/task-templates/:id` | path `workspaceId`: workspace; handler: TaskTemplateStore.mustGet(workspaceId, id) |
+| `PATCH /api/workspaces/:workspaceId/task-templates/:id` | path `workspaceId`: workspace; handler: TaskTemplateStore.mustGet(workspaceId, id) |
 | `POST /api/workspaces/:workspaceId/tasks` | path `workspaceId`: workspace |
 | `DELETE /api/workspaces/:workspaceId/tasks/:id` | path `workspaceId`: workspace |
 | `PATCH /api/workspaces/:workspaceId/tasks/:id` | path `workspaceId`: workspace |
 | `POST /api/workspaces/:workspaceId/tasks/:id/accept` | path `workspaceId`: workspace |
 | `POST /api/workspaces/:workspaceId/tasks/:id/run` | path `workspaceId`: workspace |
 
-#### Member, Admin or Owner of the workspace every identifier names (naming none: a Member of a workspace of the request's tenant) (90)
+#### Member, Admin or Owner of the workspace every identifier names (naming none: a Member of a workspace of the request's tenant) (101)
 
 | Route | Identifiers the guard resolves to the tenant and to their workspace |
 |---|---|
+| `GET /api/approval-groups` | query `botId`: bot; list scoped to the tenant and the caller's workspaces; handler: groups only the approvals visible in the caller's inbox; another person's private chat is absent |
+| `POST /api/approval-groups/:key/decide` | handler: each visible pending approval is independently decided and audited; below Admin only own runs, and allow_all remains one-time |
 | `GET /api/approvals` | query `threadId`: thread; query `botId`: bot; list scoped to the tenant and the caller's workspaces; handler: listed only from the caller's workspaces, without other people's private chats |
 | `GET /api/approvals/:id` | path `id`: approval |
 | `POST /api/approvals/:id/decide` | path `id`: approval; handler: below Admin (Member or member principal) answers only approvals of the runs it started, allow_once or deny only; allow_always and an egress allow-this-site need an Admin |
@@ -168,6 +212,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `GET /api/bots/:id/rule-versions/:file` | path `id`: bot; handler: file is soul or memory; versions are read only under the guarded bot |
 | `GET /api/bots/:id/rule-versions/:file/:version` | path `id`: bot; handler: file is soul or memory; versions are read only under the guarded bot; version is a number of that bot's own history |
 | `GET /api/bots/:id/rule-versions/:file/diff` | path `id`: bot; handler: file is soul or memory; versions are read only under the guarded bot; version is a number of that bot's own history |
+| `GET /api/bots/:id/run-stats` | path `id`: bot |
 | `GET /api/bots/:id/screen` | path `id`: bot |
 | `POST /api/bots/:id/screen/access` | path `id`: bot |
 | `POST /api/bots/:id/screen/start` | path `id`: bot |
@@ -220,6 +265,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/workspaces/:id/app-shares/:shareId/open` | path `id`: workspace; handler: the publication must belong to the workspace in the path, else 404; a signed-in person only |
 | `GET /api/workspaces/:id/assets` | path `id`: workspace |
 | `GET /api/workspaces/:id/auto-approval` | path `id`: workspace |
+| `GET /api/workspaces/:id/desktop-tools` | path `id`: workspace |
 | `GET /api/workspaces/:id/files` | path `id`: workspace |
 | `POST /api/workspaces/:id/handback` | path `id`: workspace |
 | `GET /api/workspaces/:id/limits` | path `id`: workspace |
@@ -238,15 +284,22 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /api/workspaces/:id/submit` | path `id`: workspace; body `botId`: bot |
 | `POST /api/workspaces/:id/takeover` | path `id`: workspace |
 | `POST /api/workspaces/:id/takeover/open-screen` | path `id`: workspace |
+| `GET /api/workspaces/:id/tool-tiers` | path `id`: workspace |
 | `POST /api/workspaces/:id/uploads` | path `id`: workspace |
 | `DELETE /api/workspaces/:id/uploads/:uploadId` | path `id`: workspace; handler: the upload is looked up inside the guarded workspace; its uploader, an Admin or an Owner reads or cancels it |
 | `GET /api/workspaces/:id/uploads/:uploadId` | path `id`: workspace; handler: the upload is looked up inside the guarded workspace; its uploader, an Admin or an Owner reads or cancels it |
 | `POST /api/workspaces/:id/uploads/:uploadId/complete` | path `id`: workspace; handler: the upload is looked up inside the guarded workspace; only its uploader sends parts or completes it |
 | `PUT /api/workspaces/:id/uploads/:uploadId/parts` | path `id`: workspace; handler: the upload is looked up inside the guarded workspace; only its uploader sends parts or completes it |
+| `GET /api/workspaces/:id/vault` | path `id`: workspace |
+| `GET /api/workspaces/:id/web-search` | path `id`: workspace |
 | `GET /api/workspaces/:id/workdir` | path `id`: workspace |
 | `GET /api/workspaces/:workspaceId/channels` | path `workspaceId`: workspace |
+| `GET /api/workspaces/:workspaceId/task-kinds` | path `workspaceId`: workspace |
+| `GET /api/workspaces/:workspaceId/task-kinds/:kind` | path `workspaceId`: workspace; handler: TaskKindView.stats(workspaceId, kind) |
+| `GET /api/workspaces/:workspaceId/task-templates` | path `workspaceId`: workspace |
 | `GET /api/workspaces/:workspaceId/tasks` | path `workspaceId`: workspace |
 | `GET /api/workspaces/:workspaceId/tasks/:id` | path `workspaceId`: workspace |
+| `GET /api/workspaces/:workspaceId/tasks/:id/related` | path `workspaceId`: workspace |
 
 #### Anyone who belongs to the workspace every identifier names, Guests included (naming none: anyone in the request's tenant; lists show only their workspaces) (22)
 
@@ -281,6 +334,8 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 |---|---|
 | `GET /api/channel-webhooks/:workspaceId/:pluginId` | The configured channel provider. The release-bundled plugin authenticates the untouched request envelope before accepting it. |
 | `POST /api/channel-webhooks/:workspaceId/:pluginId` | The configured channel provider. The release-bundled plugin authenticates the untouched request envelope before accepting it. |
+| `GET /api/channel-webhooks/:workspaceId/:pluginId/:connectionId` | The provider of that one connection (ADR-0047). The release-bundled plugin authenticates the untouched request envelope before accepting it. |
+| `POST /api/channel-webhooks/:workspaceId/:pluginId/:connectionId` | The provider of that one connection (ADR-0047). The release-bundled plugin authenticates the untouched request envelope before accepting it. |
 | `GET /api/integrations/oauth/callback` | The single-use OAuth state; a grant started from a session completes only in that session while it is an Admin of the workspace's tenant. |
 | `GET /auth/invitations/:token` | Holder of an open invitation token. Shows tenant, role and bound identity. |
 | `POST /auth/invitations/accept` | Holder of an open invitation, as the bound identity: a new login name (pre-login token), the invited local account's own session (session CSRF), or an SSO login asserting the invited email. |
@@ -303,6 +358,9 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /internal/runs/:runId/approvals` | That run's token. Asks for an approval in its own thread (PreToolUse hook). |
 | `GET /internal/runs/:runId/approvals/:approvalId` | That run's token, for its own approvals. |
 | `POST /internal/runs/:runId/approvals/:approvalId/decide` | That run's token, when its bot is a member of the approval's thread, is not the requesting bot and is not upstream in the requesting run's wake chain; allow_once or deny only (approval_decide; ADR-0002 amendments 2 and 3, A10). |
+| `POST /internal/runs/:runId/assistant/bots` | That run's token, when the run froze `workspaceAssistant: assistant-v1` and its bot is still the default bot of its workspace. Creates a bot in that workspace with a name, role and SOUL only; audited with the run and the requester (bot_create; ADR-0051). |
+| `POST /internal/runs/:runId/assistant/bots/:name` | The same run token and check. Changes another active bot of that workspace: role, SOUL and schedules only, never the default bot itself; audited (bot_update; ADR-0051). |
+| `POST /internal/runs/:runId/assistant/groups` | The same run token and check. Opens a web group chat of that workspace with the default bot and the named bots of that workspace (group_create; ADR-0051). |
 | `POST /internal/runs/:runId/browser-lock` | That run's token. Its workspace's browser lock. |
 | `POST /internal/runs/:runId/browser-origin` | That run's token. Its workspace's origin queue. |
 | `GET /internal/runs/:runId/browser-retention` | That run's token. Its workspace's tabs. |
@@ -313,6 +371,7 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `POST /internal/runs/:runId/connectors/:connector/submit` | That run's token, with a stored validation of the same content (ADR-0012 item 5). |
 | `POST /internal/runs/:runId/connectors/:connector/validate` | That run's token. A connector of its workspace its bot names. |
 | `GET /internal/runs/:runId/connectors/:connector/validations/:validationId` | That run's token. Validations of its workspace's connector. |
+| `POST /internal/runs/:runId/desktop-lock` | That run's token. Its workspace's shared-screen lease for desktop calls (ADR-0048 amendment 1, A3). |
 | `GET /internal/runs/:runId/egress` | That run's token. Its workspace's egress allowlist. |
 | `POST /internal/runs/:runId/ended` | That run's token. Ends its own run. |
 | `POST /internal/runs/:runId/events` | That run's token. Appends to its own ledger. |
@@ -328,8 +387,16 @@ UPDATE_GENERATED=1 npx vitest run packages/gateway/src/api/permission-matrix.tes
 | `GET /internal/runs/:runId/memory/search` | That run's token. Its workspace's learned memory. |
 | `POST /internal/runs/:runId/messages` | That run's token. `thread_post` posts in the run's own thread; `message_bot` reaches another bot of the same workspace. |
 | `POST /internal/runs/:runId/operations/asr` | That run's token. Forwards one transcription request on bytes the sidecar read to the installation's speech service (audio_transcribe; ADR-0040). |
+| `POST /internal/runs/:runId/operations/image_generation` | That run's token. Forwards one bounded text-to-image request to the installation's image service and returns the images for the sidecar to write in the bot's own directory (image_generate; ADR-0040 amendment B). Never fetches a URL. |
 | `POST /internal/runs/:runId/operations/look` | That run's token. Forwards one look/OCR request on bytes the sidecar read to the installation's vision service (image_describe; ADR-0040). Never fetches a URL. |
 | `POST /internal/runs/:runId/reply-preview` | That run's token, for its current attempt while live. Relays a reply preview to the run's own thread stream; writes no ledger row or message (ADR-0037). |
+| `GET /internal/runs/:runId/run-stats` | That run's token, when the run froze `runStats: self-v1`. Counts, failure classes, durations, spend, pending approvals, parked runs and tasks of that run's bot in its workspace only; no other parameter than `windowDays` (run_stats; ADR-0050). |
+| `POST /internal/runs/:runId/search` | That run's token, for a run whose row froze `webSearch: on`. Forwards one bounded query to the installation's SearXNG and returns filtered results (web_search; ADR-0049). Never fetches a result URL. |
+| `POST /internal/runs/:runId/session` | That run's token. Records the SDK session its current attempt runs on (ADR-0029 decision 4). |
 | `POST /internal/runs/:runId/tasks/:taskId/checkpoints` | That run's token, for a task of its workspace linked to the run or its thread (task_checkpoint; ADR-0021 A3h). Changes no task state; publishes nothing. |
 | `POST /internal/runs/:runId/tasks/:taskId/deliver` | That run's token, for a task of its workspace linked to the run or its thread (task_deliver; ADR-0021 amendment 2). Files are verified through the workspace before publication (ADR-0014 A4). Never accepts. |
+| `GET /internal/runs/:runId/vault/entries` | That run's token. Its workspace's usable Vault entries, metadata only (vault_list; ADR-0045). |
+| `GET /internal/runs/:runId/vault/entries/:entryId` | That run's token. One entry of its workspace, metadata only; another workspace's is a 404. |
+| `POST /internal/runs/:runId/vault/fill` | That run's token, while it executes, with an allowed approval of that run for the exact entry, revision and origin, spent once (vault_fill; ADR-0045). Answers a status, never a value. |
+| `POST /internal/runs/:runId/vault/request` | That run's token, while it executes, with an allowed approval of that run for the exact definition, spent once (vault_request; ADR-0045). Never retried. |
 | `POST /v1/*` | A live run token. The model proxy; the token never leaves the sandbox listener. |

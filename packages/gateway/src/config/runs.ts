@@ -61,6 +61,32 @@ export const MAX_TURNS_DEFAULT = 80;
  */
 export const GROUP_ROUTING_DEFAULT: GroupRouting = "owner-v1";
 
+/**
+ * ADR-0029 decision 11: a cron round queued during a drain is cancelled as a misfire when, at the
+ * moment it could launch, its minute is older than this many minutes. A guess, as the ADR says; 0
+ * cancels every such round that cannot start in its own minute. `CRON_MISFIRE_GRACE`.
+ */
+export const CRON_MISFIRE_GRACE_MINUTES_DEFAULT = 5;
+
+/**
+ * Issue #39 item 8: how long one model job (ADR-0023 amendment 1) may take, `MODEL_JOB_DEADLINE_MS`.
+ * The sidecar ends the job at the deadline and names it in the run error; the Gateway kills the
+ * process `MODEL_JOB_KILL_GRACE_MS` later. The default keeps decision 5's 60-second cap.
+ * Recorded per job run as `modelJobDeadlineMs`.
+ */
+export const MODEL_JOB_DEADLINE_MS_DEFAULT = 55_000;
+
+/** How long after a job's deadline the Gateway kills its process: the sidecar's start-up. */
+export const MODEL_JOB_KILL_GRACE_MS = 5_000;
+
+/**
+ * Issue #39 item 8: a model job's extended thinking on the Claude path, `MODEL_JOB_THINKING`.
+ * `disabled`, the default, sends the SDK `thinking: { type: "disabled" }`: the output-token cap
+ * does not bound thinking, and a cheap model thinking for thousands of tokens missed the deadline.
+ * `sdk-default` sends nothing, for an upstream that refuses `disabled`. Recorded as `reasoning`.
+ */
+export type ModelJobThinking = "disabled" | "sdk-default";
+
 export interface RunsConfig {
   threadPayloadMaxTokens: number;
   shortWaitSeconds: number;
@@ -86,8 +112,14 @@ export interface RunsConfig {
   /** Recorded in `runs.config_json`. */
   webhookBodyMaxBytes: number;
   webhookQueueMax: number;
+  /** Omitted means `CRON_MISFIRE_GRACE_MINUTES_DEFAULT` (ADR-0029 decision 11). */
+  cronMisfireGraceMinutes?: number;
   /** SDK `maxTurns` per run; recorded in `runs.config_json` and sent on every StartRunRequest. */
   maxTurns: number;
+  /** Omitted means `MODEL_JOB_DEADLINE_MS_DEFAULT`; recorded per job run (issue #39 item 8). */
+  modelJobDeadlineMs?: number;
+  /** Omitted means `disabled`; recorded per job run as its `reasoning` (issue #39 item 8). */
+  modelJobThinking?: ModelJobThinking;
   /**
    * `RUN_EVENTS_RETENTION_DAYS` (ADR-0042 decision 6): prune the events, usage rows and model
    * requests of terminal runs that finished longer ago. Undefined (the default) keeps everything.
@@ -111,7 +143,14 @@ export function readRunsConfig(env: Env): RunsConfig {
     cronTimeZone: cronTimeZone(env),
     webhookBodyMaxBytes: optionalInt(env, "WEBHOOK_BODY_MAX_BYTES", WEBHOOK_BODY_MAX_BYTES_DEFAULT),
     webhookQueueMax: optionalInt(env, "WEBHOOK_QUEUE_MAX", WEBHOOK_QUEUE_MAX_DEFAULT),
+    cronMisfireGraceMinutes: optionalLimit(
+      env,
+      "CRON_MISFIRE_GRACE",
+      CRON_MISFIRE_GRACE_MINUTES_DEFAULT,
+    ),
     maxTurns: optionalInt(env, "DESKMATES_MAX_TURNS", MAX_TURNS_DEFAULT),
+    modelJobDeadlineMs: optionalInt(env, "MODEL_JOB_DEADLINE_MS", MODEL_JOB_DEADLINE_MS_DEFAULT),
+    modelJobThinking: modelJobThinking(env),
     ...runEventsRetention(env),
   };
 }
@@ -120,6 +159,15 @@ export function readRunsConfig(env: Env): RunsConfig {
 function runEventsRetention(env: Env): { runEventsRetentionDays?: number } {
   const days = optionalLimit(env, "RUN_EVENTS_RETENTION_DAYS", 0);
   return days > 0 ? { runEventsRetentionDays: days } : {};
+}
+
+function modelJobThinking(env: Env): ModelJobThinking {
+  const value = env.MODEL_JOB_THINKING?.trim() || "disabled";
+  if (value !== "disabled" && value !== "sdk-default")
+    throw new DeskmatesError("validation", "MODEL_JOB_THINKING must be disabled or sdk-default", {
+      key: "MODEL_JOB_THINKING",
+    });
+  return value;
 }
 
 function groupRouting(env: Env): GroupRouting {

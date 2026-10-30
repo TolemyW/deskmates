@@ -2,4 +2,7 @@
 # Shim for the built @deskmates/sidecar. The Gateway runs `deskmates-sidecar run` through docker exec
 # and pipes a JSON StartRunRequest on stdin. Per-run secrets arrive in $DESKMATES_ENV_FILE
 # (written by DockerProvider.injectEnv), not in this process's inherited environment.
+if [ "${1:-}" = run ]; then
+  exec python3 /usr/local/lib/deskmates/run-supervisor.py run node /opt/deskmates/sidecar/dist/index.js "$@"
+fi
 exec node /opt/deskmates/sidecar/dist/index.js "$@"

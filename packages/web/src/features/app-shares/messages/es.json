@@ -7,9 +7,11 @@
   "appShares.open.continue": "Continuar",
   "appShares.open.failed": "No se pudo abrir la aplicación: {error}",
   "appShares.open.opening": "Abriendo la aplicación…",
+  "appShares.open.retry": "Intentar de nuevo",
   "appShares.open.title": "Aplicación publicada",
   "appShares.openApp": "Abrir",
   "appShares.port": "puerto {port}",
+  "appShares.portInvalid": "Usa un puerto entre 1024 y 65535. Los puertos 6080–6086 están reservados para el escritorio del espacio de trabajo.",
   "appShares.publish": "Compartir",
   "appShares.publishIntro": "Comparte una aplicación web que ya se está ejecutando en el espacio de trabajo (escuchando en 0.0.0.0).",
   "appShares.publishLabel": "Nombre",
@@ -21,6 +23,6 @@
   "appShares.state.unavailable": "detenida",
   "appShares.stop": "Dejar de compartir",
   "appShares.stopConfirm": "¿Dejar de compartir «{label}»? Las pestañas abiertas pierden el acceso al instante; la aplicación sigue ejecutándose en el espacio de trabajo.",
-  "appShares.title": "Aplicaciones",
+  "appShares.title": "Aplicaciones compartidas",
   "appShares.unavailableHint": "Nada responde en este puerto. Pide a un bot que vuelva a iniciar la aplicación; la dirección no cambia."
 }

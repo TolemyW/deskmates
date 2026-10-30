@@ -5,8 +5,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BotDefinition, StartRunRequest, Workspace } from "@deskmates/contracts";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  type BotDefinition,
+  RUN_ERROR_CRON_MISFIRE,
+  type StartRunRequest,
+  type Workspace,
+} from "@deskmates/contracts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RunRecord } from "../ledger/runs.js";
 import { sidecarToolsFor } from "../scheduler/sidecar-tools.js";
 import type { SidecarScript } from "../test-support/fake-provider.js";
@@ -45,6 +50,7 @@ async function seedCronBot(
   ],
 ): Promise<BotDefinition> {
   const ws = await harness.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+    defaultBot: false,
     name: "ws-cron",
   });
   return harness.app.deskmates.ctx.bots.create({
@@ -128,6 +134,74 @@ describe("cron runner (design v0.3 §3.4)", () => {
     } finally {
       sse.close();
     }
+  });
+
+  it("start() fires the minute the Gateway starts in, then ticks on the next boundary", async () => {
+    // A minute ahead of the real clock, so run tokens minted at the fake time stay valid.
+    const startMinute = (Math.floor(Date.now() / 60_000) + 1) * 60_000;
+    const at = (t: number) => `${new Date(t).getUTCMinutes()} ${new Date(t).getUTCHours()} * * *`;
+    const bot = await seedCronBot(h, [
+      { schedule: at(startMinute), prompt: "the start minute" },
+      { schedule: at(startMinute + 60_000), prompt: "the next minute" },
+    ]);
+    const { cron } = h.app.deskmates;
+    vi.useFakeTimers({
+      now: startMinute + 20_000,
+      toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+    });
+    try {
+      cron.start();
+      expect(runsOf(h, bot).map((r) => r.triggerRef)).toEqual([
+        `cron:0:${new Date(startMinute).toISOString()}`,
+      ]);
+      cron.start();
+      vi.advanceTimersByTime(39_000);
+      expect(runsOf(h, bot)).toHaveLength(1);
+      vi.advanceTimersByTime(1_000);
+      expect(runsOf(h, bot).map((r) => r.triggerRef)).toContain(
+        `cron:1:${new Date(startMinute + 60_000).toISOString()}`,
+      );
+      expect(runsOf(h, bot)).toHaveLength(2);
+      cron.stop();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      cron.stop();
+      vi.useRealTimers();
+    }
+    await waitFor(
+      () => runsOf(h, bot).every((r) => r.status === "succeeded"),
+      3000,
+      "both runs to end",
+    );
+  });
+
+  it("one entry that cannot fire does not cost the later bots their minute", async () => {
+    const first = await seedCronBot(h);
+    const second = h.app.deskmates.ctx.bots.create({
+      name: "cronbot-2",
+      role: "scheduled",
+      workspaceId: first.workspaceId,
+      cron: [{ schedule: "*/5 * * * *", prompt: "check tickets" }],
+    });
+    // The tick visits bots in `created_at, id` order; two bots created in the same millisecond
+    // tie on the timestamp and fall back to their random ids, so fail whichever comes first.
+    const [earlier, later] = h.app.deskmates.ctx.bots.list(first.workspaceId) as [
+      BotDefinition,
+      BotDefinition,
+    ];
+    expect([earlier.id, later.id].sort()).toEqual([first.id, second.id].sort());
+    const { runs } = h.app.deskmates.ctx;
+    vi.spyOn(runs, "create").mockImplementationOnce(() => {
+      throw new Error("SQLITE_BUSY: database is locked");
+    });
+    try {
+      h.app.deskmates.cron.tick(MINUTE_10_05);
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(runsOf(h, earlier)).toHaveLength(0);
+    expect(runsOf(h, later)).toHaveLength(1);
+    await h.app.deskmates.scheduler.drain();
   });
 
   it("does not fire on a minute the schedule misses", async () => {
@@ -335,7 +409,10 @@ describe("lanes (design v0.3 §3.4)", () => {
 
 describe("cron configuration", () => {
   it("rejects a bad cron expression on create and validates a PATCH that replaces the entries", async () => {
-    const ws = await h.api<{ workspace: Workspace }>("POST", "/api/workspaces", { name: "ws-x" });
+    const ws = await h.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+      name: "ws-x",
+      defaultBot: false,
+    });
     const bad = await h.api<{ code: string }>("POST", "/api/bots", {
       name: "badcron",
       workspaceId: ws.json.workspace.id,
@@ -359,5 +436,217 @@ describe("cron configuration", () => {
     expect(h.app.deskmates.ctx.bots.mustGet(bot.id).cron).toEqual([
       { schedule: "0 9 * * 1-5", prompt: "daily standup" },
     ]);
+  });
+});
+
+describe("missed cron minutes are skipped, not back-filled (ADR-0029 decision 11)", () => {
+  /** The runner's own log, where a start names the minutes nobody fired. */
+  function captureLog(): Array<[string, Record<string, unknown> | undefined]> {
+    const lines: Array<[string, Record<string, unknown> | undefined]> = [];
+    const cron = h.app.deskmates.cron as unknown as {
+      log: (msg: string, data?: Record<string, unknown>) => void;
+    };
+    cron.log = vi.fn((msg, data) => lines.push([msg, data]));
+    return lines;
+  }
+
+  it("fires none of the minutes a stopped Gateway missed and logs them once per entry", async () => {
+    const bot = await seedCronBot(h);
+    const lines = captureLog();
+    // Last alive at 10:01; started again at 10:16:10. 10:05, 10:10 and 10:15 were missed.
+    const found = h.app.deskmates.cron.catchUp(
+      "2026-09-22T10:01:20.000Z",
+      new Date("2026-09-22T10:16:10.000Z"),
+    );
+    expect(found).toEqual([
+      {
+        botId: bot.id,
+        entry: 0,
+        schedule: "*/5 * * * *",
+        minutes: [
+          "2026-09-22T10:05:00.000Z",
+          "2026-09-22T10:10:00.000Z",
+          "2026-09-22T10:15:00.000Z",
+        ],
+        count: 3,
+        truncated: false,
+      },
+    ]);
+    expect(
+      lines.filter(([msg]) => msg.includes("skipped while the Gateway was stopped")),
+    ).toHaveLength(1);
+    expect(runsOf(h, bot)).toEqual([]);
+    // A first start, with no previous Gateway, missed nothing.
+    expect(h.app.deskmates.cron.catchUp(undefined)).toEqual([]);
+  });
+
+  it("an entry with misfire run_once fires exactly one catch-up round, for the latest minute", async () => {
+    const bot = await seedCronBot(h, [
+      { schedule: "*/5 * * * *", prompt: "catch up", misfire: "run_once" } as never,
+    ]);
+    const now = new Date("2026-09-22T10:16:10.000Z");
+    const [found] = h.app.deskmates.cron.catchUp("2026-09-22T10:01:20.000Z", now);
+    expect(found?.caughtUpRunId).toBeDefined();
+    h.app.deskmates.cron.catchUp("2026-09-22T10:01:20.000Z", now);
+    const runs = runsOf(h, bot);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.triggerRef).toBe("cron:0:2026-09-22T10:15:00.000Z");
+    await h.app.deskmates.scheduler.drain();
+  });
+
+  it("does not name a minute the previous Gateway fired before its last-seen mark caught up", async () => {
+    const bot = await seedCronBot(h, [
+      { schedule: "*/5 * * * *", prompt: "catch up", misfire: "run_once" } as never,
+    ]);
+    // The old Gateway was last seen at 10:04:30, fired 10:05 and stopped before marking alive.
+    h.app.deskmates.cron.tick(MINUTE_10_05);
+    await waitFor(() => runsOf(h, bot)[0]?.status === "succeeded", 3000, "the 10:05 run");
+    const [found] = h.app.deskmates.cron.catchUp(
+      "2026-09-22T10:04:30.000Z",
+      new Date("2026-09-22T10:16:10.000Z"),
+    );
+    expect(found?.minutes).toEqual(["2026-09-22T10:10:00.000Z", "2026-09-22T10:15:00.000Z"]);
+    expect(found?.count).toBe(2);
+    expect(found?.caughtUpRunId).toBeDefined();
+    // A repeated start never fires a round older than one that already ran.
+    h.app.deskmates.cron.catchUp("2026-09-22T10:04:30.000Z", new Date("2026-09-22T10:16:10.000Z"));
+    expect(runsOf(h, bot).map((r) => r.triggerRef)).toEqual(
+      expect.arrayContaining([
+        "cron:0:2026-09-22T10:05:00.000Z",
+        "cron:0:2026-09-22T10:15:00.000Z",
+      ]),
+    );
+    expect(runsOf(h, bot)).toHaveLength(2);
+    await h.app.deskmates.scheduler.drain();
+  });
+
+  it("accepts misfire on a cron entry through the API and stores only the opt-in", async () => {
+    const bot = await seedCronBot(h);
+    const patched = await h.api<{ bot: BotDefinition }>("PATCH", `/api/bots/${bot.id}`, {
+      cron: [
+        { schedule: "0 9 * * *", prompt: "daily", misfire: "run_once" },
+        { schedule: "0 10 * * *", prompt: "skip", misfire: "skip" },
+      ],
+    });
+    expect(patched.status).toBe(200);
+    expect(patched.json.bot.cron).toEqual([
+      { schedule: "0 9 * * *", prompt: "daily", misfire: "run_once" },
+      { schedule: "0 10 * * *", prompt: "skip" },
+    ]);
+    const bad = await h.api("PATCH", `/api/bots/${bot.id}`, {
+      cron: [{ schedule: "0 9 * * *", prompt: "daily", misfire: "always" }],
+    });
+    expect(bad.status).toBe(400);
+  });
+
+  it("cancels a round queued during a drain that could start only past the grace", async () => {
+    const bot = await seedCronBot(h);
+    const { scheduler, ctx } = h.app.deskmates;
+    scheduler.startDrain();
+    h.app.deskmates.cron.tick(MINUTE_10_05);
+    const [queued] = runsOf(h, bot);
+    expect(queued?.config.queuedInDrain).toBe(true);
+    // Six minutes later the drain ends (CRON_MISFIRE_GRACE is 5 by default).
+    scheduler.clock = () => new Date("2026-09-22T10:11:00.000Z");
+    scheduler.endDrain();
+    await waitFor(
+      () => ctx.runs.mustGet(queued?.id as never).status === "cancelled",
+      3000,
+      "the misfire",
+    );
+    expect(ctx.runs.mustGet(queued?.id as never).error).toBe(RUN_ERROR_CRON_MISFIRE);
+    expect(h.provider.execCalls).toHaveLength(0);
+  });
+
+  it("starts a round queued during a drain that ends inside the grace", async () => {
+    const bot = await seedCronBot(h);
+    const { scheduler, ctx } = h.app.deskmates;
+    scheduler.startDrain();
+    h.app.deskmates.cron.tick(MINUTE_10_05);
+    const [queued] = runsOf(h, bot);
+    scheduler.clock = () => new Date("2026-09-22T10:08:00.000Z");
+    scheduler.endDrain();
+    await waitFor(
+      () => ctx.runs.mustGet(queued?.id as never).status === "succeeded",
+      3000,
+      "the round",
+    );
+    // A round queued outside any drain is never a misfire, however long it waited.
+    scheduler.clock = () => new Date("2026-09-22T12:00:00.000Z");
+    h.app.deskmates.cron.tick(MINUTE_10_10);
+    await waitFor(
+      () => runsOf(h, bot).length === 2 && runsOf(h, bot).every((r) => r.status === "succeeded"),
+      3000,
+      "the next round to run, not to be cancelled",
+    );
+  });
+});
+
+describe("a parked threadless round does not block later ticks silently (ADR-0029 decision 12)", () => {
+  async function seedWithChat(): Promise<{ bot: BotDefinition; chatId: string }> {
+    const bot = await seedCronBot(h);
+    const chat = h.app.deskmates.ctx.threads.create({
+      workspaceId: bot.workspaceId,
+      botIds: [bot.id],
+    });
+    return { bot, chatId: chat.id };
+  }
+
+  const skipNotices = (chatId: string) =>
+    h.app.deskmates.ctx.messages
+      .list(chatId as never, 0)
+      .filter((m) => m.authorKind === "system" && m.body.includes("skipped its round"));
+
+  it("a round parked on a continuation ask: one notice, then at most one an hour", async () => {
+    const { bot, chatId } = await seedWithChat();
+    h.provider.onRun(async (req, gw) => {
+      await gw.post("ended", {
+        type: "run_ended",
+        runId: req.runId,
+        outcome: "turns_exhausted",
+        sdkSessionId: "sess-cron-turns",
+        usage: [],
+      });
+      return undefined;
+    });
+    h.app.deskmates.cron.tick(MINUTE_10_05);
+    await waitFor(
+      () => runsOf(h, bot)[0]?.status === "waiting_continuation",
+      3000,
+      "the round to park on its continuation ask",
+    );
+    const parked = runsOf(h, bot)[0] as RunRecord;
+
+    h.app.deskmates.cron.tick(MINUTE_10_10);
+    h.app.deskmates.cron.tick(new Date("2026-09-22T10:15:00.000Z"));
+    h.app.deskmates.cron.tick(new Date("2026-09-22T11:05:00.000Z"));
+    expect(skipNotices(chatId)).toHaveLength(1);
+    expect(skipNotices(chatId)[0]?.body).toContain(parked.id);
+    expect(skipNotices(chatId)[0]?.body).toContain("a continuation decision");
+    // An hour after the first notice, the next skip says so again.
+    h.app.deskmates.cron.tick(new Date("2026-09-22T11:10:00.000Z"));
+    expect(skipNotices(chatId)).toHaveLength(2);
+    // Still skipped, so nobody is asked twice.
+    expect(runsOf(h, bot)).toHaveLength(1);
+    expect(
+      h.app.deskmates.ctx.events
+        .list(parked.id)
+        .filter((e) => e.kind === "log" && e.payload.op === "parked_skip_notice"),
+    ).toHaveLength(2);
+  });
+
+  it("a round the platform parked posts no notice: it resumes by itself", async () => {
+    const { bot, chatId } = await seedWithChat();
+    const { ctx, scheduler } = h.app.deskmates;
+    scheduler.stop();
+    h.app.deskmates.cron.tick(MINUTE_10_05);
+    const [round] = runsOf(h, bot);
+    ctx.runs.transition(round?.id as never, "running");
+    ctx.runs.transition(round?.id as never, "waiting_platform", {
+      resumePayload: { sdkSessionId: "sess-p", platform: "drain" },
+    });
+    h.app.deskmates.cron.tick(MINUTE_10_10);
+    expect(runsOf(h, bot)).toHaveLength(1);
+    expect(skipNotices(chatId)).toHaveLength(0);
   });
 });

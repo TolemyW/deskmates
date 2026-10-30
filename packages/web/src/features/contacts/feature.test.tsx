@@ -14,10 +14,10 @@ describeNavEntry({
   folder: "contacts",
   feature,
   group: "talk",
-  order: 20,
+  order: 40,
   icon: Users,
   label: "app.nav.contacts",
-  english: "Contacts",
+  english: "Bots",
   href: "#/contacts",
   currentAt: ["#/contacts", "#/contacts/new"],
   // The older addresses render the contacts screen without marking Contacts current.

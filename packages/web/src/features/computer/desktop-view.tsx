@@ -1,6 +1,6 @@
 import type { BotId, ScreenAccess } from "@deskmates/contracts";
 import { LoaderCircle, MonitorOff, RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { Button } from "../../components/ui/button.js";
 import { errorMessage } from "../../format.js";
@@ -20,6 +20,7 @@ export function DesktopView({
   mode = "view",
   preview = false,
   label,
+  shared = false,
 }: {
   api: ApiClient;
   botId?: BotId;
@@ -27,6 +28,7 @@ export function DesktopView({
   mode?: "view" | "control";
   preview?: boolean;
   label?: string;
+  shared?: boolean;
 }) {
   const t = useT();
   const container = useRef<HTMLDivElement>(null);
@@ -34,6 +36,26 @@ export function DesktopView({
   const [state, setState] = useState<"connecting" | "live" | "error">("connecting");
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+  const [ratio, setRatio] = useState(shared ? 8 / 3 : 16 / 9);
+  useEffect(() => {
+    const target = container.current;
+    if (!target) return;
+    // noVNC exposes its framebuffer as a canvas. Follow its actual dimensions, including
+    // legacy/custom images, without resizing the shared remote desktop or using private RFB fields.
+    const update = () => {
+      const canvas = target.querySelector("canvas");
+      if (canvas && canvas.width > 0 && canvas.height > 0) setRatio(canvas.width / canvas.height);
+    };
+    const observer = new MutationObserver(update);
+    observer.observe(target, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["width", "height"],
+    });
+    update();
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const element = container.current;
     if (!element) return;
@@ -117,7 +139,10 @@ export function DesktopView({
     };
   }, [api, botId, open, mode, visible, revision]);
   return (
-    <div className={`desktop-frame ${preview ? "preview" : "expanded"}`}>
+    <div
+      className={`desktop-frame ${preview ? "preview" : "expanded"}`}
+      style={{ "--desktop-ratio": ratio } as CSSProperties}
+    >
       <div
         ref={container}
         className="rfb-surface"

@@ -3,9 +3,13 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  ARGUMENT_TRUNCATION_MARKER,
   type ApprovalRule,
+  type ApprovalRuleMatcher,
   type ToolAction,
   approvalRuleMatches,
+  checkAlwaysRule,
+  filePathPrefix,
   findMatchingRule,
   globMatches,
   matcherFromAction,
@@ -24,6 +28,13 @@ function rule(matcher: ApprovalRule["matcher"], botId: BotId = ALICE): ApprovalR
     createdBy: "human:web",
     createdAt: "2026-09-22T00:00:00.000Z",
   };
+}
+
+/** The Always proposal for an action that has a stable target. */
+function always(action: ToolAction): ApprovalRuleMatcher {
+  const m = matcherFromAction(action);
+  if (m === undefined) throw new Error("no stable target");
+  return m;
 }
 
 const submitClick: ToolAction = {
@@ -59,7 +70,7 @@ describe("approvalRuleMatches", () => {
   });
 
   it("requires every present field", () => {
-    const m = matcherFromAction(submitClick);
+    const m = always(submitClick);
     expect(approvalRuleMatches(rule(m), submitClick, ALICE)).toBe(true);
     expect(
       approvalRuleMatches(
@@ -77,7 +88,7 @@ describe("approvalRuleMatches", () => {
   });
 
   it("does not match when the action lacks a dimension the rule names", () => {
-    const m = matcherFromAction(submitClick);
+    const m = always(submitClick);
     const { targetOrigin: _o, ...noOrigin } = submitClick;
     expect(approvalRuleMatches(rule(m), noOrigin, ALICE)).toBe(false);
     const { argumentSummary: _s, ...noArgs } = submitClick;
@@ -85,7 +96,7 @@ describe("approvalRuleMatches", () => {
   });
 
   it("holds across runs: a later click with different wording and ref still matches", () => {
-    const m = matcherFromAction(submitClick);
+    const m = always(submitClick);
     const later: ToolAction = {
       toolName: "mcp__browser__browser_click",
       input: { element: "button 'Submit'", ref: "e7" },
@@ -96,23 +107,16 @@ describe("approvalRuleMatches", () => {
     expect(approvalRuleMatches(rule(m), later, ALICE)).toBe(true);
   });
 
-  it("stores the summary verbatim when the sidecar gave no stable pattern", () => {
+  it("keeps matching a rule stored before A6 from a verbatim summary, as it always did", () => {
     const shell: ToolAction = {
       toolName: "Bash",
       input: { command: "git push origin main" },
       argumentSummary: "git push origin main",
     };
-    expect(matcherFromAction(shell)).toEqual({
-      toolName: "Bash",
-      argumentPattern: "git push origin main",
-    });
-    expect(approvalRuleMatches(rule(matcherFromAction(shell)), shell, ALICE)).toBe(true);
+    const legacy = rule({ toolName: "Bash", argumentPattern: "git push origin main" });
+    expect(approvalRuleMatches(legacy, shell, ALICE)).toBe(true);
     expect(
-      approvalRuleMatches(
-        rule(matcherFromAction(shell)),
-        { ...shell, argumentSummary: "git push origin other" },
-        ALICE,
-      ),
+      approvalRuleMatches(legacy, { ...shell, argumentSummary: "git push origin other" }, ALICE),
     ).toBe(false);
   });
 
@@ -145,5 +149,145 @@ describe("approvalRuleMatches", () => {
     expect(findMatchingRule([deny, allow], shell, ALICE)?.id).toBe("rule_deny");
     expect(findMatchingRule([allow, deny], shell, ALICE)?.id).toBe("rule_allow");
     expect(findMatchingRule([deny], submitClick, ALICE)).toBeUndefined();
+  });
+});
+
+// ADR-0002 amendment 3, A6: Always proposes the tool plus a stable target, never the summary.
+describe("matcherFromAction (A6 stable target)", () => {
+  it("browser: the origin with the click's side-effect phrase, never the element wording", () => {
+    expect(matcherFromAction(submitClick)).toEqual({
+      toolName: "mcp__browser__browser_click",
+      targetOrigin: "http://shop.example.test:8080",
+      argumentPattern: "*submit*",
+    });
+  });
+
+  it("browser and HTTP tools without a pattern: the origin alone", () => {
+    const upload: ToolAction = {
+      toolName: "mcp__browser__browser_file_upload",
+      input: { paths: ["/work/a.pdf"] },
+      targetOrigin: "https://forms.example.test",
+      argumentSummary: "upload form",
+    };
+    expect(matcherFromAction(upload)).toEqual({
+      toolName: "mcp__browser__browser_file_upload",
+      targetOrigin: "https://forms.example.test",
+    });
+  });
+
+  it("file tools: the directory prefix of the path", () => {
+    const write: ToolAction = {
+      toolName: "Write",
+      input: { file_path: "/etc/deskmates/app.conf", content: "x" },
+      filePath: "/etc/deskmates/app.conf",
+      argumentSummary: "/etc/deskmates/app.conf",
+    };
+    const m = always(write);
+    expect(m).toEqual({ toolName: "Write", filePath: "/etc/deskmates/" });
+    const sibling = { ...write, filePath: "/etc/deskmates/other.conf" };
+    expect(approvalRuleMatches(rule(m), sibling, ALICE)).toBe(true);
+    expect(approvalRuleMatches(rule(m), { ...write, filePath: "/etc/passwd" }, ALICE)).toBe(false);
+    expect(filePathPrefix("notes.md")).toBe("notes.md");
+  });
+
+  it("shell: the program and subcommand the sidecar derived", () => {
+    const shell: ToolAction = {
+      toolName: "Bash",
+      input: { command: "git push origin feature/a" },
+      argumentSummary: "git push origin feature/a",
+      argumentPattern: "git push*",
+    };
+    const m = always(shell);
+    expect(m).toEqual({ toolName: "Bash", argumentPattern: "git push*" });
+    const later = { ...shell, argumentSummary: "git push origin feature/b --tags" };
+    expect(approvalRuleMatches(rule(m), later, ALICE)).toBe(true);
+  });
+
+  it("subagent spawns: the agent type, whatever the description and prompt say", () => {
+    const spawn: ToolAction = {
+      toolName: "Agent",
+      input: { subagent_type: "Explore", description: "map the repo", prompt: "long text" },
+      argumentSummary: "agent Explore: map the repo",
+      argumentPattern: "agent Explore: *",
+    };
+    const m = always(spawn);
+    expect(m).toEqual({ toolName: "Agent", argumentPattern: "agent Explore: *" });
+    const later = { ...spawn, argumentSummary: "agent Explore: find the tests" };
+    expect(approvalRuleMatches(rule(m), later, ALICE)).toBe(true);
+    const other = { ...spawn, argumentSummary: "agent general-purpose: map the repo" };
+    expect(approvalRuleMatches(rule(m), other, ALICE)).toBe(false);
+  });
+
+  it("a free-text tool with no other target: the input hash, never the truncated summary", () => {
+    const long = `{"to":"x","body":"${"y".repeat(300)}`;
+    const send: ToolAction = {
+      toolName: "SendMessage",
+      input: { to: "x", body: "y".repeat(300) },
+      argumentSummary: `${long.slice(0, 199)}${ARGUMENT_TRUNCATION_MARKER}`,
+      inputSha256: "a".repeat(64),
+    };
+    const m = always(send);
+    expect(m).toEqual({ toolName: "SendMessage", inputSha256: "a".repeat(64) });
+    expect(m.argumentPattern).toBeUndefined();
+    expect(approvalRuleMatches(rule(m), send, ALICE)).toBe(true);
+    expect(approvalRuleMatches(rule(m), { ...send, inputSha256: "b".repeat(64) }, ALICE)).toBe(
+      false,
+    );
+  });
+
+  it("proposes nothing for an action recorded with only a summary", () => {
+    const legacy: ToolAction = { toolName: "SendMessage", input: {}, argumentSummary: "{}" };
+    expect(matcherFromAction(legacy)).toBeUndefined();
+  });
+});
+
+describe("checkAlwaysRule (A6)", () => {
+  const answers = { action: submitClick, botId: ALICE };
+
+  it("accepts the proposal without a warning", () => {
+    expect(checkAlwaysRule(always(submitClick), answers)).toEqual({ ok: true, warnings: [] });
+  });
+
+  it("accepts an edited matcher that still matches the action", () => {
+    const edited = { ...always(submitClick), targetOrigin: "http://*.example.test:8080" };
+    expect(checkAlwaysRule(edited, answers)).toEqual({ ok: true, warnings: [] });
+  });
+
+  it("refuses a pattern ending in the truncation marker", () => {
+    const check = checkAlwaysRule({
+      toolName: "Bash",
+      argumentPattern: `npm run long${ARGUMENT_TRUNCATION_MARKER}`,
+    });
+    expect(check).toMatchObject({ ok: false, refusal: "rule_pattern_truncated" });
+  });
+
+  it("refuses a matcher that does not match the answered action", () => {
+    const check = checkAlwaysRule({ ...always(submitClick), argumentPattern: "*cancel*" }, answers);
+    expect(check).toMatchObject({ ok: false, refusal: "rule_does_not_match_action" });
+  });
+
+  it("warns on a free-text pattern without a wildcard, and on an input hash", () => {
+    const exact = {
+      toolName: "mcp__browser__browser_click",
+      argumentPattern: "submit order button",
+    };
+    expect(checkAlwaysRule(exact, answers)).toEqual({ ok: true, warnings: ["exact_arguments"] });
+    expect(checkAlwaysRule({ toolName: "X", inputSha256: "a".repeat(64) })).toEqual({
+      ok: true,
+      warnings: ["exact_input"],
+    });
+  });
+
+  it("does not warn on the sidecar's own exact pattern for the action", () => {
+    const integration: ToolAction = {
+      toolName: "mcp__deskmates__integration_execute",
+      input: {},
+      argumentSummary: "integration:mail action:send",
+      argumentPattern: "integration:mail action:send",
+    };
+    expect(checkAlwaysRule(always(integration), { action: integration, botId: ALICE })).toEqual({
+      ok: true,
+      warnings: [],
+    });
   });
 });

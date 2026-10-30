@@ -3,6 +3,7 @@
 // team has no workspace yet. Every one of these pages is scoped by the sidebar's workspace
 // switcher and never switches, creates or starts a workspace by being opened.
 
+import { EmptyState, PageHeader } from "@deskmates/ui";
 import { Monitor } from "lucide-react";
 import type { ReactNode } from "react";
 import { useT } from "../i18n/i18n-provider.js";
@@ -25,14 +26,9 @@ export function ResourceHeading({
   children?: ReactNode;
 }) {
   return (
-    <header className="resource-heading">
-      <div className="resource-heading-text">
-        <h1>{title}</h1>
-        <p className="muted">{context}</p>
-        {children}
-      </div>
-      {action ? <div className="resource-heading-action">{action}</div> : null}
-    </header>
+    <PageHeader title={title} description={context} action={action} className="resource-heading">
+      {children}
+    </PageHeader>
   );
 }
 
@@ -42,29 +38,28 @@ export function NoWorkspace({ scope }: { scope: WorkspaceScope }) {
   const canCreateWorkspace = useCan("workspace.create");
   return (
     <section className="workspace-screen resource-page page-container">
-      <header className="profile-header">
-        <span className="avatar lg workspace-mark" aria-hidden="true">
-          <Monitor size={20} />
-        </span>
-        <div className="profile-title">
-          <h1>{t("workspace.empty.title")}</h1>
+      <EmptyState
+        icon={<Monitor size={20} />}
+        title={t("workspace.empty.title")}
+        action={
+          canCreateWorkspace.allowed ? (
+            <Button variant="primary" onClick={scope.openCreate}>
+              {t("workspace.newWorkspace")}
+            </Button>
+          ) : undefined
+        }
+      >
+        <div>
           <p className="muted">{t("workspace.empty.intro")}</p>
-          <NextAction
-            action="workspace.create"
-            does={t("workspace.empty.nextDoes")}
-            how={t("workspace.empty.nextHow")}
-          />
+          {!canCreateWorkspace.allowed ? (
+            <NextAction
+              action="workspace.create"
+              does={t("workspace.empty.nextDoes")}
+              how={t("workspace.empty.nextHow")}
+            />
+          ) : null}
         </div>
-        <div className="profile-actions">
-          <Button
-            variant="default"
-            disabled={!canCreateWorkspace.allowed}
-            onClick={scope.openCreate}
-          >
-            {t("workspace.newWorkspace")}
-          </Button>
-        </div>
-      </header>
+      </EmptyState>
     </section>
   );
 }

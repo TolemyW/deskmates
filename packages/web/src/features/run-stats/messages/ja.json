@@ -1,0 +1,14 @@
+{
+  "runStats.disable": "実行統計をオフにする",
+  "runStats.enable": "実行統計をオンにする",
+  "runStats.frozen": "すでに開始した実行は、開始時の設定を保ちます。",
+  "runStats.intro": "{name} に読み取り専用のツール run_stats を与えます。自分の最近の実行、失敗の原因、所要時間、費用、承認待ち、保留中の実行、タスクを表示します。このワークスペースでのこのボット自身の数値だけで、他のボットの数値や、誰かのプライベートチャットの内容は含みません。",
+  "runStats.loading": "実行統計を読み込み中…",
+  "runStats.off": "オフ（既定）",
+  "runStats.on": "オン",
+  "runStats.retry": "再試行",
+  "runStats.roleNote": "実行統計を変更",
+  "runStats.state": "実行統計ツール",
+  "runStats.strategyNote": "このツールを与えるとボットの働き方が変わります。頼る前に、ペアの実行で比較してください。",
+  "runStats.title": "実行統計"
+}

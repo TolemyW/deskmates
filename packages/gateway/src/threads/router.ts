@@ -8,6 +8,7 @@ import {
   type Mention,
   type MentionOptions,
   type MessageId,
+  RUN_ERROR_OPERATOR_PAUSE,
   RUN_ERROR_TURN_BUDGET,
   type RequestedRoundMode,
   type RoundMode,
@@ -15,15 +16,19 @@ import {
   type Thread,
   type ThreadId,
   type ThreadMessage,
+  type ThreadPauseReason,
+  type ThreadPauseState,
   type WakeBlockedReason,
   isPastDeadline,
   isTerminal,
   laneForThread,
+  mentionRoutingText,
   parseMentions,
 } from "@deskmates/contracts";
+import { channelRunStamp } from "../channels/channel-run-stamp.js";
 import type { EventStore } from "../ledger/events.js";
 import type { RunRecord, RunStore } from "../ledger/runs.js";
-import type { WorkspaceLimitStore } from "../limits/workspace-limits.js";
+import type { ThreadCaps, WorkspaceLimitStore } from "../limits/workspace-limits.js";
 import type { RoundTriageRequester } from "../model-jobs/round-triage.js";
 import { type CapBreach, blockedReason, breachLabel, evaluateCaps, fixedCaps } from "./caps.js";
 import type { MessageStore } from "./messages.js";
@@ -43,6 +48,11 @@ export interface PostHumanMessageInput {
   externalId?: string;
   /** Ask for a definite answer (issue #21). Stored on the message; never changes who is woken. */
   mustReply?: boolean;
+  /**
+   * An ABI-2 channel conversation (ADR-0047 decisions 3 and 4): an `@name` in the person's text
+   * never adds a member, so inbound only ever wakes the connection's bound Bot.
+   */
+  fixedMembers?: boolean;
   /** Validated by the caller (`asAttachments`); the composite submit's only use (issue #21). */
   attachments?: readonly Attachment[];
   /**
@@ -59,6 +69,22 @@ export interface PostResult {
   duplicate?: boolean;
   /** The thread is past its deadline (issue #21): the message was stored and woke nobody. */
   deadlinePassed?: true;
+  /**
+   * The thread stays paused by an operator (ADR-0005 amendment 3, decision 24): the message was
+   * stored and woke nobody.
+   */
+  paused?: ThreadPauseReason;
+}
+
+/** What an operator pause or resume changed (decision 23). */
+export interface PauseChange {
+  /** False when the thread was already in the asked state: nothing was written. */
+  changed: boolean;
+  thread: Thread;
+  /** Queued runs the pause cancelled with `operator_pause`. */
+  cancelled: RunRecord[];
+  /** The resume notice (decision 22); absent for a pause. */
+  notice?: ThreadMessage;
 }
 
 /** A bot's own post: the stored message, and why it started no run when it started none. */
@@ -66,6 +92,17 @@ export interface BotPostOutcome {
   message: ThreadMessage;
   wakeBlocked?: WakeBlockedReason;
 }
+
+/** A paused thread's state as a run is told it (amendment 3, decision 27). */
+export function pauseStateOf(thread: Thread): ThreadPauseState | undefined {
+  if (thread.status !== "paused" || !thread.pauseReason) return undefined;
+  return {
+    reason: thread.pauseReason,
+    ...(thread.resumeAt ? { resumeAt: thread.resumeAt } : {}),
+  };
+}
+
+const MINUTE_MS = 60_000;
 
 const TEXT_MENTION = /(^|[^\w@])@([\w-]+)/g;
 
@@ -94,6 +131,8 @@ export interface ThreadRouterOptions {
    */
   roundPlans?: RoundPlanStore;
   triage?: RoundTriageRequester;
+  /** The clock of a turn-budget pause's reset window (amendment 3, decision 22); tests fake it. */
+  now?: () => Date;
 }
 
 /** A bounded reason for a plan's fallback or early close. */
@@ -113,6 +152,10 @@ export class ThreadRouter {
     private readonly onMessageCreated: (message: ThreadMessage) => void = () => {},
     private readonly options: ThreadRouterOptions = {},
   ) {}
+
+  private now(): Date {
+    return this.options.now?.() ?? new Date();
+  }
 
   /** Amendment 2's routing; `round-v1` keeps it for everything amendment 6 does not change. */
   private get ownerRouting(): boolean {
@@ -135,8 +178,14 @@ export class ThreadRouter {
         const existing = this.messages.findByExternalId(thread.id, input.externalId);
         if (existing) return { message: existing, runs: [], duplicate: true };
       }
-      this.joinHumanMentions(thread.id, input.body);
-      if (thread.status === "paused") thread = this.threads.setStatus(thread.id, "active");
+      if (input.fixedMembers !== true) this.joinHumanMentions(thread.id, input.body);
+      // ADR-0005 amendment 3, decision 24: a human message ends a turn-budget pause (and moves
+      // the budget origin by being a human message), never an operator pause.
+      if (thread.status === "paused" && thread.pauseReason !== "operator") {
+        this.threads.resume(thread.id, { only: "turn_budget" });
+        thread = this.threads.mustGet(thread.id);
+        this.options.onThreadChanged?.(thread.id);
+      }
       const members = this.threads.members(thread.id);
       const message = this.messages.append({
         threadId: thread.id,
@@ -152,6 +201,8 @@ export class ThreadRouter {
       if (this.ownerRouting && members.length > 1 && thread.kind === "chat") {
         this.adoptAddressedOwner(thread, message);
       }
+      // Decision 24: in a thread an operator paused the message is stored and wakes nobody.
+      if (thread.status === "paused") return { message, runs: [], paused: "operator" };
       // Issue #21: past the deadline the message is kept and the caller is told nothing started.
       if (isPastDeadline(thread)) return { message, runs: [], deadlinePassed: true };
       return { message, runs: this.route(thread, members, message, false, input.roundMode) };
@@ -188,7 +239,7 @@ export class ThreadRouter {
     threadId: ThreadId,
     body: string,
     attachments: ThreadMessage["attachments"],
-    targetBotId: BotId,
+    targetBotId?: BotId | readonly BotId[],
   ): ThreadMessage {
     return this.postBotMessage(run, threadId, body, attachments, targetBotId).message;
   }
@@ -214,6 +265,8 @@ export class ThreadRouter {
     if (isPastDeadline(thread)) return { message, runs: [], deadlinePassed: true };
     // A routing-inert notice (an approval request, reminder or expiry, ADR-0002 amendment 3 A4).
     if (opts.inert) return { message, runs: [] };
+    // Like every other poster: in a paused thread the notice is stored and wakes nobody.
+    if (thread.status === "paused") return { message, runs: [] };
     const runs = members
       .filter((member) => member.botId !== opts.wakeExcept)
       .filter((member) => opts.wakeOnly === undefined || member.botId === opts.wakeOnly)
@@ -224,13 +277,116 @@ export class ThreadRouter {
     return { message, runs };
   }
 
-  /** Scheduler entry point: resume busy or restart-interrupted durable walks. */
+  /**
+   * Scheduler entry point, called on every scheduler pass: end the turn-budget pauses whose reset
+   * window has passed (ADR-0005 amendment 3, rewritten decision 22), then resume busy or
+   * restart-interrupted durable walks. The pass runs at least once a minute, so a pause ends at
+   * most about a minute after its `resumeAt`.
+   */
   continueWalks(): RunRecord[] {
+    this.resumeDuePauses();
     const created = this.walks
       .pendingThreadIds()
       .flatMap((threadId) => this.walks.transaction(() => this.advanceThreadWalk(threadId)));
     if (created.length > 0) this.onRunsCreated(created);
     return created;
+  }
+
+  /**
+   * Rewritten decision 22: every thread paused for `turn_budget` whose reset window ended by now
+   * resumes with one `system` notice, whose seq becomes the budget origin. The notice wakes nobody
+   * and counts toward neither cap. A pause that already ended, or that an operator took over,
+   * is left alone, so a pause gets at most one resume notice. Returns the resumed threads.
+   */
+  resumeDuePauses(): ThreadId[] {
+    const now = this.now();
+    const resumed: ThreadId[] = [];
+    for (const threadId of this.threads.duePauses(now)) {
+      const notice = this.walks.transaction(() => {
+        const thread = this.threads.mustGet(threadId);
+        if (
+          thread.status !== "paused" ||
+          thread.pauseReason !== "turn_budget" ||
+          thread.resumeAt === undefined ||
+          Date.parse(thread.resumeAt) > now.getTime()
+        )
+          return undefined;
+        const minutes = thread.pausedAt
+          ? Math.max(
+              1,
+              Math.round((Date.parse(thread.resumeAt) - Date.parse(thread.pausedAt)) / MINUTE_MS),
+            )
+          : undefined;
+        const message = this.messages.append({
+          threadId,
+          authorKind: "system",
+          authorId: "",
+          body: `Turn budget window passed${minutes === undefined ? "" : ` (${minutes} minutes)`}: the conversation resumed automatically and its turn budget was reset. Runs the pause cancelled stay cancelled; repeat what still matters.`,
+          relayCount: 0,
+        });
+        this.threads.resume(threadId, { budgetResetSeq: message.seq, only: "turn_budget" });
+        return message;
+      });
+      if (!notice) continue;
+      this.onMessageCreated(notice);
+      this.options.onThreadChanged?.(threadId);
+      resumed.push(threadId);
+    }
+    return resumed;
+  }
+
+  /**
+   * Decision 23: an Owner or Admin pauses the thread. The pause records reason `operator` (it
+   * replaces a turn-budget pause, which then no longer ends by itself), cancels the thread's
+   * queued runs with `operator_pause` and completes its pending walks. A live run finishes and a
+   * parked run stays parked. The caller ledgers who acted, in the same transaction.
+   */
+  operatorPause(threadId: ThreadId): PauseChange {
+    const result = this.walks.transaction((): PauseChange => {
+      const thread = this.threads.mustGet(threadId);
+      if (thread.status === "paused" && thread.pauseReason === "operator")
+        return { changed: false, thread, cancelled: [] };
+      this.threads.pause(threadId, {
+        reason: "operator",
+        seq: this.messages.latest(threadId)?.seq ?? 0,
+        at: this.now().toISOString(),
+      });
+      const cancelled = this.runs
+        .listQueuedInThread(threadId)
+        .map((queued) =>
+          this.runs.transition(queued.id, "cancelled", { error: RUN_ERROR_OPERATOR_PAUSE }),
+        );
+      this.walks.completePendingInThread(threadId);
+      return { changed: true, thread: this.threads.mustGet(threadId), cancelled };
+    });
+    if (result.cancelled.length > 0) this.onRunsCreated(result.cancelled);
+    if (result.changed) this.options.onThreadChanged?.(threadId);
+    return result;
+  }
+
+  /**
+   * Decisions 22 and 23: Resume, for a pause of either reason. One `system` notice names who
+   * resumed it; its seq becomes the budget origin in the same update that sets the thread active.
+   * Runs the pause cancelled stay cancelled (decision 25). A thread that is not paused is left
+   * as it is.
+   */
+  operatorResume(threadId: ThreadId, actorName: string): PauseChange {
+    const result = this.walks.transaction((): PauseChange => {
+      const thread = this.threads.mustGet(threadId);
+      if (thread.status !== "paused") return { changed: false, thread, cancelled: [] };
+      const notice = this.messages.append({
+        threadId,
+        authorKind: "system",
+        authorId: "",
+        body: `Resumed by ${actorName}; turn budget reset.`,
+        relayCount: 0,
+      });
+      this.threads.resume(threadId, { budgetResetSeq: notice.seq });
+      return { changed: true, thread: this.threads.mustGet(threadId), cancelled: [], notice };
+    });
+    if (result.notice) this.onMessageCreated(result.notice);
+    if (result.changed) this.options.onThreadChanged?.(threadId);
+    return result;
   }
 
   /**
@@ -287,7 +443,7 @@ export class ThreadRouter {
     threadId: ThreadId,
     body: string,
     attachments: ThreadMessage["attachments"],
-    forceTarget?: BotId,
+    forceTarget?: BotId | readonly BotId[],
   ): BotPostOutcome {
     const work = (): {
       message: ThreadMessage;
@@ -303,7 +459,8 @@ export class ThreadRouter {
           threadId,
         });
       }
-      if (forceTarget && !members.some((member) => member.botId === forceTarget)) {
+      const targets = typeof forceTarget === "string" ? [forceTarget] : forceTarget;
+      if (targets?.some((id) => !members.some((member) => member.botId === id))) {
         throw new DeskmatesError("validation", "target bot is not a member of the thread", {
           targetBotId: forceTarget,
           threadId,
@@ -324,8 +481,8 @@ export class ThreadRouter {
         }
       }
       const relayCount = sourceRelay + 1;
-      const mentions: Mention[] = forceTarget
-        ? [{ kind: "bot", botId: forceTarget }]
+      const mentions: Mention[] = targets
+        ? targets.map((botId) => ({ kind: "bot", botId }))
         : parseMentions(body, members, run.botId, this.mentionOptions);
       const message = this.messages.append({
         threadId,
@@ -339,11 +496,15 @@ export class ThreadRouter {
       });
       this.noteTaken(run, threadId);
       // ADR-0005 amendment 5: the workspace's caps, then the loop breaker behind them.
-      const caps = this.options.limits?.threadCaps(thread.workspaceId, thread.turnBudget);
-      const breaches = evaluateCaps(caps ?? fixedCaps(thread.turnBudget), {
+      const caps =
+        this.options.limits?.threadCaps(thread.workspaceId, thread.turnBudget) ??
+        fixedCaps(thread.turnBudget);
+      // Amendment 3, decision 22: every count starts at the budget origin, so a resumed thread
+      // does not breach again on its first bot message.
+      const breaches = evaluateCaps(caps, {
         relayCount,
-        botCount: this.messages.botCountSinceLastHuman(threadId),
-        repeats: this.messages.botRepeatsSinceLastHuman(message),
+        botCount: this.messages.botCountSinceOrigin(threadId),
+        repeats: this.messages.botRepeatsSinceOrigin(message),
         // Amendment 6, decision 49: a triaged round's posts count once toward the turn budget.
         ...(this.roundRouting && this.options.roundPlans
           ? { budgetCount: this.options.roundPlans.botCountByRound(threadId) }
@@ -364,7 +525,7 @@ export class ThreadRouter {
         );
       if (wakeBlocked) {
         const changed: RunRecord[] = [];
-        for (const breach of breaches) changed.push(...this.breach(thread, message, breach));
+        for (const breach of breaches) changed.push(...this.breach(thread, message, breach, caps));
         return { message, runs: [], changed, wakeBlocked };
       }
       if (thread.status === "paused") {
@@ -375,8 +536,8 @@ export class ThreadRouter {
       if (isPastDeadline(thread)) {
         return { message, runs: [], changed: [], wakeBlocked: "deadline_passed" };
       }
-      const created = forceTarget
-        ? this.directWakes(thread, message, this.withoutPaused(thread, message, [forceTarget]))
+      const created = targets
+        ? this.directWakes(thread, message, this.withoutPaused(thread, message, targets))
         : this.route(thread, members, message, false);
       return { message, runs: created, changed: [] };
     };
@@ -959,22 +1120,17 @@ export class ThreadRouter {
       lane: laneForThread(thread.kind),
       triggerKind: "thread_message",
       triggerRef: message.id,
-      config: this.runConfig(),
+      config: { ...this.runConfig(), ...channelRunStamp(thread) },
     });
   }
 
-  private breach(thread: Thread, message: ThreadMessage, breach: CapBreach): RunRecord[] {
+  private breach(
+    thread: Thread,
+    message: ThreadMessage,
+    breach: CapBreach,
+    caps: ThreadCaps,
+  ): RunRecord[] {
     const changed: RunRecord[] = [];
-    if (breach.pauses) {
-      this.threads.setStatus(thread.id, "paused");
-      for (const queued of this.runs.listQueuedInThread(thread.id)) {
-        // The Gateway decided this outcome, so the run names why, as a deadline cancellation does.
-        changed.push(
-          this.runs.transition(queued.id, "cancelled", { error: RUN_ERROR_TURN_BUDGET }),
-        );
-      }
-      this.walks.completePendingInThread(thread.id);
-    }
     const names = new Map(
       this.threads.members(thread.id).map((member) => [member.botId, member.name]),
     );
@@ -983,14 +1139,44 @@ export class ThreadRouter {
         .filter((m): m is { kind: "bot"; botId: BotId } => m.kind === "bot")
         .map((m) => names.get(m.botId) ?? m.botId)
         .join(", ") || "thread members";
-    const alert = this.messages.append({
-      threadId: thread.id,
-      authorKind: "system",
-      authorId: "",
-      body: `${breachLabel(breach)}: ${names.get(message.authorId as BotId) ?? message.authorId}'s mention of ${dropped} was not delivered`,
-      relayCount: 0,
-    });
-    this.onMessageCreated(alert);
+    let body = `${breachLabel(breach)}: ${names.get(message.authorId as BotId) ?? message.authorId}'s mention of ${dropped} was not delivered`;
+    // Amendment 3, decision 21: the humans are told once per pause. A breach while the thread is
+    // already paused keeps its ledger event and posts no second notice.
+    const announce = !breach.pauses || thread.status !== "paused";
+    if (breach.pauses && thread.status !== "paused") {
+      // Rewritten decision 22: the pause ends by itself when the reset window has passed.
+      const now = this.now();
+      const minutes = caps.budgetResetMinutes;
+      const resumeAt = new Date(now.getTime() + minutes * MINUTE_MS).toISOString();
+      this.threads.pause(thread.id, {
+        reason: "turn_budget",
+        seq: message.seq,
+        at: now.toISOString(),
+        resumeAt,
+      });
+      for (const queued of this.runs.listQueuedInThread(thread.id)) {
+        // The Gateway decided this outcome, so the run names why, as a deadline cancellation does.
+        changed.push(
+          this.runs.transition(queued.id, "cancelled", { error: RUN_ERROR_TURN_BUDGET }),
+        );
+      }
+      this.walks.completePendingInThread(thread.id);
+      const cancelled = changed.map((run) => names.get(run.botId) ?? run.botId).join(", ");
+      body += `. The conversation is paused${
+        cancelled ? `; queued runs cancelled for ${cancelled}` : "; no queued run was cancelled"
+      }. It resumes by itself at ${resumeAt} (in ${minutes} minutes) with its turn budget reset; a human message or Resume resumes it sooner.`;
+      this.options.onThreadChanged?.(thread.id);
+    }
+    if (announce) {
+      const alert = this.messages.append({
+        threadId: thread.id,
+        authorKind: "system",
+        authorId: "",
+        body,
+        relayCount: 0,
+      });
+      this.onMessageCreated(alert);
+    }
     if (message.runId && this.events) {
       // Amendment 5, decision 41: which counter, which limit, and where the limit came from.
       const { cap, limit, source, rule } = breach;
@@ -1045,7 +1231,7 @@ export class ThreadRouter {
 /** The distinct `@name` mentions of a human message, `@everyone` excluded. */
 function mentionedNames(body: string): Set<string> {
   const names = new Set<string>();
-  for (const match of body.matchAll(TEXT_MENTION)) {
+  for (const match of mentionRoutingText(body).matchAll(TEXT_MENTION)) {
     const name = match[2];
     if (name && name.toLowerCase() !== "everyone") names.add(name);
   }

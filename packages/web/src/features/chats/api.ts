@@ -11,6 +11,7 @@ import type {
   ThreadMember,
   ThreadMessage,
   ThreadRound,
+  ThreadStatus,
   ThreadSummary,
   WorkspaceId,
 } from "@deskmates/contracts";
@@ -75,6 +76,11 @@ export interface ChatsApi {
     messageId: string,
     botId: BotId,
   ): Promise<{ run: RunView; round?: ThreadRound }>;
+  /**
+   * Pause or Resume a thread (ADR-0005 amendment 3, decision 23): an operator pause stays until
+   * Resume; Resume ends a pause of either reason and resets the turn budget.
+   */
+  setThreadStatus(id: ThreadId, status: ThreadStatus): Promise<ThreadDetailView>;
   unpinThread(id: ThreadId): Promise<void>;
 }
 
@@ -188,6 +194,9 @@ export function createChatsApi(t: HttpTransport): ChatsApi {
         `/api/threads/${encodeURIComponent(id)}/rounds/${encodeURIComponent(messageId)}/members/${encodeURIComponent(botId)}/retry`,
         {},
       );
+    },
+    setThreadStatus(id, status) {
+      return t.json("PATCH", `/api/threads/${encodeURIComponent(id)}`, { status });
     },
     async unpinThread(id) {
       await t.json("DELETE", `/api/threads/${encodeURIComponent(id)}/pin`);

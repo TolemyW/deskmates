@@ -4,9 +4,28 @@ What it is: some actions a bot may not take on its own. Before an action with an
 (submitting a form, sending a message, clicking Export, writing to a SaaS app) the bot stops and
 asks in the chat. A person, or another member of the chat, answers.
 
-Where you find it: the request appears in the chat as a system message with buttons. **Attention**
+Where you find it: the request appears in the chat as a system message with buttons. **Approvals**
 in the sidebar collects every pending request across chats and bots; its badge shows the count.
-Deciding in Attention is the same as deciding in the chat.
+Deciding in Approvals is the same as deciding in the chat. Once decided, the request and its
+decision leave the everyday (Use) chat history and stay visible in the Tune view.
+
+## Who answers: the workspace's approval mode
+
+An Owner or Admin chooses, in the workspace's **Settings → Team & approvals → Approvals**, who
+answers a request that needs approval. A stored rule (**Always**) answers before any of them.
+
+- **Automatic review** (the default for a new workspace): an independent AI reviewer answers
+  first, including scheduled work and browser actions, so bots do not wait for someone to be
+  online. Deleting, changing permissions, opening new sites and actions that carry credentials
+  still wait for a person. Every decision is recorded.
+- **Ask a person**: every request waits for a person or a teammate bot in the chat.
+- **Approve all**: every action that would ask is allowed without asking anyone, including
+  deletions, permission changes and new sites, and a bot that reaches its turn limit continues on
+  its own. Each allowance is recorded as decided by the mode. The workspace shows an **Approve
+  all** badge while it is on.
+
+No mode lifts the hard denies: private addresses, IP literals, cloud metadata addresses, other
+workspaces and secret redaction stay blocked. The budget and the loop breaker still apply.
 
 ## Risk tiers
 
@@ -23,7 +42,7 @@ shows page content.
 
 - **Short wait.** The bot waits a short time for an answer. If you answer, it carries on.
 - **Park.** If nobody answers in that window, or nobody is online, the run is parked: it stops
-  and its session is saved. The request stays in the chat and in Attention.
+  and its session is saved. The request stays in the chat and in Approvals.
 - **Resume.** When someone answers later, even hours later, the parked run resumes from where it
   stopped. A parked run holds its chat until it is decided.
 
@@ -39,7 +58,10 @@ shows page content.
   action.
 
 Any member of the chat may decide: a human from the UI, or a bot through `approval_decide`.
-Members of the team (any role) decide approvals; only Admins and Owners create and delete rules.
+Among people, an Owner or Admin may give any answer to any request. A Member answers only
+requests of the runs they started, with **Allow once** or **Deny**; **Always** and **Allow this
+site** are an Owner's or Admin's. Guests do not see approvals. Only Admins and Owners create, edit
+and delete rules.
 
 ## New-site asks
 
@@ -57,7 +79,7 @@ reached"). No answer in 24 hours means Stop. See [Chats and groups](chats-and-gr
 
 A request for a Google Drive write shows a preview of the proposed action as plain text: the
 connection, the target, and the outgoing content and parameters, with a note when the preview is
-truncated. See [Integrations and connectors](integrations-and-connectors.md).
+truncated. See [Connections](integrations-and-connectors.md).
 
 ## What this cannot do
 

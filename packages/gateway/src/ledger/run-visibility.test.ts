@@ -1,6 +1,8 @@
-// T1 (issue #70): a run's visibility flags. `silent` keeps its ADR-0005 meaning, an empty final
-// reply; the run API reports beside it whether the run posted, decided an approval or delivered
-// a task, derived from what the Gateway wrote, so no historical row changes meaning.
+// T1 (issue #70): a run's visibility flags, reported by the run API beside its status: whether
+// the run posted, decided an approval or delivered a task, derived from what the Gateway wrote,
+// so no historical row changes meaning. `silent` follows the owner's definition of 2026-10-17
+// (ADR-0005, "Definition of `silent`"): only a thread run that ended successfully without posting
+// a message is silent; a failed or cancelled run that posted nothing never is.
 
 import type { RunVisibility } from "@deskmates/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -60,18 +62,35 @@ const NOTHING: RunVisibility = {
   decidedApproval: false,
   deliveredTask: false,
   visibleOutcome: false,
+  silent: false,
 };
 
 describe("run visibility on the run API", () => {
-  it("reports nothing visible for a silent run that did nothing", async () => {
+  it("reports a succeeded run that posted nothing as silent, and nothing visible", async () => {
     const { thread } = await h.seed();
     h.provider.onRun(endWith(""));
     const run = await settledRun(thread.id, "fyi");
     expect(run.status).toBe("silent");
+    expect(run.visibility).toEqual({ ...NOTHING, silent: true });
+  });
+
+  it("never counts a failed run that posted nothing as silent", async () => {
+    const { thread } = await h.seed();
+    h.provider.onRun(async (req, gw) => {
+      await gw.post("ended", {
+        type: "run_ended",
+        runId: req.runId,
+        outcome: "failed",
+        error: "model unavailable",
+        usage: [],
+      });
+    });
+    const run = await settledRun(thread.id, "fyi");
+    expect(run.status).toBe("failed");
     expect(run.visibility).toEqual(NOTHING);
   });
 
-  it("keeps a run that answered through thread_post silent and reports the post", async () => {
+  it("records a run that answered through thread_post as succeeded, not silent", async () => {
     const { thread } = await h.seed();
     h.provider.onRun(async (req, gw) => {
       await gw.post("messages", {
@@ -83,7 +102,7 @@ describe("run visibility on the run API", () => {
       await endWith("")(req, gw);
     });
     const run = await settledRun(thread.id, "answer this");
-    expect(run.status).toBe("silent");
+    expect(run.status).toBe("succeeded");
     expect(run.visibility).toEqual({ ...NOTHING, postedToThread: true, visibleOutcome: true });
     // The list route reports the same flags as the detail route.
     const listed = await h.api<{ runs: RunWithVisibility[] }>(
@@ -146,5 +165,37 @@ describe("runVisibility", () => {
       visibleOutcome: true,
     });
     expect(runVisibility(ctx.db, []).size).toBe(0);
+  });
+
+  it("classifies stored runs by the owner's definition of silent", async () => {
+    const { bot, thread } = await h.seed();
+    const ctx = h.app.deskmates.ctx;
+    const create = () =>
+      ctx.runs.create({
+        botId: bot.id,
+        threadId: thread.id,
+        lane: "interactive",
+        triggerKind: "thread_message",
+        triggerRef: "test",
+      });
+    const cancelled = ctx.runs.transition(create().id, "cancelled", { error: "operator_pause" });
+    // A run recorded before 2026-10-17 could be stored `silent` although it posted.
+    const olderSilent = create();
+    ctx.db.prepare("UPDATE runs SET status = 'silent' WHERE id = ?").run(olderSilent.id);
+    ctx.events.append({
+      runId: olderSilent.id,
+      kind: "log",
+      payload: { tool: "thread_post", threadId: thread.id, messageId: "msg_1" },
+    });
+    const quiet = create();
+    ctx.db.prepare("UPDATE runs SET status = 'silent' WHERE id = ?").run(quiet.id);
+    const map = runVisibility(ctx.db, [
+      cancelled,
+      ctx.runs.mustGet(olderSilent.id),
+      ctx.runs.mustGet(quiet.id),
+    ]);
+    expect(map.get(cancelled.id)?.silent).toBe(false);
+    expect(map.get(olderSilent.id)).toMatchObject({ postedToThread: true, silent: false });
+    expect(map.get(quiet.id)?.silent).toBe(true);
   });
 });

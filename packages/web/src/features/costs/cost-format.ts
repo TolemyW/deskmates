@@ -1,7 +1,7 @@
 // Number formats of the Costs page. Money and tokens never share a formatter, so a value cannot
 // change unit on its way to the screen (ADR-0032 decision 9).
 
-import type { CostTotals } from "@deskmates/contracts";
+import type { CostTotals, OperationUnit } from "@deskmates/contracts";
 import { currentI18n } from "../../i18n/intl.js";
 
 /** A token or run count with the active locale's digit grouping. */
@@ -36,14 +36,12 @@ function usd(value: number, decimals: number): string {
 }
 
 export function dollars(value: number): string {
-  return usd(value, 6);
+  return usd(value, 2);
 }
 
 /** Spend for a tile: cents matter, micro-dollars do not. */
 export function shortDollars(value: number): string {
-  if (value >= 1) return usd(value, 2);
-  if (value >= 0.01) return usd(value, 3);
-  return usd(value, 4);
+  return usd(value, 2);
 }
 
 export function totalTokens(t: CostTotals): number {
@@ -60,4 +58,15 @@ export function moneyOf(t: CostTotals): number | null {
 /** Whether a money figure includes an estimate. */
 export function hasEstimate(t: CostTotals): boolean {
   return (t.estimatedCostUsd ?? 0) > 0;
+}
+
+/**
+ * An operation quantity in its own unit (ADR-0040 amendment A): images and pages as counts,
+ * audio seconds as minutes. Never converted to tokens or money.
+ */
+export function operationQuantity(unit: OperationUnit, quantity: number): string {
+  const locale = currentI18n().locale;
+  if (unit === "audio_second")
+    return (quantity / 60).toLocaleString(locale, { maximumFractionDigits: 1 });
+  return quantity.toLocaleString(locale, { maximumFractionDigits: 0 });
 }

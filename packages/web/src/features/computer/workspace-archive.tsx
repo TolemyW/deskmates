@@ -66,7 +66,6 @@ export function WorkspaceArchive({ api, scope }: { api: ApiClient; scope: Worksp
     <>
       <section className="card workspace-lifecycle">
         <h2>{t(scope.current ? "workspaceTrash.lifecycle" : "workspaceTrash.title")}</h2>
-        <p>{t(scope.current ? "workspaceTrash.archiveIntro" : "workspaceTrash.intro")}</p>
         <div className="form-actions">
           {scope.current ? (
             <Button

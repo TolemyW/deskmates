@@ -133,8 +133,8 @@ export function registerIntegrationOAuthCallbackRoute(
   app.get("/api/integrations/oauth/callback", async (request, reply) => {
     const query = new URLSearchParams(request.url.split("?", 2)[1] ?? "");
     // A grant started from a browser session completes only in that session, while it is still
-    // an Admin of the workspace's tenant: a swapped callback URL or a revoked session finds a
-    // spent state and nothing recorded.
+    // an Admin of the grant's workspace (ADR-0022 amendment 6 W1): a swapped callback URL or a
+    // revoked session finds a spent state and nothing recorded.
     const sessionToken = readCookie(request, cookieNames(ctx.auth.config.cookieMode).session);
     const outcome = await ctx.integrations.completeOAuth(query, (pending) => {
       if (pending.sessionId === undefined) return true;
@@ -146,7 +146,11 @@ export function registerIntegrationOAuthCallbackRoute(
       return (
         resolved !== undefined &&
         resolved.session.id === pending.sessionId &&
-        roleAtLeast(resolved.principal.role, "admin")
+        roleAtLeast(
+          ctx.auth.roleInWorkspace({ userId: resolved.principal.userId }, pending.workspaceId) ??
+            "guest",
+          "admin",
+        )
       );
     });
     if (!outcome.ok)

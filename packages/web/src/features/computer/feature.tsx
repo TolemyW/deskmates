@@ -7,6 +7,7 @@ import { computerHref, routes } from "./route.js";
 export const feature = defineFeature(routes, {
   nav: {
     group: "operate",
+    audience: "tune",
     order: 10,
     icon: <Monitor size={18} />,
     label: "app.nav.computer",

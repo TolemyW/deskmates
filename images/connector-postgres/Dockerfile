@@ -8,7 +8,10 @@
 # lockfile in sync, so all of them are copied; only the connector's production dependencies are
 # installed.
 
-FROM node:22-bookworm-slim AS deps
+# The base is pinned to the tag's multi-architecture index digest (read on 2026-10-19 from the
+# Docker Hub mirrors mirror.gcr.io and public.ecr.aws, which agreed), so a new base is a change
+# here that scripts/image-tag.mjs sees, never a silent rebuild drift.
+FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS deps
 # better-sqlite3 downloads a prebuilt binary and compiles from source when that fails (seen on
 # colima: the GitHub download timed out). The toolchain stays in this stage only.
 RUN apt-get update \
@@ -22,6 +25,7 @@ COPY packages/connector-postgres/package.json packages/connector-postgres/packag
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/gateway/package.json packages/gateway/package.json
 COPY packages/golden-site/package.json packages/golden-site/package.json
+COPY packages/observability-dashboards/package.json packages/observability-dashboards/package.json
 COPY packages/sandbox-docker/package.json packages/sandbox-docker/package.json
 COPY packages/sidecar/package.json packages/sidecar/package.json
 COPY packages/testkit/package.json packages/testkit/package.json
@@ -33,7 +37,7 @@ RUN npm ci --omit=dev --workspace @deskmates/connector-postgres --include-worksp
  && test -f node_modules/pg/package.json \
  && test -f node_modules/pgsql-ast-parser/package.json
 
-FROM node:22-bookworm-slim
+FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 WORKDIR /opt/deskmates
 # Build artifacts can be mode 0600/0700 under an operator's restrictive umask.
 # Give the runtime user ownership rather than relying on world-readable host modes.

@@ -1,17 +1,29 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@deskmates/ui";
+import {
+  ChoiceGroup,
+  PageHeader,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@deskmates/ui";
 import { Select } from "@deskmates/ui";
 // Costs, one page with two views (ADR-0032 decision 9). A 金额 | 用量 (money | usage) toggle at
 // the top switches the tiles, the daily chart and the rankings together; the page opens on money
-// every time. Money shows known cost, the estimate for unpriced usage (labelled as such) and the
-// unpriced coverage; usage shows the four token categories. No list or scale mixes the two.
+// every time. Money shows one total and folds the known, estimated and unpriced breakdown under
+// "How it's priced"; usage shows the four token categories. No list or scale mixes the two.
 // Totals and days come from the `GET /api/costs` summary, rankings from the Gateway's grouped
 // `GET /api/costs/ranking` and Activity rows from `GET /api/costs/rows`, ten a page each; nothing
 // is summed from a page in the browser (#112, #113).
+// ADR-0040 amendment A: operation calls are in the money totals, chart and bot ranking, have a
+// ranking of their own in money view, and one usage tile per unit; no unit is summed with another.
 
 import type {
   BotDefinition,
   BotId,
   CostDay,
+  CostOperationUsage,
   CostQuery,
   CostReport,
   CostRow,
@@ -21,6 +33,13 @@ import { CalendarRange } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { Button } from "../../components/ui/button.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "../../components/ui/dialog.js";
 import { errorMessage } from "../../format.js";
 import type { MessageKey } from "../../i18n/catalogs.js";
 import { useT } from "../../i18n/i18n-provider.js";
@@ -35,6 +54,7 @@ import {
   dollars,
   hasEstimate,
   moneyOf,
+  operationQuantity,
   shortDollars,
   tokens,
   totalTokens,
@@ -71,7 +91,10 @@ function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-/** The inclusive UTC day range of a period; `all` and `custom` leave the dates alone. */
+/**
+ * The inclusive UTC day range of a period; `all` and `custom` leave the dates alone. The Gateway
+ * buckets costs by UTC day, so the period buttons say UTC rather than imply the person's own day.
+ */
 export function periodRange(period: Period, now = new Date()): { from?: string; to?: string } {
   const to = isoDay(now);
   if (period === "today") return { from: to, to };
@@ -119,18 +142,27 @@ function Tile({ label, value, detail }: { label: string; value: string; detail?:
     <div className="cost-tile">
       <span className="cost-tile-label">{label}</span>
       <strong>{value}</strong>
-      <span className="muted small">{detail ?? ""}</span>
+      {detail ? <span className="muted small">{detail}</span> : null}
     </div>
   );
 }
 
-function MoneyTiles({ totals }: { totals: CostTotals }) {
+function MoneyTiles({
+  totals,
+  operations,
+  estimateVersion,
+}: {
+  totals: CostTotals;
+  operations: CostOperationUsage | undefined;
+  estimateVersion: string;
+}) {
   const t = useT();
+  const [pricingOpen, setPricingOpen] = useState(false);
   const money = moneyOf(totals);
   const estimate = totals.estimatedCostUsd ?? null;
   const unknown = totals.usageCount === 0 && totals.usageCoverage !== "unknown";
   return (
-    <>
+    <div className="cost-money">
       <Tile
         label={hasEstimate(totals) ? t("costs.tile.totalWithEstimate") : t("costs.tile.total")}
         value={
@@ -140,34 +172,58 @@ function MoneyTiles({ totals }: { totals: CostTotals }) {
               ? t("costs.tile.unknown")
               : shortDollars(money)
         }
-        detail={totals.usageCount === 0 ? "" : costLabel(totals)}
+        detail={totals.usageCount === 0 || totals.costStatus === "priced" ? "" : costLabel(totals)}
       />
-      <Tile
-        label={t("costs.money.known")}
-        value={
-          totals.knownCostUsd === null ? t("costs.tile.unknown") : shortDollars(totals.knownCostUsd)
-        }
-        detail={t("costs.tile.pricedRows", { count: totals.pricedUsageCount })}
-      />
-      <Tile
-        label={t("costs.money.estimated")}
-        value={estimate === null ? "—" : shortDollars(estimate)}
-        detail={t("costs.tile.estimateDetail", { count: totals.estimatedUsageCount ?? 0 })}
-      />
-      <Tile
-        label={t("costs.tile.coverage")}
-        value={t("costs.tile.unpricedCount", { count: totals.unpricedUsageCount })}
-        detail={
-          (totals.unestimatedUsageCount ?? 0) > 0
-            ? t("costs.tile.unestimated", { count: totals.unestimatedUsageCount ?? 0 })
-            : t("costs.tile.requests", { count: totals.usageCount })
-        }
-      />
-    </>
+      {totals.usageCount > 0 ? (
+        <Dialog open={pricingOpen} onOpenChange={setPricingOpen}>
+          <DialogTrigger asChild>
+            <Button variant="tertiary" size="sm" className="cost-pricing-link">
+              {t("costs.pricing.title")}
+            </Button>
+          </DialogTrigger>
+          <DialogContent
+            className="max-w-lg overflow-y-auto cost-pricing"
+            closeLabel={t("costs.pricing.close")}
+          >
+            <DialogTitle>{t("costs.pricing.title")}</DialogTitle>
+            <DialogDescription>{t("costs.lead")}</DialogDescription>
+            <p>
+              {t("costs.money.known")}:{" "}
+              {totals.knownCostUsd === null
+                ? t("costs.tile.unknown")
+                : shortDollars(totals.knownCostUsd)}{" "}
+              · {t("costs.tile.pricedRows", { count: totals.pricedUsageCount })}
+            </p>
+            <p>
+              {t("costs.money.estimated")}: {estimate === null ? "—" : shortDollars(estimate)} ·{" "}
+              {t("costs.tile.estimateDetail", { count: totals.estimatedUsageCount ?? 0 })}
+            </p>
+            <p>
+              {t("costs.tile.unpricedCount", { count: totals.unpricedUsageCount })} ·{" "}
+              {(totals.unestimatedUsageCount ?? 0) > 0
+                ? t("costs.tile.unestimated", { count: totals.unestimatedUsageCount ?? 0 })
+                : operations
+                  ? t("costs.tile.requestsWithOperations", { count: totals.usageCount })
+                  : t("costs.tile.requests", { count: totals.usageCount })}
+            </p>
+            {estimate !== null ? (
+              <p>{t("costs.estimateNote", { version: estimateVersion })}</p>
+            ) : null}
+            {operations ? <p className="muted small">{t("costs.operations.note")}</p> : null}
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </div>
   );
 }
 
-function UsageTiles({ totals }: { totals: CostTotals }) {
+function UsageTiles({
+  totals,
+  operations,
+}: {
+  totals: CostTotals;
+  operations: CostOperationUsage | undefined;
+}) {
   const t = useT();
   const unknown = totals.usageCoverage === "unknown";
   const tile = (label: MessageKey, value: number) => (
@@ -184,6 +240,14 @@ function UsageTiles({ totals }: { totals: CostTotals }) {
       {tile("costs.activity.output", totals.outputTokens)}
       {tile("costs.activity.cacheRead", totals.cacheReadTokens)}
       {tile("costs.activity.cacheCreate", totals.cacheCreateTokens)}
+      {operations?.units.map((u) => (
+        <Tile
+          key={`operation:${u.unit}`}
+          label={t(`costs.operations.unit.${u.unit}`)}
+          value={operationQuantity(u.unit, u.quantity)}
+          detail={t("costs.operations.detail", { calls: u.callCount, unknown: u.unmeasuredCount })}
+        />
+      ))}
     </>
   );
 }
@@ -203,10 +267,12 @@ export function CostsScreen({ api }: { api: ApiClient }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const requestRevision = useRef(0);
+  const requestedFilters = useRef<CostQuery>({});
 
   const load = useCallback(
     (filters: CostQuery): void => {
       const request = ++requestRevision.current;
+      requestedFilters.current = filters;
       setLoading(true);
       setError("");
       void api
@@ -270,6 +336,7 @@ export function CostsScreen({ api }: { api: ApiClient }) {
   };
 
   const totals = report?.totals;
+  const operations = report?.operations?.units.length ? report.operations : undefined;
   const days = useMemo(() => (report ? daysOf(report) : []), [report]);
   const scale = totals ? (view === "money" ? (moneyOf(totals) ?? 0) : totalTokens(totals)) : 0;
 
@@ -286,46 +353,24 @@ export function CostsScreen({ api }: { api: ApiClient }) {
 
   return (
     <section className="costs-screen page-container">
-      <header className="costs-header">
-        <div>
-          <h1>{t("costs.title")}</h1>
-          <p>{t("costs.lead")}</p>
-        </div>
-        <fieldset className="period-picker cost-view-toggle" aria-label={t("costs.view.label")}>
-          {views.map((v) => (
-            <button
-              key={v.key}
-              type="button"
-              className={view === v.key ? "active" : ""}
-              aria-pressed={view === v.key}
-              onClick={() => setView(v.key)}
-            >
-              {t(v.label)}
-            </button>
-          ))}
-        </fieldset>
-        <fieldset className="period-picker" aria-label={t("costs.period.label")}>
-          {periods.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              className={period === p.key ? "active" : ""}
-              aria-pressed={period === p.key}
-              onClick={() => pick(p.key)}
-            >
-              {t(p.label)}
-            </button>
-          ))}
-          <button
-            type="button"
-            className={period === "custom" ? "active" : ""}
-            aria-pressed={period === "custom"}
-            onClick={() => setPeriod("custom")}
-          >
-            <CalendarRange size={14} /> {t("costs.period.custom")}
-          </button>
-        </fieldset>
-      </header>
+      <PageHeader title={t("costs.title")} />
+      <div className="costs-controls">
+        <ChoiceGroup
+          label={t("costs.view.label")}
+          value={view}
+          onChange={setView}
+          items={views.map((v) => ({ key: v.key, label: t(v.label) }))}
+        />
+        <ChoiceGroup
+          label={t("costs.period.label")}
+          value={period}
+          onChange={pick}
+          items={[
+            ...periods.map((p) => ({ key: p.key, label: t(p.label) })),
+            { key: "custom", label: t("costs.period.custom"), icon: <CalendarRange size={16} /> },
+          ]}
+        />
+      </div>
 
       <form className={`cost-filters${period === "custom" ? "" : " collapsed"}`} onSubmit={submit}>
         <label>
@@ -365,19 +410,33 @@ export function CostsScreen({ api }: { api: ApiClient }) {
         </Button>
       </form>
 
-      {error ? <p role="alert">{error}</p> : null}
+      {error ? (
+        <div role="alert">
+          <p>{error}</p>
+          <Button onClick={() => load(requestedFilters.current)}>{t("costs.retry")}</Button>
+        </div>
+      ) : null}
       {loading ? <p>{t("costs.loading")}</p> : null}
-      {!loading && totals ? (
+      {!loading && !error && totals ? (
         <>
-          {totals.usageCoverage ? <p>{t(`run.usage.${totals.usageCoverage}`)}</p> : null}
-          {totals.attributionUncertain ? <p>{t("run.usage.attributionUncertain")}</p> : null}
-          {view === "money" && hasEstimate(totals) ? (
-            <p className="muted small">
-              {t("costs.estimateNote", { version: report?.estimate?.version ?? "" })}
-            </p>
-          ) : null}
+          <div className="cost-summary-notes muted small">
+            {totals.usageCoverage && totals.usageCoverage !== "complete" ? (
+              <span>{t(`run.usage.${totals.usageCoverage}`)}</span>
+            ) : null}
+            {totals.attributionUncertain ? (
+              <span>{t("run.usage.attributionUncertain")}</span>
+            ) : null}
+          </div>
           <section className="cost-tiles" aria-label={t("costs.totals.label")}>
-            {view === "money" ? <MoneyTiles totals={totals} /> : <UsageTiles totals={totals} />}
+            {view === "money" ? (
+              <MoneyTiles
+                totals={totals}
+                operations={operations}
+                estimateVersion={report?.estimate?.version ?? ""}
+              />
+            ) : (
+              <UsageTiles totals={totals} operations={operations} />
+            )}
           </section>
         </>
       ) : null}
@@ -385,7 +444,7 @@ export function CostsScreen({ api }: { api: ApiClient }) {
           stay mounted while the report reloads, so their live subscription is never torn down. */}
       <CostAlertsPanel api={api} bots={bots} />
       <BudgetPanel api={api} />
-      {!loading && totals ? (
+      {!loading && !error && totals ? (
         <>
           {days.length === 0 ? (
             <p>{t("costs.noMatch")}</p>
@@ -414,6 +473,16 @@ export function CostsScreen({ api }: { api: ApiClient }) {
                   scale={scale}
                   title={t("costs.byBot")}
                 />
+                {view === "money" && operations ? (
+                  <CostRanking
+                    api={api}
+                    by="operation"
+                    view={view}
+                    filters={applied}
+                    scale={scale}
+                    title={t("costs.byOperation")}
+                  />
+                ) : null}
               </div>
               <CostActivity api={api} filters={applied} />
             </>

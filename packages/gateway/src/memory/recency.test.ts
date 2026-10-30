@@ -355,3 +355,64 @@ describe("the memory a run received (A13)", () => {
     );
   });
 });
+
+describe("multi-number memory values (ADR-0054)", () => {
+  it.each([
+    [
+      "Current quota is 280, replacing 250.",
+      "Current quota is 300, replacing 280.",
+      "Current quota is 280, replacing 300.",
+    ],
+    [
+      "项目当前目标为280单，替代原250单。",
+      "项目当前目标为300单，替代原280单。",
+      "项目当前目标为280单，替代原300单。",
+    ],
+  ])("keeps the newer complete body through a round trip: %s", (a, b, c) => {
+    const one = f.run();
+    const two = f.run();
+    const three = f.run();
+    const [first] = f.learn(one, [item(a)]);
+    const consumer = f.run();
+    const supplied = f.ctx.memory.indexForRun(consumer, ws(), f.a.bot.id);
+    const frozen = f.ctx.runs.mustGet(consumer).config;
+    const [second] = f.learn(two, [item(b)]);
+    const [third] = f.learn(three, [item(c)]);
+    expect(second).toMatchObject({ outcome: "applied", superseded: [entryId(first)] });
+    expect(third).toMatchObject({ outcome: "applied", superseded: [entryId(second)] });
+    expect(current().map((entry) => entry.body)).toEqual([c]);
+    expect(all()).toHaveLength(3);
+    expect(f.ctx.memory.entries.mustGet(entryId(third))).toMatchObject({ trust: "trusted" });
+    expect(f.ctx.memory.entries.version(entryId(first), 1)?.body).toBe(a);
+    expect(f.ctx.runs.mustGet(consumer).config).toEqual(frozen);
+    expect(f.ctx.memory.supplied.list(ws(), consumer)[0]).toMatchObject(
+      supplied.versionSet[0] ?? {},
+    );
+    const [duplicate] = f.learn(f.run(), [item(c)]);
+    expect(duplicate).toMatchObject({ outcome: "deduplicated", entryId: entryId(third) });
+    expect(f.learn(three, [item(c)])[0]).toMatchObject({ outcome: "replayed" });
+    expect(all()).toHaveLength(3);
+  });
+
+  it("stores an older reversed value as history without advancing the current observation", () => {
+    const old = f.run();
+    const newer = f.run();
+    const body = "Current quota is 280, replacing 300.";
+    const [winner] = f.learn(newer, [item(body)]);
+    const before = f.ctx.memory.entries.mustGet(entryId(winner));
+    const [late] = f.learn(old, [item("Current quota is 300, replacing 280.")]);
+    expect(late).toMatchObject({ outcome: "history", reason: "older_arrival" });
+    expect(current().map((entry) => entry.body)).toEqual([body]);
+    expect(f.ctx.memory.entries.mustGet(before.id).effectiveAt).toBe(before.effectiveAt);
+  });
+
+  it("preserves lower trust and excludes a newer reversed page claim from the pinned index", () => {
+    f.learn(f.run(), [item("Current quota is 300, replacing 280.")]);
+    const [page] = f.learn(f.run(), [
+      item("Current quota is 280, replacing 300.", { trust: "untrusted", sourceKind: "page" }),
+    ]);
+    expect(page).toMatchObject({ outcome: "applied" });
+    expect(f.ctx.memory.entries.mustGet(entryId(page))).toMatchObject({ trust: "untrusted" });
+    expect(f.ctx.memory.indexFor(ws(), f.a.bot.id).versionSet).toEqual([]);
+  });
+});

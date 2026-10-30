@@ -20,7 +20,7 @@ afterEach(async () => {
 });
 
 const rules = (port: number) => [
-  { kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [port] },
+  { kind: "subnet", cidr: "10.88.30.0/24", schemes: ["http"], ports: [port] },
 ];
 
 function running(harness: Harness, workspace: Workspace): void {

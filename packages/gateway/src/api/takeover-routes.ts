@@ -6,6 +6,7 @@
 import {
   type BrowserLock,
   DeskmatesError,
+  type WorkspaceContainerState,
   type WorkspaceId,
   decidedByHuman,
 } from "@deskmates/contracts";
@@ -13,8 +14,9 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { liveKeyOf } from "../auth/principal.js";
 import type { GatewayContext } from "../context.js";
 import { requestActorId } from "./actor.js";
-import { requestRole, requestTenant, roleAtLeast } from "./route-policy.js";
+import { requestTenant } from "./route-policy.js";
 import { asRecord, optionalString } from "./validate.js";
+import { actsBelowAdmin } from "./workspace-access.js";
 
 /** The human holder of the workspace browser, if there is one. Run holders are not shown here. */
 export function humanBrowserLock(
@@ -25,17 +27,21 @@ export function humanBrowserLock(
 }
 
 /**
- * Whether the workspace's container publishes the shared takeover screen. Reads the sandbox with
- * `peek`, which never creates a container: opening a workspace page must not start a machine.
- * The address itself never leaves the Gateway; the screen proxy reaches it (ADR-0022
- * amendment 1, C7).
+ * Whether the workspace's container exists and publishes the shared takeover screen. Reads the
+ * sandbox with `peek`, which never creates a container: opening a workspace page must not start
+ * a machine. An absent container says whether an earlier run had one (issue #15). The address
+ * itself never leaves the Gateway; the screen proxy reaches it (ADR-0022 amendment 1, C7).
  */
-export async function workspaceHasTakeoverScreen(
+export async function workspaceSandboxView(
   ctx: GatewayContext,
   workspaceId: WorkspaceId,
-): Promise<boolean> {
+): Promise<{ takeoverScreen: boolean; container: WorkspaceContainerState }> {
   const handle = await ctx.sandboxes.peek(workspaceId);
-  return Boolean(handle?.novncAddress);
+  if (handle) return { takeoverScreen: Boolean(handle.novncAddress), container: "present" };
+  return {
+    takeoverScreen: false,
+    container: ctx.runs.workspaceHadSandbox(workspaceId) ? "removed" : "never_created",
+  };
 }
 
 /**
@@ -180,7 +186,7 @@ export function registerTakeoverRoutes(app: FastifyInstance, ctx: GatewayContext
     if (
       typeof ctx.locks.humanHolder(workspaceId) === "string" &&
       !isHolder(request, workspaceId) &&
-      !roleAtLeast(requestRole(request), "admin")
+      actsBelowAdmin(ctx, request, workspaceId)
     )
       throw new DeskmatesError("forbidden", "another person holds this browser", {
         reason: "not_holder",

@@ -6,6 +6,11 @@ it in their own browser on an origin of its own. Status: accepted, owner-decided
 `src/app-shares/`, policies in `src/api/route-policies/app-shares.ts`, configuration in
 `src/config/app-shares.ts`, relay in `images/egress/app-relay.mjs`.
 
+For a self-contained static HTML report, use its file card's **Open full page** reader instead
+of publishing a service. That authenticated reader stays at the current Deskmates address,
+preserves embedded styling and needs no app-domain DNS or certificate (ADR-0014 amendment A8).
+It does not run JavaScript; interactive applications still use the separate origins below.
+
 ## Configuration
 
 Off unless both `APP_SHARE_BASE_URL` and `APP_SHARE_OPERATOR_URL` are set. The base host must be a
@@ -64,8 +69,8 @@ proxy is recreated.
 ## Testbox: a nip.io name and a self-signed certificate behind Caddy
 
 The stable deployment has no certificate and no wildcard DNS of its own. Owner decision
-2026-10-14: enable app sharing there with `*.10.20.40.132.nip.io` and Caddy's internal CA, at
-the next release activation. The operator UI is already `https://10.20.40.132:18443` (Caddy,
+2026-10-14: enable app sharing there with `*.10.88.40.132.nip.io` and Caddy's internal CA, at
+the next release activation. The operator UI is already `https://10.88.40.132:18443` (Caddy,
 user unit `deskmates-stable-tls.service`, `shared/Caddyfile`, self-signed IP certificate) in front
 of the operator listener on 18381.
 
@@ -75,8 +80,8 @@ of the operator listener on 18381.
    set):
 
    ```
-   APP_SHARE_BASE_URL=https://10.20.40.132.nip.io:18443
-   APP_SHARE_OPERATOR_URL=https://10.20.40.132:18443
+   APP_SHARE_BASE_URL=https://10.88.40.132.nip.io:18443
+   APP_SHARE_OPERATOR_URL=https://10.88.40.132:18443
    APP_SHARE_PORT=18382
    APP_SHARE_BIND=127.0.0.1
    ```
@@ -94,7 +99,7 @@ of the operator listener on 18381.
      skip_install_trust
    }
 
-   *.10.20.40.132.nip.io:18443 {
+   *.10.88.40.132.nip.io:18443 {
      tls internal
      reverse_proxy 127.0.0.1:18382
    }
@@ -102,14 +107,14 @@ of the operator listener on 18381.
 
 4. Reload Caddy (`systemctl --user reload deskmates-stable-tls`) and restart the Gateway
    (`systemctl --user restart deskmates-stable-gateway`), or let the release activation restart it.
-5. Check from the host: `curl -sk https://0123456789abcdef0123456789abcdef.10.20.40.132.nip.io:18443/`
+5. Check from the host: `curl -sk https://0123456789abcdef0123456789abcdef.10.88.40.132.nip.io:18443/`
    answers the listener's 404 page "No published app answers at this address", which proves DNS,
    TLS and the proxy hop. `GET /api/workspaces/:id/app-shares` reports `enabled: true`.
 
 What each person's computer needs:
 
-- **DNS.** `<label>.10.20.40.132.nip.io` must resolve to 10.20.40.132 (`dig +short
-  abc.10.20.40.132.nip.io`). Resolvers with DNS-rebinding protection (dnsmasq
+- **DNS.** `<label>.10.88.40.132.nip.io` must resolve to 10.88.40.132 (`dig +short
+  abc.10.88.40.132.nip.io`). Resolvers with DNS-rebinding protection (dnsmasq
   `stop-dns-rebind`, many home routers, Unbound `private-address`) refuse public names that answer
   with a private address; allow `nip.io` there or use another resolver. A fake-IP proxy such as
   Mihomo answers with `198.18.x` addresses instead: add `+.nip.io` to its fake-IP filter and a
@@ -118,7 +123,7 @@ What each person's computer needs:
   the host (the Caddy user's data directory). Import it into the browser or system trust store.
   Without it every app host shows its own certificate warning; after accepting one, open the app
   again from Deskmates, because the warning interrupts the one-use entry form.
-- **Same scheme everywhere.** Open Deskmates itself at `https://10.20.40.132:18443`; the entry form
+- **Same scheme everywhere.** Open Deskmates itself at `https://10.88.40.132:18443`; the entry form
   is refused from any other origin.
 
 Rollback: remove the two `APP_SHARE_*` URL lines and restart the Gateway; the tool disappears from

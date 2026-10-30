@@ -19,7 +19,7 @@ const subnet = { kind: "subnet", cidr: "192.168.10.0/24", schemes: ["http"], por
 const host = {
   kind: "host",
   hostname: "console.vendordb.lan",
-  address: "10.20.36.35",
+  address: "10.88.36.35",
   schemes: ["https"],
   ports: [443],
 };

@@ -106,7 +106,6 @@ export function KnowledgePanel({ api }: { api: ApiClient }) {
   });
   const documents = documentPages.items;
   const proposals = proposalPages.items;
-  const listError = documentPages.error ?? proposalPages.error;
   const [selection, setSelection] = useState(initialKey);
   const [draft, setDraft] = useState<KnowledgeDraft>(
     initial ?? { title: "", body: "", dirty: false },
@@ -196,7 +195,9 @@ export function KnowledgePanel({ api }: { api: ApiClient }) {
         <div className="knowledge-heading">
           <h2>
             {t("knowledge.documents.title")}{" "}
-            <span className="knowledge-count">{documentPages.page?.total ?? documents.length}</span>
+            {documentPages.page ? (
+              <span className="knowledge-count">{documentPages.page.total}</span>
+            ) : null}
           </h2>
           <p>{t("knowledge.documents.introShort")}</p>
         </div>
@@ -219,7 +220,6 @@ export function KnowledgePanel({ api }: { api: ApiClient }) {
         </Button>
       </div>
       {error && <p role="alert">{error}</p>}
-      {!error && listError ? <p role="alert">{errorMessage(listError)}</p> : null}
       {notice && <output>{notice}</output>}
       {pendingAction && (
         <DirtyGuard onKeep={() => setPendingAction(undefined)} onDiscard={discardAndContinue} />
@@ -244,10 +244,34 @@ export function KnowledgePanel({ api }: { api: ApiClient }) {
         <Button type="submit" variant="tertiary" disabled={busy}>
           {t("knowledge.search.button")}
         </Button>
+        {searched ? (
+          <Button
+            type="button"
+            variant="tertiary"
+            onClick={() => {
+              setQuery("");
+              setSearched("");
+            }}
+          >
+            {t("knowledge.search.clear")}
+          </Button>
+        ) : null}
       </form>
-      <ul className="doc-list">
-        {documents.length === 0 ? (
-          <li className="doc-row empty muted small">{t("knowledge.documents.emptyShort")}</li>
+      {documentPages.error ? (
+        <div role="alert" className="knowledge-load-error">
+          <p>{errorMessage(documentPages.error)}</p>
+          <Button onClick={() => documentPages.reload()}>{t("knowledge.documents.retry")}</Button>
+        </div>
+      ) : null}
+      <ul className="doc-list" aria-busy={documentPages.loading}>
+        {documentPages.loading && documents.length === 0 ? (
+          <li className="doc-row muted small">{t("knowledge.documents.loading")}</li>
+        ) : !documentPages.error && documentPages.page && documents.length === 0 ? (
+          <li className="doc-row empty muted small">
+            {searched
+              ? t("knowledge.documents.noMatch", { query: searched })
+              : t("knowledge.documents.emptyShort")}
+          </li>
         ) : null}
         {documents.map((item) => (
           <li key={item.id} className={`doc-row${draft.loaded?.id === item.id ? " selected" : ""}`}>
@@ -419,7 +443,16 @@ export function KnowledgePanel({ api }: { api: ApiClient }) {
         })}
       </h2>
       <RoleNote action="knowledge.review" does={t("knowledge.pending.does")} />
-      {proposals.length === 0 ? (
+      {proposalPages.error ? (
+        <div role="alert" className="knowledge-load-error">
+          <p>{errorMessage(proposalPages.error)}</p>
+          <Button onClick={() => proposalPages.reload()}>{t("knowledge.pending.retry")}</Button>
+        </div>
+      ) : proposalPages.loading && proposals.length === 0 ? (
+        <p className="muted small" aria-busy="true">
+          {t("knowledge.pending.loading")}
+        </p>
+      ) : proposalPages.page && proposals.length === 0 ? (
         <p className="muted small">{t("knowledge.pending.emptyShort")}</p>
       ) : null}
       {proposals.map((proposal) => (

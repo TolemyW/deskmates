@@ -9,16 +9,34 @@
 #                                 smoke subset for a patch tag, full suite for vX.Y.0
 #                                 (T2_SCOPE=full|smoke overrides)
 #   stable.sh activate vX.Y.Z     drain, stop, back up the DB, switch, start, health-check;
-#                                 rolls back by itself when the new release does not come up
+#                                 rolls back by itself when the new release does not come up.
+#                                 The drain (ADR-0029) stops the Gateway starting runs and parks
+#                                 each active run at its next tool call; a run that does not get
+#                                 there within DRAIN_BUDGET ends the drain, and the upgrade is
+#                                 retried after UPGRADE_RETRY_BACKOFF, UPGRADE_ATTEMPTS times in all.
+#                                 FORCE=1 stops anyway; the next Gateway parks and resumes the runs
 #   stable.sh rollback            previous release plus the DB backup taken when leaving it
 #   stable.sh status
+#   stable.sh grafana init        Grafana state directory and image for the current release
+#                                 (ADR-0046 decision 6 and amendment 1; docs/runbooks/grafana.md)
+#   stable.sh grafana start       run it on the host loopback behind the Gateway's /analytics/
+#                                 relay, with the current release's provisioning; a no-op when it
+#                                 already runs exactly that, else recreated
+#   stable.sh grafana stop|status
+#   stable.sh searxng init        SearXNG secret, cache directory and image for the current release
+#                                 (ADR-0049 decision 14; packages/gateway/docs/web-search.md)
+#   stable.sh searxng start       run it on the host loopback for the Gateway's web search proxy;
+#                                 a no-op when it already runs exactly that, else recreated
+#   stable.sh searxng stop|status
 #
 # Layout under DESKMATES_STABLE_ROOT (default ~/Data/deskmates-stable):
 #   releases/<v>/              extracted source of one tag + release-manifest.json + .release/
 #   current -> releases/<v>    what the unit runs
 #   shared/.env                0600, owned by humans: model endpoint, secrets key, operator token
 #   shared/release.env         written here on every switch: release, image IDs, UI directory
-#   shared/data/               the Gateway database
+#   shared/data/               the Gateway database (and obs.sqlite with OBSERVABILITY_SINK=sqlite)
+#   grafana/                   0700: Grafana's own state (data/); no password (ADR-0046 amendment 1)
+#   searxng/                   0700: env (0600, SEARXNG_SECRET) and cache/ (ADR-0049 decision 14)
 #   backups/<ts>-<from>-to-<to>/
 #
 # The Gateway reads shared/.env itself (process.loadEnvFile), and systemd's EnvironmentFile
@@ -32,7 +50,12 @@ BACKUPS="$ROOT/backups"
 UNIT="deskmates-stable-gateway.service"
 UNIT_FILE="$HOME/.config/systemd/user/$UNIT"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-600}"
+# ADR-0029 decision 3; all four are guesses to calibrate on the drain-time metric. DRAIN_TIMEOUT is
+# the name before the drain route existed, still honoured.
+DRAIN_BUDGET="${DRAIN_BUDGET:-${DRAIN_TIMEOUT:-120}}"
+DRAIN_POLL="${DRAIN_POLL:-5}"
+UPGRADE_RETRY_BACKOFF="${UPGRADE_RETRY_BACKOFF:-600}"
+UPGRADE_ATTEMPTS="${UPGRADE_ATTEMPTS:-3}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-90}"
 
 say()  { printf '==> %s\n' "$*"; }
@@ -83,6 +106,11 @@ ports() {
 
 api() { # path
   curl -fsS --max-time 5 -H "authorization: Bearer $OPERATOR_TOKEN" "http://127.0.0.1:$OPERATOR_PORT$1"
+}
+
+api_call() { # method path; for the routes that change something
+  curl -fsS --max-time 5 -X "$1" -H "authorization: Bearer $OPERATOR_TOKEN" \
+    "http://127.0.0.1:$OPERATOR_PORT$2"
 }
 
 db_path() {
@@ -193,8 +221,10 @@ cmd_install() {
     # build the same Dockerfile here. Its apt and npm layers come from this host's build cache
     # or network, so the ID differs from the release workflow's; images.txt records both.
     say "LOCAL_BASE=1: building $base_tag on this host"
-    # APT_MIRROR (optional, .env) points apt at a faster Ubuntu mirror for this build only.
+    # APT_MIRROR (optional, .env) points apt at a faster Ubuntu mirror for this build only, and the
+    # npm_config_registry install runs with (ship.sh passes it) does the same for npm.
     (cd "$rel" && docker build --build-arg APT_MIRROR="$(env_get APT_MIRROR)" \
+      --build-arg NPM_REGISTRY="${npm_config_registry:-}" \
       -f images/workspace-base/Dockerfile -t "$base_tag" images/workspace-base) \
       >"$meta/base.log" 2>&1 || { tail -20 "$meta/base.log" >&2; die "local base build failed; see $meta/base.log"; }
     base_note="built on this host (LOCAL_BASE=1); the release workflow's base is $base_id"
@@ -300,23 +330,55 @@ cmd_verify() {
 
 # --- activate / rollback -------------------------------------------------------------------------
 
+# Poll /api/runtime until no run is active or DRAIN_BUDGET passes. Sets ACTIVE (count) and
+# ACTIVE_IDS; returns 0 at zero, 1 past the budget, 2 when the Gateway has no /api/runtime.
+wait_for_safe_point() {
+  local waited=0 body
+  while :; do
+    body="$(api /api/runtime 2>/dev/null)" || return 2
+    ACTIVE="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).activeRuns))' "$body")"
+    ACTIVE_IDS="$(node -e 'process.stdout.write((JSON.parse(process.argv[1]).activeRunIds||[]).join(" "))' "$body")"
+    [ "$ACTIVE" = "0" ] && return 0
+    [ "$waited" -ge "$DRAIN_BUDGET" ] && return 1
+    say "waiting for $ACTIVE active run(s) to reach a safe point ($waited/${DRAIN_BUDGET}s)"
+    sleep "$DRAIN_POLL"; waited=$((waited + DRAIN_POLL))
+  done
+}
+
+# ADR-0029 decisions 1 and 3. The drain route stops the Gateway starting or resuming runs while it
+# keeps accepting messages, approvals, webhooks and cron ticks; each active run parks at its next
+# tool call and the next Gateway continues it. A run with no safe point inside the budget (a long
+# tool call or model turn) ends the drain unforced, so launching resumes, and the upgrade is tried
+# again after the backoff. A Gateway from before the route is drained the old way: wait for it.
 drain() {
   systemctl --user is-active --quiet "$UNIT" || return 0
   ports
-  local waited=0 body n
+  local attempt=1 status
   while :; do
-    if ! body="$(api /api/runtime 2>/dev/null)"; then
-      warn "the running Gateway has no /api/runtime; stopping without draining"
+    if ! api_call POST /api/runtime/drain >/dev/null 2>&1; then
+      warn "the running Gateway has no drain route; waiting for its active runs to finish instead"
+      status=0; wait_for_safe_point || status=$?
+      [ "$status" -eq 2 ] && { warn "the running Gateway has no /api/runtime; stopping without draining"; return 0; }
+      [ "$status" -eq 0 ] && { ok "no active runs"; return 0; }
+      [ "${FORCE:-}" = "1" ] || die "$ACTIVE run(s) still active after ${DRAIN_BUDGET}s; retry later or FORCE=1"
+      warn "FORCE=1: stopping with $ACTIVE active run(s)"
       return 0
     fi
-    n="$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).activeRuns))' "$body")"
-    [ "$n" = "0" ] && { ok "no active runs"; return 0; }
-    [ "$waited" -ge "$DRAIN_TIMEOUT" ] && break
-    say "waiting for $n active run(s) to finish ($waited/${DRAIN_TIMEOUT}s)"
-    sleep 10; waited=$((waited + 10))
+    say "drain $attempt/$UPGRADE_ATTEMPTS: no run starts or resumes; active runs park at their next tool call"
+    status=0; wait_for_safe_point || status=$?
+    [ "$status" -eq 0 ] && { ok "every active run reached a safe point"; return 0; }
+    [ "$status" -eq 2 ] && { warn "/api/runtime stopped answering; stopping"; return 0; }
+    if [ "${FORCE:-}" = "1" ]; then
+      warn "FORCE=1: stopping with $ACTIVE active run(s) ($ACTIVE_IDS); the next Gateway parks and resumes them"
+      return 0
+    fi
+    api_call DELETE /api/runtime/drain >/dev/null 2>&1 || warn "the drain could not be ended"
+    [ "$attempt" -ge "$UPGRADE_ATTEMPTS" ] &&
+      die "$ACTIVE run(s) never reached a safe point in $UPGRADE_ATTEMPTS drain(s) of ${DRAIN_BUDGET}s: $ACTIVE_IDS; the Gateway runs on; retry later or FORCE=1"
+    warn "$ACTIVE run(s) still active after ${DRAIN_BUDGET}s ($ACTIVE_IDS); drain ended, retrying in ${UPGRADE_RETRY_BACKOFF}s"
+    sleep "$UPGRADE_RETRY_BACKOFF"
+    attempt=$((attempt + 1))
   done
-  [ "${FORCE:-}" = "1" ] || die "$n run(s) still active after ${DRAIN_TIMEOUT}s; retry later or FORCE=1"
-  warn "FORCE=1: stopping with $n active run(s)"
 }
 
 write_release_env() { # version
@@ -455,7 +517,373 @@ cmd_status() {
     [ -f "$m/t2.skipped" ] && s+=" t2-skipped"
     [ -f "$m/activated" ] && s+=" activated"
     echo "release  $(basename "$d"):$s"
+    node "$HERE/t2-status.mjs" "$d"
   done
+}
+
+# --- grafana (ADR-0046 decision 6 and amendment 1) -----------------------------------------------
+
+# One container on the host network, beside the Gateway rather than under its unit: the Gateway's
+# upgrades and rollbacks never touch it, and it reads the obs file the Gateway writes, read-only.
+# Provisioning (datasource and dashboards for the selected engine) is mounted from the current
+# release's observability/grafana/<engine>/, generated by packages/observability-dashboards.
+#
+# Amendment 1: it listens on 127.0.0.1 only, under /analytics/, and signs in whoever the
+# X-WEBAUTH-USER header names from loopback (auth.proxy). The Gateway's /analytics relay is that
+# client, for the root's own session, and only ever names admin, a Viewer. No Grafana administrator
+# or password exists; /analytics/api/health needs no sign-in, which is all start and status read.
+GRAFANA_STATE="$ROOT/grafana"
+GRAFANA_CONTAINER="${GRAFANA_CONTAINER:-deskmates-stable-grafana}"
+GRAFANA_HEALTH_TIMEOUT="${GRAFANA_HEALTH_TIMEOUT:-60}"
+
+env_opt() { env_get "$1" || true; } # a key an older shared/.env may not have
+
+grafana_release() { # prints the current release directory
+  local v; v="$(current_version)"
+  [ -n "$v" ] || die "no current release; activate one before Grafana"
+  printf '%s' "$RELEASES/$v"
+}
+
+grafana_tag() { # release-dir
+  (cd "$1" && node scripts/image-tag.mjs grafana --arch "${IMAGE_ARCH:-amd64}")
+}
+
+# Reads the settings from shared/.env into GF_* shell variables.
+grafana_settings() {
+  [ -f "$SHARED/.env" ] || die "no $SHARED/.env; run init first"
+  GF_PORT="$(env_opt OBSERVABILITY_GRAFANA_PORT)"; GF_PORT="${GF_PORT:-18700}"
+  [[ "$GF_PORT" =~ ^[0-9]+$ ]] && [ "$GF_PORT" -ge 1 ] && [ "$GF_PORT" -le 65535 ] ||
+    die "OBSERVABILITY_GRAFANA_PORT must be a port number, got '$GF_PORT'"
+  # Retired by amendment 1 decision 12: refused rather than silently ignored.
+  case "$(env_opt OBSERVABILITY_GRAFANA_ANONYMOUS)" in
+    "" | 0) ;;
+    *) die "OBSERVABILITY_GRAFANA_ANONYMOUS is retired (ADR-0046 amendment 1): Grafana is the root's alone, through the Gateway's /analytics/; remove it from $SHARED/.env" ;;
+  esac
+  GF_URL="$(env_opt OBSERVABILITY_GRAFANA_URL)"
+  # What the Gateway relays /analytics/ to: Grafana's own loopback origin.
+  GF_UPSTREAM="http://127.0.0.1:$GF_PORT"
+  GF_ENGINE="$(env_opt OBSERVABILITY_SINK)"
+  # Phase 1 bundles the sqlite sink only; the Gateway refuses any other id at startup too.
+  [ "$GF_ENGINE" = sqlite ] ||
+    die "Grafana reads the obs model; set OBSERVABILITY_SINK=sqlite in $SHARED/.env (got '${GF_ENGINE}')"
+  # The Gateway runs in $SHARED, so a relative path is relative to it; the default is obs.sqlite
+  # beside the ledger (packages/gateway/docs/run-observability.md).
+  local obs; obs="$(env_opt OBSERVABILITY_SQLITE_PATH)"
+  if [ -z "$obs" ]; then obs="$(dirname "$(db_path)")/obs.sqlite"
+  else case "$obs" in /*) ;; *) obs="$SHARED/${obs#./}" ;; esac
+  fi
+  GF_OBS_DIR="$(dirname "$obs")"
+  GF_OBS_FILE="$(basename "$obs")"
+}
+
+grafana_running() { # prints the running container's config label, fails when none runs
+  local state
+  state="$(docker container inspect --format '{{.State.Running}} {{index .Config.Labels "deskmates.config"}}' "$GRAFANA_CONTAINER" 2>/dev/null)" ||
+    return 1
+  [ "${state%% *}" = true ] || return 1
+  printf '%s' "${state#* }"
+}
+
+# A state directory from decision 6 holds admin-password, and its Grafana database holds the user
+# admin as Grafana's server administrator, whom the relay's header would then sign in.
+grafana_state_current() {
+  [ ! -e "$GRAFANA_STATE/admin-password" ] ||
+    die "$GRAFANA_STATE predates ADR-0046 amendment 1: its Grafana user admin is a server administrator. Run stable.sh grafana stop, remove $GRAFANA_STATE (Grafana's own users and preferences; the dashboards come back from the release), then grafana init again"
+}
+
+grafana_url_hint() { # warns when the Gateway would not relay to this Grafana
+  [ "$GF_URL" = "$GF_UPSTREAM" ] ||
+    warn "set OBSERVABILITY_GRAFANA_URL=$GF_UPSTREAM in $SHARED/.env (got '${GF_URL}') and restart the Gateway to relay /analytics/ to this Grafana"
+}
+
+grafana_healthy() { # port
+  local i
+  for i in $(seq 1 "$GRAFANA_HEALTH_TIMEOUT"); do
+    curl -fsS --max-time 2 "http://127.0.0.1:$1/analytics/api/health" >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  return 1
+}
+
+cmd_grafana_init() {
+  command -v docker >/dev/null || die "docker is not installed"
+  docker info >/dev/null 2>&1 || die "docker daemon unreachable"
+  grafana_settings
+  local rel; rel="$(grafana_release)"
+  [ -f "$rel/images/grafana/Dockerfile" ] || die "$(basename "$rel") has no images/grafana; upgrade first"
+  grafana_state_current
+  mkdir -p "$GRAFANA_STATE/data"
+  chmod 700 "$GRAFANA_STATE"
+  local tag; tag="$(grafana_tag "$rel")"
+  if docker image inspect "$tag" >/dev/null 2>&1; then
+    ok "image $tag already built"
+  else
+    # The only step that needs the registries: the official image and the plugin, at build time.
+    say "building $tag"
+    mkdir -p "$GRAFANA_STATE/logs"
+    (cd "$rel" && GRAFANA_IMAGE="$tag" bash scripts/build-grafana-image.sh) \
+      >"$GRAFANA_STATE/logs/build.log" 2>&1 ||
+      { tail -20 "$GRAFANA_STATE/logs/build.log" >&2; die "Grafana image build failed; see $GRAFANA_STATE/logs/build.log"; }
+    ok "built $tag"
+  fi
+  grafana_url_hint
+  ok "next: stable.sh grafana start"
+}
+
+cmd_grafana_start() {
+  grafana_settings
+  local rel v; rel="$(grafana_release)"; v="$(basename "$rel")"
+  grafana_state_current
+  [ -d "$GRAFANA_STATE/data" ] || die "run stable.sh grafana init first"
+  local provisioning="$rel/observability/grafana/$GF_ENGINE"
+  [ -d "$provisioning/provisioning" ] && [ -d "$provisioning/dashboards" ] ||
+    die "$v has no Grafana provisioning for $GF_ENGINE ($provisioning)"
+  local tag image; tag="$(grafana_tag "$rel")"
+  image="$(docker image inspect --format '{{.Id}}' "$tag" 2>/dev/null)" ||
+    die "image $tag is not on this host; run stable.sh grafana init"
+  [ -d "$GF_OBS_DIR" ] || die "$GF_OBS_DIR does not exist; start the Gateway with OBSERVABILITY_SINK=sqlite first"
+  [ -f "$GF_OBS_DIR/$GF_OBS_FILE" ] || warn "$GF_OBS_DIR/$GF_OBS_FILE does not exist yet; panels stay empty until the Gateway writes it"
+
+  # Everything the container is created from; a running container with the same value is left alone.
+  local config
+  config="$(printf '%s\n' "$image" "$v" "$GF_ENGINE" "$GF_PORT" auth-proxy-v1 "$GF_OBS_DIR" "$GF_OBS_FILE" "$(id -u):$(id -g)" |
+    node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(require("node:crypto").createHash("sha256").update(s).digest("hex").slice(0,16)))')"
+  local running
+  if running="$(grafana_running)" && [ "$running" = "$config" ]; then
+    ok "Grafana already runs $v on port $GF_PORT; nothing to change"
+    return 0
+  fi
+  docker rm -f "$GRAFANA_CONTAINER" >/dev/null 2>&1 || true
+  say "starting Grafana for $v ($GF_ENGINE) on port $GF_PORT"
+  local args=(
+    run -d --name "$GRAFANA_CONTAINER" --restart unless-stopped --network host
+    --user "$(id -u):$(id -g)" --label "deskmates.config=$config" --label "deskmates.release=$v"
+    # Amendment 1 decision 11: loopback only, served from the Gateway's /analytics/ sub path.
+    -e GF_SERVER_HTTP_ADDR=127.0.0.1 -e "GF_SERVER_HTTP_PORT=$GF_PORT"
+    -e "GF_SERVER_ROOT_URL=$GF_UPSTREAM/analytics/" -e GF_SERVER_SERVE_FROM_SUB_PATH=true
+    # Decision 12: the relay's header is the only sign-in; its one user, admin, is a Viewer.
+    -e GF_AUTH_PROXY_ENABLED=true -e GF_AUTH_PROXY_HEADER_NAME=X-WEBAUTH-USER
+    -e GF_AUTH_PROXY_HEADER_PROPERTY=username -e GF_AUTH_PROXY_AUTO_SIGN_UP=true
+    -e "GF_AUTH_PROXY_WHITELIST=127.0.0.1, ::1"
+    -e GF_USERS_AUTO_ASSIGN_ORG=true -e GF_USERS_AUTO_ASSIGN_ORG_ROLE=Viewer
+    -e GF_USERS_ALLOW_SIGN_UP=false -e GF_USERS_ALLOW_ORG_CREATE=false
+    -e GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION=true
+    -e GF_AUTH_DISABLE_LOGIN_FORM=true -e GF_AUTH_DISABLE_SIGNOUT_MENU=true
+    -e GF_AUTH_BASIC_ENABLED=false -e GF_AUTH_ANONYMOUS_ENABLED=false
+    # Decision 15: no Grafana Live; the relay upgrades no WebSocket.
+    -e GF_LIVE_MAX_CONNECTIONS=0
+    -e GF_ANALYTICS_REPORTING_ENABLED=false -e GF_ANALYTICS_CHECK_FOR_UPDATES=false
+    -e GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false -e GF_PLUGINS_PREINSTALL_DISABLED=true
+    -e "DESKMATES_OBS_FILE=$GF_OBS_FILE"
+    -e GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/deskmates-dashboards/agent-runs.json
+    -v "$GRAFANA_STATE/data:/var/lib/grafana"
+    # The directory, not the file: a reader of a WAL database needs the -wal and -shm files.
+    -v "$GF_OBS_DIR:/var/lib/deskmates-obs:ro"
+    -v "$provisioning/provisioning/datasources:/etc/grafana/provisioning/datasources:ro"
+    -v "$provisioning/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro"
+    -v "$provisioning/dashboards:/var/lib/deskmates-dashboards:ro"
+  )
+  docker "${args[@]}" "$image" >/dev/null
+  if grafana_healthy "$GF_PORT"; then
+    ok "Grafana is up on 127.0.0.1:$GF_PORT; the root opens it as Analytics, <Deskmates address>/analytics/"
+    grafana_url_hint
+    return 0
+  fi
+  docker logs --tail 30 "$GRAFANA_CONTAINER" >&2 || true
+  die "Grafana did not answer /analytics/api/health on port $GF_PORT within ${GRAFANA_HEALTH_TIMEOUT}s"
+}
+
+cmd_grafana_stop() {
+  if docker container inspect "$GRAFANA_CONTAINER" >/dev/null 2>&1; then
+    docker rm -f "$GRAFANA_CONTAINER" >/dev/null
+    ok "Grafana stopped; its state stays in $GRAFANA_STATE"
+  else
+    ok "Grafana is not running"
+  fi
+}
+
+cmd_grafana_status() {
+  local release
+  release="$(docker container inspect --format '{{index .Config.Labels "deskmates.release"}}' "$GRAFANA_CONTAINER" 2>/dev/null)" ||
+    { echo "grafana  not running"; return 0; }
+  grafana_settings
+  if grafana_running >/dev/null && curl -fsS --max-time 2 "http://127.0.0.1:$GF_PORT/analytics/api/health" >/dev/null 2>&1; then
+    echo "grafana  running $release on 127.0.0.1:$GF_PORT, healthy"
+  elif grafana_running >/dev/null; then
+    echo "grafana  running $release on 127.0.0.1:$GF_PORT, not answering /analytics/api/health"
+  else
+    echo "grafana  stopped ($release)"
+  fi
+  [ "$release" = "$(current_version)" ] || echo "grafana  current release is $(current_version); run stable.sh grafana start"
+  if [ "$GF_URL" = "$GF_UPSTREAM" ]; then echo "grafana  relayed by the Gateway at /analytics/ (OBSERVABILITY_GRAFANA_URL=$GF_URL)"
+  else echo "grafana  not relayed: OBSERVABILITY_GRAFANA_URL is '${GF_URL}', expected $GF_UPSTREAM"
+  fi
+}
+
+cmd_grafana() {
+  case "${1:-}" in
+    init) cmd_grafana_init ;;
+    start) cmd_grafana_start ;;
+    stop) cmd_grafana_stop ;;
+    status) cmd_grafana_status ;;
+    *) die "usage: $0 grafana init | start | stop | status" ;;
+  esac
+}
+
+# --- searxng (ADR-0049 decision 14) --------------------------------------------------------------
+
+# One container on the host network, beside the Gateway like Grafana: the Gateway's upgrades and
+# rollbacks never touch it. It listens on 127.0.0.1 only; the Gateway's search proxy is its one
+# client and no workspace container can reach it. The secret key lives in searxng/env, passed with
+# --env-file so it is never on a command line.
+SEARXNG_STATE="$ROOT/searxng"
+SEARXNG_CONTAINER="${SEARXNG_CONTAINER:-deskmates-stable-searxng}"
+SEARXNG_HEALTH_TIMEOUT="${SEARXNG_HEALTH_TIMEOUT:-60}"
+
+searxng_release() { # prints the current release directory
+  local v; v="$(current_version)"
+  [ -n "$v" ] || die "no current release; activate one before SearXNG"
+  printf '%s' "$RELEASES/$v"
+}
+
+searxng_tag() { # release-dir
+  (cd "$1" && node scripts/image-tag.mjs searxng --arch "${IMAGE_ARCH:-amd64}")
+}
+
+# Reads the settings from shared/.env into SX_* shell variables.
+searxng_settings() {
+  [ -f "$SHARED/.env" ] || die "no $SHARED/.env; run init first"
+  SX_PORT="$(env_opt SEARCH_PORT)"; SX_PORT="${SX_PORT:-18710}"
+  [[ "$SX_PORT" =~ ^[0-9]+$ ]] && [ "$SX_PORT" -ge 1 ] && [ "$SX_PORT" -le 65535 ] ||
+    die "SEARCH_PORT must be a port number, got '$SX_PORT'"
+  SX_URL="$(env_opt SEARCH_URL)"
+  # What the Gateway's search proxy calls: SearXNG's own loopback origin.
+  SX_UPSTREAM="http://127.0.0.1:$SX_PORT"
+}
+
+searxng_running() { # prints the running container's config label, fails when none runs
+  local state
+  state="$(docker container inspect --format '{{.State.Running}} {{index .Config.Labels "deskmates.config"}}' "$SEARXNG_CONTAINER" 2>/dev/null)" ||
+    return 1
+  [ "${state%% *}" = true ] || return 1
+  printf '%s' "${state#* }"
+}
+
+searxng_url_hint() { # warns when the Gateway would not search through this SearXNG
+  [ "$SX_URL" = "$SX_UPSTREAM" ] ||
+    warn "set SEARCH_URL=$SX_UPSTREAM in $SHARED/.env (got '${SX_URL}') and restart the Gateway to search through this SearXNG; each workspace's web search switch stays off until an Owner or Admin turns it on"
+}
+
+searxng_healthy() { # port
+  local i
+  for i in $(seq 1 "$SEARXNG_HEALTH_TIMEOUT"); do
+    curl -fsS --max-time 2 "http://127.0.0.1:$1/healthz" >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  return 1
+}
+
+cmd_searxng_init() {
+  command -v docker >/dev/null || die "docker is not installed"
+  docker info >/dev/null 2>&1 || die "docker daemon unreachable"
+  searxng_settings
+  local rel; rel="$(searxng_release)"
+  [ -f "$rel/images/searxng/Dockerfile" ] || die "$(basename "$rel") has no images/searxng; upgrade first"
+  mkdir -p "$SEARXNG_STATE/cache"
+  chmod 700 "$SEARXNG_STATE"
+  if [ -f "$SEARXNG_STATE/env" ]; then
+    ok "secret key kept in $SEARXNG_STATE/env"
+  else
+    (umask 077; printf 'SEARXNG_SECRET=%s\n' "$(openssl rand -hex 32)" > "$SEARXNG_STATE/env")
+    ok "secret key written to $SEARXNG_STATE/env"
+  fi
+  chmod 600 "$SEARXNG_STATE/env"
+  local tag; tag="$(searxng_tag "$rel")"
+  if docker image inspect "$tag" >/dev/null 2>&1; then
+    ok "image $tag already built"
+  else
+    # The only step that needs the registry: the official image, at build time.
+    say "building $tag"
+    mkdir -p "$SEARXNG_STATE/logs"
+    (cd "$rel" && SEARXNG_IMAGE="$tag" bash scripts/build-searxng-image.sh) \
+      >"$SEARXNG_STATE/logs/build.log" 2>&1 ||
+      { tail -20 "$SEARXNG_STATE/logs/build.log" >&2; die "SearXNG image build failed; see $SEARXNG_STATE/logs/build.log"; }
+    ok "built $tag"
+  fi
+  searxng_url_hint
+  ok "next: stable.sh searxng start"
+}
+
+cmd_searxng_start() {
+  searxng_settings
+  local rel v; rel="$(searxng_release)"; v="$(basename "$rel")"
+  [ -f "$SEARXNG_STATE/env" ] || die "run stable.sh searxng init first"
+  local tag image; tag="$(searxng_tag "$rel")"
+  image="$(docker image inspect --format '{{.Id}}' "$tag" 2>/dev/null)" ||
+    die "image $tag is not on this host; run stable.sh searxng init"
+  # Everything the container is created from; a running container with the same value is left alone.
+  local config
+  config="$(printf '%s\n' "$image" "$v" "$SX_PORT" loopback-v1 "$(id -u):$(id -g)" |
+    node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(require("node:crypto").createHash("sha256").update(s).digest("hex").slice(0,16)))')"
+  local running
+  if running="$(searxng_running)" && [ "$running" = "$config" ]; then
+    ok "SearXNG already runs $v on port $SX_PORT; nothing to change"
+    return 0
+  fi
+  docker rm -f "$SEARXNG_CONTAINER" >/dev/null 2>&1 || true
+  say "starting SearXNG for $v on port $SX_PORT"
+  local args=(
+    run -d --name "$SEARXNG_CONTAINER" --restart unless-stopped --network host
+    --user "$(id -u):$(id -g)" --label "deskmates.config=$config" --label "deskmates.release=$v"
+    --env-file "$SEARXNG_STATE/env"
+    -e SEARXNG_BIND_ADDRESS=127.0.0.1 -e "SEARXNG_PORT=$SX_PORT"
+    -v "$SEARXNG_STATE/cache:/var/cache/searxng"
+  )
+  docker "${args[@]}" "$image" >/dev/null
+  if searxng_healthy "$SX_PORT"; then
+    ok "SearXNG is up on 127.0.0.1:$SX_PORT"
+    searxng_url_hint
+    return 0
+  fi
+  docker logs --tail 30 "$SEARXNG_CONTAINER" >&2 || true
+  die "SearXNG did not answer /healthz on port $SX_PORT within ${SEARXNG_HEALTH_TIMEOUT}s"
+}
+
+cmd_searxng_stop() {
+  if docker container inspect "$SEARXNG_CONTAINER" >/dev/null 2>&1; then
+    docker rm -f "$SEARXNG_CONTAINER" >/dev/null
+    ok "SearXNG stopped; its secret and cache stay in $SEARXNG_STATE"
+  else
+    ok "SearXNG is not running"
+  fi
+}
+
+cmd_searxng_status() {
+  local release
+  release="$(docker container inspect --format '{{index .Config.Labels "deskmates.release"}}' "$SEARXNG_CONTAINER" 2>/dev/null)" ||
+    { echo "searxng  not running"; return 0; }
+  searxng_settings
+  if searxng_running >/dev/null && curl -fsS --max-time 2 "http://127.0.0.1:$SX_PORT/healthz" >/dev/null 2>&1; then
+    echo "searxng  running $release on 127.0.0.1:$SX_PORT, healthy"
+  elif searxng_running >/dev/null; then
+    echo "searxng  running $release on 127.0.0.1:$SX_PORT, not answering /healthz"
+  else
+    echo "searxng  stopped ($release)"
+  fi
+  [ "$release" = "$(current_version)" ] || echo "searxng  current release is $(current_version); run stable.sh searxng start"
+  if [ "$SX_URL" = "$SX_UPSTREAM" ]; then echo "searxng  used by the Gateway (SEARCH_URL=$SX_URL)"
+  else echo "searxng  not used: SEARCH_URL is '${SX_URL}', expected $SX_UPSTREAM"
+  fi
+}
+
+cmd_searxng() {
+  case "${1:-}" in
+    init) cmd_searxng_init ;;
+    start) cmd_searxng_start ;;
+    stop) cmd_searxng_stop ;;
+    status) cmd_searxng_status ;;
+    *) die "usage: $0 searxng init | start | stop | status" ;;
+  esac
 }
 
 case "${1:-}" in
@@ -465,5 +893,7 @@ case "${1:-}" in
   activate) cmd_activate "${2:-}" ;;
   rollback) cmd_rollback ;;
   status) cmd_status ;;
-  *) die "usage: $0 init | install vX.Y.Z | verify vX.Y.Z | activate vX.Y.Z | rollback | status" ;;
+  grafana) cmd_grafana "${2:-}" ;;
+  searxng) cmd_searxng "${2:-}" ;;
+  *) die "usage: $0 init | install vX.Y.Z | verify vX.Y.Z | activate vX.Y.Z | rollback | status | grafana init|start|stop|status | searxng init|start|stop|status" ;;
 esac

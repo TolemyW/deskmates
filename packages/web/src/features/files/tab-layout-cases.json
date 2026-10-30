@@ -1,0 +1,8 @@
+[
+  {
+    "id": "toolbar",
+    "route": "#/resources/files",
+    "container": ".files-toolbar",
+    "strip": ".files-toolbar-primary"
+  }
+]

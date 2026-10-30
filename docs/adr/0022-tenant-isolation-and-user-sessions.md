@@ -1,8 +1,8 @@
 # ADR-0022: Tenant isolation and revocable user sessions
 
 Date: 2026-10-05
-Status: Proposed
-Scope: M4 design review; no implementation, release or acceptance claim
+Status: Accepted (under owner delegation, 2026-10-17) for the single-tenant scope that has shipped: decisions 1 to 6 as the design of the tenant layer, persistent revocable sessions (P1), the OIDC interface, the implementation choices listed below, and amendments 1 to 7. Exposing a second tenant is not accepted: decision 6's gate stays closed until E2E-02 on the deployed model, a migration rehearsal on a copy of a real deployment database and the real-provider SSO checks pass, and the owner reopens multi-tenancy, which the owner set aside on 2026-10-10 (amendment 1). Decision 2's tenant roles are superseded by amendment 6 (roles are per workspace; AGENTS.md).
+Scope: M4 design review; the acceptance above is of the design, not of the second-tenant gates
 
 ## Implementation note (2026-10-05, updated 2026-10-07)
 
@@ -17,7 +17,7 @@ the [permission model](../design/m4-permission-model-2026-10-07.md) and the
 [multi-tenant runbook](../runbooks/multi-tenant.md). T2 with two tenants on a real Docker daemon
 and a real-browser check against Keycloak have run; E2E-02 (deployed model) and a migration
 rehearsal on a copy of a real deployment database have not, so no second tenant may be exposed.
-This ADR stays Proposed and the owner review items below remain open.
+This ADR stayed Proposed until the delegated review of 2026-10-17 accepted its single-tenant scope (Status); the second-tenant gates remain open.
 
 Owner decisions of 2026-10-07, which the implementation follows:
 
@@ -33,7 +33,7 @@ Owner decisions of 2026-10-07, which the implementation follows:
   direct noVNC address and password. The SSE feed accepts the tenant selector as `?tenant=`, a
   selector checked against the session and never a credential.
 
-Choices the implementation made that the review should confirm:
+Choices the implementation made that the review should confirm (confirmed under owner delegation on 2026-10-17; the per-tenant concurrency limits named below were later removed by amendment 5, and the queued-run and request limits stay):
 
 - Decision 3: an OIDC ID token's signature is always verified against the provider's JWKS,
   including for token-endpoint responses, where the library skips that check by default.
@@ -123,7 +123,7 @@ reviewed deployment defaults, never silent weakening of authorization.
 
 Status: decided by the owner on 2026-10-10 in an interactive walkthrough of findings C1 to C8 of
 the [permission model](../design/m4-permission-model-2026-10-07.md) (GitHub issue #14), and
-implemented on branch `member-role`. ADR-0022 itself stays Proposed: multi-tenancy is not a
+implemented on branch `member-role`. ADR-0022 itself stayed Proposed until 2026-10-17: multi-tenancy is not a
 product feature for now, and the second-tenant and real-OIDC gates are no longer pursued. The
 rules below apply inside every tenant, the Default Tenant included.
 
@@ -380,8 +380,8 @@ S6. **Admins manage principals of their tenant.** `GET` and `POST /api/service-p
 
 ## Amendment 3 (2026-10-10): self-service account settings
 
-Status: implemented for review under GitHub issue #26. Number 1 stays reserved for the
-Member-role amendment of issue #14; number 2 is service principals.
+Status: implemented for review under GitHub issue #26; Accepted under owner delegation (2026-10-17).
+Number 1 stays reserved for the Member-role amendment of issue #14; number 2 is service principals.
 
 ### Context
 
@@ -463,7 +463,7 @@ P6. **Password change is unchanged and stays the one mechanism.** The settings p
 
 ## Amendment 4 (2026-10-10): invite by link and administrator-created accounts
 
-Status: implemented for review under GitHub issue #25. It changes the invitation identity of P4
+Status: implemented for review under GitHub issue #25; Accepted under owner delegation (2026-10-17). It changes the invitation identity of P4
 (test plan INV-01) and builds on amendment 3's Account settings for the password change.
 
 ### Context
@@ -545,7 +545,7 @@ I6. **A link holder learns why a link stopped working.** `GET /auth/invitations/
 
 ## Amendment 5 (2026-10-12): no run-concurrency caps; container limits bound a workspace
 
-Status: implemented for review on branch `no-concurrency-caps`. Owner decision of 2026-10-12. It
+Status: implemented for review on branch `no-concurrency-caps`. Owner decision of 2026-10-12; the engineering detail is Accepted under owner delegation (2026-10-17). It
 removes the concurrent-sidecar part of test plan LIMIT-01 and the run cap of amendment 2 S4.
 
 ### Context
@@ -754,7 +754,7 @@ status-inquiry runtime, navigation a Guest cannot use, workspace creation checke
 selected workspace, a Member's click on a bot). S1 to S4 replace W6's "not built yet" sentence;
 the rest of W6 stands. Owner-decided (2026-10-14): S1's model is the default model, not the
 cheap one; the job runs on the bot's background lane; S2 adds task status and progress; S8 and
-S9 add the role badge and the role panel. Real-model answer quality is not measured.
+S9 add the role badge and the role panel. The rest is Accepted under owner delegation (2026-10-17). Real-model answer quality is not measured.
 
 ### Context
 

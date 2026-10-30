@@ -23,7 +23,8 @@ export interface ComputerApi {
   startBotScreen(id: BotId): Promise<BotScreen>;
   /**
    * Take the shared browser over: every bot in the workspace is locked out until hand back. The
-   * answer is the lease only; the screen opens through `openTakeoverScreen`.
+   * answer is the lease only; use `screenAccess` for a Bot region or `openTakeoverScreen`
+   * for the full workspace display.
    */
   takeOver(workspaceId: WorkspaceId, authorId?: string): Promise<{ lock: BrowserLock }>;
 }

@@ -113,6 +113,123 @@ const body = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe("task_deliver route", () => {
+  it("refuses an in-flight delivery when its run is cancelled during file verification", async () => {
+    const { workspace, thread, run, tasksUrl } = seed();
+    const task = await createTask(tasksUrl, { threadIds: [thread.id], outputSchema: schema });
+    await serveDigests(workspace, { "/work/counts.csv": "a,b\n1,2\n" });
+    const digest = vi.mocked(provider.exec).getMockImplementation();
+    let entered!: () => void;
+    let release!: () => void;
+    const verifying = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(provider.exec).mockImplementation(async (handle, request) => {
+      entered();
+      await gate;
+      if (!digest) throw new Error("missing digest fixture");
+      return digest(handle, request);
+    });
+    const pending = deliver(run.id, task.id, body()).then((response) => response);
+    await verifying;
+    const cancelled = await operatorApi("POST", `/api/runs/${run.id}/cancel`, {});
+    expect(cancelled.statusCode).toBe(200);
+    release();
+    const result = await pending;
+    expect(result.statusCode, result.body).toBe(409);
+    expect(result.json().details).toMatchObject({ reason: "run_finished", status: "cancelled" });
+    expect(sandbox.deskmates.ctx.tasks.mustGet(workspace.id, task.id)).toEqual(task);
+    expect(sandbox.deskmates.ctx.tasks.deliveries(task.id)).toEqual([]);
+    expect(sandbox.deskmates.ctx.db.prepare("SELECT * FROM file_publications").all()).toEqual([]);
+  });
+
+  it.each(["cancelled", "stopped", "failed", "succeeded", "silent"] as const)(
+    "refuses a %s run before verifying any files even if it holds a token",
+    async (status) => {
+      const { workspace, thread, run, tasksUrl } = seed();
+      const task = await createTask(tasksUrl, { threadIds: [thread.id] });
+      const ctx = sandbox.deskmates.ctx;
+      ctx.runs.transition(run.id, "running");
+      if (status === "stopped") ctx.runs.transition(run.id, "waiting_continuation");
+      ctx.runs.transition(run.id, status);
+      const execs = await serveDigests(workspace, { "/work/counts.csv": "a,b\n1,2\n" });
+      const result = await deliver(run.id, task.id, body());
+      expect(result.statusCode, result.body).toBe(409);
+      expect(result.json().details.reason).toBe("run_finished");
+      expect(execs).toEqual([]);
+      expect(ctx.tasks.mustGet(workspace.id, task.id)).toEqual(task);
+    },
+  );
+
+  it("replays identical concurrent and later deliveries without new rows, events or fileless receipts", async () => {
+    const { workspace, thread, run, tasksUrl } = seed();
+    const task = await createTask(tasksUrl, { threadIds: [thread.id], outputSchema: schema });
+    await serveDigests(workspace, { "/work/counts.csv": "a,b\n1,2\n" });
+    const events: GatewayEvent[] = [];
+    sandbox.deskmates.ctx.bus.subscribe((event) => events.push(event));
+    const results = await Promise.all([
+      deliver(run.id, task.id, body()),
+      deliver(run.id, task.id, body()),
+    ]);
+    const retry = await deliver(run.id, task.id, body());
+    for (const result of [...results, retry]) {
+      expect(result.statusCode, result.body).toBe(200);
+      expect(result.json()).toEqual(results[0]?.json());
+      expect(result.json().delivery.publications).toHaveLength(1);
+    }
+    expect(sandbox.deskmates.ctx.tasks.deliveries(task.id)).toHaveLength(1);
+    expect(events.filter((event) => event.type === "task_delivered")).toHaveLength(1);
+    const logs = sandbox.deskmates.ctx.db
+      .prepare("SELECT payload_json FROM run_events WHERE run_id = ? AND kind = 'log'")
+      .all(run.id) as { payload_json: string }[];
+    expect(logs.filter((row) => JSON.parse(row.payload_json).tool === "task_deliver")).toHaveLength(
+      1,
+    );
+  });
+
+  it("keeps genuine revisions, reopened tasks, new attempts and changed bytes distinct", async () => {
+    const { workspace, thread, run, tasksUrl } = seed();
+    const task = await createTask(tasksUrl, { threadIds: [thread.id] });
+    const files = { "/work/counts.csv": "a,b\n1,2\n" };
+    await serveDigests(workspace, files);
+    const first = (await deliver(run.id, task.id, body())).json<{
+      task: Task;
+      delivery: TaskDelivery;
+    }>();
+    const changed = (await deliver(run.id, task.id, body({ output: { rows: 4 } }))).json<{
+      task: Task;
+      delivery: TaskDelivery;
+    }>();
+    expect(changed.delivery.id).not.toBe(first.delivery.id);
+    await operatorApi("PATCH", `${tasksUrl}/${task.id}`, {
+      version: changed.task.version,
+      status: "planned",
+    });
+    const reopened = (await deliver(run.id, task.id, body({ output: { rows: 4 } }))).json<{
+      task: Task;
+      delivery: TaskDelivery;
+    }>();
+    expect(reopened.delivery.id).not.toBe(changed.delivery.id);
+    files["/work/counts.csv"] = "changed bytes";
+    const bytes = (await deliver(run.id, task.id, body({ output: { rows: 4 } }))).json<{
+      task: Task;
+      delivery: TaskDelivery;
+    }>();
+    expect(bytes.delivery.id).not.toBe(reopened.delivery.id);
+    sandbox.deskmates.ctx.db
+      .prepare("UPDATE runs SET attempt = attempt + 1 WHERE id = ?")
+      .run(run.id);
+    const attempt = (await deliver(run.id, task.id, body({ output: { rows: 4 } }))).json<{
+      task: Task;
+      delivery: TaskDelivery;
+    }>();
+    expect(attempt.delivery.id).not.toBe(bytes.delivery.id);
+    expect(attempt.delivery.attempt).toBe(2);
+    expect(sandbox.deskmates.ctx.tasks.deliveries(task.id)).toHaveLength(5);
+  });
+
   it("delivers a linked task, publishes task_delivered and starts nothing", async () => {
     const { workspace, bot, thread, run, tasksUrl } = seed();
     const task = await createTask(tasksUrl, { threadIds: [thread.id], outputSchema: schema });
@@ -216,6 +333,56 @@ describe("task_deliver route", () => {
       },
     });
     expect(sandbox.deskmates.ctx.tasks.mustGet(workspace.id, task.id)).toEqual(task);
+  });
+
+  // Issue #39 item 5: the bot's relative path names a file in its work directory, and a refused
+  // call carries an example of a valid one.
+  it("verifies and publishes a relative artifact path resolved under the bot's directory", async () => {
+    const { workspace, thread, run, tasksUrl } = seed();
+    const task = await createTask(tasksUrl, { threadIds: [thread.id] });
+    const execs = await serveDigests(workspace, { "/work/bots/one/web/app.py": "print(1)" });
+    const response = await deliver(run.id, task.id, {
+      summary: "Wrote the app",
+      artifacts: [{ label: "App", path: "web/app.py" }],
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(execs.map((e) => e.path)).toEqual(["/work/bots/one/web/app.py"]);
+    expect(response.json<{ task: Task }>().task.artifacts).toEqual([
+      { label: "App", path: "/work/bots/one/web/app.py", runId: run.id },
+    ]);
+  });
+
+  it("answers a missing summary with an example whose output follows the schema", async () => {
+    const { thread, run, tasksUrl } = seed();
+    const task = await createTask(tasksUrl, { threadIds: [thread.id], outputSchema: schema });
+    const response = await deliver(run.id, task.id, { artifacts: [], output: { rows: 3 } });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      code: "validation",
+      details: {
+        key: "summary",
+        workDir: "/work/bots/one",
+        example: { taskId: task.id, summary: expect.any(String), output: { rows: 0 } },
+      },
+    });
+  });
+
+  it("names the work directory when /tmp is refused, before any workspace read", async () => {
+    const { thread, run, tasksUrl } = seed();
+    const task = await createTask(tasksUrl, { threadIds: [thread.id] });
+    const exec = vi.spyOn(provider, "exec");
+    const response = await deliver(
+      run.id,
+      task.id,
+      body({ output: undefined, artifacts: [{ label: "x", path: "/tmp/x" }] }),
+    );
+    expect(response.statusCode).toBe(403);
+    expect(response.json().message).toContain("/work/bots/one");
+    expect(response.json().details).toMatchObject({
+      workDir: "/work/bots/one",
+      example: { artifacts: [{ path: "/work/bots/one/result.md" }] },
+    });
+    expect(exec).not.toHaveBeenCalled();
   });
 
   it("refuses an unlinked run, another workspace's task and a bad artifact path", async () => {
@@ -438,6 +605,27 @@ describe("task_deliver route", () => {
       runId: run.id,
       completed: [{ unit: "case 1" }, { unit: "case 2", evidence: [] }],
       outstanding: ["case 3"],
+    });
+    // Issue #39 item 5: a commit hash and a URL are typed evidence; `..` cannot leave /work.
+    const typed = await post({
+      completed: [
+        { unit: "fix", outcome: "pushed", evidence: ["9489f6a", "https://example.com/pull/7"] },
+      ],
+    });
+    expect(typed.statusCode, typed.body).toBe(200);
+    expect(typed.json().checkpoint.completed[0]).toEqual({
+      unit: "fix",
+      outcome: "pushed",
+      evidence: ["9489f6a", "https://example.com/pull/7"],
+      evidenceKinds: ["commit", "url"],
+    });
+    const escaping = await post({
+      completed: [{ unit: "x", outcome: "x", evidence: ["../../../etc/passwd"] }],
+    });
+    expect(escaping.statusCode).toBe(403);
+    expect(escaping.json().details).toMatchObject({
+      workDir: "/work/bots/one",
+      example: { taskId: task.id },
     });
   });
 

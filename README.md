@@ -133,7 +133,7 @@ Deskmates is honest about where its boundaries are.
 - **The workspace is the boundary, not the bot.** Bots in one workspace share cookies, files, shell and process environment. Roles, tool lists and ownership are conventions. A new trust domain costs one more container, never a permission subsystem.
 - **Page content is untrusted.** Browser output is wrapped before it enters model context. Tokens and cookies are redacted before anything reaches the ledger. Screenshots are not redacted.
 - **Credentials stay on the Gateway host.** Workspaces receive a short-lived run token and reach the model through the Gateway's proxy. The database never holds a plaintext password, cookie or upstream model key.
-- **Open-internet workspaces hold no production credentials.** That is the default grouping rule, and the docs do not pretend otherwise.
+- **Open-internet workspaces hold no production credentials.** That is the default grouping rule, and the docs do not pretend otherwise. The one owner-accepted exception is a workspace with the desktop tools enabled (on by default on the optional desktop image), which may hold a signed-in account (ADR-0048); its workspace page says so.
 
 The full rules, with the tests that enforce each one, are in [`AGENTS.md`](AGENTS.md).
 
@@ -150,7 +150,9 @@ packages/channels         WhatsApp adapters and the agent MCP server
 packages/connector-postgres  standalone receipted PostgreSQL connector
 packages/testkit          fake SDK, fake provider, fixtures (dev only)
 packages/golden-site      Galaxy Ops Console, the deterministic site the benchmark runs against
-images/                   workspace, egress proxy and connector images
+packages/observability-dashboards  Grafana dashboards generated per engine (dev only)
+images/                   workspace, egress proxy, connector and Grafana images
+observability/            generated Grafana provisioning, mounted by stable.sh grafana
 evals/                    the 48-task deskbench suite and A/B tooling
 docs/                     operator guide, runbooks, design docs, ADRs
 ```

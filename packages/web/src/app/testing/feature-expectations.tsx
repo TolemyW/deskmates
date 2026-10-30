@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 import { ENGLISH, type MessageKey } from "../../i18n/catalogs.js";
 import { parseRoute } from "../../router.js";
-import type { Feature, NavGroup, ShellContext } from "../feature.js";
+import { type Feature, type NavGroup, type ShellContext, isCurrentEntry } from "../feature.js";
 import { FEATURES, featureFor } from "../features.js";
 import { shownRoute } from "../route-registry.js";
 
@@ -23,10 +23,13 @@ export const STUB_CONTEXT = {
   locale: "en",
   changeLocale: () => undefined,
   theme: { preference: "system", setPreference: () => undefined },
+  view: "tune",
+  setView: () => undefined,
   onProfile: () => undefined,
   onSessionRotated: () => undefined,
   onSignOut: () => undefined,
   checkConnection: () => undefined,
+  openGuide: () => undefined,
 } as unknown as ShellContext;
 
 /** The element the shell puts in the work area (or the drawer) for an address and role. */
@@ -40,7 +43,9 @@ export function renderedFor(hash: string, manager = true): ReactElement<Record<s
 /** The folder names of the features whose navigation entry is current at an address. */
 export function currentEntries(hash: string): string[] {
   const route = parseRoute(hash);
-  return [...FEATURES].filter(([, f]) => f.nav?.active(route)).map(([folder]) => folder);
+  return [...FEATURES]
+    .filter(([, f]) => f.nav !== undefined && isCurrentEntry(f.nav, route))
+    .map(([folder]) => folder);
 }
 
 export interface NavExpectations {
@@ -79,7 +84,7 @@ export function describeNavEntry(expected: NavExpectations): void {
       expect(icon.props.size).toBe(18);
       expect(nav?.label).toBe(expected.label);
       expect(ENGLISH[expected.label]).toBe(expected.english);
-      expect(nav?.href()).toBe(expected.href);
+      expect(nav?.href?.()).toBe(expected.href);
     });
 
     it("is the only current entry where it should be", () => {

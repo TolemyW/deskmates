@@ -1,0 +1,867 @@
+{
+  "uid": "deskmates-approvals",
+  "title": "Approvals",
+  "description": "Approval requests and decisions across every workspace: waits, who decided (person, AI reviewer, rule, mode, bot), what is pending now and what expired. Read from the obs model (ADR-0046).",
+  "tags": [
+    "deskmates"
+  ],
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "timezone": "browser",
+  "links": [
+    {
+      "title": "Deskmates dashboards",
+      "type": "dashboards",
+      "tags": [
+        "deskmates"
+      ],
+      "asDropdown": true,
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Overview",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Requested",
+      "description": "Approval requests created in the time range.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(*) AS requested FROM approval_requests_named WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}'",
+          "queryText": "SELECT count(*) AS requested FROM approval_requests_named WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Pending now",
+      "description": "Requests waiting for a decision now, whenever they were made, whose run is still open.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(*) AS pending FROM approval_requests_named WHERE state = 'pending'",
+          "queryText": "SELECT count(*) AS pending FROM approval_requests_named WHERE state = 'pending'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Decided",
+      "description": "Approvals decided in the time range, by anyone or anything.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(*) AS decided FROM approval_waits WHERE decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}'",
+          "queryText": "SELECT count(*) AS decided FROM approval_waits WHERE decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Expired",
+      "description": "Approvals nobody answered within the workspace's expiry window.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT count(*) AS expired FROM approval_waits WHERE decider_group = 'expired' AND decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}'",
+          "queryText": "SELECT count(*) AS expired FROM approval_waits WHERE decider_group = 'expired' AND decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Decided by a person",
+      "description": "Decisions made by a person, as a share of all decisions in the time range.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT 100.0 * sum(CASE WHEN decider_group = 'human' THEN 1 ELSE 0 END) / nullif(count(*), 0) AS human_share FROM approval_waits WHERE decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}'",
+          "queryText": "SELECT 100.0 * sum(CASE WHEN decider_group = 'human' THEN 1 ELSE 0 END) / nullif(count(*), 0) AS human_share FROM approval_waits WHERE decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}'",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Median wait for a person",
+      "description": "Median time from the request to a person's decision.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT median AS median_wait_ms FROM (SELECT avg(wait_ms) AS median FROM (SELECT wait_ms, row_number() OVER (ORDER BY wait_ms) AS median_rn, count(*) OVER () AS median_n FROM (SELECT wait_ms FROM approval_waits WHERE decider_group = 'human' AND decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}') median_src WHERE wait_ms IS NOT NULL) median_ranked WHERE median_rn IN ((median_n + 1) / 2, (median_n + 2) / 2)) m",
+          "queryText": "SELECT median AS median_wait_ms FROM (SELECT avg(wait_ms) AS median FROM (SELECT wait_ms, row_number() OVER (ORDER BY wait_ms) AS median_rn, count(*) OVER () AS median_n FROM (SELECT wait_ms FROM approval_waits WHERE decider_group = 'human' AND decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}') median_src WHERE wait_ms IS NOT NULL) median_ranked WHERE median_rn IN ((median_n + 1) / 2, (median_n + 2) / 2)) m",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Over time",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "panels": []
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Decisions per hour by who decided",
+      "description": "Decisions per hour, stacked by person, reviewer, rule, mode, bot, expired, and closed with the run.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', decided_at) AS time, coalesce(decider_group, 'other') AS decider_group, count(*) AS approvals FROM approval_waits WHERE decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "queryText": "SELECT strftime('%Y-%m-%dT%H:00:00Z', decided_at) AS time, coalesce(decider_group, 'other') AS decider_group, count(*) AS approvals FROM approval_waits WHERE decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}' GROUP BY 1, 2 ORDER BY 1, 2",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Wait for a person per hour (p50, p95)",
+      "description": "Percentiles of the wait of the decisions people made in each hour.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "time series",
+          "rawQueryText": "SELECT time, p50, p95 FROM (SELECT time, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN wait_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN wait_ms END) AS p95 FROM (SELECT time, wait_ms, row_number() OVER (PARTITION BY time ORDER BY wait_ms) AS pct_rn, count(*) OVER (PARTITION BY time) AS pct_n FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z', decided_at) AS time, wait_ms FROM approval_waits WHERE decider_group = 'human' AND decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}') pct_src WHERE wait_ms IS NOT NULL) pct_ranked GROUP BY time) q ORDER BY time",
+          "queryText": "SELECT time, p50, p95 FROM (SELECT time, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN wait_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN wait_ms END) AS p95 FROM (SELECT time, wait_ms, row_number() OVER (PARTITION BY time ORDER BY wait_ms) AS pct_rn, count(*) OVER (PARTITION BY time) AS pct_n FROM (SELECT strftime('%Y-%m-%dT%H:00:00Z', decided_at) AS time, wait_ms FROM approval_waits WHERE decider_group = 'human' AND decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}') pct_src WHERE wait_ms IS NOT NULL) pct_ranked GROUP BY time) q ORDER BY time",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Pending and expired",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Pending now",
+      "description": "Every request waiting for a decision, oldest first, with how long it has waited. A run id opens the run view.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT created_at, workspace_name, bot_name, kind, tool_name, risk_level, wait_mode, ((julianday('now') - julianday(created_at)) * 86400000.0) AS age_ms, run_status, run_id FROM approval_requests_named WHERE state = 'pending' AND created_at IS NOT NULL ORDER BY created_at, approval_id LIMIT 100",
+          "queryText": "SELECT created_at, workspace_name, bot_name, kind, tool_name, risk_level, wait_mode, ((julianday('now') - julianday(created_at)) * 86400000.0) AS age_ms, run_status, run_id FROM approval_requests_named WHERE state = 'pending' AND created_at IS NOT NULL ORDER BY created_at, approval_id LIMIT 100",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "age_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this run",
+                    "url": "/d/deskmates-agent-runs/agent-runs?var-run=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Expired",
+      "description": "The newest approvals that expired unanswered. A run id opens the run view.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT decided_at, workspace_name, bot_name, kind, tool_name, risk_level, wait_mode, wait_ms, run_id FROM approval_waits WHERE decider_group = 'expired' AND decided_at IS NOT NULL AND decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}' ORDER BY decided_at DESC LIMIT 50",
+          "queryText": "SELECT decided_at, workspace_name, bot_name, kind, tool_name, risk_level, wait_mode, wait_ms, run_id FROM approval_waits WHERE decider_group = 'expired' AND decided_at IS NOT NULL AND decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}' ORDER BY decided_at DESC LIMIT 50",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "wait_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this run",
+                    "url": "/d/deskmates-agent-runs/agent-runs?var-run=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Per workspace and kind",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "panels": []
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "Workspaces",
+      "description": "Per workspace, the requests made in the time range by how they ended, and the median and p95 wait for a person.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT w.workspace, w.requested, w.decided, w.by_human, w.by_reviewer, w.by_rule, w.by_mode, w.by_bot, w.expired, w.closed_with_run, w.denied, w.pending, q.p50 AS human_wait_p50_ms, q.p95 AS human_wait_p95_ms FROM (SELECT coalesce(workspace_id, '') AS workspace_key, max(coalesce(workspace_name, workspace_id)) AS workspace, count(*) AS requested, sum(CASE WHEN state = 'decided' THEN 1 ELSE 0 END) AS decided, sum(CASE WHEN decider_group = 'human' THEN 1 ELSE 0 END) AS by_human, sum(CASE WHEN decider_group = 'reviewer' THEN 1 ELSE 0 END) AS by_reviewer, sum(CASE WHEN decider_group = 'rule' THEN 1 ELSE 0 END) AS by_rule, sum(CASE WHEN decider_group = 'mode' THEN 1 ELSE 0 END) AS by_mode, sum(CASE WHEN decider_group = 'bot' THEN 1 ELSE 0 END) AS by_bot, sum(CASE WHEN decider_group = 'expired' THEN 1 ELSE 0 END) AS expired, sum(CASE WHEN decider_group = 'closed' THEN 1 ELSE 0 END) AS closed_with_run, sum(CASE WHEN decision = 'deny' AND decider_group <> 'expired' AND decider_group <> 'closed' THEN 1 ELSE 0 END) AS denied, sum(CASE WHEN state = 'pending' THEN 1 ELSE 0 END) AS pending FROM approval_requests_named WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}' GROUP BY 1) w LEFT JOIN (SELECT workspace_key, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN wait_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN wait_ms END) AS p95 FROM (SELECT workspace_key, wait_ms, row_number() OVER (PARTITION BY workspace_key ORDER BY wait_ms) AS pct_rn, count(*) OVER (PARTITION BY workspace_key) AS pct_n FROM (SELECT coalesce(workspace_id, '') AS workspace_key, wait_ms FROM approval_requests_named WHERE decider_group = 'human' AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}') pct_src WHERE wait_ms IS NOT NULL) pct_ranked GROUP BY workspace_key) q ON q.workspace_key = w.workspace_key ORDER BY w.requested DESC, w.workspace",
+          "queryText": "SELECT w.workspace, w.requested, w.decided, w.by_human, w.by_reviewer, w.by_rule, w.by_mode, w.by_bot, w.expired, w.closed_with_run, w.denied, w.pending, q.p50 AS human_wait_p50_ms, q.p95 AS human_wait_p95_ms FROM (SELECT coalesce(workspace_id, '') AS workspace_key, max(coalesce(workspace_name, workspace_id)) AS workspace, count(*) AS requested, sum(CASE WHEN state = 'decided' THEN 1 ELSE 0 END) AS decided, sum(CASE WHEN decider_group = 'human' THEN 1 ELSE 0 END) AS by_human, sum(CASE WHEN decider_group = 'reviewer' THEN 1 ELSE 0 END) AS by_reviewer, sum(CASE WHEN decider_group = 'rule' THEN 1 ELSE 0 END) AS by_rule, sum(CASE WHEN decider_group = 'mode' THEN 1 ELSE 0 END) AS by_mode, sum(CASE WHEN decider_group = 'bot' THEN 1 ELSE 0 END) AS by_bot, sum(CASE WHEN decider_group = 'expired' THEN 1 ELSE 0 END) AS expired, sum(CASE WHEN decider_group = 'closed' THEN 1 ELSE 0 END) AS closed_with_run, sum(CASE WHEN decision = 'deny' AND decider_group <> 'expired' AND decider_group <> 'closed' THEN 1 ELSE 0 END) AS denied, sum(CASE WHEN state = 'pending' THEN 1 ELSE 0 END) AS pending FROM approval_requests_named WHERE created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}' GROUP BY 1) w LEFT JOIN (SELECT workspace_key, count(*) AS n, max(CASE WHEN pct_rn = (pct_n * 50 + 99) / 100 THEN wait_ms END) AS p50, max(CASE WHEN pct_rn = (pct_n * 95 + 99) / 100 THEN wait_ms END) AS p95 FROM (SELECT workspace_key, wait_ms, row_number() OVER (PARTITION BY workspace_key ORDER BY wait_ms) AS pct_rn, count(*) OVER (PARTITION BY workspace_key) AS pct_n FROM (SELECT coalesce(workspace_id, '') AS workspace_key, wait_ms FROM approval_requests_named WHERE decider_group = 'human' AND created_at >= '${__from:date:iso}' AND created_at < '${__to:date:iso}') pct_src WHERE wait_ms IS NOT NULL) pct_ranked GROUP BY workspace_key) q ON q.workspace_key = w.workspace_key ORDER BY w.requested DESC, w.workspace",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "human_wait_p50_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "human_wait_p95_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 16,
+      "type": "table",
+      "title": "By kind and decision",
+      "description": "Decisions grouped by kind, risk level, who decided and decision, with the median and longest wait.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 42
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT a.kind, a.risk_level, a.decider_group, a.decision, a.approvals, m.median AS median_wait_ms, a.max_wait_ms FROM (SELECT coalesce(kind, '') AS kind, coalesce(risk_level, '') AS risk_level, coalesce(decider_group, '') AS decider_group, coalesce(decision, '') AS decision, count(*) AS approvals, max(wait_ms) AS max_wait_ms FROM approval_waits WHERE decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}' GROUP BY 1, 2, 3, 4) a LEFT JOIN (SELECT kind, risk_level, decider_group, decision, avg(wait_ms) AS median FROM (SELECT kind, risk_level, decider_group, decision, wait_ms, row_number() OVER (PARTITION BY kind, risk_level, decider_group, decision ORDER BY wait_ms) AS median_rn, count(*) OVER (PARTITION BY kind, risk_level, decider_group, decision) AS median_n FROM (SELECT coalesce(kind, '') AS kind, coalesce(risk_level, '') AS risk_level, coalesce(decider_group, '') AS decider_group, coalesce(decision, '') AS decision, wait_ms FROM approval_waits WHERE decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}') median_src WHERE wait_ms IS NOT NULL) median_ranked WHERE median_rn IN ((median_n + 1) / 2, (median_n + 2) / 2) GROUP BY kind, risk_level, decider_group, decision) m ON m.kind = a.kind AND m.risk_level = a.risk_level AND m.decider_group = a.decider_group AND m.decision = a.decision ORDER BY a.approvals DESC, a.kind, a.decision",
+          "queryText": "SELECT a.kind, a.risk_level, a.decider_group, a.decision, a.approvals, m.median AS median_wait_ms, a.max_wait_ms FROM (SELECT coalesce(kind, '') AS kind, coalesce(risk_level, '') AS risk_level, coalesce(decider_group, '') AS decider_group, coalesce(decision, '') AS decision, count(*) AS approvals, max(wait_ms) AS max_wait_ms FROM approval_waits WHERE decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}' GROUP BY 1, 2, 3, 4) a LEFT JOIN (SELECT kind, risk_level, decider_group, decision, avg(wait_ms) AS median FROM (SELECT kind, risk_level, decider_group, decision, wait_ms, row_number() OVER (PARTITION BY kind, risk_level, decider_group, decision ORDER BY wait_ms) AS median_rn, count(*) OVER (PARTITION BY kind, risk_level, decider_group, decision) AS median_n FROM (SELECT coalesce(kind, '') AS kind, coalesce(risk_level, '') AS risk_level, coalesce(decider_group, '') AS decider_group, coalesce(decision, '') AS decision, wait_ms FROM approval_waits WHERE decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}') median_src WHERE wait_ms IS NOT NULL) median_ranked WHERE median_rn IN ((median_n + 1) / 2, (median_n + 2) / 2) GROUP BY kind, risk_level, decider_group, decision) m ON m.kind = a.kind AND m.risk_level = a.risk_level AND m.decider_group = a.decider_group AND m.decision = a.decision ORDER BY a.approvals DESC, a.kind, a.decision",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "median_wait_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "max_wait_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 17,
+      "type": "table",
+      "title": "Longest waits",
+      "description": "The decisions that waited longest. A run id opens the run view.",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "deskmates-obs"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 42
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "deskmates-obs"
+          },
+          "queryType": "table",
+          "rawQueryText": "SELECT decided_at, workspace_name, bot_name, kind, tool_name, decider_group, decision, decided_by, wait_ms, run_id FROM approval_waits WHERE wait_ms IS NOT NULL AND decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}' ORDER BY wait_ms DESC, decided_at DESC LIMIT 50",
+          "queryText": "SELECT decided_at, workspace_name, bot_name, kind, tool_name, decider_group, decision, decided_by, wait_ms, run_id FROM approval_waits WHERE wait_ms IS NOT NULL AND decided_at >= '${__from:date:iso}' AND decided_at < '${__to:date:iso}' ORDER BY wait_ms DESC, decided_at DESC LIMIT 50",
+          "timeColumns": [
+            "time"
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "wait_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this run",
+                    "url": "/d/deskmates-agent-runs/agent-runs?var-run=${__value.raw}&${__url_time_range}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ]
+}

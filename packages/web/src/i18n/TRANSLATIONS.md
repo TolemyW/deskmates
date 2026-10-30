@@ -5,6 +5,11 @@ with the code. The other four were written by the implementing agent on 2026-10-
 from the English text and the screens that use each key. **None has been reviewed by a native
 speaker yet.** Treat every one as machine-authored until a reviewer signs it off here.
 
+The English and Simplified Chinese operational copy was rewritten against the owner-approved
+product vocabulary on 2026-10-19. That rewrite is implementation work, not linguistic sign-off:
+`zh-CN` is still machine-authored and still requires an independent native-speaker review on the
+running UI. Do not describe it as reviewed until a named reviewer adds a Sign-off row below.
+
 | Locale | File | Author | Review state |
 |---|---|---|---|
 | English | `en.json` | Source text, written with the code | Source |
@@ -48,17 +53,22 @@ fragment of a locale together.
 | English | zh-CN | zh-TW | ja | es |
 |---|---|---|---|---|
 | workspace | 工作区 | 工作區 | ワークスペース | espacio de trabajo |
-| bot | 机器人 | 機器人 | ボット | bot |
-| thread | 会话 | 對話串 | スレッド | conversación |
+| Bot | Bot | 機器人 | ボット | bot |
+| SOUL | SOUL | SOUL | SOUL | SOUL |
+| chat | 聊天 | 對話 | チャット | chat |
 | task | 任务 | 任務 | タスク | tarea |
 | approval | 审批 | 核准 | 承認 | aprobación |
-| run | 运行 | 執行 | 実行 | ejecución |
+| work (ordinary UI); run (technical history/debugging only) | 工作；运行 | 工作；執行 | 作業；実行 | trabajo; ejecución |
+| Organization | 组织 | 組織 | 組織 | organización |
 | Owner / Admin / Member | 所有者 / 管理员 / 成员 | 擁有者 / 管理員 / 成員 | オーナー / 管理者 / メンバー | propietario / administrador / miembro |
 | sign in | 登录 | 登入 | サインイン | iniciar sesión |
 | settings | 设置 | 設定 | 設定 | configuración |
 | server | 服务器 | 伺服器 | サーバー | servidor |
-| Gateway | 网关 | 閘道 | ゲートウェイ | Gateway |
-| allowed domains | 允许的域名 | 允許的網域 | 許可ドメイン | dominios permitidos |
+| Allowed websites | 允许的网站 | 允許的網站 | 許可されたウェブサイト | sitios web permitidos |
+| Internal network | 内部网络 | 內部網路 | 内部ネットワーク | red interna |
+| AI model / thinking depth | AI 模型 / 思考深度 | AI 模型 / 思考深度 | AI モデル / 思考の深さ | modelo de IA / profundidad de razonamiento |
+| Another app | 外部应用 | 其他應用程式 | 別のアプリ | otra aplicación |
+| Repeats | 重复方式 | 重複方式 | 繰り返し | repetición |
 | take over / hand back | 接管 / 交还 | 接管 / 交還 | 操作を引き継ぐ / 操作を戻す | tomar el control / devolver el control |
 | side chat (a Member's own one-bot chat, ADR-0022 amendment 1) | 单独聊天 | 單獨聊天 | 個別チャット | chat aparte |
 
@@ -95,6 +105,13 @@ Keys added on 2026-10-12 for the approval card's tier labels (`approvalCard.suba
 `approvalCard.unclassified`, `approvalCard.unclassifiedWhy`; ADR-0002 amendment 3, A5) are
 machine-authored and pending native review.
 
+Keys added on 2026-10-18 for the bot editor's run statistics switch (`runStats.*` and
+`roles.action.bot.setRunStats`; ADR-0050) are machine-authored and pending native review.
+
+Keys added on 2026-10-19 for the workspace default bot (`botProfile.default*`,
+`botProfile.makeDefault*`, `contacts.row.default`, `firstRunChecklist.step.talkToAssistant` and
+`roles.action.workspace.setDefaultBot`; ADR-0051) are machine-authored and pending native review.
+
 ## What reviewers should know
 
 - Role sentences are assembled: `roles.note` ("Only {who} can {does}.") and `roles.nextAction.*`
@@ -110,6 +127,10 @@ machine-authored and pending native review.
 - Identifiers stay as they are in every locale: product names (Deskmates, WhatsApp, noVNC, Google
   Drive, PostgreSQL, Keycloak), file names (SOUL.md, MEMORY.md, SKILL.md), example paths
   and tool names in placeholders, cron expressions, UTC/USD/CSV/ID/API/URL/MCP/SSO.
+- Primary UI copy says server, Allowed websites and Internal network. Protocol terms such as
+  Gateway, proxy, bearer token, environment-variable names and raw cron expressions belong only
+  in a folded Details or Advanced section when a person needs them to diagnose or configure the
+  system.
 - Not in the catalogs, so always English: Gateway-authored system messages stored in
   `thread_messages` (approval requests, outcome and cap notices, handoff diagnostics), Gateway
   error messages, SOUL, guidance and anything the model reads.

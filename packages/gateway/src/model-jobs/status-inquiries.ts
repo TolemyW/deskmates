@@ -111,7 +111,7 @@ export class StatusInquiries {
         threadId: thread.id,
         // Never the interactive lane: a person's chat with the bot is not held by a Guest.
         lane: "background",
-        triggerKind: "cron",
+        triggerKind: "model_job",
         triggerRef: `${STATUS_INQUIRY}:${message.id}`,
         triggerPayload: { prompt: "" },
         config: {

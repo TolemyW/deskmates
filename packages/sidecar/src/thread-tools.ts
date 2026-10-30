@@ -16,6 +16,7 @@ import {
   browserCliWorkflowTool,
 } from "./browser-cli-workflow.js";
 import { connectorTools } from "./connector-tools.js";
+import { defaultBotTools } from "./default-bot-tools.js";
 import type { CreateSdkMcpServerFn, ToolFn } from "./deps.js";
 import type { GatewayClient } from "./gateway-client.js";
 import { integrationTools } from "./integration-tools.js";
@@ -23,12 +24,16 @@ import { knowledgeTools } from "./knowledge-tools.js";
 import type { EventSink } from "./ledger.js";
 import { memoryTools } from "./memory-tools.js";
 import type { OperationFiles } from "./operation-input.js";
+import type { ImageOutputs } from "./operation-output.js";
 import { operationTools } from "./operation-tools.js";
 import { describePosted } from "./posted-message.js";
 import { DESKMATES_MCP_SERVER } from "./risk-tier.js";
+import { runStatsTools } from "./run-stats-tool.js";
 import { taskTools } from "./task-tools.js";
 import { type TtySessions, ttySessionTool } from "./tty-session.js";
+import { type VaultToolsContext, vaultTools } from "./vault-tools.js";
 import { withholdingToolResults } from "./vision-withhold.js";
+import { webSearchTools } from "./web-search-tool.js";
 
 export interface ThreadToolsContext {
   request: StartRunRequest;
@@ -41,6 +46,10 @@ export interface ThreadToolsContext {
   createSdkMcpServer: CreateSdkMcpServerFn;
   /** How `image_describe` and `audio_transcribe` read files (ADR-0040); tests use a temp root. */
   operationFiles?: OperationFiles;
+  /** Where `image_generate` writes images (ADR-0040 amendment B); tests use a temp root. */
+  imageOutputs?: ImageOutputs;
+  /** ADR-0045: the run state the hook hands credential releases through, and the capture mark. */
+  vault?: VaultToolsContext;
 }
 
 const attachmentSchema = z.object({
@@ -164,7 +173,13 @@ export function createThreadTools(ctx: ThreadToolsContext): McpSdkServerConfigWi
                 ? ` (decided by ${typed.details.decidedBy})`
                 : "";
             const error = `${String(err)}${decidedBy}`;
-            const text = `The Gateway did not record the decision: ${error}`;
+            // Issue #89: a refused lead told its thread "approved". Unless someone else already
+            // decided it, the request is still pending, and the result says so.
+            const pending =
+              typed?.code === "invalid_transition"
+                ? ""
+                : " The request is unchanged and still waiting; do not report it as decided.";
+            const text = `The Gateway did not record the decision: ${error}.${pending}`;
             sink.emit("log", {
               source: "approval_decide",
               approvalId: args.approvalId,
@@ -194,6 +209,10 @@ export function createThreadTools(ctx: ThreadToolsContext): McpSdkServerConfigWi
   tools.push(...taskTools(ctx));
   tools.push(...appShareTools(ctx));
   tools.push(...operationTools(ctx));
+  tools.push(...runStatsTools(ctx));
+  tools.push(...defaultBotTools(ctx));
+  tools.push(...vaultTools(ctx));
+  tools.push(...webSearchTools(ctx));
   if (
     request.tools.includes("browser_cli_workflow") &&
     request.browserExecutionMode === "vision-cli-v2" &&

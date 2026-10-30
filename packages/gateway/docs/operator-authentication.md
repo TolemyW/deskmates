@@ -29,9 +29,12 @@ scripts). P1 serves exactly one tenant, the Default Tenant, which owns every wor
   (`scripts/gateway-dev-env.mjs`). Other commands: `create-user --role owner|admin|member`,
   `reset-password`, `disable-user`, `enable-user`, `revoke-sessions`, `list-users`, and
   `grant-maintainer` / `revoke-maintainer` for platform maintenance (never the last active
-  maintainer; `docs/runbooks/multi-tenant.md` section 2). Passwords are
-  read from stdin, hashed with Argon2id (`AUTH_ARGON2_*`, OWASP baseline by default) and never
-  logged. Until an account exists the UI says so and nobody can sign in.
+  maintainer; `docs/runbooks/multi-tenant.md` section 2). Passwords are read from stdin, hashed
+  with Argon2id (`AUTH_ARGON2_*`, OWASP baseline by default) and never logged. A password assigned
+  by `create-user` or `reset-password` is temporary: the account may only inspect or end its
+  session and change that password until the person replaces it. A password the person chooses
+  during invitation sign-up or `bootstrap-owner` does not trigger this gate. Until an account
+  exists the UI says so and nobody can sign in.
 - **Sessions.** `POST /auth/login` returns a 256-bit opaque token only as an HttpOnly,
   `SameSite=Lax`, `Path=/` cookie (`__Host-deskmates-session`, `Secure`); the database keeps its
   SHA-256. Sessions survive Gateway restarts and expire after 7 days unused or 30 days after

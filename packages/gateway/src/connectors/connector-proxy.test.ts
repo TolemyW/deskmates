@@ -36,13 +36,14 @@ const summary = (reply: string): RunSummary => ({
   reply,
 });
 
-async function stack() {
+async function stack(wrap?: (fetch: typeof globalThis.fetch) => typeof globalThis.fetch) {
   const fake = new FakeConnector({ baseUrl: CONNECTOR_URL, credential: CONNECTOR_CREDENTIAL });
   const h = await startHarness({ secretsKey: TEST_SECRETS_KEY }, undefined, {
-    connectorFetch: fake.fetch,
+    connectorFetch: wrap ? wrap(fake.fetch) : fake.fetch,
   });
   harnesses.push(h);
   const ws = await h.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+    defaultBot: false,
     name: "db",
     egressAllowlist: ["ops.example.test"],
   });
@@ -136,6 +137,7 @@ describe("the Gateway is the only caller of a connector", () => {
     const h = await startHarness({ secretsKey: TEST_SECRETS_KEY });
     harnesses.push(h);
     const workspace = await h.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+      defaultBot: false,
       name: "db-without-connection",
       egressAllowlist: ["ops.example.test"],
     });
@@ -175,6 +177,41 @@ describe("the Gateway is the only caller of a connector", () => {
     );
     expect(request.connectors).toEqual([]);
     expect(request.tools.some((tool) => tool.startsWith("connector_"))).toBe(false);
+  });
+
+  it("releases the body of a non-OK connector answer (#61 L12)", async () => {
+    let cancelled = 0;
+    const { h, bot } = await stack(() => async () => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("<html>Bad Gateway</html>"));
+        },
+        cancel() {
+          cancelled += 1;
+        },
+      });
+      return new Response(body, { status: 502, headers: { "content-type": "text/html" } });
+    });
+    const ctx = h.app.deskmates.ctx;
+    h.app.deskmates.scheduler.stop();
+    const run = ctx.runs.create({
+      botId: bot.id,
+      lane: "background",
+      triggerKind: "webhook",
+      triggerRef: "t",
+      triggerPayload: { body: "x" },
+      config: ctx.runConfig(),
+    });
+    const res = await fetch(`${h.baseUrl}/internal/runs/${run.id}/connectors/tickets/describe`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${ctx.tokens.issue(run.id).token}`,
+      },
+      body: "{}",
+    });
+    expect(await res.json()).toMatchObject({ code: "connector_unavailable" });
+    expect(cancelled).toBe(1);
   });
 
   it("confines a run token to its own run's connector routes and its own workspace", async () => {

@@ -3,7 +3,7 @@
 
 import { createHash } from "node:crypto";
 import path from "node:path";
-import type { ToolAction } from "@deskmates/contracts";
+import { ARGUMENT_TRUNCATION_MARKER, type ToolAction } from "@deskmates/contracts";
 import { browserToolCode, describeBrowserCode } from "./browser-code-effects.js";
 import {
   type TierOptions,
@@ -12,11 +12,12 @@ import {
   isBrowserTool,
   isNavigation,
   isShellTool,
+  isSubagentSpawn,
   shellBrowserCodeEffects,
   sideEffectPhrase,
   splitMcpToolName,
 } from "./risk-tier.js";
-import { basename, shellArgvs, unwrapArgv } from "./shell-words.js";
+import { basename, hasExpandedCommandWord, shellArgvs, unwrapArgv } from "./shell-words.js";
 
 const URL_KEYS = ["url", "uri", "href"] as const;
 const PATH_KEYS = ["file_path", "path", "notebook_path"] as const;
@@ -37,11 +38,15 @@ function isFetcherWord(word: string): boolean {
 
 /**
  * Whether the command resolves a fetcher at run time (`$(which curl) ...`, `x=$(command -v wget)`)
- * so the literal URLs in it cannot be trusted to describe what runs.
+ * or runs a program whose name is expanded at run time (`$c ...`, `${c} ...`;
+ * `hasExpandedCommandWord`), so the literal URLs in it cannot be trusted to describe what runs.
+ * A script run from a file or stdin (`bash s.sh`, `... | sh`, `source f`) is not counted: it is
+ * L2 in the risk tier and goes to the approval path, not to an egress denial.
  */
 function hasOpaqueFetcher(command: string): boolean {
   if (FETCHER_IN_SUBSTITUTION.test(command)) return true;
   return shellArgvs(command).some((argv) => {
+    if (hasExpandedCommandWord(argv)) return true;
     const head = basename(argv[0] ?? "");
     const rest = argv.slice(1);
     if (RESOLVERS.has(head)) return rest.some(isFetcherWord);
@@ -61,7 +66,9 @@ function hasOpaqueFetcher(command: string): boolean {
  * `bash -c "curl ..."` and `ls&&curl` are all seen. Any argv word whose basename is curl or wget
  * counts, not only the first: an unknown wrapper cannot hide the fetcher, at the price of
  * denying the odd harmless `grep curl file` (no URL to check). A fetcher named inside a
- * substitution (`$(which curl)`) counts too; see `shellHosts` for what it reports.
+ * substitution (`$(which curl)`) counts too, and so does a program word expanded at run time
+ * (`$c https://…`, `bash -lc "$x"`), which may be a fetcher nobody can see; see `shellHosts` for
+ * what it reports.
  */
 export function isShellFetch(command: string): boolean {
   return shellArgvs(command).some((argv) => argv.some(isFetcherWord)) || hasOpaqueFetcher(command);
@@ -168,7 +175,7 @@ function collapse(text: string): string {
 function truncateSummary(text: string): string {
   return text.length <= ARGUMENT_SUMMARY_MAX_CHARS
     ? text
-    : `${text.slice(0, ARGUMENT_SUMMARY_MAX_CHARS - 1)}…`;
+    : `${text.slice(0, ARGUMENT_SUMMARY_MAX_CHARS - 1)}${ARGUMENT_TRUNCATION_MARKER}`;
 }
 
 function stringInput(input: Record<string, unknown>, ...keys: string[]): string | undefined {
@@ -240,6 +247,13 @@ export function toToolAction(
     describeArguments(toolName, input, action.filePath);
   if (summary !== undefined && summary !== "") action.argumentSummary = truncateSummary(summary);
   if (pattern !== undefined) action.argumentPattern = pattern;
+  // ADR-0002 amendment 3, A6: with no pattern, path or origin there is no stable target to build
+  // an Always rule from, and the summary of a free-text input is not one (it may be truncated).
+  // The input's hash is: a rule bound to it matches this exact input again and nothing else.
+  if (pattern === undefined && action.filePath === undefined && action.targetOrigin === undefined)
+    action.inputSha256 = createHash("sha256")
+      .update(JSON.stringify(input) ?? "")
+      .digest("hex");
   return action;
 }
 
@@ -314,6 +328,13 @@ function describeArguments(
         ...(phrase === undefined ? {} : { pattern: `*${phrase}*` }),
       };
     }
+  }
+  if (isSubagentSpawn(toolName)) {
+    // A6: a spawn's stable target is its subagent type; its description and prompt are free
+    // text that changes every time. An absent type is the SDK's default, kept apart by name.
+    const type = collapse(stringInput(input, "subagent_type") ?? "default").replace(/\*/g, "");
+    const description = collapse(stringInput(input, "description", "prompt") ?? "");
+    return { summary: `agent ${type}: ${description}`, pattern: `agent ${type}: *` };
   }
   if (filePath !== undefined) return { summary: path.posix.resolve(WORK_DIR, filePath) };
   return { summary: collapse(JSON.stringify(input) ?? "") };

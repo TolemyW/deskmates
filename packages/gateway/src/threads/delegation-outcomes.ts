@@ -291,6 +291,8 @@ interface NoticeFacts {
   delegated: string;
   /** The run's last message in the delegation's thread was an answer, not a further hand-on. */
   answered: boolean;
+  /** The run ended with a non-empty final reply (rather than answering only through a post). */
+  finalReply: boolean;
   /** Seq of that answer where the reader can see it; undefined in another thread. */
   replySeq: number | undefined;
   /** The run's last message handed the work to another member instead of answering. */
@@ -311,10 +313,12 @@ function renderNotice(facts: NoticeFacts): string {
     case "succeeded":
     case "silent":
       if (facts.answered) {
-        // `silent` is an empty final reply. A delegate that answered through `thread_post` and
-        // then ended with nothing to add did reply; telling the delegator otherwise sends it
-        // looking for a failure that did not happen (seen on a real model, 2026-09-30).
-        return facts.status === "succeeded"
+        // A delegate that answered through `thread_post` and then ended with nothing to add did
+        // reply; telling the delegator otherwise sends it looking for a failure that did not
+        // happen (seen on a real model, 2026-09-30). Since 2026-10-17 such a run is recorded
+        // `succeeded` (ADR-0005, "Definition of `silent`"); the wording still follows whether it
+        // had a final reply, so the delegator reads what it read before.
+        return facts.finalReply
           ? `${head} finished the work ${facts.delegated} (succeeded).${where}`
           : `${head} finished the work ${facts.delegated}.${where}`;
       }
@@ -410,6 +414,7 @@ function announceWork(
     delegate,
     status: run.status,
     answered: reply !== undefined,
+    finalReply: run.summary ? run.summary.reply.trim() !== "" : run.status === "succeeded",
     handedOn,
     handedOnSeq: handedOn ? last?.seq : undefined,
     error: run.error === undefined ? undefined : bounded(run.error, OUTCOME_ERROR_MAX_CHARS),

@@ -5,17 +5,33 @@ one-line role, written instructions, memory, a model and optional schedules. Eac
 woken (a message, a schedule, an approval answer, another bot's mention) it does one run on the
 workspace's shared computer.
 
-Where you find it: **Contacts** in the sidebar lists the bots of the current workspace, the way a
-messaging app lists people, with what each one is doing now. A contact opens its private chat or
-its profile.
+Where you find it: **Bots** in the sidebar lists the bots of the current workspace, the way a
+messaging app lists people, with what each one is doing now. The workspace's default bot is listed
+first with a **Default** badge. A bot opens its private chat or its profile.
 
 ## Create a bot
 
-Admins and Owners press **New contact** in Contacts. Give it a handle (letters, digits, `_`, `-`),
-a role such as "Reads dashboards and reports KPI changes", and optionally an avatar. Then open its
-profile and write its instructions. Members see who can do this instead of the button. Everything
-but the workspace can be changed later
+The easiest way is to ask the workspace's assistant (its default bot) in its chat: describe the
+work, answer its few questions, and it creates and configures the teammate; see
+[Getting started](getting-started.md#your-assistant-and-first-teammates).
+
+Admins and Owners can also press **New Bot** in Bots. Give it a handle (letters, digits, `_`,
+`-`), a role such as "Reads dashboards and reports KPI changes", and optionally an avatar. Then
+open its profile and write its instructions. Members see who can do this instead of the button.
+Everything but the workspace can be changed later
 ([ADR-0043](../adr/0043-bot-editable-after-creation.md)).
+
+## The default bot
+
+Each workspace has at most one default bot. A new workspace comes with one named `assistant`; a
+workspace created before default bots existed has none until an Owner or Admin presses **Make
+default** on a bot's profile. Only the default bot's runs can create bots, change another bot's
+role, instructions and schedules, and open group chats, and each change is posted in its chat and
+audited. It never changes itself, and never a bot's model, connectors, approval rules, Vault
+access, name or pause. A new chat-channel connection that names no bot goes to the default bot.
+Moving the default bot to Trash leaves the workspace without one; restoring it does not make it
+the default again. Being the default bot is a routing and tooling fact, not a permission: it
+shares the computer, files and logins like every other bot.
 
 ## The profile
 
@@ -32,7 +48,8 @@ A bot's profile has four tabs.
   **Needs your confirmation** until a person confirms it. You can edit, forget and undo entries.
 - **Your notes**: the bot's `MEMORY.md`, a plain file Admins and Owners edit, with its saved
   versions, and the bot's diary (below).
-- **Settings**: profile and pause, instructions, model, schedules, approval rules and **Try it**.
+- **Settings**: profile and pause, instructions, model, schedules, **Apps this Bot may use**,
+  approval rules and **Try it**.
 
 ## Profile and pause
 
@@ -101,6 +118,21 @@ is only deleted if the day has not changed since you opened it, and not while th
 because the run's end writes to today's file. The diary lives on the workspace's computer, so it
 cannot be shown while the workspace is stopped.
 
+## Apps this Bot may use
+
+Settings has **Apps this Bot may use** when the installation has an integration service. **All
+connected apps**, the default, lets the bot use every app the workspace has connected, including
+ones connected later. **Only these apps** limits it to the apps you tick; an enabled app not
+connected yet can be ticked in advance, and ticking none means the bot is offered no app at all.
+**Save apps** applies from the bot's next run. An Owner or Admin changes it; Members see it
+read-only. The default bot cannot change it for any bot.
+
+A limited bot is not offered the other apps, and the Gateway refuses its calls to them before
+anything reaches the app. This limits what the bot can do itself. It is not a wall between bots: a
+teammate that may use the app can still be asked to act, and what it reads lands on the shared
+computer. An account that must stay separate belongs in another workspace. Connections › Apps
+shows, for each app in use, how many bots may use it.
+
 ## Approval rules
 
 Settings lists the bot's stored rules (Always allow or Deny for a tool, optionally narrowed to a
@@ -133,7 +165,7 @@ The first pack contains:
 The release build scans every Starter Skill and refuses a missing manifest entry or changed hash.
 The same pack is copied into the workspace image for offline operation, while the Gateway sends the
 exact recorded set to each run. Starter Skills never contain account credentials. When a procedure
-needs an external account, connect it under **Integrations**; the Skill uses the resulting action or
+needs an external account, connect it under **Connections → Apps**; the Skill uses the resulting action or
 stops with setup guidance.
 
 The second section contains workspace-created or third-party Skills. It lists their stage, the bots

@@ -11,6 +11,7 @@ import {
   LOOP_BREAKER_RELAY_MAX,
   LOOP_BREAKER_REPEATS,
   TURN_BUDGET_DEFAULT,
+  TURN_BUDGET_RESET_MINUTES_DEFAULT,
   WORKSPACE_LIMIT_KEYS,
   WORKSPACE_LIMIT_RANGES,
   WORKSPACE_LIMIT_SWITCH_KEYS,
@@ -46,6 +47,11 @@ export interface ThreadCaps {
   relayCountMax: EffectiveLimit;
   /** Decision 40: whether the 300-message volume rule is armed (the `volumeBreaker` switch). */
   volumeBreaker: boolean;
+  /**
+   * ADR-0005 amendment 3, rewritten decision 22: minutes after which a turn-budget pause of this
+   * thread ends by itself.
+   */
+  budgetResetMinutes: number;
 }
 
 /** The frozen run limits of ADR-0016 amendment 2, decision 16. */
@@ -279,6 +285,8 @@ export class WorkspaceLimitStore {
       turnBudget,
       relayCountMax: effective.relayCountMax,
       volumeBreaker: switches.volumeBreaker,
+      budgetResetMinutes:
+        effective.turnBudgetResetMinutes.value ?? TURN_BUDGET_RESET_MINUTES_DEFAULT,
     };
   }
 

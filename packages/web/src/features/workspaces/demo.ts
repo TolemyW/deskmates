@@ -87,6 +87,19 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
       String(b.name ?? "workspace"),
       (b.egressAllowlist as string[]) ?? ["*"],
     );
+    // ADR-0051 decision 2: a new workspace comes with its default bot.
+    if (b.defaultBot !== false) {
+      const assistant = s.addBot(
+        "assistant",
+        "Workspace assistant",
+        workspace.id,
+        "# Assistant\n\nYou are the assistant of this workspace. Get the person's work done, mostly by making sure the right teammate does it.",
+      );
+      workspace.defaultBotId = assistant.id;
+      const privateChat = s.addThread(workspace.id, [assistant.id], "", "chat");
+      s.privateChats.set(assistant.id, privateChat.id);
+      return created({ workspace, defaultBot: assistant, privateChat });
+    }
     return created({ workspace });
   }
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
@@ -122,6 +135,8 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
           }
         : null,
       takeoverScreen: false,
+      // The scripted team works as if its container were up (issue #15).
+      container: "present",
       capacity: { activeAttempts: s.active().length, waitingRunIds: [] },
     });
   }

@@ -1,0 +1,68 @@
+{
+  "id": "desktop-visual-save-v1",
+  "status": "prepared",
+  "decision": "ADR-0048 decision 13",
+  "authorisedBy": "owner ruling 8 on issue deskmates-private#7, 2026-10-17: zero cost on the installation's local vision service (ADR-0040), independent oracles, full token accounting, no paid model",
+  "notRunReason": "needs the locally built desktop variant, the GTK fixture application and the installation's local vision service; none is available where this was written",
+  "cost": {
+    "upstream": "the installation's local vision service of ADR-0040, reached through MODEL_UPSTREAMS",
+    "priceUsdPerMillionTokens": { "input": 0, "output": 0, "cacheRead": 0, "cacheCreate": 0 },
+    "paidModelsAllowed": false,
+    "pricingMustBeKnown": true
+  },
+  "configuration": {
+    "desktopTools": "lcu-v1",
+    "image": "deskmates/workspace-desktop:<arch>-<hash12>, built locally by scripts/build-workspace-desktop-image.sh",
+    "visionPolicy": "deliver",
+    "approvalMode": "manual",
+    "model": "the local vision model named in the installation's MODEL_UPSTREAMS and priced with an all-zero MODEL_PRICES row; this file names no model id",
+    "knobsRecordedIn": "runs.config_json (desktopTools, desktopLcuVersion, desktopAppVersion, model, modelUpstreams, visionPolicy)"
+  },
+  "fixture": {
+    "application": "the GTK 3 text-editor fixture of the 2026-10-13 spike, started by the harness before the run, never by the bot",
+    "windowTitle": "Deskmates desktop fixture",
+    "codeImage": "a second fixture window shows a six-character code drawn as an image only: it has no accessibility text, so the code can be read only from a screenshot",
+    "codeAlphabet": "ACDEFHJKMNPRTUVWXY34679",
+    "codeLength": 6,
+    "savePath": "/work/desktop-eval/out.txt",
+    "resetBeforeEachRun": [
+      "remove /work/desktop-eval/out.txt",
+      "draw a fresh random code",
+      "restart both fixture windows"
+    ]
+  },
+  "prompt": "On this workspace's desktop there is a window titled \"Deskmates desktop fixture\" with a text editor, and a second window that shows a six-character code as a picture. Read the code from a screenshot, type exactly that code into the editor followed by a newline, and save the file with the editor's Save button. Use the desktop tools only. Reply with the code you typed.",
+  "oracles": [
+    {
+      "id": "file-bytes",
+      "kind": "independent",
+      "check": "the harness reads /work/desktop-eval/out.txt from the container with docker exec after the run; its bytes equal the drawn code plus one LF exactly (SHA-256 compared)"
+    },
+    {
+      "id": "saved-state",
+      "kind": "independent",
+      "check": "the harness reads the fixture window's AT-SPI state outside the run: no unsaved-changes marker in the title and the status label reads Saved"
+    },
+    {
+      "id": "used-screenshot",
+      "kind": "ledger",
+      "check": "at least one mcp__desktop__js tool_call before the first input carries the capture label, and the run made no shell call refused as desktop_shell_refused"
+    },
+    {
+      "id": "accounting",
+      "kind": "ledger",
+      "check": "every model in the run's usage has input and output token counts, cost_usd is a known 0 for each, and no pricing_missing event exists"
+    }
+  ],
+  "success": "file-bytes and saved-state pass; used-screenshot and accounting are validity conditions: a run failing either is excluded and reported, never counted as a success or a failure",
+  "repeats": 5,
+  "report": {
+    "metrics": [
+      "success rate with a Wilson 95% interval",
+      "input, output and cache-read tokens per task",
+      "model turns per task",
+      "desktop calls per task and their effect labels"
+    ],
+    "claim": "none about planning from screenshots until this has run; a single run is not evidence"
+  }
+}

@@ -1,0 +1,44 @@
+/* Desktop tools section of the workspace detail (ADR-0048). */
+
+.desktop-tools-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.desktop-tools-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.desktop-tools-list dt {
+  color: var(--muted, inherit);
+}
+
+.desktop-tools-list dd {
+  margin: 0;
+}
+
+.desktop-tools-warning {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--app-warning);
+  background: var(--app-warning-soft);
+  color: var(--warning-text);
+}
+
+.desktop-tools-bots {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 0;
+  border: 0;
+}
+
+.desktop-tools-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

@@ -565,3 +565,79 @@ if (!globalThis.CSS?.escape) {
       Array.from(value, (char) => `\\${char.codePointAt(0)?.toString(16)} `).join(""),
   };
 }
+
+it("hides old results while a new search loads and allows retry after failure", async () => {
+  const { api, typed } = fakeApi({ entries: [entry({ id: "old", body: "Old result" })] });
+  let fail: (error: Error) => void = () => {};
+  api.searchLearnedMemoryPage.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      }),
+  );
+  render(<ObservationsPanel api={typed} workspaceId={WS} />);
+  expect(await screen.findByText("Old result")).toBeVisible();
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "new query" } });
+  expect(await screen.findByText("Loading observations…")).toBeVisible();
+  expect(screen.queryByText("Old result")).not.toBeInTheDocument();
+  await act(async () => fail(new Error("Search unavailable")));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Search unavailable");
+  api.searchLearnedMemoryPage.mockResolvedValue({
+    entries: [entry({ id: "new", body: "New result" })],
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Retry observations" }));
+  expect(await screen.findByText("New result")).toBeVisible();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("keeps an observation draft stable during save and editable after failure", async () => {
+  const { typed, api } = fakeApi();
+  let rejectSave!: (error: Error) => void;
+  api.editMemoryEntry.mockImplementationOnce(
+    () =>
+      new Promise((_, reject) => {
+        rejectSave = reject;
+      }),
+  );
+  renderPanel(typed);
+  const [fact] = await rows();
+  fireEvent.click(
+    within(fact as HTMLElement).getByRole("button", { name: /More actions for S3 price JSON/ }),
+  );
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+  const detail = await screen.findByRole("complementary", { name: "Observation details" });
+  const draft = within(detail).getByLabelText("Edit mem_fact");
+  fireEvent.change(draft, { target: { value: "Keep my revised observation" } });
+  fireEvent.click(within(detail).getByRole("button", { name: "Save" }));
+  expect(draft).toBeDisabled();
+  expect(within(detail).getByRole("button", { name: "Cancel" })).toBeDisabled();
+  expect(within(detail).getByRole("button", { name: "Close details" })).toBeDisabled();
+  await act(async () => rejectSave(new Error("Could not save")));
+  expect(draft).toHaveValue("Keep my revised observation");
+  expect(draft).not.toBeDisabled();
+  expect(within(detail).getByRole("button", { name: "Cancel" })).not.toBeDisabled();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not save");
+});
+
+it("ignores a failed history request after its detail is closed", async () => {
+  const { typed, api } = fakeApi();
+  let rejectRead!: (error: Error) => void;
+  api.listMemoryVersionsPage.mockImplementationOnce(
+    () =>
+      new Promise((_, reject) => {
+        rejectRead = reject;
+      }),
+  );
+  renderPanel(typed);
+  const [fact] = await rows();
+  fireEvent.click(
+    within(fact as HTMLElement).getByRole("button", { name: /More actions for S3 price JSON/ }),
+  );
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Versions" }));
+  const detail = await screen.findByRole("complementary", { name: "Observation details" });
+  expect(within(detail).getByRole("status")).toHaveTextContent("Loading");
+  fireEvent.click(within(detail).getByRole("button", { name: "Close details" }));
+  await act(async () => rejectRead(new Error("Old history failed")));
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.queryByRole("complementary", { name: "Observation details" })).toBeNull();
+});

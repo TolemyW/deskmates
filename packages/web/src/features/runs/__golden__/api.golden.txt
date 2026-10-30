@@ -677,7 +677,7 @@
   "listRuns": {
     "requests": [
       {
-        "url": "https://gw.test/api/runs?threadId=thr%2F1&phase=finished&cursor=c%2F1&limit=20&status=failed%2Ccancelled&lane=background&since=2026-10-01T00%3A00%3A00.000Z&until=2026-10-08T00%3A00%3A00.000Z&failureClass=model_unavailable&q=no+worker",
+        "url": "https://gw.test/api/runs?threadId=thr%2F1&phase=finished&cursor=c%2F1&limit=20&status=failed%2Ccancelled&lane=background&triggerKind=model_job&since=2026-10-01T00%3A00%3A00.000Z&until=2026-10-08T00%3A00%3A00.000Z&failureClass=model_unavailable&q=no+worker",
         "method": "GET",
         "headers": {
           "accept": "application/json",
@@ -728,7 +728,7 @@
       "rejected": {
         "error": "ApiError",
         "code": "unauthorized",
-        "message": "GET /api/runs?threadId=thr%2F1&phase=finished&cursor=c%2F1&limit=20&status=failed%2Ccancelled&lane=background&since=2026-10-01T00%3A00%3A00.000Z&until=2026-10-08T00%3A00%3A00.000Z&failureClass=model_unavailable&q=no+worker failed with 401",
+        "message": "GET /api/runs?threadId=thr%2F1&phase=finished&cursor=c%2F1&limit=20&status=failed%2Ccancelled&lane=background&triggerKind=model_job&since=2026-10-01T00%3A00%3A00.000Z&until=2026-10-08T00%3A00%3A00.000Z&failureClass=model_unavailable&q=no+worker failed with 401",
         "status": 401,
         "details": {}
       },
@@ -812,6 +812,52 @@
         "error": "ApiError",
         "code": "unauthorized",
         "message": "GET /api/runs/memory-index?workspaceId=ws%2F1 failed with 401",
+        "status": 401,
+        "details": {}
+      },
+      "notified": 1
+    },
+    "error": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "conflict",
+        "message": "Changed",
+        "status": 409,
+        "details": {
+          "version": 9
+        }
+      },
+      "notified": 0
+    }
+  },
+  "resumePlatformRuns": {
+    "requests": [
+      {
+        "url": "https://gw.test/api/runtime/platform-resume",
+        "method": "POST",
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "x-deskmates-csrf": "csrf-1",
+          "x-deskmates-tenant": "tn/1"
+        },
+        "body": {
+          "runIds": [
+            "run/1"
+          ]
+        },
+        "credentials": "same-origin",
+        "signal": false
+      }
+    ],
+    "ok": {
+      "resolved": "<undefined>"
+    },
+    "unauthorized": {
+      "rejected": {
+        "error": "ApiError",
+        "code": "unauthorized",
+        "message": "POST /api/runtime/platform-resume failed with 401",
         "status": 401,
         "details": {}
       },

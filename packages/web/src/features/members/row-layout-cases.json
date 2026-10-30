@@ -1,0 +1,15 @@
+[
+  {
+    "id": "main",
+    "route": "#/members"
+  },
+  {
+    "id": "edit-form",
+    "route": "#/members",
+    "steps": [
+      {
+        "name": "Create account"
+      }
+    ]
+  }
+]

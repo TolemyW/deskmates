@@ -621,6 +621,13 @@ export class AuthService {
     targetUserId: string,
     change: { role?: TenantRole; status?: "active" | "removed"; workspaceId?: string },
   ): void {
+    // A role change is checked and applied in one workspace, a removal from the tenant takes
+    // other checks; one request that carries both would be checked as the first and applied as
+    // the second (ADR-0022 amendment 6 W3, W4, W9).
+    if (change.role !== undefined && change.status !== undefined)
+      throw new DeskmatesError("validation", "change a role or a status, not both", {
+        reason: "role_and_status",
+      });
     const target = this.users.getMembership(tenantId, targetUserId);
     if (!target) throw new DeskmatesError("not_found", "Not found");
     if (this.users.isProtected(targetUserId) && (change.role !== undefined || change.status))
@@ -848,6 +855,7 @@ export class AuthService {
           tenantId,
           role,
           workspaceId: input.workspaceId,
+          mustChangePassword: true,
         });
       })
       .immediate();
@@ -942,6 +950,8 @@ export class AuthService {
      * test fixtures that stand in for an installation's first account. Refused when one exists.
      */
     protectedRoot?: boolean;
+    /** The maintenance CLI chose this password for somebody else. */
+    mustChangePassword?: boolean;
   }): Promise<User> {
     const problem = passwordProblem(input.password, this.config.passwordMinLength);
     if (problem) throw new DeskmatesError("validation", problem);
@@ -954,6 +964,7 @@ export class AuthService {
       role: input.role,
       ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
       ...(input.protectedRoot ? { protectedRoot: true } : {}),
+      ...(input.mustChangePassword ? { mustChangePassword: true } : {}),
     }).user;
   }
 
@@ -962,7 +973,7 @@ export class AuthService {
     const login = this.mustFindLocal(rawLoginName);
     const problem = passwordProblem(password, this.config.passwordMinLength);
     if (problem) throw new DeskmatesError("validation", problem);
-    this.users.setPasswordHash(login.id, await this.hasher.hash(password));
+    this.users.setPasswordHash(login.id, await this.hasher.hash(password), "administrator");
     const revoked = this.sessions.revokeAllForUser(login.userId, "password_changed");
     this.live.closeSessions(revoked);
     return revoked.length;

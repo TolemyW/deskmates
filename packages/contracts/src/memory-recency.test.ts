@@ -2,7 +2,12 @@
 // deterministic functions. Same key = same fact; the value is the numbers and the polarity.
 
 import { describe, expect, it } from "vitest";
-import { compareRecency, memoryEffectiveTime, memoryFact } from "./memory-recency.js";
+import {
+  compareRecency,
+  memoryEffectiveTime,
+  memoryFact,
+  memoryValuesEquivalent,
+} from "./memory-recency.js";
 
 describe("memoryFact (A7)", () => {
   const same: [string, string, string][] = [
@@ -51,6 +56,36 @@ describe("memoryFact (A7)", () => {
 
   it("has no key for a body without content words", () => {
     expect(memoryFact("It is 42.").key).toBeUndefined();
+  });
+});
+
+describe("multi-number value consolidation (ADR-0054)", () => {
+  it.each([
+    ["Current quota is 300, replacing 280.", "Current quota is 280, replacing 300."],
+    ["项目当前目标为300单，替代原280单。", "项目当前目标为280单，替代原300单。"],
+    ["Seats cost 20; rooms cost 30.", "Rooms cost 20; seats cost 30."],
+    ["Quota page lists 20 seats and 20 rooms.", "Quota page lists 20 rooms and 20 seats."],
+    ["The quota lists 20 seats and 20 rooms.", "The quota lists 20 seats and rooms."],
+  ])("does not merge numeric roles in %s", (a, b) => {
+    expect(memoryFact(a)).toEqual(memoryFact(b));
+    expect(memoryValuesEquivalent(a, b)).toBe(false);
+    expect(memoryValuesEquivalent(b, a)).toBe(false);
+  });
+
+  it.each([
+    ["Current quota is 300, replacing 280.", "  Current  quota is ３００, replacing ２８０！ "],
+    ["The quota lists 40 seats.", "40 seats the quota lists"],
+    ["The export button is under Reports.", "Under Reports is the export button"],
+    ["In version 2 the quota lists 40 seats.", "The quota lists 40 seats in version 2"],
+    ["As of 2026-10-22 the quota lists 40 seats.", "As of 2026-10-23 the quota lists 40 seats"],
+  ])("keeps normalized copies or a single value equivalent: %s", (a, b) => {
+    expect(memoryFact(a)).toEqual(memoryFact(b));
+    expect(memoryValuesEquivalent(a, b)).toBe(true);
+  });
+
+  it("still distinguishes changed single numbers and polarity", () => {
+    expect(memoryValuesEquivalent("Quota is 40.", "Quota is 50.")).toBe(false);
+    expect(memoryValuesEquivalent("Export is available.", "Export is not available.")).toBe(false);
   });
 });
 

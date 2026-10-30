@@ -20,9 +20,9 @@ functions it replaced (`KnowledgeStore.search` / `searchPage`, `searchMemory` /
 On Testbox with the GPU-host services (owner decisions 2026-10-14, item 9):
 
 ```
-EMBEDDING_URL=http://10.20.50.16:11434/api/embed
+EMBEDDING_URL=http://10.0.0.5:11434/api/embed
 EMBEDDING_MODEL=BAAI/bge-m3:latest
-RERANK_URL=http://10.20.50.16:8899/rerank
+RERANK_URL=http://10.0.0.5:8899/rerank
 RERANK_MODEL=bge-reranker-v2-m3
 ```
 

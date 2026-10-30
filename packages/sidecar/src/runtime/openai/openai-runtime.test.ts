@@ -3,10 +3,12 @@
 // SDK's `createSdkMcpServer` and `tool` build the in-process `deskmates` MCP server the runtime
 // attaches; they start no CLI and call no model.
 
+import { createHash } from "node:crypto";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
+import { canonicalJson } from "@deskmates/contracts";
 import type {
   ApprovalId,
   BotId,
@@ -61,7 +63,9 @@ function baseRequest(overrides: Partial<StartRunRequest> = {}): StartRunRequest 
     runId: "run-1" as RunId,
     botId: "bot-nova" as BotId,
     botName: "nova",
+    botRole: "ops bot",
     workspaceId: "ws-1" as WorkspaceId,
+    workspaceName: "Ops",
     threadId: "thread-1" as ThreadId,
     botHomeDir: home,
     attempt: 1,
@@ -237,6 +241,8 @@ describe("openai-agents runtime: the loop", () => {
 
 describe("openai-agents runtime: L2 approvals through the one hook (ADR-0044 decisions 2 and 3)", () => {
   const push = { name: "Bash", arguments: { command: "git push origin main" } };
+  /** The stable dimensions the Gateway sends back with the decision (`deferredActionOf`). */
+  const pushAction = { toolName: "Bash", argumentPattern: "git push*" };
 
   it("an immediate deny from the Gateway becomes the tool's error result and the run completes", async () => {
     const { gateway, deps } = await makeDeps([
@@ -291,6 +297,8 @@ describe("openai-agents runtime: L2 approvals through the one hook (ADR-0044 dec
           approvalId: first.pendingApprovalId as ApprovalId,
           decision: "allow_once",
           toolUseId: first.pendingToolUseId as string,
+          deferredAction: pushAction,
+          approvalKind: "tool",
         },
       }),
     );
@@ -332,6 +340,8 @@ describe("openai-agents runtime: L2 approvals through the one hook (ADR-0044 dec
           approvalId: first.pendingApprovalId as ApprovalId,
           decision: "deny",
           toolUseId: first.pendingToolUseId as string,
+          deferredAction: pushAction,
+          approvalKind: "tool",
         },
       }),
     );
@@ -339,5 +349,155 @@ describe("openai-agents runtime: L2 approvals through the one hook (ADR-0044 dec
     expect(gateway.approvals).toHaveLength(1);
     const toolMessage = toolMessages(1).find((m) => m.role === "tool");
     expect(String(toolMessage?.content)).toMatch(/Denied by human/);
+  });
+  it("two parked calls of one turn: the decided one is judged first and every approval is reported (issue #62 M8)", async () => {
+    const main = { id: "call_a", name: "Bash", arguments: { command: "git push origin main" } };
+    const release = {
+      id: "call_b",
+      name: "Bash",
+      arguments: { command: "git push origin release" },
+    };
+    const { gateway, deps } = await makeDeps(
+      [{ toolCalls: [main, release] }, { text: summaryBlock("Pushed.") }],
+      { approvalResponder: () => "pending" },
+    );
+    const first = await run(deps, baseRequest({ shortWaitSeconds: 1 }));
+
+    expect(first.outcome).toBe("deferred");
+    expect(gateway.approvals.map((a) => a.toolUseId).sort()).toEqual(["call_a", "call_b"]);
+    // Both parked approvals reach the Gateway, not only the last one.
+    expect([...(first.pendingApprovalIds ?? [])].sort()).toEqual(
+      gateway.approvals.map((a) => a.approvalId).sort(),
+    );
+    expect(first.pendingApprovalIds).toContain(first.pendingApprovalId);
+
+    // The human decides the second call of the turn; the SDK lists the first one first.
+    const decided = gateway.approvals.find((a) => a.toolUseId === "call_b");
+    const second = await run(
+      deps,
+      baseRequest({
+        runId: "run-2" as RunId,
+        sdkSessionId: first.sdkSessionId ?? "",
+        shortWaitSeconds: 1,
+        pendingApprovals: gateway.approvals
+          .filter((a) => a.toolUseId === "call_a")
+          .map((a) => ({
+            approvalId: a.approvalId,
+            toolUseId: a.toolUseId as string,
+            kind: "tool",
+            actionFingerprint: createHash("sha256").update(canonicalJson(a.action)).digest("hex"),
+          })),
+        trigger: {
+          kind: "approval",
+          approvalId: decided?.approvalId as ApprovalId,
+          decision: "allow_once",
+          toolUseId: "call_b",
+          deferredAction: pushAction,
+          approvalKind: "tool",
+        },
+      }),
+    );
+
+    // The undecided call polls the same card instead of creating another one.
+    const resumed = gateway.events.filter(
+      (e) => e.kind === "approval" && e.payload.phase === "resumed",
+    );
+    expect(resumed.map((e) => e.payload)).toEqual([
+      expect.objectContaining({
+        consumedBy: "replay",
+        toolUseId: "call_b",
+        approvalId: decided?.approvalId,
+      }),
+    ]);
+    expect(gateway.approvals.filter((a) => a.toolUseId === "call_b")).toHaveLength(1);
+    expect(gateway.approvals.filter((a) => a.toolUseId === "call_a")).toHaveLength(2);
+    expect(
+      new Set(gateway.approvals.filter((a) => a.toolUseId === "call_a").map((a) => a.approvalId))
+        .size,
+    ).toBe(1);
+    expect(second.outcome).toBe("deferred");
+    expect(second.pendingToolUseId).toBe("call_a");
+  });
+
+  /** Parks one turn on two pushes and returns what the resume needs (issue #62 M8). */
+  async function parkTwoPushes() {
+    const main = { id: "call_a", name: "Bash", arguments: { command: "git push origin main" } };
+    const release = {
+      id: "call_b",
+      name: "Bash",
+      arguments: { command: "git push origin release" },
+    };
+    const made = await makeDeps(
+      [{ toolCalls: [main, release] }, { text: summaryBlock("Pushed.") }],
+      { approvalResponder: () => "pending" },
+    );
+    const first = await run(made.deps, baseRequest({ shortWaitSeconds: 1 }));
+    expect(first.outcome).toBe("deferred");
+    const approvalOf = (toolUseId: string) =>
+      made.gateway.approvals.find((a) => a.toolUseId === toolUseId)?.approvalId as ApprovalId;
+    const decision = (toolUseId: string, decision: "allow_once" | "deny" = "allow_once") => ({
+      approvalId: approvalOf(toolUseId),
+      decision,
+      toolUseId,
+      approvalKind: "tool" as const,
+      deferredAction: pushAction,
+    });
+    return { ...made, first, decision };
+  }
+
+  it("two parked calls, both decided: one resume applies each decision to its own call (issue #62 M8)", async () => {
+    const { gateway, deps, first, decision } = await parkTwoPushes();
+    const named = decision("call_b");
+    const other = decision("call_a", "deny");
+    const second = await run(
+      deps,
+      baseRequest({
+        runId: "run-2" as RunId,
+        sdkSessionId: first.sdkSessionId ?? "",
+        shortWaitSeconds: 1,
+        trigger: { kind: "approval", ...named, decidedApprovals: [named, other] },
+      }),
+    );
+
+    const resumed = gateway.events.filter(
+      (e) => e.kind === "approval" && e.payload.phase === "resumed",
+    );
+    // In the trigger's order, each on its own call; nothing is discarded or asked again.
+    expect(resumed.map((e) => [e.payload.toolUseId, e.payload.approvalId])).toEqual([
+      ["call_b", named.approvalId],
+      ["call_a", other.approvalId],
+    ]);
+    expect(
+      gateway.events.filter((e) => e.kind === "approval" && e.payload.phase === "discarded"),
+    ).toEqual([]);
+    expect(gateway.approvals).toHaveLength(2);
+    expect(second.outcome).toBe("completed");
+    const toolResults = toolMessages(1).filter((m) => m.role === "tool");
+    expect(String(toolResults.find((m) => m.tool_call_id === "call_a")?.content)).toMatch(
+      /Denied by human/,
+    );
+  });
+
+  it("two parked calls, one decided in the list: that call takes it and only the other asks (issue #62 M8)", async () => {
+    const { gateway, deps, first, decision } = await parkTwoPushes();
+    const named = decision("call_a");
+    const second = await run(
+      deps,
+      baseRequest({
+        runId: "run-2" as RunId,
+        sdkSessionId: first.sdkSessionId ?? "",
+        shortWaitSeconds: 1,
+        trigger: { kind: "approval", ...named, decidedApprovals: [named] },
+      }),
+    );
+
+    const resumed = gateway.events.filter(
+      (e) => e.kind === "approval" && e.payload.phase === "resumed",
+    );
+    expect(resumed.map((e) => e.payload.toolUseId)).toEqual(["call_a"]);
+    expect(gateway.approvals.filter((a) => a.toolUseId === "call_a")).toHaveLength(1);
+    expect(gateway.approvals.filter((a) => a.toolUseId === "call_b")).toHaveLength(2);
+    expect(second.outcome).toBe("deferred");
+    expect(second.pendingToolUseId).toBe("call_b");
   });
 });

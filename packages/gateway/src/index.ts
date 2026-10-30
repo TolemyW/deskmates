@@ -4,6 +4,7 @@
 import { existsSync } from "node:fs";
 import {
   type ChannelPlugin,
+  type ChannelPluginV2,
   DOCKER_HOST_ALIAS,
   DeskmatesError,
   type SandboxProvider,
@@ -22,15 +23,23 @@ import { loadReleaseChannelPlugins } from "./channels/plugin-loader.js";
 import { type GatewayConfig, loadConfig } from "./config.js";
 import { type GatewayContext, buildContext } from "./context.js";
 import { openDatabase } from "./db/open.js";
+import { warmDesktopImageFacts } from "./desktop/desktop-tools.js";
+import { createChannelImageStore } from "./files/channel-image-upload.js";
+import { reportHostResources } from "./host-resources/host-resources.js";
 import { invokedDirectly } from "./invoked-directly.js";
 import { RunRetention } from "./ledger/run-retention.js";
 import { reportNetworkOverlaps } from "./network/network-overlaps.js";
+import {
+  attachObservability,
+  createObservabilityModule,
+} from "./observability/observability-module.js";
 import { resolveProvider } from "./provider.js";
 import { RunLifecycle } from "./scheduler/run-lifecycle.js";
 import { Scheduler } from "./scheduler/scheduler.js";
 import { TaskDispatcher, TaskScheduleRunner } from "./tasks/task-dispatch.js";
 import { TENANCY_MODE_DEFAULT, assertTenancyReady } from "./tenancy/tenancy-mode.js";
 import { CronRunner } from "./triggers/cron.js";
+import { ParkedCronNotices } from "./triggers/parked-cron-notices.js";
 
 export type { GatewayConfig } from "./config.js";
 export { GROUP_ROUTING_DEFAULT, loadConfig } from "./config.js";
@@ -65,7 +74,7 @@ export interface BuildOptions extends RouteOptions {
   /** How the Gateway reaches the integration runtime; T1 tests pass the testkit fake runtime. */
   integrationFetch?: typeof fetch;
   /** Deterministic T1 injection; production loads only the release manifest. */
-  channelPlugins?: Map<string, ChannelPlugin>;
+  channelPlugins?: Map<string, ChannelPlugin | ChannelPluginV2>;
 }
 
 const UNSPECIFIED_ADDRESSES = new Set(["0.0.0.0", "::", ""]);
@@ -91,7 +100,11 @@ export function buildGateway(
   provider: SandboxProvider,
   opts: BuildOptions = {},
 ): FastifyInstance {
-  const app = Fastify({ logger: opts.logger ?? false, forceCloseConnections: true });
+  const app = Fastify({
+    logger: opts.logger ?? false,
+    forceCloseConnections: true,
+    pluginTimeout: 60_000,
+  });
   const db = openDatabase(config.dbPath);
   const gatewayBaseUrl = (): string => {
     if (config.gatewayBaseUrl) return config.gatewayBaseUrl;
@@ -100,39 +113,52 @@ export function buildGateway(
     const address = addr && typeof addr === "object" ? addr.address : "127.0.0.1";
     return `http://${sandboxReachableHost(address, provider.kind)}:${port}`;
   };
-  const ctx = buildContext(
-    config,
-    db,
-    provider,
-    gatewayBaseUrl,
-    (msg, data) => app.log.info(data, msg),
-    {
-      ...(opts.connectorFetch ? { connectorFetch: opts.connectorFetch } : {}),
-      ...(opts.connectorLookup ? { connectorLookup: opts.connectorLookup } : {}),
-      ...(opts.integrationFetch ? { integrationFetch: opts.integrationFetch } : {}),
-    },
-  );
-  // The second-tenant gate runs before anything is served (ADR-0022 decision 6).
-  assertTenancyReady(db, config.tenancy ?? TENANCY_MODE_DEFAULT, ctx.auth.config);
-  // The price table is loaded before any route can read it, so the first run of a fresh
-  // deployment is priced like every later one (AGENTS.md: "The Gateway prices tokens").
-  for (const price of config.modelPrices) ctx.prices.upsert(price);
-  // ADR-0023 (test plan FB-04): a fallback the Gateway cannot price would turn every overload
-  // into `pricing_missing`; refuse to start instead.
-  if (
-    config.fallbackModel !== undefined &&
-    ctx.prices.listForModel(config.fallbackModel).length === 0
-  ) {
-    throw new DeskmatesError(
-      "validation",
-      `FALLBACK_MODEL "${config.fallbackModel}" has no price row; add it to MODEL_PRICES or the price table`,
-      { key: "FALLBACK_MODEL" },
+  let ctx: GatewayContext;
+  try {
+    ctx = buildContext(
+      config,
+      db,
+      provider,
+      gatewayBaseUrl,
+      (msg, data) => app.log.info(data, msg),
+      {
+        ...(opts.connectorFetch ? { connectorFetch: opts.connectorFetch } : {}),
+        ...(opts.connectorLookup ? { connectorLookup: opts.connectorLookup } : {}),
+        ...(opts.integrationFetch ? { integrationFetch: opts.integrationFetch } : {}),
+      },
     );
+    // The second-tenant gate runs before anything is served (ADR-0022 decision 6).
+    assertTenancyReady(db, config.tenancy ?? TENANCY_MODE_DEFAULT, ctx.auth.config);
+    // The price table is loaded before any route can read it, so the first run of a fresh
+    // deployment is priced like every later one (AGENTS.md: "The Gateway prices tokens").
+    for (const price of config.modelPrices) ctx.prices.upsert(price);
+    // ADR-0023 (test plan FB-04): a fallback the Gateway cannot price would turn every overload
+    // into `pricing_missing`; refuse to start instead.
+    if (
+      config.fallbackModel !== undefined &&
+      ctx.prices.listForModel(config.fallbackModel).length === 0
+    ) {
+      throw new DeskmatesError(
+        "validation",
+        `FALLBACK_MODEL "${config.fallbackModel}" has no price row; add it to MODEL_PRICES or the price table`,
+        { key: "FALLBACK_MODEL" },
+      );
+    }
+  } catch (err) {
+    // A refused start must not leak the handle to an embedder or the T1 harness.
+    db.close();
+    throw err;
   }
   const lifecycle = new RunLifecycle(ctx);
   const scheduler = new Scheduler(ctx, lifecycle, (msg, data) => app.log.warn(data ?? {}, msg));
-  ctx.channels.setKick(() => scheduler.kick());
+  // ADR-0047: the channel host schedules, fences runs at a rebind and stores inbound images.
+  ctx.channels.attach({
+    kick: () => scheduler.kick(),
+    cancelRun: (runId, by) => scheduler.cancel(runId, by),
+    storeImage: createChannelImageStore(ctx),
+  });
   const pausedCron = new PausedCronNotices(ctx);
+  const parkedCron = new ParkedCronNotices(ctx);
   const cron = new CronRunner({
     bots: ctx.bots,
     runs: ctx.runs,
@@ -143,6 +169,10 @@ export function buildGateway(
     bus: ctx.bus,
     log: (msg, data) => app.log.info(data ?? {}, msg),
     onPausedSkip: (bot, entry, schedule) => pausedCron.skipped(bot, entry, schedule),
+    // ADR-0029 decisions 11 and 12.
+    draining: () => scheduler.draining,
+    onParkedSkip: (bot, parked, entry, schedule, minute) =>
+      parkedCron.skipped(bot, parked, entry, schedule, minute),
   });
   const taskSchedules = new TaskScheduleRunner(
     new TaskDispatcher(ctx, () => scheduler.kick()),
@@ -153,6 +183,13 @@ export function buildGateway(
   const retention = new RunRetention(db, config.runEventsRetentionDays, (msg, data) =>
     app.log.info(data ?? {}, msg),
   );
+  // ADR-0046 decision 2: off unless OBSERVABILITY_SINK is set; it only reads the ledger.
+  const observability = createObservabilityModule({
+    db,
+    config,
+    log: (msg, data) => app.log.warn(data ?? {}, msg),
+  });
+  if (observability) attachObservability(ctx, observability);
   app.decorate("deskmates", { ctx, scheduler, lifecycle, cron, taskSchedules });
   if (opts.surface === "combined-test") registerRoutes(app, ctx, lifecycle, scheduler, opts);
   else registerSandboxRoutes(app, ctx, lifecycle, scheduler, opts);
@@ -168,14 +205,21 @@ export function buildGateway(
     // ADR-0024 amendment 1: databases from before immediate private-chat creation have no
     // unopened Bot state after this Gateway starts. This does not enqueue retroactive greetings.
     ctx.privateChats.ensureExisting();
-    scheduler.reconcile();
+    // ADR-0048 amendment 1, A1: a run starting now knows whether the image has desktop tools.
+    await warmDesktopImageFacts(ctx);
+    // ADR-0029 decision 4: every old process of a live run is gone before anything resumes.
+    await scheduler.reconcile();
     scheduler.kick();
     if (opts.startCron !== false) {
+      // Decision 11: name the minutes nobody fired while no Gateway ran; fire none of them,
+      // except one round of an entry that asked for `run_once`.
+      cron.catchUp(scheduler.previousStart?.lastSeenAt);
       cron.start();
       taskSchedules.start();
       // ADR-0041 decision 4: the backfill, then a pass every interval; absent when unconfigured.
       ctx.retrieval.indexer?.start();
       retention.start();
+      observability?.start();
     }
   });
   app.addHook("onClose", async () => {
@@ -183,6 +227,7 @@ export function buildGateway(
     cron.stop();
     taskSchedules.stop();
     retention.stop();
+    await observability?.stop();
     scheduler.stop();
     await ctx.retrieval.indexer?.stop();
     db.close();
@@ -251,6 +296,8 @@ export async function main(): Promise<void> {
   }
   // ADR-0027 amendment 2 decision 15: warn about LAN targets inside a Docker network.
   void reportNetworkOverlaps(app.deskmates.ctx, (message) => operatorApp.log.warn(message));
+  // ADR-0006 amendment 5 decisions 12 and 14: leftover host resources and pool headroom.
+  void reportHostResources(app.deskmates.ctx, (message) => operatorApp.log.warn(message));
   // ADR-0023 amendment 1, decision 6: models in use without a result for this configuration.
   if (config.visionProbe === "auto" && app.deskmates.ctx.modelJobs.vision.sweep().length > 0)
     app.deskmates.scheduler.kick();

@@ -127,6 +127,23 @@ describe("runtime adapter", () => {
     });
     expect(await codeOf(garbage.listConnections("t"))).toBe("integration_protocol");
     expect(await codeOf(garbage.listAllConnections())).toBe("integration_protocol");
+    // A reverse proxy's HTML error page is the runtime being unavailable (#61 L13).
+    const proxyError = (status: number) =>
+      new RuntimeAdapter({
+        url: URL_,
+        adminToken: "adm",
+        fetch: async () =>
+          new Response("<html>Bad Gateway</html>", {
+            status,
+            headers: { "content-type": "text/html" },
+          }),
+      });
+    expect(await codeOf(proxyError(502).listAllConnections())).toBe("integration_unavailable");
+    expect(await codeOf(proxyError(503).deleteConnection("gitea", "x"))).toBe(
+      "integration_unavailable",
+    );
+    expect(await codeOf(proxyError(403).listAllConnections())).toBe("integration_unavailable");
+    await proxyError(404).deleteConnection("gitea", "x");
   });
 
   it("forwards the OAuth callback query and reports the runtime's verdict", async () => {

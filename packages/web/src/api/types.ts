@@ -23,6 +23,7 @@ import type {
   ThreadPinsEvent,
   WelcomeDelivery,
   Workspace,
+  WorkspaceContainerState,
   WorkspaceId,
 } from "@deskmates/contracts";
 
@@ -67,6 +68,8 @@ export interface ThreadDetailView {
    * Gateway omits it.
    */
   effectiveTurnBudget?: EffectiveLimit;
+  /** The chat's workspace is in Trash: a message here is refused, not run (issue #15). */
+  workspaceArchived?: true;
 }
 
 /**
@@ -80,7 +83,11 @@ export interface WorkspaceView {
   capacity?: { activeAttempts: number; waitingRunIds: string[] };
   bots: BotDefinition[];
   browserLock: BrowserLock | null;
+  /** Whether this authenticated principal owns the reported human hold. */
+  browserLockHeldByMe?: boolean;
   takeoverScreen: boolean;
+  /** Whether the container exists, and if not whether it ever did (issue #15); older Gateways omit it. */
+  container?: WorkspaceContainerState;
 }
 
 /** One SSE frame from `GET /api/events`; `data` is this object, `event` is `type`. */

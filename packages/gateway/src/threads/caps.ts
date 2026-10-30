@@ -10,6 +10,7 @@ import {
   LOOP_BREAKER_REPEATS,
   type LoopBreakerRule,
   RELAY_COUNT_MAX,
+  TURN_BUDGET_RESET_MINUTES_DEFAULT,
   type WakeBlockedReason,
   type WorkspaceLimitSource,
 } from "@deskmates/contracts";
@@ -32,6 +33,7 @@ export function fixedCaps(threadTurnBudget: number): ThreadCaps {
     turnBudget: { value: threadTurnBudget, source: "thread" },
     relayCountMax: { value: RELAY_COUNT_MAX, source: "default" },
     volumeBreaker: false,
+    budgetResetMinutes: TURN_BUDGET_RESET_MINUTES_DEFAULT,
   };
 }
 

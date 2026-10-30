@@ -125,3 +125,28 @@ describe("memoryFreshness", () => {
     expect(memoryFreshness(note({ effectiveAt: daysAgo(11) }), NOW, policy)).toEqual(["age"]);
   });
 });
+
+it("preserves bounded exact citations and drops malformed citation fields", () => {
+  const parse = (evidence: unknown) =>
+    parseMemoryRecheckReply(
+      JSON.stringify({
+        verdicts: [{ id: "mem_a", verdict: "still_true", reason: "fresh source", evidence }],
+      }),
+    )?.[0];
+  expect(parse({ sourceId: "message:1", quote: "A direct factual quote." })?.evidence).toEqual({
+    sourceId: "message:1",
+    quote: "A direct factual quote.",
+  });
+  // A whole truncated source (500 characters plus the mark) is a legitimate quote.
+  expect(
+    parse({ sourceId: "message:1", quote: `${"x".repeat(500)}…` })?.evidence?.quote,
+  ).toHaveLength(501);
+  for (const evidence of [
+    null,
+    {},
+    { sourceId: 42, quote: "fact" },
+    { sourceId: "x", quote: " " },
+    { sourceId: "x", quote: "x".repeat(601) },
+  ])
+    expect(parse(evidence)?.evidence).toBeUndefined();
+});

@@ -55,6 +55,146 @@
   margin-top: 0;
   padding-top: 10px;
   gap: 6px;
+  flex-shrink: 0;
+}
+.sidebar-heading {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+.sidebar-heading > .workspace-switcher {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  margin-bottom: 0;
+}
+.sidebar-collapse {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+.sidebar nav {
+  scrollbar-width: thin;
+  overflow-x: hidden;
+}
+.sidebar-view-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: var(--app-text-3);
+  background: transparent;
+  font: inherit;
+  font-size: var(--app-text-xs);
+  cursor: pointer;
+}
+.sidebar-view-switch[data-tune="true"] {
+  color: var(--accent);
+  background: var(--default);
+}
+.sidebar-view-switch:hover {
+  background: var(--default);
+}
+.sidebar-mode-state {
+  margin-left: auto;
+}
+.app[data-nav-compact="true"] .sidebar-heading {
+  flex-direction: column;
+}
+.app[data-nav-compact="true"] .sidebar-view-switch {
+  justify-content: center;
+  padding: 6px;
+}
+.app[data-nav-compact="true"] .sidebar-view-switch > span,
+.app[data-nav-compact="true"] .connection-label,
+.app[data-nav-compact="true"] .release-label,
+.app[data-nav-compact="true"] .signed-in-user > div {
+  display: none;
+}
+.app[data-nav-compact="true"] .sidebar-status-row,
+.app[data-nav-compact="true"] .sidebar-account-row {
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.app[data-nav-compact="true"] .workspace-health {
+  flex: none;
+  padding: 2px;
+}
+.app[data-nav-compact="true"] .account-menu {
+  flex: none;
+  width: 100%;
+  justify-content: center;
+}
+.app[data-nav-compact="true"] .signed-in-user {
+  flex: none;
+  justify-content: center;
+  padding: 0;
+}
+.app[data-nav-compact="true"] .nav-group + .nav-group {
+  border-top: 1px solid var(--app-border);
+  padding-top: 8px;
+}
+.sidebar-view-switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (max-width: 720px) {
+  .sidebar-heading {
+    flex: 1 1 0%;
+    margin-bottom: 0;
+  }
+  .sidebar .brand-text {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .sidebar .mobile-nav-toggle {
+    flex: none;
+    margin-left: 0;
+  }
+  .app[data-nav-compact="true"] .sidebar.menu-open .nav-group-label {
+    display: block;
+  }
+  .app[data-nav-compact="true"] .sidebar .brand-chevron {
+    display: inline;
+  }
+  .sidebar nav {
+    max-height: calc(100dvh - 56px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .sidebar-collapse {
+    display: none;
+  }
+  .app[data-nav-compact="true"] .sidebar-heading {
+    flex-direction: row;
+    margin-bottom: 0;
+  }
+  .app[data-nav-compact="true"] .sidebar-status-row,
+  .app[data-nav-compact="true"] .sidebar-account-row {
+    flex-direction: row;
+  }
+  .app[data-nav-compact="true"] .sidebar-account-row .account-menu {
+    width: auto;
+  }
+  .sidebar-footer .workspace-health,
+  .sidebar-guide button > span {
+    display: none;
+  }
+  .sidebar-view-switch {
+    width: 32px;
+    justify-content: center;
+    padding: 6px;
+  }
+  .sidebar-view-switch > span {
+    display: none;
+  }
 }
 /* Connected (and the release) on the left, Help on the right, on one row. */
 .sidebar-status-row {
@@ -117,6 +257,39 @@
 .workspace-health {
   font-size: var(--app-text-xs);
 }
+.status-dot.connecting {
+  background: var(--app-warning);
+}
+.status-dot.reconnecting {
+  background: var(--app-danger);
+}
+.gateway-offline-banner {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  right: 0;
+  left: var(--sidebar-w);
+  padding: 8px 16px;
+  text-align: center;
+  color: var(--danger-text);
+  background: var(--danger-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--app-danger) 35%, transparent);
+}
+.terminal-page {
+  display: grid;
+  justify-items: start;
+  align-content: center;
+  gap: 12px;
+  min-height: 280px;
+}
+.terminal-page p {
+  overflow-wrap: anywhere;
+}
+.terminal-page h1,
+.terminal-page h2,
+.terminal-page p {
+  margin: 0;
+}
 .credential-screen {
   background: var(--background);
 }
@@ -125,24 +298,7 @@
   box-shadow: var(--app-shadow-sm);
   border-radius: 28px;
 }
-@media (max-width: 1100px) {
-  .sidebar {
-    padding: 20px 10px 16px;
-  }
-  .sidebar nav a {
-    justify-content: center;
-    padding: 9px;
-  }
-  .sidebar-status-row {
-    justify-content: center;
-  }
-  .signed-in-user > div {
-    display: none;
-  }
-  .signed-in-user {
-    justify-content: center;
-  }
-}
+
 @media (max-width: 720px) {
   .sidebar {
     padding: 8px 12px;
@@ -182,54 +338,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.team-menu-trigger {
-  flex-shrink: 0;
-}
 .sidebar-footer-row {
   justify-content: flex-end;
 }
 .sidebar-footer-row > button:first-child {
   flex: none;
 }
-.account-panel {
-  margin: 0;
-  color: var(--foreground);
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 0;
-  z-index: 50;
-  width: 280px;
-  max-width: calc(100vw - 24px);
-  max-height: calc(100dvh - 100px);
-  overflow-y: auto;
-  padding: 12px;
-  border: 1px solid var(--app-border);
-  border-radius: 18px;
-  background: var(--app-surface);
-  box-shadow: var(--shadow-md);
-  outline: none;
-}
-.account-panel .tenant-switcher {
-  margin-bottom: 12px;
-}
-@media (min-width: 721px) and (max-width: 1100px) {
-  .account-menu {
-    flex-direction: column;
-  }
-}
+
 @media (max-width: 720px) {
   .sidebar-footer .account-menu .signed-in-user {
     display: flex;
     width: 36px;
     min-height: 36px;
     padding: 0;
-  }
-  .account-panel {
-    position: fixed;
-    top: 64px;
-    right: 12px;
-    bottom: auto;
-    left: auto;
   }
 }
 .sidebar-account-row {
@@ -241,11 +362,7 @@
 .sidebar-account-row .account-menu {
   flex: 1;
 }
-@media (min-width: 721px) and (max-width: 1100px) {
-  .sidebar-account-row {
-    flex-direction: column;
-  }
-}
+
 /* Help entry and the bundled operator manual (issue #28). The manual shares the work area's grid
  * cell and covers it; the work area stays mounted underneath (inert), keeping drafts and scroll. */
 .sidebar-guide button {
@@ -551,9 +668,6 @@
   font-size: var(--app-text-xs);
 }
 @media (max-width: 1100px) {
-  .sidebar-guide button > span {
-    display: none;
-  }
   .manual-content {
     padding: 24px 28px 40px;
   }
@@ -623,7 +737,6 @@ a.signed-in-user:focus-visible {
 .app[data-nav-compact="true"] .sidebar nav a > span:not(.badge),
 .app[data-nav-compact="true"] .nav-group-label,
 .app[data-nav-compact="true"] .nav-label,
-.app[data-nav-compact="true"] .workspace-health,
 .app[data-nav-compact="true"] .sidebar-guide a > span,
 .app[data-nav-compact="true"] .sidebar-guide button > span,
 .app[data-nav-compact="true"] .sidebar-footer-row > button:first-child > span {
@@ -643,20 +756,6 @@ a.signed-in-user:focus-visible {
 .app[data-nav-compact="true"] .sidebar-guide {
   justify-content: center;
   padding: 0;
-}
-@media (min-width: 721px) and (max-width: 1100px) {
-  .app[data-nav-compact="false"] .brand-text {
-    display: flex;
-  }
-  .app[data-nav-compact="false"] .brand-chevron,
-  .app[data-nav-compact="false"] .sidebar nav a > span:not(.badge),
-  .app[data-nav-compact="false"] .nav-group-label,
-  .app[data-nav-compact="false"] .nav-label {
-    display: inline;
-  }
-  .app[data-nav-compact="false"] .sidebar nav a {
-    justify-content: flex-start;
-  }
 }
 @media (max-width: 720px) {
   .sidebar > [role="separator"] {
@@ -832,52 +931,6 @@ a.signed-in-user:focus-visible {
     color: var(--app-text-3);
     font-size: var(--app-text-xs);
   }
-  /* ADR-0022 P4: team switcher, SSO buttons, people and invitations. */
-  .tenant-switcher {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 0 10px;
-    font-size: var(--app-text-xs);
-    color: var(--app-text-3);
-  }
-  @media (min-width: 721px) and (max-width: 1100px) {
-    .sidebar .language-control {
-      padding: 0;
-      align-items: center;
-    }
-    .sidebar .language-control .select__trigger {
-      width: 40px;
-      min-width: 40px;
-      padding: 0;
-    }
-    .sidebar .language-control .select__value,
-    .sidebar .language-control .select__indicator {
-      visibility: hidden;
-    }
-    .sidebar .language-control-icon {
-      display: block;
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      z-index: 1;
-    }
-  }
-  .tenant-switcher select {
-    min-height: 32px;
-    border: 1px solid var(--app-border);
-    border-radius: 8px;
-    background: var(--app-surface);
-    color: var(--text);
-    padding: 4px 8px;
-    max-width: 100%;
-  }
-  .tenant-switcher .link-button {
-    align-self: flex-start;
-    text-align: left;
-  }
   .sso-providers {
     display: flex;
     flex-direction: column;
@@ -989,9 +1042,11 @@ a.signed-in-user:focus-visible {
     line-height: 1.55;
     font-size: var(--app-text-xs);
     color: var(--app-text-4);
-    text-align: center;
+    text-align: start;
   }
   .first-run-checklist {
+    display: flex;
+    flex-direction: column;
     margin-top: 20px;
     padding: 16px 20px;
     min-width: 260px;
@@ -999,6 +1054,11 @@ a.signed-in-user:focus-visible {
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     background: var(--surface-2);
+  }
+  /* A ghost button's padding would indent its words from the items; at the end it reads as the
+     card's closing action instead. */
+  .first-run-checklist > .gb-button {
+    align-self: flex-end;
   }
   .first-run-checklist h2 {
     margin: 0 0 8px;
@@ -1021,53 +1081,7 @@ a.signed-in-user:focus-visible {
   .first-run-checklist li.done {
     color: var(--text-3);
   }
-  @media (max-width: 1100px) {
-    .sidebar {
-      padding: 16px 10px 12px;
-    }
 
-    .sidebar .brand {
-      justify-content: center;
-      padding: 6px 0;
-    }
-
-    .sidebar .brand .brand-text,
-    .sidebar .brand .brand-chevron,
-    .sidebar nav a > span:not(.badge),
-    .nav-group-label,
-    .nav-label,
-    .workspace-health,
-    .sidebar-guide a > span,
-    .sidebar-footer-row > button:first-child > span {
-      display: none;
-    }
-
-    .sidebar-guide {
-      justify-content: center;
-      padding: 0;
-    }
-
-    .sidebar nav a {
-      justify-content: center;
-      padding: 10px;
-      position: relative;
-    }
-
-    .sidebar nav a .badge {
-      position: absolute;
-      top: 4px;
-      right: 4px;
-      margin: 0;
-    }
-
-    .sidebar-footer-row {
-      flex-direction: column;
-    }
-
-    .sidebar-footer-row > button:first-child {
-      justify-content: center;
-    }
-  }
   @media (max-width: 720px) {
     .app {
       grid-template-columns: 1fr;
@@ -1152,4 +1166,49 @@ a.signed-in-user:focus-visible {
       padding: 26px;
     }
   }
+}
+
+.preferences-dialog {
+  width: min(420px, calc(100vw - 24px));
+}
+.preferences-dialog h2 {
+  margin: 0 32px 12px 0;
+  font-size: var(--app-text-lg);
+}
+.preferences-dialog #preferences-description {
+  color: var(--app-text-3);
+  font-size: var(--app-text-xs);
+  margin-bottom: 20px;
+}
+.preferences-dialog .account-preferences {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+.preferences-dialog .preferences-field small {
+  color: var(--app-text-3);
+  font-size: var(--app-text-xs);
+}
+
+.preferences-dialog .switch,
+.preferences-dialog .switch__content {
+  width: 100%;
+}
+.preferences-dialog .switch__content {
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+}
+.preference-select {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+}
+.preference-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

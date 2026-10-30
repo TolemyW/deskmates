@@ -15,6 +15,9 @@ import {
 } from "@deskmates/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { GatewayContext } from "../context.js";
+import { announceCreatedBot, createDefaultBot } from "../default-bot/default-bot-actions.js";
+import { registerDefaultBotRoutes } from "../default-bot/default-bot-routes.js";
+import { welcomeLocale } from "../default-bot/default-bot-welcome.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
 import { EGRESS_EDIT_NOTE, replaceEgressAllowlist } from "../workspaces/egress-policy.js";
 import { type DirectoryViewer, WorkspaceDirectory } from "../workspaces/workspace-directory.js";
@@ -22,8 +25,14 @@ import { requestActorId } from "./actor.js";
 import { workspacesByIds } from "./name-lookup.js";
 import { parseOffsetQuery } from "./pagination.js";
 import { requestTenant } from "./route-policy.js";
-import { humanBrowserLock, workspaceHasTakeoverScreen } from "./takeover-routes.js";
-import { asRecord, optionalString, optionalStringArray, requireString } from "./validate.js";
+import { holderOf, humanBrowserLock, workspaceSandboxView } from "./takeover-routes.js";
+import {
+  asRecord,
+  optionalBoolean,
+  optionalString,
+  optionalStringArray,
+  requireString,
+} from "./validate.js";
 import { readableWorkspaceIds } from "./workspace-access.js";
 
 export { EGRESS_EDIT_NOTE } from "../workspaces/egress-policy.js";
@@ -113,19 +122,47 @@ export function registerWorkspaceRoutes(
     // ADR-0020 decision 1: a workspace created without a list browses the open public internet.
     // A creator who wants a locked workspace sends the list, an empty one included.
     const egressAllowlist = optionalStringArray(body, "egressAllowlist") ?? [EGRESS_OPEN_INTERNET];
-    const workspace = ctx.workspaces.create({
-      // A workspace belongs to the tenant it was created in, for good (ADR-0022).
-      tenantId: requestTenant(request),
-      name: requireString(body, "name"),
-      sandboxProvider: providerRaw,
-      ...(probeUrl
-        ? { probe: { url: probeUrl, expectText: optionalString(body, "probeExpectText") ?? "" } }
+    // ADR-0051 decision 2: a new workspace comes with its default bot unless the creator asks for
+    // none (`defaultBot: false`, for scripted setups that create their own bots).
+    const withDefaultBot = optionalBoolean(body, "defaultBot") ?? true;
+    const actor = decidedByHuman(requestActorId(request, body));
+    // Decision 11: the default bot greets its creator in the language they read.
+    const locale = withDefaultBot
+      ? welcomeLocale(
+          request.principal?.kind === "user"
+            ? ctx.auth.users.getPreferences(request.principal.userId).locale
+            : undefined,
+          request.headers["accept-language"],
+        )
+      : undefined;
+    const created = ctx.db.transaction(() => {
+      const workspace = ctx.workspaces.create({
+        // A workspace belongs to the tenant it was created in, for good (ADR-0022).
+        tenantId: requestTenant(request),
+        name: requireString(body, "name"),
+        sandboxProvider: providerRaw,
+        ...(probeUrl
+          ? { probe: { url: probeUrl, expectText: optionalString(body, "probeExpectText") ?? "" } }
+          : {}),
+        egressAllowlist,
+        createdBy: actor,
+        ...(request.principal?.kind === "user" ? { ownerUserId: request.principal.userId } : {}),
+      });
+      const defaultBot = withDefaultBot
+        ? createDefaultBot(ctx, workspace.id, actor, locale)
+        : undefined;
+      return { workspace: ctx.workspaces.mustGet(workspace.id), defaultBot };
+    })();
+    if (created.defaultBot) {
+      announceCreatedBot(ctx, created.defaultBot, actor);
+      scheduler.kick();
+    }
+    return reply.code(201).send({
+      workspace: created.workspace,
+      ...(created.defaultBot
+        ? { defaultBot: created.defaultBot.bot, privateChat: created.defaultBot.privateChat }
         : {}),
-      egressAllowlist,
-      createdBy: decidedByHuman(requestActorId(request, body)),
-      ...(request.principal?.kind === "user" ? { ownerUserId: request.principal.userId } : {}),
     });
-    return reply.code(201).send({ workspace });
   });
 
   app.get<{ Params: { id: string } }>("/api/workspaces/:id", async (request) => {
@@ -136,8 +173,10 @@ export function registerWorkspaceRoutes(
       capacity: scheduler.capacity(id),
       // The takeover state of the one shared browser: who holds it, and whether its screen is
       // up. The screen is reached through the proxy only, never by address (ADR-0022 amd. 1).
+      // `container` says whether the sandbox exists and, if not, whether it ever did (#15).
       browserLock: humanBrowserLock(ctx, id),
-      takeoverScreen: await workspaceHasTakeoverScreen(ctx, id),
+      browserLockHeldByMe: ctx.locks.humanHolder(id) === holderOf(request),
+      ...(await workspaceSandboxView(ctx, id)),
     };
   });
 
@@ -214,6 +253,8 @@ export function registerWorkspaceRoutes(
       ).filter((r) => !own.has(JSON.stringify([r.code, r.path, r.sourceProviderRef]))),
     };
   });
+
+  registerDefaultBotRoutes(app, ctx);
 }
 
 /** The directory's view of the caller (ADR-0022 amendment 6 W1 through `readableWorkspaceIds`). */

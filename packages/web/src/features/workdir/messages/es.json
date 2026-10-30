@@ -14,6 +14,7 @@
   "workdir.off": "Desactivado",
   "workdir.on": "Activado",
   "workdir.perBotHelp": "Con un directorio propio por bot, cada bot clona su propia copia del código con el que trabaja y guarda allí sus entregables, que sus compañeros pueden leer. Con el /work compartido, todos los bots pueden escribir en cualquier sitio salvo en /work/uploads.",
+  "workdir.retry": "Reintentar cargar los ajustes",
   "workdir.roleNote": "cambiar los directorios de trabajo",
   "workdir.save": "Guardar directorios de trabajo",
   "workdir.source.gateway": "valor del servidor",

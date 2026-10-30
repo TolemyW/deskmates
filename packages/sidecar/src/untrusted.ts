@@ -62,6 +62,23 @@ export function wrapIntegrationContent(service: string, text: string): string {
   return `<untrusted source="${label}">\n${escapeEntities(text)}\n</untrusted>`;
 }
 
+/**
+ * A `vault_request` response body (ADR-0045 decision 7): bounded, with known credential echoes
+ * withheld by the Gateway, and still untrusted. Entity-escaped like page text.
+ */
+export function wrapVaultResponse(origin: string, text: string): string {
+  const label = `vault:${origin}`.replace(LABEL_UNSAFE, "");
+  return `<untrusted source="${label}">\n${escapeEntities(text)}\n</untrusted>`;
+}
+
+/**
+ * Native desktop text (ADR-0048 decision 8): accessibility names and values, window titles and
+ * error text read from applications on the shared desktop. Entity-escaped like page text.
+ */
+export function wrapDesktopContent(text: string): string {
+  return `<untrusted source="desktop:lcu">\n${escapeEntities(text)}\n</untrusted>`;
+}
+
 /** Opening of the wrapper around untrusted memory entries; the taint tracker looks for it. */
 export const UNTRUSTED_MEMORY_MARK = '<untrusted source="memory">';
 
@@ -76,13 +93,33 @@ export function wrapMemoryContent(text: string): string {
 /**
  * A look/OCR description or a transcript (ADR-0040 decision 7): text a service read out of an
  * image, a page or audio the bot was handed. Converting modality never raises trust, so it is
- * entity-escaped like page text.
+ * entity-escaped like page text. An image service's revised prompt (amendment B, decision 23) is
+ * wrapped the same way.
  */
-export function wrapOperationContent(operation: "look" | "asr", text: string): string {
+export function wrapOperationContent(
+  operation: "look" | "asr" | "image_generation",
+  text: string,
+): string {
   return `<untrusted source="operation:${operation}">\n${escapeEntities(text)}\n</untrusted>`;
+}
+
+/**
+ * Web search results (ADR-0049 decision 8): titles and snippets written by pages and engines.
+ * Entity-escaped like page text, so no spelling of a closing tag survives inside it.
+ */
+export function wrapSearchContent(text: string): string {
+  return `<untrusted source="search:web">\n${escapeEntities(text)}\n</untrusted>`;
 }
 
 /** Approved knowledge is reference data, not a new instruction channel. */
 export function wrapKnowledgeContent(text: string): string {
   return `<untrusted source="knowledge">\n${escapeEntities(text)}\n</untrusted>`;
+}
+
+/**
+ * Workspace board text in a `run_stats` answer (ADR-0050 decision 4): the titles of the bot's own
+ * open tasks, which people and bots wrote. Data, never an instruction.
+ */
+export function wrapTaskContent(text: string): string {
+  return `<untrusted source="tasks">\n${escapeEntities(text)}\n</untrusted>`;
 }

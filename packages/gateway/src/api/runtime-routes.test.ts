@@ -16,7 +16,13 @@ describe("GET /api/runtime", () => {
     h = await startHarness();
     const res = await h.api<RuntimeStatus>("GET", "/api/runtime");
     expect(res.status).toBe(200);
-    expect(res.json).toEqual({ activeRuns: 0, activeRunIds: [] });
+    expect(res.json).toMatchObject({
+      activeRuns: 0,
+      activeRunIds: [],
+      draining: false,
+      drainParkedRunIds: [],
+      restartBreaker: { tripped: false, limit: 3, windowMinutes: 10, heldRunIds: [] },
+    });
   });
 
   it("counts running and live-approval runs, not queued, parked or finished ones", async () => {

@@ -4,7 +4,7 @@
 // `route-registry.ts` finds those modules with `import.meta.glob`, so a route module must not
 // import a screen (screens import `router.ts`, which imports the registry).
 
-import type { RoleAction } from "@deskmates/contracts";
+import { ROLE_ACTIONS, type RoleAction } from "@deskmates/contracts";
 import type { GuidePage } from "../lib/guide.js";
 
 /**
@@ -36,8 +36,19 @@ export interface RouteRoles {
  * A navigation link shown to whoever may read its screen (ADR-0022 amendment 7 S6): `action` is
  * the screen's read action, checked against the route policy like every other action.
  */
-export function readableBy(action: RoleAction): (roles: RouteRoles) => boolean {
-  return (roles) => roles.can?.(action) ?? true;
+export type RouteVisibility = ((roles: RouteRoles) => boolean) & {
+  /** The read action a typed address must explain when this predicate refuses it. */
+  requiredAction?: RoleAction;
+};
+
+export function readableBy(action: RoleAction): RouteVisibility {
+  const visible: RouteVisibility = (roles) =>
+    roles.can?.(action) ??
+    (ROLE_ACTIONS[action].role === "admin" || ROLE_ACTIONS[action].role === "owner"
+      ? roles.manager
+      : true);
+  visible.requiredAction = action;
+  return visible;
 }
 
 /** Parses the path after a first segment (`rest` is the second segment, if any). */

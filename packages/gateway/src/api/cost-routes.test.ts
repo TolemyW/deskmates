@@ -174,3 +174,51 @@ describe("estimates and rankings (ADR-0032 decisions 4 and 9)", () => {
       expect((await h.api("GET", path)).status, path).toBe(400);
   });
 });
+
+describe("operations on Costs (ADR-0040 amendment A, decision 14)", () => {
+  it("adds operation spend to the report and ranks operations by money only", async () => {
+    const db = h.app.deskmates.ctx.db;
+    db.prepare(
+      `INSERT INTO workspaces (id, tenant_id, name, sandbox_provider, status, created_at)
+       VALUES ('ws_o', 'tnt_default', 'Ops', 'docker', 'ready', '2026-09-01T00:00:00.000Z')`,
+    ).run();
+    db.prepare(
+      `INSERT INTO bots (id, workspace_id, name, role, created_at)
+       VALUES ('bot_o', 'ws_o', 'Reader', '', '2026-09-01T00:00:00.000Z')`,
+    ).run();
+    db.prepare(
+      `INSERT INTO runs (workspace_id, id, bot_id, lane, status, trigger_kind, trigger_ref, created_at)
+       VALUES ('ws_o', 'run_o', 'bot_o', 'interactive', 'succeeded', 'thread_message', 'x', '2026-10-02T10:00:00.000Z')`,
+    ).run();
+    const op = db.prepare(
+      `INSERT INTO operation_requests (id, workspace_id, run_id, attempt, operation, mode, model,
+         endpoint_sha256, status, error_code, unit, quantity, measured, input_bytes, cost_usd, created_at)
+       VALUES (?, 'ws_o', 'run_o', 1, ?, ?, ?, ?, 'succeeded', NULL, ?, ?, 'computed', 1, ?, '2026-10-02T10:00:01.000Z')`,
+    );
+    op.run("op_1", "look", "ocr", "vl-model", "0".repeat(64), "image", 1, 0.25);
+    op.run("op_2", "asr", null, "whisper", "1".repeat(64), "audio_second", 12, null);
+
+    const report = (await h.api<CostReport>("GET", "/api/costs?workspaceId=ws_o")).json;
+    expect(report.totals).toMatchObject({
+      runCount: 1,
+      usageCount: 2,
+      inputTokens: 0,
+      knownCostUsd: 0.25,
+      pricedUsageCount: 1,
+      unpricedUsageCount: 1,
+      costStatus: "partial",
+    });
+    expect(report.operations?.units.map((u) => [u.unit, u.quantity])).toEqual([
+      ["audio_second", 12],
+      ["image", 1],
+    ]);
+    const ranking = (
+      await h.api<CostRankingPage>("GET", "/api/costs/ranking?by=operation&metric=money")
+    ).json;
+    expect(ranking.entries.map((e) => [e.label, e.knownCostUsd])).toEqual([
+      ["look · vl-model", 0.25],
+      ["asr · whisper", null],
+    ]);
+    expect((await h.api("GET", "/api/costs/ranking?by=operation&metric=usage")).status).toBe(400);
+  });
+});

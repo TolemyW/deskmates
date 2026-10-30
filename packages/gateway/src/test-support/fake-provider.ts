@@ -240,6 +240,19 @@ export class FakeProvider implements SandboxProvider {
     return Promise.race([scripted, timeout, aborted]);
   }
 
+  /**
+   * Every `killRun`, in order, with how many exec calls had been made by then: the restart test
+   * asserts the kill of each live run came before any resume (ADR-0029 decision 4).
+   */
+  readonly killedRuns: { workspaceId: WorkspaceId; runId: string; execCallsBefore: number }[] = [];
+  async killRun(handle: SandboxHandle, runId: string): Promise<void> {
+    this.killedRuns.push({
+      workspaceId: handle.workspaceId,
+      runId,
+      execCallsBefore: this.execCalls.length,
+    });
+  }
+
   async injectEnv(_handle: SandboxHandle, env: Readonly<Record<string, string>>): Promise<void> {
     this.injected.push({ ...env });
   }

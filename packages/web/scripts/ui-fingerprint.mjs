@@ -380,7 +380,8 @@ function screens(found) {
     { name: "computer", hash: "#/computer" },
     { name: "trash", hash: "#/trash" },
     { name: "costs", hash: "#/costs" },
-    { name: "integrations", hash: "#/integrations" },
+    { name: "connections", hash: "#/connections/channels" },
+    { name: "connections-apps", hash: "#/connections/apps" },
     { name: "members", hash: "#/members" },
     { name: "account", hash: "#/account" },
     {

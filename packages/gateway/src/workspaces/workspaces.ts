@@ -4,6 +4,7 @@
 
 import {
   APPROVAL_EXPIRY_DEFAULT_MINUTES,
+  type BotId,
   DeskmatesError,
   type LoginProbe,
   type SandboxProviderKind,
@@ -301,6 +302,14 @@ export class WorkspaceStore {
       ...(row.archived_at == null ? {} : { archivedAt: row.archived_at }),
       ...(row.archived_by == null ? {} : { archivedBy: row.archived_by }),
     };
+    // ADR-0051 decision 1: a default bot in Trash is no default (archiving deletes the row too).
+    const defaultBot = this.db
+      .prepare(
+        `SELECT d.bot_id FROM workspace_default_bots d JOIN bots b ON b.id = d.bot_id
+         WHERE d.workspace_id = ? AND b.archived_at IS NULL`,
+      )
+      .get(row.id) as { bot_id: string } | undefined;
+    if (defaultBot) ws.defaultBotId = defaultBot.bot_id as BotId;
     if (row.restoration_requirements_json) {
       ws.restorationRequirements = parseJson<SandboxRestorationRequirement[]>(
         row.restoration_requirements_json,

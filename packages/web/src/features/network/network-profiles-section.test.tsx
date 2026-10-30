@@ -20,7 +20,7 @@ const profile: NetworkProfile = {
   id: "netp_1",
   name: "Owen's service",
   description: "",
-  rules: [{ kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [23001] }],
+  rules: [{ kind: "subnet", cidr: "10.88.30.0/24", schemes: ["http"], ports: [23001] }],
   revision: 1,
   createdAt: "2026-10-14T00:00:00Z",
   updatedAt: "2026-10-14T00:00:00Z",
@@ -90,7 +90,7 @@ function client() {
 it("lets an Admin select an available profile and set the open-internet switch", async () => {
   const { api, calls } = client();
   render(<NetworkProfilesSection api={api} entry={entry("admin")} onChanged={() => {}} />);
-  expect(await screen.findByText("Network profiles")).toBeInTheDocument();
+  expect(await screen.findByText("Internal network access")).toBeInTheDocument();
   expect(await screen.findByText(/This workspace browses the open internet/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("checkbox", { name: /Owen's service/ }));
   fireEvent.click(screen.getByRole("button", { name: "Apply" }));
@@ -120,4 +120,29 @@ it("shows nothing to a Member or for an archived workspace", () => {
   );
   expect(archived.container.textContent).toBe("");
   expect(calls).toEqual([]);
+});
+
+it("keeps unsubmitted profile choices when the separate internet switch is saved", async () => {
+  const { api, calls } = client();
+  render(<NetworkProfilesSection api={api} entry={entry("admin")} onChanged={() => {}} />);
+  const choice = await screen.findByRole("checkbox", { name: /Owen's service/ });
+  fireEvent.click(choice);
+  const toggle = screen.getByRole("checkbox", { name: /Allow network profiles while/ });
+  fireEvent.click(toggle);
+  await waitFor(() => expect(toggle).not.toBeChecked());
+  expect(choice).toBeChecked();
+  expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
+  expect(calls.some((call) => call.startsWith("PUT") && call.endsWith("/network-profiles"))).toBe(
+    false,
+  );
+});
+
+it("recovers a failed network-profile read without changing a grant", async () => {
+  const { api, calls } = client();
+  vi.spyOn(api, "getWorkspaceNetwork").mockRejectedValueOnce(new Error("Read unavailable"));
+  render(<NetworkProfilesSection api={api} entry={entry("admin")} onChanged={() => {}} />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Read unavailable");
+  fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  expect(await screen.findByRole("checkbox", { name: /Owen's service/ })).not.toBeChecked();
+  expect(calls.every((call) => call.startsWith("GET"))).toBe(true);
 });

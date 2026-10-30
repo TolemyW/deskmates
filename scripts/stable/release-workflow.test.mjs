@@ -145,31 +145,47 @@ describe("ci workflow: one gate job, on ready pull requests only", () => {
     expect(gate).not.toContain("shard");
   });
 
-  it("tests only what a pull request affects, unless it touches shared or text-read files", () => {
+  it("pins scope selection to the PR base before expensive build steps", () => {
     const gate = jobBlock(CI, "gate");
-    expect(gate).toContain("run: npm test\n");
-    expect(gate).toContain("if: steps.scope.outputs.full == 'true'");
+    expect(gate).toContain("BASE: ${{ github.event.pull_request.base.sha }}");
+    expect(gate).toContain("EVENT_NAME: ${{ github.event_name }}");
+    expect(gate).toContain("run: node scripts/ci/test-scope.mjs");
+    expect(gate.indexOf("id: scope")).toBeLessThan(gate.indexOf("run: npm run typecheck"));
+    expect(gate).not.toContain("origin/${{ github.base_ref }}");
+    expect(gate).not.toContain("FULL_SUITE_PATHS");
+    expect(gate).toContain("if: steps.scope.outputs.typecheck == 'true'");
+    expect(gate).toContain("if: steps.scope.outputs.web_build == 'true'");
+  });
+
+  it("runs import-related tests separately from explicit text-input guards", () => {
+    const gate = jobBlock(CI, "gate");
+    expect(gate).toContain("if: steps.scope.outputs.mode == 'full'");
+    expect(gate).toContain("run: node scripts/ci/test-metrics.mjs\n");
     expect(gate).toContain(
-      'npm test -- --changed "origin/${{ github.base_ref }}" --passWithNoTests',
+      'node scripts/ci/test-metrics.mjs --changed "${{ github.event.pull_request.base.sha }}" --passWithNoTests',
     );
-    const paths = new RegExp(/FULL_SUITE_PATHS: '(.+)'/.exec(CI)?.[1] ?? "^$");
-    for (const file of [
-      "packages/contracts/src/index.ts",
-      "scripts/hotspot-budgets.test.mjs",
-      "docs/generated/permission-matrix.md",
-      "packages/gateway/src/api/route-policies/threads.ts",
-      "packages/gateway/migrations/202610131020-baseline.sql",
-      "packages/web/src/features/chats/messages/en.json",
-      "packages/web/src/features/chats/__golden__/api.json",
-      "package-lock.json",
-      ".github/workflows/ci.yml",
-    ])
-      expect(paths.test(file), file).toBe(true);
-    for (const file of [
-      "packages/gateway/src/threads/router.ts",
-      "packages/web/src/features/chats/chat-pane.tsx",
-    ])
-      expect(paths.test(file), file).toBe(false);
+    expect(gate).toContain("if: steps.scope.outputs.mode != 'full'");
+    expect(gate).toContain("CI_GUARD_TESTS: ${{ steps.scope.outputs.guards }}");
+    expect(gate).toContain("run: node scripts/ci/test-guards.mjs");
+    expect(gate).not.toContain("--no-isolate");
+  });
+});
+
+describe("workflows: third-party actions are pinned", () => {
+  // #63 L20: a tag can be moved to other code, and release.yml runs with packages: write. A full
+  // commit SHA cannot; the trailing comment names the release it was resolved from.
+  it("names every action by full commit SHA with its version as a comment", () => {
+    for (const [file, workflow] of [
+      ["ci.yml", CI],
+      ["release.yml", WORKFLOW],
+    ]) {
+      const uses = [...workflow.matchAll(/^\s*(?:- )?uses: (.+)$/gm)].map((m) => m[1]);
+      expect(uses.length, file).toBeGreaterThan(0);
+      for (const ref of uses)
+        expect(ref, `${file}: ${ref}`).toMatch(
+          /^(?:\.\/\S+|[\w.-]+\/[\w.-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+)$/,
+        );
+    }
   });
 });
 
@@ -182,6 +198,10 @@ describe("release workflow: packages only; tests run on the target host", () => 
     expect(publish).toContain("needs: base");
     expect(publish).toContain("needs.base.result == 'success'");
     expect(publish).toContain('ci: "not run online: T0/T1 and T2 run on the target host');
+    expect(publish).toContain('t2: "external: not evaluated by packaging;');
+    expect(publish).toContain("target host .release/t2.json for result, scope and image IDs");
+    expect(publish).toContain("counts and skips are in .release/t2.log");
+    expect(publish).not.toContain('t2: "pending:');
     expect(WORKFLOW).not.toContain("prior");
     expect(WORKFLOW).not.toContain("CI_RUN");
   });

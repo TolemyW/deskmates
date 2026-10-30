@@ -10,7 +10,9 @@ import {
   type ApprovalId,
   type ApprovalMode,
   type ApprovalRule,
+  type ApprovalRuleMatcher,
   isApprovalMode,
+  matcherFromAction,
 } from "@deskmates/contracts";
 import type { GatewayEvent } from "../../api/types.js";
 import type { DemoFeature, DemoRequest, DemoSeedContext } from "../../demo/feature.js";
@@ -135,16 +137,15 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
         s.emit({ type: "workspace", workspaceId: ws.id, workspace: ws });
       }
     } else if (decision === "allow_always") {
+      // ADR-0002 amendment 3, A6: the human's edited scope, else the stable-target proposal.
+      const matcher =
+        b.matcher !== null && typeof b.matcher === "object"
+          ? (b.matcher as ApprovalRuleMatcher)
+          : (matcherFromAction(approval.action) ?? { toolName: approval.action.toolName });
       rule = {
         id: id("rul"),
         botId: approval.botId,
-        matcher: {
-          toolName: approval.action.toolName,
-          ...(approval.action.targetOrigin ? { targetOrigin: approval.action.targetOrigin } : {}),
-          ...(approval.action.argumentPattern
-            ? { argumentPattern: approval.action.argumentPattern }
-            : {}),
-        },
+        matcher,
         decision: "allow_always",
         createdFromApprovalId: approval.id,
         createdBy: "human:operator",

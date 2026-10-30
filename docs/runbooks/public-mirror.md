@@ -33,7 +33,7 @@ node scripts/public-scan.mjs --hash <token>
 
 and paste the hash into the blocklist. Short tokens can be brute-forced from the hash;
 the list protects against accidents, not against a determined reader, so still prefer
-placeholders (`testbox`, `example-corp.internal`, `10.20.x.y`) in prose.
+placeholders (`testbox`, `example-corp.internal`, `10.88.x.y`) in prose.
 
 Material that needs the real names goes elsewhere:
 

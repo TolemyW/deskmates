@@ -1,0 +1,9 @@
+{
+  "route": "tasks",
+  "ready": ".task-item-meta",
+  "rows": ".task-list li a",
+  "maxRowHeight": 150,
+  "minRows": 1,
+  "toolbar": ".task-list-tools",
+  "maxToolbarHeight": 48
+}

@@ -7,7 +7,7 @@ import { contactsHref, routes } from "./route.js";
 export const feature = defineFeature(routes, {
   nav: {
     group: "talk",
-    order: 20,
+    order: 40,
     icon: <Users size={18} />,
     label: "app.nav.contacts",
     href: contactsHref,

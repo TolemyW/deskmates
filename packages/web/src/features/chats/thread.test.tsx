@@ -73,11 +73,11 @@ describe("ThreadScreen", () => {
     await within(list).findByText("check the console");
     const rows = within(list).getAllByRole("listitem");
     expect(rows.map((r) => r.querySelector(".author")?.textContent)).toEqual([
-      "human",
+      undefined,
       "system",
       "ops",
     ]);
-    const link = within(rows[2] as HTMLElement).getByRole("link", { name: "run" });
+    const link = within(rows[2] as HTMLElement).getByRole("link", { name: "Details" });
     expect(link.getAttribute("href")).toBe(`#/runs/${RUN_ID}`);
     expect(screen.queryByTestId("typing")).toBeNull();
     // The rail lists the thread and marks it selected.
@@ -167,7 +167,7 @@ describe("ThreadScreen", () => {
 
     const es = FakeEventSource.forUrl("/api/events?threadId=thr_1");
     es.emit({ type: "run_status", threadId: THREAD_ID, run: run({ status: "running" }) });
-    await waitFor(() => expect(screen.getByTestId("typing").textContent).toContain("is running"));
+    await waitFor(() => expect(screen.getByTestId("typing").textContent).toContain("is working"));
 
     es.emit({
       type: "thread_message",
@@ -220,11 +220,11 @@ describe("ThreadScreen", () => {
       threadId: THREAD_ID,
       run: run({ status: "running" }),
     });
-    await waitFor(() => expect(screen.getByTestId("typing").textContent).toContain("is running"));
+    await waitFor(() => expect(screen.getByTestId("typing").textContent).toContain("is working"));
 
     resolvePost?.({ message: human, runs: [run({ status: "queued" })] });
     await screen.findByText("start now");
-    await waitFor(() => expect(screen.getByTestId("typing").textContent).toContain("is running"));
+    await waitFor(() => expect(screen.getByTestId("typing").textContent).toContain("is working"));
   });
 
   it("does not let send A finishing clear draft B typed while it was pending", async () => {
@@ -432,15 +432,18 @@ describe("ThreadScreen", () => {
     });
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
 
-    await screen.findByText("model request timed out");
-    expect(screen.getByText("This run was cancelled.")).toBeTruthy();
-    const links = screen.getAllByRole("link", { name: "View run details" });
+    await screen.findByText("This reply could not be completed. Open the work details to see why.");
+    expect(screen.queryByText("model request timed out")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Technical details" }));
+    expect(screen.getByText("model request timed out")).toBeTruthy();
+    expect(screen.getByText(/This work was cancelled/)).toBeTruthy();
+    const links = screen.getAllByRole("link", { name: "View work details" });
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       `#/runs/${failed.id}`,
       `#/runs/${cancelled.id}`,
     ]);
     fireEvent.click(screen.getByRole("button", { name: "Show chat info" }));
-    const member = within(screen.getByLabelText("Thread members")).getByText("ops").closest("li");
+    const member = within(screen.getByLabelText("Chat members")).getByText("ops").closest("li");
     expect(member?.textContent).toContain("cancelled");
     expect(member?.textContent).not.toContain("ready");
   });
@@ -517,52 +520,47 @@ describe("ThreadScreen", () => {
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ body: "你好" });
   });
 
-  it("creates workspace, bot and thread from the first-run form on an empty database", async () => {
+  it("creates the workspace from the first-run form and opens its assistant's chat (ADR-0051)", async () => {
     const created = (method: string, path: string) =>
       calls.some((call) => call.method === method && call.path === path);
     const { fetch, calls } = fakeFetch({
       "GET /api/workspaces": { workspaces: [] },
-      "GET /api/bots": () => ({ bots: created("POST", "/api/bots") ? [bot] : [] }),
+      "GET /api/bots": () => ({ bots: created("POST", "/api/workspaces") ? [bot] : [] }),
       "GET /api/threads?workspaceId=ws_1&limit=50": () => ({
-        threads: created("POST", "/api/bots")
+        threads: created("POST", "/api/workspaces")
           ? [{ ...thread, memberIds: [BOT_ID], privateChatBotId: BOT_ID }]
           : [],
       }),
-      "POST /api/workspaces": { workspace },
-      "POST /api/bots": { bot },
-      "POST /api/bots/bot_1/private-chat": { thread, members },
+      "POST /api/workspaces": {
+        workspace: { ...workspace, defaultBotId: BOT_ID },
+        defaultBot: bot,
+        privateChat: thread,
+      },
     });
     render(<ThreadScreen api={createApiClient({ fetch })} />);
-    const form = await screen.findByLabelText("First run");
+    const form = await screen.findByLabelText("First work");
+    expect(within(form).queryByLabelText("Bot name")).toBeNull();
     fireEvent.change(within(form).getByLabelText("Workspace name"), {
       target: { value: "default" },
     });
     fireEvent.click(within(form).getByLabelText(/Only these sites/));
-    fireEvent.change(within(form).getByLabelText(/Allowed domains/), {
+    fireEvent.change(within(form).getByLabelText(/Allowed websites/), {
       target: { value: "example.com\n*.example.org" },
     });
-    fireEvent.change(within(form).getByLabelText("Bot name"), { target: { value: "ops" } });
-    fireEvent.change(within(form).getByLabelText("Bot role"), { target: { value: "operator" } });
     fireEvent.submit(form);
 
     await waitFor(() => expect(window.location.hash).toBe(`#/threads/${THREAD_ID}`));
-    const posts = calls.filter((c) => c.method === "POST");
-    expect(posts).toEqual([
+    // One request: the workspace comes with its default bot and that bot's private chat.
+    expect(calls.filter((c) => c.method === "POST")).toEqual([
       {
         method: "POST",
         path: "/api/workspaces",
         body: { name: "default", egressAllowlist: ["example.com", "*.example.org"] },
       },
-      {
-        method: "POST",
-        path: "/api/bots",
-        body: { name: "ops", role: "operator", workspaceId: WS_ID },
-      },
-      { method: "POST", path: "/api/bots/bot_1/private-chat", body: {} },
     ]);
-    // The new thread appears in the rail from the create response; the refetch keeps it.
-    await within(screen.getByRole("complementary")).findByText("ops");
-    expect(screen.queryByLabelText("First run")).toBeNull();
+    // The assistant's chat appears in the rail from the create response; the refetch keeps it.
+    await within(screen.getByRole("complementary")).findByText(bot.name);
+    expect(screen.queryByLabelText("First work")).toBeNull();
   });
 
   it("creates a group of up to six bots from the current workspace only", async () => {
@@ -590,7 +588,7 @@ describe("ThreadScreen", () => {
     // the first two preselected, the seventh disabled once six are chosen. With bots listed as
     // inboxes the dialog no longer opens by itself (issue #29).
     fireEvent.click(await screen.findByRole("button", { name: "New chat" }));
-    const form = await screen.findByLabelText("New thread");
+    const form = await screen.findByRole("form", { name: "New chat" });
     const initialChoices = within(form).getAllByRole("checkbox") as HTMLInputElement[];
     expect(initialChoices).toHaveLength(7);
     expect(initialChoices[0]?.checked).toBe(true);
@@ -609,7 +607,7 @@ describe("ThreadScreen", () => {
       </WorkspaceScopeProvider>,
     );
     fireEvent.click(await screen.findByRole("button", { name: "New chat" }));
-    const otherForm = await screen.findByLabelText("New thread");
+    const otherForm = await screen.findByRole("form", { name: "New chat" });
     const otherChoices = within(otherForm).getAllByRole("checkbox") as HTMLInputElement[];
     expect(otherChoices).toHaveLength(2);
     expect(otherChoices[0]?.checked).toBe(true);
@@ -635,7 +633,7 @@ describe("ThreadScreen", () => {
     const handoff = message(4, "system", "ops handed off to reviewer.", {
       attachments: [
         {
-          name: "Open conversation",
+          name: "Open chat",
           mimeType: THREAD_LINK_ATTACHMENT_MIME,
           ref: "thr_bus",
         },
@@ -673,14 +671,14 @@ describe("ThreadScreen", () => {
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Show chat info" }));
-    const memberList = await screen.findByLabelText("Thread members");
-    expect(within(memberList).getByText("ops").closest("li")?.textContent).toContain("running");
+    const memberList = await screen.findByLabelText("Chat members");
+    expect(within(memberList).getByText("ops").closest("li")?.textContent).toContain("working");
     expect(within(memberList).getByText("reviewer").closest("li")?.textContent).toContain(
-      "waiting browser",
+      "waiting for the shared browser",
     );
     fireEvent.click(screen.getByRole("button", { name: "Hide chat info" }));
     expect(screen.getByRole("status").textContent).toContain("Send a new message to resume");
-    const handoffLink = screen.getByRole("link", { name: "Open conversation" });
+    const handoffLink = screen.getByRole("link", { name: "Open collaboration" });
     expect(handoffLink.getAttribute("href")).toBe("#/threads/thr_bus");
     expect(handoffLink.closest("li")?.querySelector(".author")?.textContent).toBe("handoff");
 
@@ -694,7 +692,7 @@ describe("ThreadScreen", () => {
     const legacyHandoff = message(4, "system", "ops handed off to reviewer.", {
       attachments: [
         {
-          name: "Open conversation",
+          name: "Open chat",
           mimeType: "application/x-cogbot-thread",
           ref: "thr_bus",
         },
@@ -714,7 +712,7 @@ describe("ThreadScreen", () => {
     });
     render(<ThreadScreen threadId={THREAD_ID} api={createApiClient({ fetch })} />);
 
-    const link = await screen.findByRole("link", { name: "Open conversation" });
+    const link = await screen.findByRole("link", { name: "Open collaboration" });
     expect(link.getAttribute("href")).toBe("#/threads/thr_bus");
     expect(link.closest("li")?.querySelector(".author")?.textContent).toBe("handoff");
   });
@@ -761,18 +759,18 @@ describe("ThreadScreen", () => {
       run: run({ status: "running" }),
     });
     fireEvent.click(await screen.findByRole("button", { name: "Show chat info" }));
-    expect((await screen.findByLabelText("Thread members")).textContent).toContain("reviewer");
+    expect((await screen.findByLabelText("Chat members")).textContent).toContain("reviewer");
     expect(screen.getByRole("status", { hidden: true })).toBeTruthy();
 
     resolveInitial?.({ thread, members });
     await screen.findByText("check the console");
-    expect(screen.getByLabelText("Thread members").textContent).toContain("reviewer");
+    expect(screen.getByLabelText("Chat members").textContent).toContain("reviewer");
     expect(screen.getByRole("status", { hidden: true })).toBeTruthy();
 
     stream.drop();
     stream.open();
     await waitFor(() => expect(screen.queryByRole("status", { hidden: true })).toBeNull());
-    expect(screen.getByLabelText("Thread members").textContent).toContain("reviewer");
+    expect(screen.getByLabelText("Chat members").textContent).toContain("reviewer");
   });
 
   it("updates a new chat's rail preview when its first messages arrive", async () => {
@@ -811,7 +809,7 @@ describe("ThreadScreen", () => {
     const api = createApiClient({ fetch });
     const view = render(<ThreadScreen api={api} />);
     fireEvent.click(await screen.findByRole("button", { name: "New chat" }));
-    fireEvent.submit(await screen.findByLabelText("New thread"));
+    fireEvent.submit(await screen.findByRole("form", { name: "New chat" }));
     await waitFor(() => expect(window.location.hash).toBe(`#/threads/${THREAD_ID}`));
     view.rerender(<ThreadScreen threadId={THREAD_ID} api={api} />);
     const rail = screen.getByRole("complementary");
@@ -890,7 +888,7 @@ describe("ThreadScreen", () => {
       await waitFor(() => expect(answerSlowList).toBeDefined());
 
       fireEvent.click(within(rail).getByRole("button", { name: "New chat" }));
-      fireEvent.submit(await screen.findByLabelText("New thread"));
+      fireEvent.submit(await screen.findByRole("form", { name: "New chat" }));
       await waitFor(() => expect(answerCreate).toBeDefined());
       latest = [{ ...created, memberIds: [BOT_ID, peer.id] }, olderRow];
       if (race === "from before the chat existed") {

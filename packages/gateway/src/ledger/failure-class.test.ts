@@ -20,6 +20,8 @@ const CORPUS: Readonly<Record<Exclude<RunFailureClass, "other">, readonly string
     'API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
     "model_not_selected: the run asked for a model this workspace does not offer",
     "could not start run: DeskmatesError: pricing_missing for model cheap-model-x",
+    "Error: Claude Code returned an error result: There's an issue with the selected model (unavailable-model). It may not exist or you may not have access to it.\n    at readMessages (file:///sdk.mjs:127:26507)",
+    "It may not exist or you may not have access to it.",
   ],
   model_deadline: [
     "model job did not finish within 60 s",
@@ -52,6 +54,21 @@ const CORPUS: Readonly<Record<Exclude<RunFailureClass, "other">, readonly string
   ],
   no_reply: ["no_reply"],
   budget_limit: ["budget_exhausted", "turn_budget"],
+  platform_interruption: ["gateway_restarted", "gateway restarted while the run was live"],
+  // ADR-0042 amendment 2: the groups the v0.7.3 acceptance (issue #11, 2026-10-17) found filed
+  // as `other`, shaped from the provider's and the scheduler's own messages.
+  sandbox_unavailable: [
+    "sandbox error: DeskmatesError: workspace is attached to a legacy or mismatched network",
+    'sandbox error: Error: Docker 404 POST /networks/create: {"message":"could not find an available, non-overlapping IPv4 address pool among the defaults to assign to the network"}',
+    "sandbox error: DeskmatesError: managed egress proxy is missing",
+    "sandbox error: DeskmatesError: volume deskmates-ws-1-work ownership is unverified; preserve the old runtime and follow the legacy-volume recovery runbook",
+    "sandbox error: DeskmatesError: egress proxy image is unavailable",
+  ],
+  sidecar_exit: [
+    "sidecar exited without run_ended (exit 1)",
+    "sidecar exited without run_ended (exit 1): TypeError: Cannot read properties of undefined (reading 'name') |     at connectorMenu (file:///opt/deskmates/sidecar/dist/connector-tools.js:88:31)",
+    "sidecar exited without run_ended (exit 137)",
+  ],
 };
 
 /** Cheap-model job names now, and the ones they replaced (issue #11 scope 2). */
@@ -87,9 +104,20 @@ describe("failure class (ADR-0042 decision 1)", () => {
     );
   });
 
+  it("names the cause a sidecar exit's stderr tail carries before calling it a sidecar exit", () => {
+    for (const [tail, expected] of [
+      ['API Error: 529 {"type":"error","error":{"type":"overloaded_error"}}', "model_unavailable"],
+      ["AbortError: The operation was aborted", "sdk_abort"],
+      ["invalid StartRunRequest on stdin", "tool_allowlist"],
+    ] as const) {
+      const error = `sidecar exited without run_ended (exit 1): ${tail}`;
+      expect(classifyFailure(error), error).toBe(expected);
+      expect(sqlClass(error), error).toBe(expected);
+    }
+  });
+
   it("gives an unknown error other and no error no class", () => {
     expect(classifyFailure("something nobody has seen before")).toBe("other");
-    expect(classifyFailure("gateway restarted while the run was live")).toBe("other");
     expect(classifyFailure(undefined)).toBeUndefined();
     expect(classifyFailure(null)).toBeUndefined();
     expect(sqlClass(null)).toBeNull();
@@ -108,7 +136,12 @@ describe("failure class (ADR-0042 decision 1)", () => {
 
   it("does not depend on which model job failed, current name or old", () => {
     for (const [expected, errors] of Object.entries(CORPUS)) {
-      if (expected === "no_reply" || expected === "wall_clock" || expected === "budget_limit")
+      if (
+        expected === "no_reply" ||
+        expected === "wall_clock" ||
+        expected === "budget_limit" ||
+        expected === "platform_interruption"
+      )
         continue;
       for (const error of errors)
         for (const job of JOB_NAMES) {

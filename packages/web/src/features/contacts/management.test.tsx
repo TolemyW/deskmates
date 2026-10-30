@@ -1,19 +1,16 @@
 // @vitest-environment jsdom
+// The bot settings editor on a bot's profile (`BotEditor`): model overrides, approval rules, SOUL
+// drafts and the test conversation. Rendered on its own it shows every section, as the tune view
+// does (docs/use-and-tune-views.md).
+import type { BotDefinition, OperatorConfig } from "@deskmates/contracts";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { createApiClient } from "../../api/client.js";
-import { ManagementScreen } from "./management.js";
+import { type ApiClient, createApiClient } from "../../api/client.js";
+import { InterfaceViewProvider } from "../../lib/interface-view.js";
+import { BotEditor } from "./management.js";
 
 afterEach(cleanup);
 
-const workspace = {
-  id: "ws_1",
-  name: "Operations",
-  sandboxProvider: "docker",
-  status: "running",
-  egressAllowlist: [],
-  createdAt: "2026-09-23T00:00:00.000Z",
-};
 const bot = {
   id: "bot_1",
   workspaceId: "ws_1",
@@ -24,208 +21,58 @@ const bot = {
   messageAllowlist: [],
   cron: [],
   createdAt: "2026-09-23T00:00:00.000Z",
-};
+} as unknown as BotDefinition;
 
-it("requires the exact archived name before permanent deletion", async () => {
-  const archived = { ...workspace, archivedAt: "2026-10-11T00:00:00.000Z" };
-  const deletes: Array<{ path: string; body: unknown }> = [];
-  let deleted = false;
-  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const path = String(input);
-    if (path === "/api/config")
-      return Response.json({ defaultModel: "default-model", cheapModel: "cheap-default" });
-    if (path === "/api/workspaces") return Response.json({ workspaces: [] });
-    if (path === "/api/bots") return Response.json({ bots: [] });
-    if (path === "/api/trash")
-      return Response.json({ workspaces: deleted ? [] : [archived], bots: [] });
-    if (path === "/api/workspaces/ws_1" && init?.method === "DELETE") {
-      deletes.push({ path, body: JSON.parse(String(init.body)) });
-      deleted = true;
-      return Response.json({ deleted: true });
-    }
-    throw new Error(`unexpected ${init?.method ?? "GET"} ${path}`);
-  });
-  render(<ManagementScreen api={createApiClient({ fetch: fetcher })} />);
+const CONFIG = {
+  defaultModel: "deploy/main",
+  cheapModel: "deploy/cheap",
+  cronTimeZone: "UTC",
+} as unknown as OperatorConfig;
 
-  const name = await screen.findByLabelText("Type Operations to confirm permanent deletion");
-  const remove = screen.getByRole("button", { name: "Delete permanently" });
-  expect((remove as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.change(name, { target: { value: "Operation" } });
-  expect((remove as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.change(name, { target: { value: "Operations" } });
-  expect((remove as HTMLButtonElement).disabled).toBe(false);
-  fireEvent.click(remove);
-  await waitFor(() =>
-    expect(deletes).toEqual([{ path: "/api/workspaces/ws_1", body: { name: "Operations" } }]),
+function editor(api: ApiClient, shown: BotDefinition = bot, config: OperatorConfig = CONFIG) {
+  return (
+    <BotEditor
+      api={api}
+      bot={shown}
+      config={config}
+      timeZone="UTC"
+      workspaceName="Operations"
+      onSaved={() => undefined}
+    />
   );
-});
-
-it("creates another workspace and bot when the registry is already populated", async () => {
-  const requests: Array<{ path: string; body: unknown }> = [];
-  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const path = String(input);
-    const requestBody = init?.body ? JSON.parse(String(init.body)) : undefined;
-    if (init?.method === "POST") requests.push({ path, body: requestBody });
-    if (path === "/api/config")
-      return Response.json({ defaultModel: "default-model", cheapModel: "cheap-default" });
-    if (path === "/api/workspaces" && init?.method === "POST")
-      return Response.json({
-        workspace: { ...workspace, id: "ws_2", name: requestBody.name },
-      });
-    if (path === "/api/workspaces") return Response.json({ workspaces: [workspace] });
-    if (path === "/api/bots" && init?.method === "POST")
-      return Response.json({ bot: { ...bot, id: "bot_2", ...requestBody } });
-    if (path.endsWith("/soul"))
-      return Response.json({ soul: { body: "Be useful.", version: "1" } });
-    if (path.includes("/approval-rules?")) return Response.json({ rules: [], total: 0 });
-    return Response.json({ bots: [bot] });
-  });
-  render(<ManagementScreen api={createApiClient({ fetch: fetcher })} />);
-
-  await screen.findByText("triage");
-  fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "Research" } });
-  fireEvent.change(screen.getByLabelText("Allowed domains"), {
-    target: { value: "docs.example.com, api.example.com" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Create workspace" }));
-  await screen.findByText("Workspace created.");
-
-  fireEvent.change(screen.getByLabelText("Bot name"), { target: { value: "analyst" } });
-  fireEvent.change(screen.getByLabelText("Role"), { target: { value: "Researcher" } });
-  const createModel = screen.getAllByLabelText("Model override")[0];
-  if (!createModel) throw new Error("Create bot model input was not rendered");
-  fireEvent.change(createModel, {
-    target: { value: "vendor/custom-model" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Create bot" }));
-  await screen.findByText("Bot created.");
-
-  expect(requests).toContainEqual({
-    path: "/api/workspaces",
-    body: {
-      name: "Research",
-      egressAllowlist: ["docs.example.com", "api.example.com"],
-    },
-  });
-  expect(requests).toContainEqual({
-    path: "/api/bots",
-    body: {
-      name: "analyst",
-      role: "Researcher",
-      workspaceId: "ws_2",
-      model: "vendor/custom-model",
-    },
-  });
-});
+}
 
 it("shows effective defaults and clears overrides with null", async () => {
   const patches: unknown[] = [];
+  const overridden = { ...bot, model: "old/main", cheapModel: "old/cheap" } as BotDefinition;
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
-    if (path === "/api/config")
-      return Response.json({ defaultModel: "deploy/main", cheapModel: "deploy/cheap" });
-    if (path === "/api/workspaces") return Response.json({ workspaces: [workspace] });
-    if (path === "/api/bots" && init?.method !== "PATCH")
-      return Response.json({ bots: [{ ...bot, model: "old/main", cheapModel: "old/cheap" }] });
-    if (path.endsWith("/soul"))
-      return Response.json({ soul: { body: "Be useful.", version: "1" } });
-    if (path.includes("/approval-rules?")) return Response.json({ rules: [], total: 0 });
+    if (init?.method !== "PATCH") {
+      if (path.endsWith("/soul"))
+        return Response.json({ soul: { body: "Be useful.", version: "1" } });
+      if (path.includes("/approval-rules?")) return Response.json({ rules: [], total: 0 });
+      return Response.json({ bots: [overridden] });
+    }
     const patch = JSON.parse(String(init?.body));
     patches.push(patch);
     return Response.json({ bot: { ...bot, model: patch.model, cheapModel: undefined } });
   });
-  render(<ManagementScreen api={createApiClient({ fetch: fetcher })} />);
+  render(editor(createApiClient({ fetch: fetcher }), overridden));
 
   const card = (await screen.findByText("triage")).closest("article");
   expect(card).not.toBeNull();
-  const editor = within(card as HTMLElement);
-  expect(editor.getByText(/Operations/)).toBeTruthy();
-  expect(editor.getByText(/Effective model:/).textContent).toContain("old/main");
-  fireEvent.change(editor.getByLabelText("Model"), { target: { value: "custom" } });
-  fireEvent.change(editor.getByLabelText("Model override"), {
+  const scope = within(card as HTMLElement);
+  expect(scope.getByText(/Operations/)).toBeTruthy();
+  expect(scope.getByText(/Effective model:/).textContent).toContain("old/main");
+  fireEvent.change(scope.getByLabelText("Model"), { target: { value: "custom" } });
+  fireEvent.change(scope.getByLabelText("AI model"), {
     target: { value: "provider/free-form" },
   });
-  fireEvent.change(editor.getByLabelText("Cheap model override"), { target: { value: "" } });
-  fireEvent.click(editor.getByRole("button", { name: "Save model settings" }));
+  fireEvent.change(scope.getByLabelText("AI model for side work"), { target: { value: "" } });
+  fireEvent.click(scope.getByRole("button", { name: "Save model settings" }));
 
-  await editor.findByText("Model settings saved.");
+  await scope.findByText("Model settings saved.");
   expect(patches).toEqual([{ model: "provider/free-form", cheapModel: null }]);
-  await waitFor(() =>
-    expect(editor.getByText(/Effective cheap model:/).textContent).toContain("deploy/cheap"),
-  );
-});
-
-it("requires inline confirmation before removing an egress domain", async () => {
-  const patched: unknown[] = [];
-  const withEgress = { ...workspace, egressAllowlist: ["keep.example.com", "remove.example.com"] };
-  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const path = String(input);
-    if (path === "/api/config")
-      return Response.json({ defaultModel: "deploy/main", cheapModel: "deploy/cheap" });
-    if (path === "/api/workspaces" && init?.method !== "PATCH")
-      return Response.json({ workspaces: [withEgress] });
-    if (path === "/api/workspaces/ws_1" && init?.method === "PATCH") {
-      const body = JSON.parse(String(init?.body));
-      patched.push(body);
-      return Response.json({ workspace: { ...withEgress, egressAllowlist: body.egressAllowlist } });
-    }
-    if (path === "/api/bots") return Response.json({ bots: [] });
-    throw new Error(`unexpected ${init?.method ?? "GET"} ${path}`);
-  });
-  render(<ManagementScreen api={createApiClient({ fetch: fetcher })} />);
-
-  const operations = (
-    await screen.findByRole("heading", { level: 3, name: /^Operations/ })
-  ).closest("article") as HTMLElement;
-  const input = within(operations).getByRole("textbox");
-  fireEvent.change(input, { target: { value: "keep.example.com\nnew.example.com" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save egress allowlist" }));
-
-  expect(patched).toEqual([]);
-  expect(screen.getByText(/Remove remove\.example\.com/)).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Confirm egress removal" }));
-  await screen.findByText("Egress allowlist saved.");
-  expect(patched).toEqual([{ egressAllowlist: ["keep.example.com", "new.example.com"] }]);
-});
-
-it("marks a workspace as open internet exactly when its allowlist is ['*'] (ADR-0010)", async () => {
-  const patched: unknown[] = [];
-  const restricted = { ...workspace, egressAllowlist: ["docs.example.com"] };
-  const open = { ...workspace, id: "ws_2", name: "Trial", egressAllowlist: ["*"] };
-  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const path = String(input);
-    if (path === "/api/config")
-      return Response.json({ defaultModel: "deploy/main", cheapModel: "deploy/cheap" });
-    if (path === "/api/workspaces" && init?.method !== "PATCH")
-      return Response.json({ workspaces: [restricted, open] });
-    if (path === "/api/workspaces/ws_1" && init?.method === "PATCH") {
-      const body = JSON.parse(String(init?.body));
-      patched.push(body);
-      return Response.json({ workspace: { ...restricted, egressAllowlist: body.egressAllowlist } });
-    }
-    if (path === "/api/bots") return Response.json({ bots: [] });
-    throw new Error(`unexpected ${init?.method ?? "GET"} ${path}`);
-  });
-  render(<ManagementScreen api={createApiClient({ fetch: fetcher })} />);
-
-  const operations = (
-    await screen.findByRole("heading", { level: 3, name: /^Operations/ })
-  ).closest("article") as HTMLElement;
-  const trial = screen
-    .getByRole("heading", { level: 3, name: /^Trial/ })
-    .closest("article") as HTMLElement;
-  expect(within(trial).getByText("Open internet")).toBeTruthy();
-  expect(within(operations).queryByText("Open internet")).toBeNull();
-
-  // The operator opens a restricted workspace by choosing the open-internet mode, which saves
-  // the lone `*`; the badge follows the saved list, not the draft.
-  fireEvent.click(within(operations).getByLabelText(/Open public internet/));
-  expect(within(operations).queryByText("Open internet")).toBeNull();
-  fireEvent.click(within(operations).getByRole("button", { name: "Save egress allowlist" }));
-  fireEvent.click(within(operations).getByRole("button", { name: "Confirm egress removal" }));
-  await within(operations).findByText("Egress allowlist saved.");
-  expect(patched).toEqual([{ egressAllowlist: ["*"] }]);
-  expect(within(operations).getByText("Open internet")).toBeTruthy();
 });
 
 it("creates rules and requires inline confirmation before deleting one", async () => {
@@ -244,10 +91,8 @@ it("creates rules and requires inline confirmation before deleting one", async (
     const method = init?.method ?? "GET";
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     if (method !== "GET") requests.push({ method, path, body });
-    if (path === "/api/config")
-      return Response.json({ defaultModel: "deploy/main", cheapModel: "deploy/cheap" });
-    if (path === "/api/workspaces") return Response.json({ workspaces: [workspace] });
-    if (path === "/api/bots") return Response.json({ bots: [bot] });
+    if (path === "/api/bots" || path.startsWith("/api/bots?"))
+      return Response.json({ bots: [bot] });
     if (path.endsWith("/soul"))
       return Response.json({ soul: { body: "Be useful.", version: "1" } });
     // The rules page is read again after each change (#113 slice B), so the fake keeps state.
@@ -262,9 +107,9 @@ it("creates rules and requires inline confirmation before deleting one", async (
       stored = stored.filter((rule) => rule.id !== "rul_1");
       return Response.json({ deleted: true });
     }
-    throw new Error(`unexpected ${method} ${path}`);
+    return Response.json({});
   });
-  render(<ManagementScreen api={createApiClient({ fetch: fetcher })} />);
+  render(editor(createApiClient({ fetch: fetcher })));
 
   await screen.findByText(/git push/);
   const rules = screen.getByLabelText("Approval rules for triage");
@@ -274,7 +119,7 @@ it("creates rules and requires inline confirmation before deleting one", async (
   await waitFor(() => expect(screen.queryByText(/git push/)).toBeNull());
 
   fireEvent.change(screen.getByLabelText("Tool name"), { target: { value: "browser_click" } });
-  fireEvent.change(screen.getByLabelText("Target origin"), {
+  fireEvent.change(screen.getByLabelText("Website"), {
     target: { value: "https://shop.example.com" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
@@ -300,10 +145,6 @@ it("preserves a dirty SOUL draft through a version conflict", async () => {
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
     const method = init?.method ?? "GET";
-    if (path === "/api/config")
-      return Response.json({ defaultModel: "deploy/main", cheapModel: "deploy/cheap" });
-    if (path === "/api/workspaces") return Response.json({ workspaces: [workspace] });
-    if (path === "/api/bots") return Response.json({ bots: [bot] });
     if (path.includes("/approval-rules?")) return Response.json({ rules: [], total: 0 });
     if (path === "/api/bots/bot_1/soul" && method === "GET") {
       soulReads += 1;
@@ -323,16 +164,17 @@ it("preserves a dirty SOUL draft through a version conflict", async () => {
       }
       return Response.json({ soul: { body: body.body, version: "3" } });
     }
+    if (method === "GET") return Response.json({ bots: [bot] });
     throw new Error(`unexpected ${method} ${path}`);
   });
-  render(<ManagementScreen api={createApiClient({ fetch: fetcher })} />);
+  render(editor(createApiClient({ fetch: fetcher })));
 
-  const editor = await screen.findByLabelText("SOUL.md for triage");
-  fireEvent.change(editor, { target: { value: "My local draft" } });
+  const soul = await screen.findByLabelText("SOUL.md for triage");
+  fireEvent.change(soul, { target: { value: "My local draft" } });
   fireEvent.click(screen.getByRole("button", { name: "Save SOUL.md" }));
 
   await screen.findByText("Remote");
-  expect((editor as HTMLTextAreaElement).value).toBe("My local draft");
+  expect((soul as HTMLTextAreaElement).value).toBe("My local draft");
   fireEvent.click(screen.getByRole("button", { name: "Keep draft and use latest as base" }));
   fireEvent.click(screen.getByRole("button", { name: "Save SOUL.md" }));
   await screen.findByText(/SOUL\.md saved/);
@@ -350,10 +192,6 @@ it.each([
   async (message) => {
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = String(input);
-      if (path === "/api/config")
-        return Response.json({ defaultModel: "main", cheapModel: "cheap" });
-      if (path === "/api/workspaces") return Response.json({ workspaces: [workspace] });
-      if (path === "/api/bots") return Response.json({ bots: [bot] });
       if (path.includes("/approval-rules?")) return Response.json({ rules: [], total: 0 });
       if (path.endsWith("/soul")) {
         if (init?.method === "PATCH")
@@ -363,14 +201,14 @@ it.each([
           );
         return Response.json({ soul: { body: "Original", version: "1" } });
       }
-      throw new Error(`unexpected ${path}`);
+      return Response.json({ bots: [bot] });
     });
-    render(<ManagementScreen api={createApiClient({ fetch: fetcher })} />);
-    const editor = await screen.findByLabelText("SOUL.md for triage");
-    fireEvent.change(editor, { target: { value: "Keep my local instructions" } });
+    render(editor(createApiClient({ fetch: fetcher })));
+    const soul = await screen.findByLabelText("SOUL.md for triage");
+    fireEvent.change(soul, { target: { value: "Keep my local instructions" } });
     fireEvent.click(screen.getByRole("button", { name: "Save SOUL.md" }));
     await screen.findByText(message);
-    expect((editor as HTMLTextAreaElement).value).toBe("Keep my local instructions");
+    expect((soul as HTMLTextAreaElement).value).toBe("Keep my local instructions");
     expect(screen.queryByText(/SOUL.md changed since it was loaded/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Keep draft and use latest as base" })).toBeNull();
   },
@@ -379,21 +217,17 @@ it.each([
 it("retains a dirty SOUL draft across in-app unmount and remount for the same session", async () => {
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
-    if (path === "/api/config")
-      return Response.json({ defaultModel: "deploy/main", cheapModel: "deploy/cheap" });
-    if (path === "/api/workspaces") return Response.json({ workspaces: [workspace] });
-    if (path === "/api/bots") return Response.json({ bots: [bot] });
     if (path.includes("/approval-rules?")) return Response.json({ rules: [], total: 0 });
     if (path.endsWith("/soul")) return Response.json({ soul: { body: "Original", version: "1" } });
-    throw new Error(`unexpected ${path}`);
+    return Response.json({ bots: [bot] });
   });
   const api = createApiClient({ fetch: fetcher });
-  const first = render(<ManagementScreen api={api} />);
-  const editor = await screen.findByLabelText("SOUL.md for triage");
-  fireEvent.change(editor, { target: { value: "Retained draft" } });
+  const first = render(editor(api));
+  const soul = await screen.findByLabelText("SOUL.md for triage");
+  fireEvent.change(soul, { target: { value: "Retained draft" } });
   first.unmount();
 
-  render(<ManagementScreen api={api} />);
+  render(editor(api));
   await waitFor(() =>
     expect((screen.getByLabelText("SOUL.md for triage") as HTMLTextAreaElement).value).toBe(
       "Retained draft",
@@ -405,22 +239,17 @@ it("shows instruction readiness and opens a one-bot test conversation", async ()
   const requests: unknown[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
-    if (path === "/api/config")
-      return Response.json({ defaultModel: "main", cheapModel: "cheap", cronTimeZone: "UTC" });
-    if (path === "/api/workspaces") return Response.json({ workspaces: [workspace] });
-    if (path === "/api/bots") return Response.json({ bots: [bot] });
     if (path.endsWith("/soul")) return Response.json({ soul: { body: "", version: "1" } });
     if (path.includes("/approval-rules?")) return Response.json({ rules: [], total: 0 });
     if (path === "/api/threads" && init?.method === "POST") {
       requests.push(JSON.parse(String(init.body)));
       return Response.json({ thread: { id: "thr_test" }, members: [] });
     }
-    throw new Error(`unexpected ${path}`);
+    return Response.json({ bots: [bot] });
   });
-  render(<ManagementScreen api={createApiClient({ fetch: fetcher })} />);
+  render(editor(createApiClient({ fetch: fetcher })));
   await screen.findByText(/Needs instructions/);
-  expect(screen.getAllByText(/Role is a display description/).length).toBeGreaterThan(0);
-  fireEvent.click(screen.getByRole("button", { name: "Start test conversation" }));
+  fireEvent.click(screen.getByRole("button", { name: "Start test chat" }));
   await waitFor(() =>
     expect(requests).toEqual([
       { workspaceId: bot.workspaceId, botIds: [bot.id], title: "Test triage" },
@@ -429,34 +258,30 @@ it("shows instruction readiness and opens a one-bot test conversation", async ()
   expect(window.location.hash).toBe("#/threads/thr_test");
 });
 
-it("shows the workspace restoration requirement without offering automatic certificate trust", async () => {
-  const warning = {
-    ...workspace,
-    restorationRequirements: [
-      {
-        code: "volatile_nss_database",
-        path: "/root/.pki/nssdb",
-        sourceProviderRef: "previous-exact-runtime",
-        status: "restoration_required",
-      },
-    ],
-  };
+it("keeps instructions reachable in the use view while advanced operations stay hidden", async () => {
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const path = String(input);
-    if (path === "/api/config")
-      return Response.json({ defaultModel: "default-model", cheapModel: "cheap-default" });
-    if (path === "/api/workspaces") return Response.json({ workspaces: [warning] });
-    if (path === "/api/bots") return Response.json({ bots: [] });
-    if (path === "/api/trash") return Response.json({ workspaces: [], bots: [] });
-    if (path.startsWith("/api/approval-rules")) return Response.json({ rules: [] });
-    if (path.startsWith("/api/connectors")) return Response.json({ connectors: [] });
-    throw new Error(`unexpected GET ${path}`);
+    if (path.endsWith("/soul"))
+      return Response.json({ soul: { body: "Be useful.", version: "1" } });
+    if (path.includes("/approval-rules?")) return Response.json({ rules: [], total: 0 });
+    return Response.json({ bots: [bot] });
   });
-  render(<ManagementScreen api={createApiClient({ fetch: fetcher })} />);
-  expect(await screen.findByText("Temporary access restoration")).toBeTruthy();
-  expect(screen.getByText(/Changed peers or expired grants need new authorization/)).toBeTruthy();
-  expect(screen.getByText("/root/.pki/nssdb")).toBeTruthy();
-  expect(screen.queryByRole("button", { name: /trust|restore certificate/i })).toBeNull();
+  render(
+    <InterfaceViewProvider view="use">
+      {editor(createApiClient({ fetch: fetcher }))}
+    </InterfaceViewProvider>,
+  );
+  expect(await screen.findByRole("button", { name: "Start test chat" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Add schedule" })).toBeTruthy();
+  expect(await screen.findByLabelText("SOUL.md for triage")).toBeTruthy();
+  const instructions = screen.getByText("Instructions", { selector: "summary" });
+  expect(instructions.parentElement?.hasAttribute("open")).toBe(false);
+  fireEvent.click(instructions);
+  expect(instructions.parentElement?.hasAttribute("open")).toBe(true);
+  expect(screen.queryByRole("button", { name: "Save model settings" })).toBeNull();
+  expect(screen.queryByLabelText("Approval rules for triage")).toBeNull();
+  expect(screen.queryByText("Connectors")).toBeNull();
 });
 
 it("edits an approval rule in place (ADR-0043 decision 6)", async () => {
@@ -474,11 +299,6 @@ it("edits an approval rule in place (ADR-0043 decision 6)", async () => {
     const method = init?.method ?? "GET";
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     if (method !== "GET") requests.push({ method, path, body });
-    if (path === "/api/config")
-      return Response.json({ defaultModel: "deploy/main", cheapModel: "deploy/cheap" });
-    if (path === "/api/workspaces") return Response.json({ workspaces: [workspace] });
-    if (path.startsWith("/api/bots?") || path === "/api/bots")
-      return Response.json({ bots: [bot] });
     if (path.endsWith("/soul"))
       return Response.json({ soul: { body: "Be useful.", version: "1" } });
     if (path.endsWith("/rule-versions/soul")) return Response.json({ file: "soul", versions: [] });
@@ -488,13 +308,14 @@ it("edits an approval rule in place (ADR-0043 decision 6)", async () => {
       stored = { ...stored, ...body };
       return Response.json({ rule: stored });
     }
+    if (method === "GET") return Response.json({ bots: [bot] });
     throw new Error(`unexpected ${method} ${path}`);
   });
-  render(<ManagementScreen api={createApiClient({ fetch: fetcher })} />);
+  render(editor(createApiClient({ fetch: fetcher })));
   await screen.findByText(/git push/);
   const rules = screen.getByLabelText("Approval rules for triage");
   fireEvent.click(within(rules).getByRole("button", { name: "Edit" }));
-  fireEvent.change(within(rules).getByLabelText("Argument pattern"), {
+  fireEvent.change(within(rules).getByLabelText("Details pattern"), {
     target: { value: "git push --force*" },
   });
   fireEvent.click(within(rules).getByRole("button", { name: "Save rule" }));

@@ -1,6 +1,6 @@
 # ADR-0044: A second agent runtime (OpenAI Agents SDK), selected per bot, behind the same hook
 
-Status: Proposed (engineering choices awaiting owner review). Decision 1 records the owner's request of 2026-10-16: a switchable Claude Agent SDK / OpenAI SDK runtime so the two can be compared. Everything else is how that request fits the existing rules.
+Status: Accepted (under owner delegation, 2026-10-17). Decision 1 records the owner's request of 2026-10-16: a switchable Claude Agent SDK / OpenAI SDK runtime so the two can be compared. Everything else is how that request fits the existing rules, and it keeps them: one `PreToolUse` gate judges every call on both runtimes, the sidecar stays the only package that imports an agent SDK (AGENTS.md now names both loops), and the OpenAI runtime reaches the model proxy only with the run's short-lived token, in process. Accepting the runtime is not choosing it: `DEFAULT_RUNTIME` stays the Claude Agent SDK, compaction on the OpenAI runtime stays off, and moving a bot or the default is a strategy change that needs decision 8's paired `evals/compare.ts` run, which has not run. Still pending: T2 against the real Agents SDK and a real OpenAI-protocol upstream, and the known gaps under Consequences (no subagents, no fallback model).
 
 ## Context
 

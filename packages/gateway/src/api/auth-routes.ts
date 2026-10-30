@@ -144,12 +144,17 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: GatewayContext): v
   /** A cookie-authenticated mutation: live session, allowed Origin, matching CSRF token. */
   const requireSessionMutation = (
     request: FastifyRequest,
+    allowWhilePasswordChangeRequired = false,
   ): { token: string; resolved: ResolvedSession } => {
     if (!originAllowed(request, auth.config.allowedOrigins))
       throw new DeskmatesError("forbidden", "cross-origin request refused", { reason: "origin" });
     const token = readCookie(request, names.session);
     const resolved = token === undefined ? undefined : auth.resolve(token);
     if (!token || !resolved) throw new DeskmatesError("token_rejected", "not signed in");
+    if (!allowWhilePasswordChangeRequired && auth.mustChangePassword(resolved.session))
+      throw new DeskmatesError("forbidden", "change the initial password first", {
+        reason: "password_change_required",
+      });
     if (!sameSecret(headerValue(request, CSRF_HEADER), csrfTokenFor(token)))
       throw new DeskmatesError("forbidden", "missing or invalid CSRF token", { reason: "csrf" });
     return { token, resolved };
@@ -225,7 +230,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: GatewayContext): v
 
   app.post("/auth/logout", async (request, reply) => {
     reply.header("cache-control", "no-store");
-    const { resolved } = requireSessionMutation(request);
+    const { resolved } = requireSessionMutation(request, true);
     auth.logout(resolved.session.id);
     clearSessionCookie(reply);
     return { signedOut: true };
@@ -233,7 +238,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: GatewayContext): v
 
   app.post("/auth/logout-all", async (request, reply) => {
     reply.header("cache-control", "no-store");
-    const { resolved } = requireSessionMutation(request);
+    const { resolved } = requireSessionMutation(request, true);
     const revoked = auth.logoutAll(resolved.principal.userId);
     clearSessionCookie(reply);
     return { signedOut: true, sessionsRevoked: revoked };
@@ -241,7 +246,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: GatewayContext): v
 
   app.post("/auth/password", async (request, reply) => {
     reply.header("cache-control", "no-store");
-    const { resolved } = requireSessionMutation(request);
+    const { resolved } = requireSessionMutation(request, true);
     const body = asRecord(request.body);
     const rotated = await auth.changePassword(
       resolved.principal,

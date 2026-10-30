@@ -23,6 +23,11 @@ const SESSION = "__Host-deskmates-session";
 const HOST = "gw.test";
 type Who = { token: string; csrf: string };
 type Page = { approvals: Approval[]; nextCursor?: string; total: number };
+type GroupPage = {
+  groups: Array<{ key: string; approval: Approval; count: number }>;
+  totalGroups: number;
+  totalApprovals: number;
+};
 
 let app: FastifyInstance;
 let A: TenantFixture;
@@ -122,6 +127,20 @@ async function get(who: Who, url: string) {
   return app.inject({ method: "GET", url, headers } as InjectOptions);
 }
 
+async function post(who: Who, url: string, body: unknown) {
+  return app.inject({
+    method: "POST",
+    url,
+    headers: {
+      cookie: `${SESSION}=${who.token}`,
+      host: HOST,
+      origin: `http://${HOST}`,
+      [CSRF_HEADER]: who.csrf,
+    },
+    payload: body,
+  } as InjectOptions);
+}
+
 async function walk(who: Who, limit?: number): Promise<{ pages: Page[]; ids: string[] }> {
   const pages: Page[] = [];
   let cursor: string | undefined;
@@ -185,5 +204,30 @@ describe("Attention inbox paging (#113 surface 23)", () => {
     const { pages, ids } = await walk(member);
     expect(pages[0]?.total).toBe(3);
     expect(ids).toEqual([created[0], created[20], created[40]]);
+  });
+
+  it("groups identical actions and records a bulk decision on every approval independently", async () => {
+    const response = await get(admin, "/api/approval-groups");
+    expect(response.statusCode, response.body).toBe(200);
+    const page = response.json() as GroupPage;
+    expect(page.totalApprovals).toBe(60);
+    const repeated = page.groups.find((group) => group.count === 59);
+    expect(repeated?.approval.id).toBe(created[0]);
+
+    const decided = await post(
+      admin,
+      `/api/approval-groups/${encodeURIComponent(repeated?.key ?? "")}/decide`,
+      { decision: "deny_all" },
+    );
+    expect(decided.statusCode, decided.body).toBe(200);
+    const approvals = (decided.json() as { approvals: Approval[] }).approvals;
+    expect(approvals).toHaveLength(59);
+    expect(new Set(approvals.map((approval) => approval.id)).size).toBe(59);
+    expect(approvals.every((approval) => approval.decision === "deny")).toBe(true);
+    for (const id of created.slice(0, 59)) {
+      const stored = app.deskmates.ctx.approvals.mustGet(id);
+      expect(stored.decision).toBe("deny");
+      expect(stored.decidedBy).toMatch(/^human:/);
+    }
   });
 });

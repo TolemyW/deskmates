@@ -119,6 +119,21 @@ export interface WorkspaceFileItem {
   referenceCount: number;
   /** Newest first, at most FILE_COLLECTION_ITEM_REFERENCES. */
   references: FileReference[];
+  /**
+   * The newest chat message the caller may read whose attachments name this path (ADR-0014
+   * amendment A7): a person's input or a bot's delivery. Absent when no such message is visible;
+   * another person's private chat is never named.
+   */
+  sentInChat?: FileChatDelivery;
+}
+
+/** Where a file was sent in chat: the message a "Sent in chat" link opens. */
+export interface FileChatDelivery {
+  threadId: ThreadId;
+  threadTitle: string;
+  messageId: MessageId;
+  authorKind: "human" | "bot";
+  at: IsoTimestamp;
 }
 
 /** `GET /api/workspaces/:id/assets`. */
@@ -215,6 +230,8 @@ export function workspacePathTokens(body: string): string[] {
   const paths: string[] = [];
   for (const match of body.matchAll(TOKEN)) {
     const start = match.index;
+    // An unsupported Unicode filename is one path, never its linkable ASCII prefix.
+    if (/^[\p{L}\p{N}\p{M}]/u.test(body.slice(start + match[0].length))) continue;
     const quote = body[start - 1];
     if (quote === '"' || quote === "'" || quote === "`") {
       const close = body.indexOf(quote, start);

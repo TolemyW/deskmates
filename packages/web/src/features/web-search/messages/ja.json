@@ -1,0 +1,19 @@
+{
+  "webSearch.disable": "ウェブ検索をオフにする",
+  "webSearch.enable": "ウェブ検索をオンにする",
+  "webSearch.flow": "ウェブ検索をオンにすると、検索のたびにその文字列がこのインストールを離れ、公開の検索エンジンに送られます。閲覧がリストに制限されたワークスペースでも同じです。検索結果を開くときは引き続きこのワークスペースの外部接続ルールに従い、リスト外のサイトは先に確認を求めます。",
+  "webSearch.frozen": "すでに開始した実行は、開始時の設定のままです。",
+  "webSearch.intro": "サーバーに検索サービスが接続されている場合、ウェブ検索は既定でオンです。ワークスペースの所有者または管理者がオフにできます。",
+  "webSearch.loading": "ウェブ検索を読み込み中…",
+  "webSearch.notConfigured": "このインストールには検索サービスが設定されていないため、ここではウェブ検索をオンにできません。",
+  "webSearch.off": "オフ",
+  "webSearch.on": "オン",
+  "webSearch.reset": "既定に戻す",
+  "webSearch.retry": "ウェブ検索設定を再読み込み",
+  "webSearch.roleNote": "ウェブ検索を変更する",
+  "webSearch.setting.chosen": "このページで設定",
+  "webSearch.setting.default": "既定",
+  "webSearch.strategyNote": "ウェブ検索はネットワーク設定の一部です。データを公開検索クエリに含めてはいけない場合はオフにしてください。",
+  "webSearch.title": "ウェブ検索",
+  "webSearch.workspaceLabel": "このワークスペース"
+}

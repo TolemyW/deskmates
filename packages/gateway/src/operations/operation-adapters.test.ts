@@ -1,13 +1,19 @@
 // T0: the fixed upstream requests of the operation proxy (ADR-0040 decision 3).
 
 import { describe, expect, it } from "vitest";
-import type { AsrOperationConfig, LookOperationConfig } from "../config/operations.js";
+import type {
+  AsrOperationConfig,
+  ImageOperationConfig,
+  LookOperationConfig,
+} from "../config/operations.js";
 import {
   LOOK_MAX_TOKENS,
   asrRequest,
+  imageRequest,
   lookPrompt,
   lookRequest,
   parseAsrResponse,
+  parseImageResponse,
   parseLookResponse,
 } from "./operation-adapters.js";
 
@@ -131,5 +137,44 @@ describe("asrRequest and parseAsrResponse", () => {
       durationSeconds: null,
     });
     expect(parseAsrResponse({ segments: [] })).toBeUndefined();
+  });
+});
+
+// ADR-0040 amendment B, decision 18.
+describe("imageRequest and parseImageResponse", () => {
+  const image: ImageOperationConfig = {
+    url: "http://i.internal/v1/images/generations",
+    model: "flux-local",
+    authToken: "img-secret",
+    endpointSha256: "x",
+    defaultSize: "1024x1024",
+  };
+
+  it("builds the fixed generations body with the configured model and base64 answers", () => {
+    const { url, init } = imageRequest(image, { prompt: "a red cube", size: "512x512", count: 2 });
+    expect(url).toBe(image.url);
+    expect(JSON.parse(String(init.body))).toEqual({
+      model: "flux-local",
+      prompt: "a red cube",
+      n: 2,
+      size: "512x512",
+      response_format: "b64_json",
+    });
+    expect(new Headers(init.headers).get("authorization")).toBe("Bearer img-secret");
+  });
+
+  it("reads base64 items and a revised prompt, and refuses url-only or empty answers", () => {
+    expect(
+      parseImageResponse({
+        data: [{ b64_json: "AAAA", revised_prompt: "a cube, red" }, { b64_json: "BBBB" }],
+      }),
+    ).toEqual({ images: ["AAAA", "BBBB"], revisedPrompt: "a cube, red" });
+    expect(parseImageResponse({ data: [{ b64_json: "AAAA" }] })).toEqual({
+      images: ["AAAA"],
+      revisedPrompt: null,
+    });
+    expect(parseImageResponse({ data: [{ url: "http://elsewhere.test/a.png" }] })).toBeUndefined();
+    expect(parseImageResponse({ data: [] })).toBeUndefined();
+    expect(parseImageResponse({ images: ["AAAA"] })).toBeUndefined();
   });
 });

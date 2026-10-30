@@ -1,4 +1,5 @@
 {
+  "computer.allowedDomains.manage": "在工作區設定中修改",
   "computer.context": "{name} · 這個工作區所有機器人共用的瀏覽器、檔案和 shell",
   "computer.desktops.intro": "每個機器人的畫面以及接管共用桌面的操作都在它的個人檔案頁。",
   "computer.desktops.loading": "正在載入機器人…",
@@ -39,6 +40,9 @@
   "desktopView.live.control": "你已取得控制",
   "desktopView.live.view": "即時 · 僅供檢視",
   "desktopView.reconnect": "重新連線",
+  "desktopView.screen": "畫面",
+  "desktopView.sharedFallback": "此 Bot 的畫面區域尚未就緒，目前顯示整個工作區。啟動它的桌面或更新工作區映像後即可使用個別區域。",
+  "desktopView.workspace": "整個工作區",
   "desktops.empty.body": "建立工作區並新增第一個機器人即可開始。",
   "desktops.empty.setup": "設定你的工作區",
   "desktops.empty.title": "團隊的畫面會顯示在這裡。",

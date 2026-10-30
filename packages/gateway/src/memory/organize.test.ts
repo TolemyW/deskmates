@@ -133,6 +133,7 @@ describe("A30 the job", () => {
       ]),
     });
     const run = ctx.runs.mustGet(job.runId as RunId);
+    expect(run.triggerKind).toBe("model_job");
     expect(run.config).toMatchObject({ runType: "memory_organize", maxTurns: 1 });
     expect(run.config.memoryOrganizeInput).toEqual(
       expect.arrayContaining([

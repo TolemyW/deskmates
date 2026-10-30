@@ -8,7 +8,7 @@ import type {
   WorkdirSettingsInput,
   WorkdirSettingsView,
 } from "@deskmates/contracts";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/button.js";
 import { errorMessage } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
@@ -44,10 +44,22 @@ export function WorkdirSection({ api, entry }: DetailSectionProps) {
   const [draft, setDraft] = useState<Draft>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [loadRevision, setLoadRevision] = useState(0);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const modeInput = useRef<HTMLSelectElement>(null);
+  const wasEditing = useRef(false);
+  const editing = draft !== undefined;
+  useEffect(() => {
+    if (editing) modeInput.current?.focus();
+    else if (wasEditing.current) editButton.current?.focus();
+    wasEditing.current = editing;
+  }, [editing]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadRevision requests a local retry.
   useEffect(() => {
     let active = true;
     setView(undefined);
+    setError("");
     setDraft(undefined);
     api
       .getWorkspaceWorkdir(workspaceId)
@@ -56,11 +68,11 @@ export function WorkdirSection({ api, entry }: DetailSectionProps) {
     return () => {
       active = false;
     };
-  }, [api, workspaceId]);
+  }, [api, workspaceId, loadRevision]);
 
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!draft) return;
+    if (!draft || busy) return;
     const input = inputOf(draft);
     setBusy(true);
     setError("");
@@ -74,6 +86,10 @@ export function WorkdirSection({ api, entry }: DetailSectionProps) {
       .finally(() => setBusy(false));
   };
 
+  const changed =
+    view && draft
+      ? draft.mode !== draftOf(view).mode || draft.laneNotice !== draftOf(view).laneNotice
+      : false;
   const modeText = (mode: BotWorkdirMode) => t(`workdir.mode.${mode}`);
 
   return (
@@ -89,6 +105,8 @@ export function WorkdirSection({ api, entry }: DetailSectionProps) {
           <label>
             {t("workdir.modeLabel")}
             <select
+              ref={modeInput}
+              disabled={busy}
               value={draft.mode}
               onChange={(event) => setDraft({ ...draft, mode: event.target.value as ModeChoice })}
             >
@@ -103,6 +121,7 @@ export function WorkdirSection({ api, entry }: DetailSectionProps) {
           <label className="workdir-check">
             <input
               type="checkbox"
+              disabled={busy}
               checked={draft.laneNotice}
               onChange={(event) => setDraft({ ...draft, laneNotice: event.target.checked })}
             />
@@ -110,10 +129,18 @@ export function WorkdirSection({ api, entry }: DetailSectionProps) {
           </label>
           <p className="muted small">{t("workdir.frozen")}</p>
           <div className="form-actions">
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || !changed}>
               {t("workdir.save")}
             </Button>
-            <Button type="button" variant="tertiary" onClick={() => setDraft(undefined)}>
+            <Button
+              type="button"
+              variant="tertiary"
+              disabled={busy}
+              onClick={() => {
+                setDraft(undefined);
+                setError("");
+              }}
+            >
               {t("workdir.cancel")}
             </Button>
           </div>
@@ -137,7 +164,12 @@ export function WorkdirSection({ api, entry }: DetailSectionProps) {
           </dl>
           <p className="muted small">{t("workdir.convention")}</p>
           {canSet ? (
-            <Button type="button" variant="tertiary" onClick={() => setDraft(draftOf(view))}>
+            <Button
+              ref={editButton}
+              type="button"
+              variant="tertiary"
+              onClick={() => setDraft(draftOf(view))}
+            >
               {t("workdir.edit")}
             </Button>
           ) : entry.archivedAt ? null : (
@@ -146,9 +178,18 @@ export function WorkdirSection({ api, entry }: DetailSectionProps) {
         </>
       )}
       {error ? (
-        <p className="error" role="alert">
+        <div className="error" role="alert">
           {error}
-        </p>
+          {!view ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLoadRevision((value) => value + 1)}
+            >
+              {t("workdir.retry")}
+            </Button>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );

@@ -13,16 +13,16 @@ actions, and records every run.
 
 | Page | What it covers |
 |---|---|
-| [Getting started](getting-started.md) | Sign in, roles in brief, your first workspace, bot and chat, the first-run checklist |
-| [Workspaces and the shared computer](workspaces.md) | What bots in a workspace share, screens and takeover, which sites they may reach, files, Knowledge (Documents and Observations), Skills and Computer |
-| [Bots](bots.md) | Contacts, a bot's profile, instructions (SOUL), notes and experience, model, schedules, activity |
-| [Chats and groups](chats-and-groups.md) | Private chats and groups, mentions, the chat owner, turn limits, runs |
+| [Getting started](getting-started.md) | Sign in, the sidebar, Preferences, Use and Tune, roles in brief, your first workspace, the assistant and your first chat |
+| [Workspaces and the shared computer](workspaces.md) | The workspace directory and settings, what bots in a workspace share, screens and takeover, which sites they may reach, files, the board, Knowledge, Skills and Computer, Trash |
+| [Bots](bots.md) | The Bots list, the default bot, a bot's profile, instructions (SOUL), notes and experience, model, schedules, activity |
+| [Chats and groups](chats-and-groups.md) | Private chats and groups, mentions, the chat owner, what chat history shows in Use and Tune, handoffs, failures, turn limits, runs |
 | [Tasks](tasks.md) | Tracking work: states, owner, blockers, delivery and human acceptance |
-| [Approvals](approvals.md) | What needs a human, Allow once / Always / Deny, new-site asks, the Attention screen |
-| [Integrations and connectors](integrations-and-connectors.md) | Apps through the integration runtime, registered databases |
-| [Channels](channels.md) | Talking to bots from WhatsApp |
+| [Approvals](approvals.md) | What needs a human, the workspace's approval mode, Allow once / Always / Deny, new-site asks, the Approvals screen |
+| [Connections](integrations-and-connectors.md) | Chat channels, apps through the integration runtime and how a large catalog is listed, registered databases, the Vault |
+| [Chat channels](channels.md) | Talking to bots from Telegram, WhatsApp, Slack or Discord: guided setup, management, approvals |
 | [Costs](costs.md) | What bots spent, how it is priced, cost alerts |
-| [People and roles](people-and-roles.md) | Owner, Admin and Member; invitations; sign-in and teams |
+| [People and roles](people-and-roles.md) | Owner, Admin, Member and Guest in each workspace; private chats; invitations; your account |
 | [Using Deskmates from another agent](using-deskmates-from-another-agent.md) | The `deskmates-agent-mcp` server for external agents |
 
 Every page ends with a **What this cannot do** section. Read it before you rely on a feature for

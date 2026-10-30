@@ -20,6 +20,8 @@ interface UsageRow {
   run_id: string;
   model: string;
   attempt: number;
+  source: UsageSource;
+  usage_complete: number;
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
@@ -37,6 +39,23 @@ interface SessionUsageRow {
 }
 
 export type UsageCounts = Omit<RunUsage, "runId" | "costUsd">;
+
+/**
+ * Where an attempt's `run_usage` rows came from (ADR-0029 decision 8): `sdk`, the sidecar's final
+ * report; `proxy`, the `model_requests` the attempt's token made, because the sidecar never
+ * reported (a restart, the deadline, a crash, a forced stop) or reported a total the Gateway
+ * cannot use as a baseline.
+ */
+export type UsageSource = "sdk" | "proxy";
+
+interface ProxyRequestRow {
+  model: string | null;
+  served_model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_create_tokens: number | null;
+}
 
 /** The session a run's usage report belongs to, when the run has a thread. */
 export interface UsageSession {
@@ -73,6 +92,148 @@ export class UsageStore {
     session?: UsageSession,
     sdkSessionId?: string,
   ): RunUsage[] {
+    // ADR-0029 decision 8: after an attempt whose usage came from the proxy, the SDK's cumulative
+    // total has no usable baseline. The session's totals still move to the report, so the run
+    // after this one is measured from it, but this attempt's rows come from its requests.
+    if (this.followsProxySourced(runId, attempt, session))
+      return this.db.transaction(() => {
+        this.recordSdk(runId, attempt, usage, pricedAt, session, sdkSessionId, false);
+        return this.recordFromProxy(runId, attempt, pricedAt);
+      })();
+    return this.recordSdk(runId, attempt, usage, pricedAt, session, sdkSessionId, true);
+  }
+
+  /**
+   * ADR-0029 decision 8: the attempt's rows from the `model_requests` its token made, one per
+   * served model, marked `proxy`. A request whose usage the upstream never reported makes the
+   * row incomplete (`usage_complete = 0`): a lower bound, unknown beyond it, never zero. Replaces
+   * whatever the attempt had, so a later call (a late response) corrects it rather than adds.
+   */
+  recordFromProxy(runId: RunId, attempt: number, pricedAt: string): RunUsage[] {
+    return this.db.transaction(() => {
+      const rows = this.db
+        .prepare(
+          `SELECT model, served_model, input_tokens, output_tokens, cache_read_tokens,
+                  cache_create_tokens
+             FROM model_requests
+            WHERE run_id = ? AND attempt = ? AND request_kind = 'messages' AND refusal IS NULL
+            ORDER BY seq`,
+        )
+        .all(runId, attempt) as ProxyRequestRow[];
+      // No request reached the upstream: nothing was spent, and nothing replaces what is there.
+      if (rows.length === 0) return [];
+      const byModel = new Map<string, { counts: UsageCounts; complete: boolean }>();
+      for (const r of rows) {
+        const model = r.served_model ?? r.model ?? "unknown";
+        let entry = byModel.get(model);
+        if (!entry) {
+          entry = {
+            counts: {
+              model,
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheReadTokens: 0,
+              cacheCreateTokens: 0,
+            },
+            complete: true,
+          };
+          byModel.set(model, entry);
+        }
+        if (r.input_tokens === null || r.output_tokens === null) entry.complete = false;
+        entry.counts.inputTokens += r.input_tokens ?? 0;
+        entry.counts.outputTokens += r.output_tokens ?? 0;
+        entry.counts.cacheReadTokens += r.cache_read_tokens ?? 0;
+        entry.counts.cacheCreateTokens += r.cache_create_tokens ?? 0;
+      }
+      this.db.prepare("DELETE FROM run_usage WHERE run_id = ? AND attempt = ?").run(runId, attempt);
+      const out: RunUsage[] = [];
+      for (const { counts, complete } of byModel.values()) {
+        const cost = priceUsage(
+          this.prices.listForModel(counts.model),
+          counts.model,
+          counts,
+          pricedAt,
+        );
+        this.db
+          .prepare(
+            `INSERT INTO run_usage (run_id, attempt, model, input_tokens, output_tokens, cache_read_tokens, cache_create_tokens, cost_usd, source, usage_complete)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'proxy', ?)`,
+          )
+          .run(
+            runId,
+            attempt,
+            counts.model,
+            counts.inputTokens,
+            counts.outputTokens,
+            counts.cacheReadTokens,
+            counts.cacheCreateTokens,
+            cost,
+            complete ? 1 : 0,
+          );
+        if (cost === null)
+          this.events.append({ runId, kind: "pricing_missing", payload: { model: counts.model } });
+        out.push({ runId, ...counts, costUsd: cost });
+      }
+      this.events.append({
+        runId,
+        attempt,
+        kind: "log",
+        payload: {
+          source: "usage_proxy",
+          requests: rows.length,
+          models: [...byModel.keys()],
+          complete: [...byModel.values()].every((e) => e.complete),
+        },
+      });
+      return out;
+    })();
+  }
+
+  /** Whether the attempt has any `run_usage` row yet, from either source. */
+  hasAttemptUsage(runId: RunId, attempt: number): boolean {
+    return (
+      this.db
+        .prepare("SELECT 1 FROM run_usage WHERE run_id = ? AND attempt = ? LIMIT 1")
+        .get(runId, attempt) !== undefined
+    );
+  }
+
+  /**
+   * Whether this attempt's SDK total sits on top of an attempt that was proxy-sourced since the
+   * session's totals were last stored: an earlier attempt of the same run, or another run of the
+   * same (bot, thread) session that started after the stored totals.
+   */
+  private followsProxySourced(runId: RunId, attempt: number, session?: UsageSession): boolean {
+    const own = this.db
+      .prepare(
+        "SELECT 1 FROM run_usage WHERE run_id = ? AND attempt < ? AND source = 'proxy' LIMIT 1",
+      )
+      .get(runId, attempt);
+    if (own !== undefined) return true;
+    if (!session) return false;
+    const stored = this.db
+      .prepare("SELECT max(updated_at) AS at FROM session_usage WHERE bot_id = ? AND thread_id = ?")
+      .get(session.botId, session.threadId) as { at: string | null };
+    return (
+      this.db
+        .prepare(
+          `SELECT 1 FROM run_usage u JOIN runs r ON r.id = u.run_id
+            WHERE r.bot_id = ? AND r.thread_id = ? AND r.id != ? AND u.source = 'proxy'
+              AND coalesce(r.started_at, r.created_at) >= ? LIMIT 1`,
+        )
+        .get(session.botId, session.threadId, runId, stored.at ?? "") !== undefined
+    );
+  }
+
+  private recordSdk(
+    runId: RunId,
+    attempt: number,
+    usage: readonly UsageCounts[],
+    pricedAt: string,
+    session: UsageSession | undefined,
+    sdkSessionId: string | undefined,
+    write: boolean,
+  ): RunUsage[] {
     return this.db.transaction(() => {
       const out: RunUsage[] = [];
       const sessionId = sdkSessionId ?? session?.sdkSessionId;
@@ -99,15 +260,18 @@ export class UsageStore {
           : attempt > 1 && this.isThreadlessTrigger(runId)
             ? this.deltaForRunAttempt(runId, attempt, reported, fingerprint)
             : reported;
+        if (!write) continue;
         const cost = priceUsage(this.prices.listForModel(u.model), u.model, u, pricedAt);
+        // An SDK final replaces a proxy row of the same attempt (a `run_ended` recovered from
+        // stdout after the Gateway had filled the attempt in from its requests).
         this.db
           .prepare(
-            `INSERT INTO run_usage (run_id, attempt, model, input_tokens, output_tokens, cache_read_tokens, cache_create_tokens, cost_usd)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `INSERT INTO run_usage (run_id, attempt, model, input_tokens, output_tokens, cache_read_tokens, cache_create_tokens, cost_usd, source, usage_complete)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sdk', 1)
              ON CONFLICT (run_id, attempt, model) DO UPDATE SET
                input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
                cache_read_tokens = excluded.cache_read_tokens, cache_create_tokens = excluded.cache_create_tokens,
-               cost_usd = excluded.cost_usd`,
+               cost_usd = excluded.cost_usd, source = 'sdk', usage_complete = 1`,
           )
           .run(
             runId,
@@ -137,6 +301,7 @@ export class UsageStore {
       run.thread_id === null &&
       (run.trigger_kind === "cron" ||
         run.trigger_kind === "manual" ||
+        run.trigger_kind === "model_job" ||
         run.trigger_kind === "webhook")
     );
   }
@@ -360,7 +525,9 @@ export class UsageStore {
   }
 
   /** Every stored row for a run, attempt by attempt. The ledger view and its tests read it. */
-  listByAttempt(runId: RunId): (RunUsage & { attempt: number })[] {
+  listByAttempt(
+    runId: RunId,
+  ): (RunUsage & { attempt: number; source: UsageSource; usageComplete: boolean })[] {
     const rows = this.db
       .prepare("SELECT * FROM run_usage WHERE run_id = ? ORDER BY id")
       .all(runId) as UsageRow[];
@@ -368,6 +535,8 @@ export class UsageStore {
       runId: r.run_id as RunId,
       model: r.model,
       attempt: r.attempt,
+      source: r.source,
+      usageComplete: r.usage_complete === 1,
       inputTokens: r.input_tokens,
       outputTokens: r.output_tokens,
       cacheReadTokens: r.cache_read_tokens,

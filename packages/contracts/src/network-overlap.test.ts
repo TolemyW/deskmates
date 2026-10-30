@@ -54,7 +54,7 @@ describe("findNetworkOverlaps", () => {
 
   it("finds the network holding one address", () => {
     expect(networkHolding("172.18.200.24", testbox)?.name).toBe("vendordb-demo-net");
-    expect(networkHolding("10.20.40.132", testbox)).toBeUndefined();
+    expect(networkHolding("10.88.40.132", testbox)).toBeUndefined();
     expect(networkHolding("console.vendordb.lan", testbox)).toBeUndefined();
   });
 });

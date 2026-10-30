@@ -32,6 +32,12 @@ describe("workspacePathTokens", () => {
       "/work/ok.md",
     ]);
   });
+
+  it("never publishes the ASCII prefix of an unsupported Unicode filename", () => {
+    expect(
+      workspacePathTokens("说明在 /work/bots/editor/editor_复核说明.md；另见 /work/report.md。"),
+    ).toEqual(["/work/report.md"]);
+  });
 });
 
 describe("parseFileCollectionQuery", () => {

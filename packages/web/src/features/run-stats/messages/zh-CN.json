@@ -1,0 +1,14 @@
+{
+  "runStats.disable": "关闭运行统计",
+  "runStats.enable": "开启运行统计",
+  "runStats.frozen": "已开始的运行保留其开始时的设置。",
+  "runStats.intro": "为 {name} 提供一个只读工具 run_stats，显示它自己最近的运行、失败原因、耗时、花费、待审批事项、挂起的运行和任务。只包含这个 Bot 在本工作区的数据；绝不包含其他 Bot 的数据，也绝不包含任何人私聊的内容。",
+  "runStats.loading": "正在加载运行统计…",
+  "runStats.off": "关闭（默认）",
+  "runStats.on": "开启",
+  "runStats.retry": "重试",
+  "runStats.roleNote": "更改运行统计",
+  "runStats.state": "运行统计工具",
+  "runStats.strategyNote": "给 Bot 这个工具会改变它的工作方式；依赖它之前请先用配对运行进行比较。",
+  "runStats.title": "运行统计"
+}

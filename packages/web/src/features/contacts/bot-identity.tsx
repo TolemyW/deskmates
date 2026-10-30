@@ -15,6 +15,7 @@ import type { ApiClient } from "../../api/client.js";
 import { Button } from "../../components/ui/button.js";
 import { errorMessage, formatDateTime } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
+import { useTuneView } from "../../lib/interface-view.js";
 import { RoleNote, useCan } from "../../state/session-roles.js";
 import type { BotUpdate } from "./api.js";
 
@@ -54,8 +55,10 @@ export function BotIdentity({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const canConfigure = useCan("bot.configure").allowed;
+  const canConfigure = useCan("bot.configure", bot.workspaceId).allowed;
   const t = useT();
+  // Connectors, teammates and reasoning are tuning knobs (docs/use-and-tune-views.md).
+  const tune = useTuneView();
 
   useEffect(() => {
     let active = true;
@@ -105,9 +108,85 @@ export function BotIdentity({
     <section className="management-subsection bot-identity">
       <h3>{t("botIdentity.title")}</h3>
       <p className="muted small">{t("botIdentity.intro", { name: bot.name })}</p>
-      <RoleNote action="bot.configure" does={t("botIdentity.roleNote")} />
+      <RoleNote allowed={canConfigure} action="bot.configure" does={t("botIdentity.roleNote")} />
       {error ? <p role="alert">{error}</p> : null}
       {notice ? <output>{notice}</output> : null}
+      <fieldset disabled={busy || !canConfigure}>
+        <label>
+          {t("botIdentity.name")}
+          <input value={name} onChange={(event) => setName(event.target.value)} />
+        </label>
+        {patch.name !== undefined ? (
+          <p className="muted small">{t("botIdentity.renameHelp", { from: bot.name })}</p>
+        ) : null}
+        <label>
+          {t("botIdentity.role")}
+          <input value={role} onChange={(event) => setRole(event.target.value)} />
+        </label>
+        {tune ? (
+          <>
+            <label>
+              {t("botIdentity.connectors")}
+              <input value={connectors} onChange={(event) => setConnectors(event.target.value)} />
+            </label>
+            <p className="muted small">{t("botIdentity.connectorsHelp")}</p>
+            <fieldset className="bot-allowlist">
+              <legend>{t("botIdentity.allowlist")}</legend>
+              <p className="muted small">{t("botIdentity.allowlistHelp", { name: bot.name })}</p>
+              {allowNames.length === 0 ? (
+                <p className="muted small">{t("botIdentity.allowlistEmpty")}</p>
+              ) : null}
+              {allowNames.map((peer) => (
+                <label key={peer} className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={allowlist.includes(peer)}
+                    onChange={(event) =>
+                      setAllowlist((current) =>
+                        event.target.checked
+                          ? [...current, peer]
+                          : current.filter((item) => item !== peer),
+                      )
+                    }
+                  />
+                  {peer}
+                </label>
+              ))}
+            </fieldset>
+            <Select
+              label={t("botIdentity.effort")}
+              value={effort}
+              onValueChange={(value) => setEffort(value as EffortLevel | "")}
+              disabled={busy || !canConfigure}
+              options={[
+                { value: "", label: t("botIdentity.sdkDefault") },
+                ...EFFORT_LEVELS.map((level) => ({ value: level, label: level })),
+              ]}
+            />
+            <Select
+              label={t("botIdentity.thinking")}
+              value={thinking}
+              onValueChange={(value) => setThinking(value as ThinkingChoice)}
+              disabled={busy || !canConfigure}
+              options={[
+                { value: "", label: t("botIdentity.sdkDefault") },
+                { value: "adaptive", label: t("botIdentity.thinkingAdaptive") },
+                { value: "enabled", label: t("botIdentity.thinkingEnabled") },
+                { value: "disabled", label: t("botIdentity.thinkingDisabled") },
+              ]}
+            />
+            <p className="muted small">{t("botIdentity.reasoningHelp")}</p>
+          </>
+        ) : null}
+        <Button
+          type="button"
+          variant="default"
+          disabled={!changed}
+          onClick={() => void save(patch, t("botIdentity.saved"))}
+        >
+          {t("botIdentity.save")}
+        </Button>
+      </fieldset>
       <div className="bot-pause">
         {bot.pausedAt ? (
           <p>
@@ -133,78 +212,6 @@ export function BotIdentity({
           {bot.pausedAt ? t("botIdentity.resume") : t("botIdentity.pause")}
         </Button>
       </div>
-      <fieldset disabled={busy || !canConfigure}>
-        <label>
-          {t("botIdentity.name")}
-          <input value={name} onChange={(event) => setName(event.target.value)} />
-        </label>
-        {patch.name !== undefined ? (
-          <p className="muted small">{t("botIdentity.renameHelp", { from: bot.name })}</p>
-        ) : null}
-        <label>
-          {t("botIdentity.role")}
-          <input value={role} onChange={(event) => setRole(event.target.value)} />
-        </label>
-        <label>
-          {t("botIdentity.connectors")}
-          <input value={connectors} onChange={(event) => setConnectors(event.target.value)} />
-        </label>
-        <p className="muted small">{t("botIdentity.connectorsHelp")}</p>
-        <fieldset className="bot-allowlist">
-          <legend>{t("botIdentity.allowlist")}</legend>
-          <p className="muted small">{t("botIdentity.allowlistHelp", { name: bot.name })}</p>
-          {allowNames.length === 0 ? (
-            <p className="muted small">{t("botIdentity.allowlistEmpty")}</p>
-          ) : null}
-          {allowNames.map((peer) => (
-            <label key={peer} className="checkbox">
-              <input
-                type="checkbox"
-                checked={allowlist.includes(peer)}
-                onChange={(event) =>
-                  setAllowlist((current) =>
-                    event.target.checked
-                      ? [...current, peer]
-                      : current.filter((item) => item !== peer),
-                  )
-                }
-              />
-              {peer}
-            </label>
-          ))}
-        </fieldset>
-        <Select
-          label={t("botIdentity.effort")}
-          value={effort}
-          onValueChange={(value) => setEffort(value as EffortLevel | "")}
-          disabled={busy || !canConfigure}
-          options={[
-            { value: "", label: t("botIdentity.sdkDefault") },
-            ...EFFORT_LEVELS.map((level) => ({ value: level, label: level })),
-          ]}
-        />
-        <Select
-          label={t("botIdentity.thinking")}
-          value={thinking}
-          onValueChange={(value) => setThinking(value as ThinkingChoice)}
-          disabled={busy || !canConfigure}
-          options={[
-            { value: "", label: t("botIdentity.sdkDefault") },
-            { value: "adaptive", label: t("botIdentity.thinkingAdaptive") },
-            { value: "enabled", label: t("botIdentity.thinkingEnabled") },
-            { value: "disabled", label: t("botIdentity.thinkingDisabled") },
-          ]}
-        />
-        <p className="muted small">{t("botIdentity.reasoningHelp")}</p>
-        <Button
-          type="button"
-          variant="default"
-          disabled={!changed}
-          onClick={() => void save(patch, t("botIdentity.saved"))}
-        >
-          {t("botIdentity.save")}
-        </Button>
-      </fieldset>
     </section>
   );
 }

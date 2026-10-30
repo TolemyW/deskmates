@@ -4,10 +4,12 @@
 // the non-secret input; a
 // used, revoked or expired link says which; an existing account signs in on the page and joins.
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { SessionFlows } from "../api/members-client.js";
 import { App } from "../app.js";
 import { installFakeEventSource } from "../test-support/fixtures.js";
+import { InviteScreen } from "./invite-screen.js";
 
 const PASSWORD = "a long password here";
 
@@ -187,4 +189,116 @@ it("lets an existing account sign in on the page and join with it", async () => 
       csrf: "session-csrf",
     }),
   );
+});
+
+it("dates the expiry in the page's language, not the browser default (#63 L23)", async () => {
+  vi.spyOn(navigator, "languages", "get").mockReturnValue(["ja"]);
+  gateway();
+  render(<App />);
+  const when = new Date("2026-10-17T00:00:00.000Z").toLocaleString("ja");
+  expect(await screen.findByText((text) => text.includes(when))).toBeInTheDocument();
+});
+
+it("retries transient invitation reads without declaring the link invalid", async () => {
+  const previewInvitation = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValue({
+      tenantName: "Recovered team",
+      role: "member",
+      target: { kind: "local_signup" },
+      expiresAt: "2027-01-01T00:00:00Z",
+    });
+  render(
+    <InviteScreen
+      flows={{ previewInvitation } as unknown as SessionFlows}
+      token="test-token"
+      session={undefined}
+      loginCsrf="csrf"
+      onSignedIn={() => {}}
+      onJoined={() => {}}
+    />,
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not load this invitation");
+  expect(screen.queryByText(/This invitation is not valid/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await screen.findByLabelText("Username");
+  expect(previewInvitation).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("clears the old invitation form while a different link loads", async () => {
+  const preview = {
+    tenantName: "First team",
+    role: "member",
+    target: { kind: "local_signup" },
+    expiresAt: "2027-01-01T00:00:00Z",
+  };
+  let finish!: (value: typeof preview) => void;
+  const previewInvitation = vi
+    .fn()
+    .mockResolvedValueOnce(preview)
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+  const props = {
+    flows: { previewInvitation } as unknown as SessionFlows,
+    session: undefined,
+    loginCsrf: "csrf",
+    onSignedIn: () => {},
+    onJoined: () => {},
+  };
+  const view = render(<InviteScreen {...props} token="first" />);
+  await screen.findByLabelText("Username");
+  fill({ username: "unfinished", password: PASSWORD, confirm: PASSWORD });
+  view.rerender(<InviteScreen {...props} token="second" />);
+  expect(screen.queryByLabelText("Username")).toBeNull();
+  expect(screen.getByText("Checking your invitation…")).toBeInTheDocument();
+  await act(async () => {
+    finish({ ...preview, tenantName: "Second team" });
+  });
+  expect(await screen.findByLabelText("Username")).toHaveValue("");
+  expect(screen.getByLabelText("Password")).toHaveValue("");
+});
+
+it("prevents repeated SSO invitation starts and restores the button after failure", async () => {
+  let rejectStart: (reason: Error) => void = () => {};
+  const startSso = vi.fn(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectStart = reject;
+      }),
+  );
+  const flows = {
+    previewInvitation: vi.fn(async () => ({
+      tenantName: "Demo",
+      role: "member",
+      target: { kind: "oidc_email", email: "demo@example.test", providerId: "sso-test" },
+      provider: { id: "sso-test", displayName: "Example" },
+    })),
+    startSso,
+  } as unknown as SessionFlows;
+  render(
+    <InviteScreen
+      flows={flows}
+      token="test-token"
+      session={undefined}
+      loginCsrf="test-csrf"
+      onSignedIn={() => {}}
+      onJoined={() => {}}
+    />,
+  );
+  const button = await screen.findByRole("button", { name: /Continue with Example/ });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  expect(button).toBeDisabled();
+  expect(startSso).toHaveBeenCalledOnce();
+  await act(async () => {
+    rejectStart(new Error("offline"));
+  });
+  expect(screen.getByRole("alert")).toBeInTheDocument();
+  expect(button).toBeEnabled();
 });

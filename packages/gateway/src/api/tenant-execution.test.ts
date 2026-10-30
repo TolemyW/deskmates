@@ -428,6 +428,43 @@ describe("INT-01: an OAuth grant completes only in the session that started it",
       .all() as Array<{ connection_name: string }>;
     expect(names.map((row) => row.connection_name)).toEqual(["own"]);
   });
+
+  it("rechecks the role in the grant's workspace, not the highest role anywhere", async () => {
+    const f = await integrationFixture();
+    cleanups.push(() => f.close());
+    await f.adopt("slack");
+    await f.h.api("PUT", "/api/integrations/providers/slack/oauth-app", {
+      clientId: "slack-client",
+      clientSecret: "slack-secret",
+      requestedScopes: ["chat:write"],
+    });
+    const ctx = f.h.app.deskmates.ctx;
+    const ada = await ctx.auth.createUser({
+      loginName: "ada",
+      displayName: "Ada",
+      password: TEST_PASSWORD,
+      role: "admin",
+      workspaceId: f.a.workspace.id,
+    });
+    ctx.auth.memberships.add(f.b.workspace.id, ada.id, "owner", "test");
+    const jar = new BrowserJar(f.h.baseUrl);
+    expect((await jar.signIn("ada")).status).toBe(200);
+    const started = await jar.json<{ authorizationUrl: string }>(
+      "POST",
+      `/api/integrations/workspaces/${f.a.workspace.id}/connections/oauth/start`,
+      { body: { service: "slack", connectionName: "demoted" } },
+    );
+    expect(started.status).toBe(200);
+    const state = new URL(started.json.authorizationUrl).searchParams.get("state") as string;
+    // Demoted to Member in A only, the session still live: still Owner of B, but not A's Admin.
+    ctx.auth.memberships.change(f.a.workspace.id, ada.id, { role: "member" }, "test");
+    expect(
+      (await jar.fetch("GET", `/api/integrations/oauth/callback?code=c&state=${state}`)).status,
+    ).toBe(401);
+    expect(
+      ctx.db.prepare("SELECT COUNT(*) AS n FROM integration_connections").get() as { n: number },
+    ).toEqual({ n: 0 });
+  });
 });
 
 describe("INT-02: a tenant cannot aim the Gateway at private addresses", () => {

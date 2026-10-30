@@ -53,6 +53,7 @@ RUN node /opt/deskmates/patch-mcp-tab-identity.mjs /opt/deskmates
 
 COPY images/workspace/entry.sh /usr/local/bin/deskmates-entry
 COPY images/workspace/close-browser.mjs /usr/local/lib/deskmates/close-browser.mjs
+COPY images/workspace/run-supervisor.py /usr/local/lib/deskmates/run-supervisor.py
 COPY images/workspace/deskmates-sidecar /usr/local/bin/deskmates-sidecar
 COPY images/workspace/deskmates-healthz /usr/local/bin/deskmates-healthz
 # Managed browser policy: secure-DNS auto-upgrade, safe browsing, metrics and update checks off.

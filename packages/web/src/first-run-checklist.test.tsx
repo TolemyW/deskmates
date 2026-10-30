@@ -111,13 +111,14 @@ afterEach(() => {
 });
 
 describe("first-run checklist", () => {
-  it("shows an Owner of an empty team every step still to do", async () => {
+  it("shows an Owner of an empty team every step still to do, the assistant's included", async () => {
+    // ADR-0051 decision 11: the first workspace comes with `assistant`, so the steps already
+    // ask to talk to it rather than to create a bot.
     stubGateway({ role: "owner" });
     render(<App />);
     expect(await items()).toEqual([
       "To do: Create a workspace",
-      "To do: Create a bot",
-      "To do: Open a chat",
+      "To do: Chat with assistant to set up your team",
       "To do: Invite a person",
     ]);
   });
@@ -145,6 +146,40 @@ describe("first-run checklist", () => {
         "Done: Open a chat",
         "Done: Invite a person",
       ]),
+    );
+  });
+
+  it("asks to talk to the default bot instead of creating one, in its private chat (ADR-0051)", async () => {
+    stubGateway({
+      role: "owner",
+      workspaces: [{ ...workspace, defaultBotId: bot.id }],
+      bots: [bot],
+      threads: [{ ...thread, memberIds: [bot.id], privateChatBotId: bot.id }],
+    });
+    render(<App />);
+    await waitFor(async () =>
+      expect(await items()).toEqual([
+        "Done: Create a workspace",
+        `To do: Chat with ${bot.name} to set up your team`,
+        "To do: Invite a person",
+      ]),
+    );
+    const list = await screen.findByRole("list", { name: "First steps" });
+    expect(
+      within(list).getByRole("link", { name: `Chat with ${bot.name} to set up your team` }),
+    ).toHaveAttribute("href", `#/threads/${thread.id}`);
+  });
+
+  it("checks the assistant step once the assistant has set up a teammate", async () => {
+    stubGateway({
+      role: "owner",
+      workspaces: [{ ...workspace, defaultBotId: bot.id }],
+      bots: [bot, { ...bot, id: "bot_2", name: "reporter" }],
+      threads: [{ ...thread, memberIds: [bot.id], privateChatBotId: bot.id }],
+    });
+    render(<App />);
+    await waitFor(async () =>
+      expect((await items())[1]).toBe(`Done: Chat with ${bot.name} to set up your team`),
     );
   });
 

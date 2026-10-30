@@ -24,7 +24,7 @@ describeNavEntry({
   href: "#/network",
   currentAt: ["#/network"],
   // Without role facts every link shows and the Gateway decides; the root check is below.
-  visibleTo: { manager: true, member: true },
+  visibleTo: { manager: true, member: false },
 });
 
 it("shows the link to the root and to an Owner of any workspace, not to an Admin", () => {

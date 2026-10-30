@@ -40,7 +40,7 @@ const options = {
 describe("egress probe layers", () => {
   it("reports every layer up to the HTTP status for a granted LAN origin", async () => {
     const result = await probe(
-      { url: `http://10.20.30.24:${httpPort}/health`, grant: true },
+      { url: `http://10.88.30.24:${httpPort}/health`, grant: true },
       options,
     );
     expect(result).toMatchObject({ ok: true, status: 204 });
@@ -48,7 +48,7 @@ describe("egress probe layers", () => {
   });
 
   it("names TCP when nothing listens", async () => {
-    const result = await probe({ url: `http://10.20.30.24:${closedPort}/`, grant: true }, options);
+    const result = await probe({ url: `http://10.88.30.24:${closedPort}/`, grant: true }, options);
     expect(result.ok).toBe(false);
     expect(result.layers.at(-1)).toMatchObject({ layer: "tcp", ok: false, detail: "ECONNREFUSED" });
   });
@@ -63,7 +63,7 @@ describe("egress probe layers", () => {
     const dnsFail = await probe({ url: "https://docs.example.org/", grant: false }, failing);
     expect(dnsFail.layers).toEqual([{ layer: "dns", ok: false, detail: "ENOTFOUND" }]);
     const pinned = await probe(
-      { url: `http://console.lab.test:${httpPort}/`, address: "10.20.36.35", grant: true },
+      { url: `http://console.lab.test:${httpPort}/`, address: "10.88.36.35", grant: true },
       failing,
     );
     expect(pinned).toMatchObject({ ok: true, status: 204 });
@@ -71,13 +71,13 @@ describe("egress probe layers", () => {
 
   it("names TLS when the certificate does not verify", async () => {
     // A plain HTTP listener answering a TLS handshake is a TLS failure, not an HTTP one.
-    const result = await probe({ url: `https://10.20.30.24:${httpPort}/`, grant: true }, options);
+    const result = await probe({ url: `https://10.88.30.24:${httpPort}/`, grant: true }, options);
     expect(result.layers.at(-1)).toMatchObject({ layer: "tls", ok: false });
   });
 
   it("is a policy denial when a grant hits infrastructure or an allowlisted name is private", async () => {
     const infra = await probe(
-      { url: `http://10.20.30.24:${httpPort}/`, grant: true },
+      { url: `http://10.88.30.24:${httpPort}/`, grant: true },
       { ...options, infrastructure: () => true },
     );
     expect(infra.layers).toEqual([expect.objectContaining({ layer: "policy", ok: false })]);

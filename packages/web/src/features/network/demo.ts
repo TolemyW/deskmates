@@ -28,7 +28,7 @@ const store = (s: DemoState) =>
         name: "VendorDB test environment",
         description: "LAN test services for functional checks",
         rules: [
-          { kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [23001] },
+          { kind: "subnet", cidr: "10.88.30.0/24", schemes: ["http"], ports: [23001] },
         ] as NetworkRule[],
         revision: 1,
         createdAt: AT,
@@ -169,6 +169,14 @@ function route(req: DemoRequest, s: DemoState): Result | undefined {
   // The demo has no Docker daemon, so overlap is never checked (amendment 2 decision 15).
   if (path === "/api/network-overlaps" && method === "GET")
     return ok({ checked: false, networks: [], overlaps: [] });
+  // Nor host resources (ADR-0006 amendment 5): nothing is listed, so nothing can be acted on.
+  if (path === "/api/runtime/resources" && method === "GET")
+    return ok({ checked: false, checkedAt: AT, findings: [], healthy: 0 });
+  if (
+    (path === "/api/runtime/resources/remove" || path === "/api/runtime/resources/reattach") &&
+    method === "POST"
+  )
+    return notFound("host-resource finding");
   const preflightMatch = req.match(/^\/api\/workspaces\/([^/]+)\/network-preflight$/);
   if (preflightMatch && method === "POST") {
     const workspaceId = decodeURIComponent(preflightMatch[1] ?? "");

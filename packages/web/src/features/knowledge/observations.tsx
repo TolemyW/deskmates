@@ -119,6 +119,8 @@ export function ObservationsPanel({
   const [loadingMore, setLoadingMore] = useState<"pending" | "entries">();
   const [provenance, setProvenance] = useState<MemoryProvenance & { id: string }>();
   const reloadSeq = useRef(0);
+  const versionsSeq = useRef(0);
+  const [loadingVersions, setLoadingVersions] = useState(false);
   const live = useRef(true);
   // Batch dispositions decide gated items like a single review (ADR-0011 amendment 3, A18).
   const canReview = useCan("memory.reviewSuggestion").allowed;
@@ -156,6 +158,8 @@ export function ObservationsPanel({
 
   const reload = useCallback(async () => {
     const seq = ++reloadSeq.current;
+    setLoaded(false);
+    setLoadError("");
     const query = search.trim();
     try {
       const [nextEntries, nextGroups, nextTopics] = await Promise.all([
@@ -252,6 +256,8 @@ export function ObservationsPanel({
 
   const open = (id: string) => {
     if (id !== selectedId) {
+      versionsSeq.current += 1;
+      setLoadingVersions(false);
       setEditing(undefined);
       setForgetting(undefined);
       setVersions(undefined);
@@ -259,6 +265,8 @@ export function ObservationsPanel({
     setSelectedId(id);
   };
   const close = () => {
+    versionsSeq.current += 1;
+    setLoadingVersions(false);
     setSelectedId(undefined);
     setEditing(undefined);
     setForgetting(undefined);
@@ -266,11 +274,15 @@ export function ObservationsPanel({
   };
   const showVersions = (id: string, cursor?: string) => {
     if (!cursor) open(id);
+    const request = ++versionsSeq.current;
+    setLoadingVersions(true);
+    setError("");
     api
       .listMemoryVersionsPage(id, cursor ? { cursor } : {})
       .then(
         (page) =>
           live.current &&
+          request === versionsSeq.current &&
           setVersions((current) => ({
             id,
             // Newest first; "Load older" appends without repeating a version (#113 K2).
@@ -284,7 +296,12 @@ export function ObservationsPanel({
             ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
           })),
       )
-      .catch((err: unknown) => live.current && setError(errorMessage(err)));
+      .catch((err: unknown) => {
+        if (live.current && request === versionsSeq.current) setError(errorMessage(err));
+      })
+      .finally(() => {
+        if (live.current && request === versionsSeq.current) setLoadingVersions(false);
+      });
   };
 
   const startBatch = (group: MemoryReviewGroup, decision: MemoryBatchDecision) => {
@@ -432,6 +449,32 @@ export function ObservationsPanel({
 
   return (
     <div className="observations">
+      <div className="resource-toolbar">
+        <label className="resource-search">
+          <Search size={15} aria-hidden="true" />
+          <input
+            type="search"
+            aria-label={t("learnedMemory.search.label")}
+            placeholder={t("observations.search.placeholder")}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+        <label className="resource-toggle">
+          <input
+            type="checkbox"
+            checked={showHistory}
+            onChange={(event) => setShowHistory(event.target.checked)}
+          />
+          {t("learnedMemory.showHistory")}
+        </label>
+        {search.trim() && showHistory ? (
+          <p className="muted small">{t("learnedMemory.search.activeOnly")}</p>
+        ) : null}
+        {search.trim() ? (
+          <p className="muted small">{t("observations.search.bestMatches")}</p>
+        ) : null}
+      </div>
       {groupTotals.items > 0 ? (
         <section className="review-queue" aria-label={t("observations.review.label")}>
           <h2>
@@ -501,7 +544,7 @@ export function ObservationsPanel({
                       >
                         {t("observations.batch.confirm")}
                       </Button>
-                      <Button onClick={() => setPreview(undefined)}>
+                      <Button disabled={busy} onClick={() => setPreview(undefined)}>
                         {t("learnedMemory.action.cancel")}
                       </Button>
                     </div>
@@ -550,32 +593,6 @@ export function ObservationsPanel({
         </div>
       ) : null}
 
-      <div className="resource-toolbar">
-        <label className="resource-search">
-          <Search size={15} aria-hidden="true" />
-          <input
-            type="search"
-            aria-label={t("learnedMemory.search.label")}
-            placeholder={t("observations.search.placeholder")}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
-        <label className="resource-toggle">
-          <input
-            type="checkbox"
-            checked={showHistory}
-            onChange={(event) => setShowHistory(event.target.checked)}
-          />
-          {t("learnedMemory.showHistory")}
-        </label>
-        {search.trim() && showHistory ? (
-          <p className="muted small">{t("learnedMemory.search.activeOnly")}</p>
-        ) : null}
-        {search.trim() ? (
-          <p className="muted small">{t("observations.search.bestMatches")}</p>
-        ) : null}
-      </div>
       {topics.total > 0 && !search.trim() ? (
         <nav className="topic-tags" aria-label={t("observations.topics.label")}>
           <button
@@ -609,9 +626,10 @@ export function ObservationsPanel({
       ) : null}
 
       {loadError ? (
-        <p role="alert" className="error">
-          {loadError}
-        </p>
+        <div role="alert">
+          <p className="error">{loadError}</p>
+          <Button onClick={() => void reload()}>{t("observations.retry")}</Button>
+        </div>
       ) : null}
       {error ? (
         <p role="alert" className="error">
@@ -645,6 +663,7 @@ export function ObservationsPanel({
                     <button
                       type="button"
                       className="resource-row-main"
+                      disabled={busy}
                       aria-expanded={item.id === selectedId}
                       onClick={() => (item.id === selectedId ? close() : open(item.id))}
                     >
@@ -680,7 +699,7 @@ export function ObservationsPanel({
               })}
             </ul>
           )}
-          {entryCursor && !loadError ? (
+          {entryCursor && loaded && !loadError ? (
             <Button
               size="sm"
               disabled={loadingMore !== undefined}
@@ -709,6 +728,7 @@ export function ObservationsPanel({
                 className="icon-button"
                 aria-label={t("observations.detail.close")}
                 title={t("observations.detail.close")}
+                disabled={busy}
                 onClick={close}
               >
                 <X size={16} aria-hidden="true" />
@@ -719,6 +739,7 @@ export function ObservationsPanel({
                 <textarea
                   aria-label={t("learnedMemory.edit.label", { id: selected.id })}
                   value={editing.body}
+                  disabled={busy}
                   onChange={(event) => setEditing({ ...editing, body: event.target.value })}
                 />
                 <p className="muted small">{t("learnedMemory.introRetrieval")}</p>
@@ -735,7 +756,7 @@ export function ObservationsPanel({
                   >
                     {t("learnedMemory.action.save")}
                   </Button>
-                  <Button onClick={() => setEditing(undefined)}>
+                  <Button disabled={busy} onClick={() => setEditing(undefined)}>
                     {t("learnedMemory.action.cancel")}
                   </Button>
                 </div>
@@ -865,6 +886,7 @@ export function ObservationsPanel({
                 </Button>
               </div>
             ) : null}
+            {loadingVersions ? <output>{t("learnedMemory.loadingMore")}</output> : null}
             {versions?.id === selected.id ? (
               <section className="resource-versions" aria-label={t("learnedMemory.versions.label")}>
                 <h3>{t("observations.detail.versions")}</h3>
@@ -885,7 +907,11 @@ export function ObservationsPanel({
                   ))}
                 </ol>
                 {versions.nextCursor ? (
-                  <Button size="sm" onClick={() => showVersions(versions.id, versions.nextCursor)}>
+                  <Button
+                    size="sm"
+                    disabled={loadingVersions}
+                    onClick={() => showVersions(versions.id, versions.nextCursor)}
+                  >
                     {t("learnedMemory.versions.loadOlder")}
                   </Button>
                 ) : null}

@@ -18,7 +18,7 @@ import { ApprovalsScreen } from "./features/approvals/approvals.js";
 import { ThreadRail } from "./features/chats/thread-rail.js";
 import { ComputerScreen } from "./features/computer/computer.js";
 import { ContactsScreen } from "./features/contacts/contacts.js";
-import { IntegrationsScreen } from "./features/integrations/integrations.js";
+import { AppsTab } from "./features/integrations/apps-tab.js";
 import { MembersScreen } from "./features/members/members.js";
 import { TasksScreen } from "./features/tasks/tasks.js";
 import { SessionRolesProvider } from "./state/session-roles.js";
@@ -59,9 +59,9 @@ describe("no workspaces", () => {
   it("offers an Admin the first-run form and names the step", async () => {
     as(ADMIN, <ThreadRail workspace={undefined} bots={[]} threads={[]} onCreated={() => {}} />);
     expect(await nextAction()).toBe(
-      "Next: create a workspace, its first bot and a chat with the form below. An Admin or Owner can do this.",
+      "Next: create a workspace and meet its assistant with the form below. An Admin or Owner can do this.",
     );
-    expect(screen.getByLabelText("First run")).toBeInTheDocument();
+    expect(screen.getByLabelText("First work")).toBeInTheDocument();
   });
 
   it("tells a Member who can create a workspace instead of a form that would be refused", async () => {
@@ -69,7 +69,7 @@ describe("no workspaces", () => {
     expect(await nextAction()).toBe(
       "Next: ask an Admin or Owner to create a workspace. Only an Admin or Owner can.",
     );
-    expect(screen.queryByLabelText("First run")).toBeNull();
+    expect(screen.queryByLabelText("First work")).toBeNull();
   });
 
   it("says the step on the Computer screen and disables New workspace for a Member", async () => {
@@ -78,7 +78,7 @@ describe("no workspaces", () => {
     expect(await nextAction()).toBe(
       "Next: ask an Admin or Owner to create a workspace. Only an Admin or Owner can.",
     );
-    expect(screen.getByRole("button", { name: "New workspace" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "New workspace" })).toBeNull();
   });
 
   it("says the step on the tasks screen", async () => {
@@ -107,9 +107,7 @@ describe("no bots", () => {
   it("tells an Admin where to add one", async () => {
     installFakeEventSource();
     as(ADMIN, <ContactsScreen api={api(routes)} />);
-    expect(await nextAction()).toBe(
-      "Next: add a bot with New contact. An Admin or Owner can do this.",
-    );
+    expect(await nextAction()).toBe("Next: add a bot with New Bot. An Admin or Owner can do this.");
   });
 });
 
@@ -213,17 +211,17 @@ describe("no connections", () => {
   };
 
   it("tells a Member who can connect one", async () => {
-    as(MEMBER, <IntegrationsScreen api={api(routes)} />);
-    expect(await screen.findByText("No connections yet.")).toBeInTheDocument();
+    as(MEMBER, <AppsTab api={api(routes)} workspaceId={WS_ID} />);
+    expect(await screen.findByText(/The integration service has no apps yet/)).toBeInTheDocument();
     expect(await nextAction()).toBe(
-      "Next: ask an Admin or Owner to connect an account of an adopted app or register a database. Only an Admin or Owner can.",
+      "Next: ask an Admin or Owner to connect an account of an app that is ready to connect. Only an Admin or Owner can.",
     );
   });
 
   it("tells an Admin what to connect", async () => {
-    as(ADMIN, <IntegrationsScreen api={api(routes)} />);
+    as(ADMIN, <AppsTab api={api(routes)} workspaceId={WS_ID} />);
     expect(await nextAction()).toBe(
-      "Next: connect an account of an adopted app or register a database. An Admin or Owner can do this.",
+      "Next: connect an account of an app that is ready to connect. An Admin or Owner can do this.",
     );
   });
 });
@@ -261,7 +259,7 @@ describe("no people invited", () => {
         ssoProviders={[]}
       />,
     );
-    expect(await screen.findByText("Nobody else is in this team yet.")).toBeInTheDocument();
+    expect(await screen.findByText("Nobody else is in this Organization yet.")).toBeInTheDocument();
     expect(await nextAction()).toBe(
       "Next: invite someone with Invite by link or Create account below. An Admin or Owner can do this.",
     );

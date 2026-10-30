@@ -76,6 +76,13 @@ export class RecordingProvider implements SandboxProvider {
     }
   }
 
+  /** Runs a restart killed by marker (ADR-0029 decision 4), in order. */
+  readonly killedRuns: string[] = [];
+  killRun(handle: SandboxHandle, runId: string): Promise<void> {
+    this.killedRuns.push(runId);
+    return this.inner.killRun(handle, runId);
+  }
+
   injectEnv(handle: SandboxHandle, env: Readonly<Record<string, string>>): Promise<void> {
     this.injected.push({ ...env });
     return this.inner.injectEnv(handle, env);

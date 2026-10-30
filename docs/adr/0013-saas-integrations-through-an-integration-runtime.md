@@ -1,7 +1,7 @@
 # ADR-0013: SaaS integrations come from an integration runtime behind the Gateway
 
 Date: 2026-09-29
-Status: Proposed (drafted for the product owner; narrows ADR-0012 to receipted execution; refines design v0.3 §3.8 "MCP service")
+Status: Accepted (under owner delegation, 2026-10-17; drafted for the product owner, narrows ADR-0012 to receipted execution, refines design v0.3 §3.8 "MCP service"). Decisions 1 to 9 with amendments 1 to 3 are accepted as the design the Gateway's `integrations/` module implements. This accepts no provider and no live gate: no provider is adopted until its T2/T3 smoke of decision 8 exists and passes, and the real-world checks amendment 1 lists (Slack and Google OAuth apps, grants and token refresh, the ten actions on test accounts, transit-storage upload and download, provider traffic through the managed egress proxy) remain pending. Clarified on acceptance: decision 6's L2 approvals follow the workspace approval mode of ADR-0002 amendment 6 like any L2 call, and a `destructive` action is never lowered by an operator override.
 Source: product owner direction on 2026-09-29 ("we have no resources to develop and test all of these interfaces"), the library evaluation recorded in this ADR's Context, and the spike it orders (`spikes/openconnector/`).
 
 ## Context

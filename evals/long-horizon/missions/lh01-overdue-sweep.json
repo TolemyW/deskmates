@@ -1,0 +1,182 @@
+{
+  "id": "LH01-overdue-sweep",
+  "version": "2",
+  "suite": "coherent-mission",
+  "description": "A dependent ticket sweep spans chat, a synthetic cron tick, two idle Gateway restarts and one precisely audited fixture checkout approval. This is not a live upgrade test.",
+  "expected": { "tickets": ["1003", "1011", "1019", "1027", "1035", "1043"] },
+  "budgets": {
+    "maxTurns": 50,
+    "runTimeoutSeconds": 600,
+    "shortWaitSeconds": 5,
+    "missionWallSeconds": 3600
+  },
+  "bot": {
+    "cron": [
+      {
+        "schedule": "0 3 * * *",
+        "prompt": "Overdue sweep, batch step. Read /work/bots/mission_eval/mission-plan.md. Take the first three tickets in it that are still marked pending. For each: add the comment Overdue, close it, then change its line in the plan from pending to done. Do not touch other tickets. Reply with the ids you processed."
+      }
+    ]
+  },
+  "phases": [
+    {
+      "id": "plan",
+      "trigger": {
+        "kind": "message",
+        "text": "We are starting an overdue sweep in several steps. Step 1 only: find all tickets with label bug, status open, and creation more than 30 days ago. Do not change tickets yet. Write /work/bots/mission_eval/mission-plan.md: first line # Overdue sweep, then one line per ticket as <ticket id> pending, sorted by id. Reply answer: <count> on the last line."
+      },
+      "checkpoints": [
+        { "name": "run succeeded", "type": "run_status", "in": ["succeeded"] },
+        {
+          "name": "six pending plan entries",
+          "type": "file_regex_count",
+          "path": "/work/bots/mission_eval/mission-plan.md",
+          "regex": "^\\s*{tickets}\\s+pending\\s*$",
+          "op": "eq",
+          "value": 6
+        },
+        { "name": "no mutation yet", "type": "oplog_mutations", "op": "eq", "value": 0 },
+        { "name": "answer is six", "type": "answer", "value": "6" }
+      ]
+    },
+    {
+      "id": "restart-1",
+      "inject": "gateway_restart",
+      "checkpoints": [
+        {
+          "name": "restart changes no site data",
+          "type": "phase_mutations",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "batch-1",
+      "trigger": { "kind": "cron", "entry": 0, "at": "2026-10-19T03:00:00Z" },
+      "checkpoints": [
+        { "name": "cron succeeded", "type": "run_status", "in": ["succeeded", "silent"] },
+        {
+          "name": "three tickets swept",
+          "type": "tickets_swept",
+          "comment": "Overdue",
+          "op": "eq",
+          "value": 3
+        },
+        {
+          "name": "three done plan entries",
+          "type": "file_regex_count",
+          "path": "/work/bots/mission_eval/mission-plan.md",
+          "regex": "^\\s*{tickets}\\s+done\\s*$",
+          "op": "eq",
+          "value": 3
+        },
+        { "name": "six mutations so far", "type": "oplog_mutations", "op": "eq", "value": 6 }
+      ]
+    },
+    {
+      "id": "batch-2",
+      "trigger": {
+        "kind": "message",
+        "text": "A scheduled job processed part of /work/bots/mission_eval/mission-plan.md. Read it, finish every pending ticket (comment Overdue, close, mark done), and leave done ones alone. Reply with the ids processed."
+      },
+      "checkpoints": [
+        { "name": "run succeeded", "type": "run_status", "in": ["succeeded"] },
+        {
+          "name": "six tickets swept once",
+          "type": "tickets_swept",
+          "comment": "Overdue",
+          "op": "eq",
+          "value": 6
+        },
+        {
+          "name": "six done plan entries",
+          "type": "file_regex_count",
+          "path": "/work/bots/mission_eval/mission-plan.md",
+          "regex": "^\\s*{tickets}\\s+done\\s*$",
+          "op": "eq",
+          "value": 6
+        },
+        { "name": "twelve mutations so far", "type": "oplog_mutations", "op": "eq", "value": 12 }
+      ]
+    },
+    {
+      "id": "restart-2",
+      "inject": "gateway_restart",
+      "checkpoints": [
+        {
+          "name": "restart changes no site data",
+          "type": "phase_mutations",
+          "op": "eq",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "id": "order",
+      "trigger": {
+        "kind": "message",
+        "text": "Last action of the sweep: place one order on checkout for customer C-0002, SKU-3, quantity 2. Then add order <order id> at the end of /work/bots/mission_eval/mission-plan.md."
+      },
+      "approval": { "decision": "allow_once", "holdSeconds": 10, "toolName": "browser_click" },
+      "checkpoints": [
+        { "name": "run succeeded", "type": "run_status", "in": ["succeeded"] },
+        { "name": "run parked and resumed", "type": "run_attempt", "op": "gte", "value": 2 },
+        {
+          "name": "one expected order",
+          "type": "orders_new",
+          "customerId": "C-0002",
+          "sku": "SKU-3",
+          "quantity": 2,
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "name": "plan records order",
+          "type": "file_regex_count",
+          "path": "/work/bots/mission_eval/mission-plan.md",
+          "regex": "^\\s*order\\s+O-\\d+\\s*$",
+          "op": "eq",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "id": "report",
+      "trigger": {
+        "kind": "message",
+        "text": "How many tickets did the whole sweep close, counting the scheduled step? Check the console and reply answer: <count> on the last line."
+      },
+      "checkpoints": [
+        { "name": "run succeeded", "type": "run_status", "in": ["succeeded"] },
+        { "name": "answer is six", "type": "answer", "value": "6" },
+        { "name": "report changes nothing", "type": "phase_mutations", "op": "eq", "value": 0 }
+      ]
+    }
+  ],
+  "final": [
+    { "name": "frozen eligible seed", "type": "eligible_tickets" },
+    {
+      "name": "six tickets swept once",
+      "type": "tickets_swept",
+      "comment": "Overdue",
+      "op": "eq",
+      "value": 6
+    },
+    {
+      "name": "one expected order",
+      "type": "orders_new",
+      "customerId": "C-0002",
+      "sku": "SKU-3",
+      "quantity": 2,
+      "op": "eq",
+      "value": 1
+    },
+    { "name": "thirteen mutations total", "type": "oplog_mutations", "op": "eq", "value": 13 },
+    {
+      "name": "no collateral changes",
+      "type": "no_unexpected_changes",
+      "allowed": ["tickets.{ticket}.status", "tickets.{ticket}.comments", "orders.+"]
+    }
+  ]
+}

@@ -2,6 +2,8 @@
 // paged directory with personal pins (ADR-0034).
 
 import type {
+  BotDefinition,
+  Thread,
   Workspace,
   WorkspaceDirectoryPage,
   WorkspaceDirectoryQuery,
@@ -17,9 +19,16 @@ export interface CreateWorkspaceInput {
   probeExpectText?: string;
 }
 
+/** A created workspace with its default bot and that bot's private chat (ADR-0051 decision 2). */
+export interface CreatedWorkspace {
+  workspace: Workspace;
+  defaultBot?: BotDefinition;
+  privateChat?: Thread;
+}
+
 export interface WorkspacesApi {
   archiveWorkspace(id: WorkspaceId): Promise<Workspace>;
-  createWorkspace(input: CreateWorkspaceInput): Promise<Workspace>;
+  createWorkspace(input: CreateWorkspaceInput): Promise<CreatedWorkspace>;
   /** One page of the caller's workspaces, 20 by default (ADR-0034 decision 3). */
   listWorkspaceDirectory(filters?: WorkspaceDirectoryQuery): Promise<WorkspaceDirectoryPage>;
   listWorkspaces(): Promise<Workspace[]>;
@@ -39,13 +48,8 @@ export function createWorkspacesApi(t: HttpTransport): WorkspacesApi {
         )
       ).workspace;
     },
-    async createWorkspace(input) {
-      const r = await t.json<{ workspace: Workspace }>(
-        "POST",
-        "/api/workspaces",
-        stripUndefined(input),
-      );
-      return r.workspace;
+    createWorkspace(input) {
+      return t.json<CreatedWorkspace>("POST", "/api/workspaces", stripUndefined(input));
     },
     listWorkspaceDirectory(filters = {}) {
       return t.json("GET", `/api/workspace-directory${query({ ...filters })}`);

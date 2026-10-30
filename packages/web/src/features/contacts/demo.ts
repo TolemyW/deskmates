@@ -63,6 +63,16 @@ function demoRoute(req: DemoRequest, s: DemoState): Result | undefined {
       },
     };
   // biome-ignore lint/suspicious/noAssignInExpressions: route matching
+  if ((x = req.match(/^\/api\/workspaces\/([^/]+)\/default-bot$/)) && method === "PUT") {
+    // ADR-0051 decision 1: one default bot per workspace, a bot of that workspace.
+    const workspace = s.workspaces.find((w) => w.id === x?.[1]);
+    if (!workspace) return notFound("workspace");
+    const bot = s.bot(String(b.botId ?? ""));
+    if (!bot || bot.workspaceId !== workspace.id) return notFound("bot");
+    workspace.defaultBotId = bot.id;
+    return ok({ workspace });
+  }
+  // biome-ignore lint/suspicious/noAssignInExpressions: route matching
   if ((x = req.match(/^\/api\/bots\/([^/]+)\/welcome$/)) && method === "POST") {
     const bot = s.bot(x[1]);
     return bot ? { status: 202, json: { ok: true } } : notFound("bot");
@@ -145,7 +155,13 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
       const needle = (q.get("q") ?? "").toLowerCase();
       const matches = bots
         .filter((bot) => `${bot.name} ${bot.role}`.toLowerCase().includes(needle))
-        .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+        // ADR-0051 decision 7: the workspace's default bot leads its rail.
+        .sort(
+          (a, b) =>
+            Number(isDefault(s, b)) - Number(isDefault(s, a)) ||
+            a.name.localeCompare(b.name) ||
+            a.id.localeCompare(b.id),
+        );
       const offset = Number(q.get("offset") ?? 0) || 0;
       const limit = Number(q.get("limit") ?? 50) || 50;
       return ok({
@@ -188,6 +204,9 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
     }
     if (Array.isArray(b.connectors)) bot.connectors = b.connectors as string[];
     if (Array.isArray(b.messageAllowlist)) bot.messageAllowlist = b.messageAllowlist as string[];
+    // ADR-0055: null is every connected app again.
+    if (b.integrationApps === null) Reflect.deleteProperty(bot, "integrationApps");
+    else if (Array.isArray(b.integrationApps)) bot.integrationApps = b.integrationApps as string[];
     const mutable = bot as {
       effort?: BotDefinition["effort"] | undefined;
       thinking?: BotDefinition["thinking"] | undefined;
@@ -260,9 +279,19 @@ function route(req: DemoRequest, s: DemoState): Result | Promise<Result> | undef
   if ((x = m(/^\/api\/bots\/([^/]+)\/memory\/consolidate$/))) {
     const bot = s.bot(x[1]);
     if (!bot) return notFound("bot");
-    const run = s.newRun(bot, undefined, "cron", "consolidate", "background");
+    const run = s.newRun(
+      bot,
+      undefined,
+      "model_job",
+      `memory_consolidation:${bot.id}`,
+      "background",
+    );
     void finishLater(s, run, 1500, summary(""), "silent").catch(ignoreCancelled);
     return ok({ run });
   }
   return undefined;
+}
+
+function isDefault(s: DemoState, bot: BotDefinition): boolean {
+  return s.workspaces.some((w) => w.id === bot.workspaceId && w.defaultBotId === bot.id);
 }

@@ -112,6 +112,11 @@
 
 .network-expiry {
   display: flex;
+  flex-direction: row;
+  width: fit-content;
+  max-width: calc(100% - 30px);
+  flex-wrap: wrap;
+  justify-content: flex-start;
   align-items: center;
   gap: 8px;
   margin-left: 30px;
@@ -197,6 +202,19 @@
 /* The table of every profile. */
 .network-table td {
   vertical-align: top;
+}
+
+/* Host resources (ADR-0006 amendment 5): the pool line warns when the pools run low. */
+.network-host .network-table code {
+  overflow-wrap: anywhere;
+}
+
+.network-host-pool[data-status="low"],
+.network-host-pool[data-status="exhausted"] {
+  padding: 8px 12px;
+  border-inline-start: 3px solid var(--warning-text);
+  background: var(--app-warning-soft);
+  border-radius: var(--app-radius);
 }
 
 .network-table tr[data-expired="true"] td {
@@ -326,4 +344,35 @@
   .network-target-row {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+/* Dates have an intrinsic control width; never stretch across the profile row. */
+.network-choice .network-expiry input {
+  flex: 0 1 auto;
+  width: 15rem;
+  max-width: 100%;
+  min-width: 0;
+}
+/* Keep resource identifiers readable; the table's own scroll area handles narrow pages. */
+.network-host .network-table {
+  table-layout: auto;
+  min-width: 64rem;
+}
+.network-host .network-table :is(th, td):first-child {
+  min-width: 18rem;
+  max-width: 26rem;
+}
+.network-host .network-table :is(th, td):nth-child(2) {
+  min-width: 13rem;
+  max-width: 19rem;
+  overflow-wrap: anywhere;
+}
+.network-host .network-table :is(th, td):nth-child(3) {
+  white-space: nowrap;
+}
+.network-host .network-table :is(th, td):nth-child(4) {
+  min-width: 10rem;
+}
+.network-host .network-table :is(th, td):nth-child(5) {
+  min-width: 14rem;
 }

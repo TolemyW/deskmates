@@ -82,7 +82,7 @@ describe("Docker/LAN subnet overlap", () => {
     const read = (value: string) => readSandboxConfig({ NETWORK_LAN_CIDRS: value }).lanCidrs;
     expect(read(" 172.16.180.0/23, 10.0.0.0/8 ")).toEqual(["172.16.180.0/23", "10.0.0.0/8"]);
     expect(read("")).toBeUndefined();
-    for (const bad of ["10.20.40.132", "lan.example/24", "fd00::/8", "10.0.0.0/33"])
+    for (const bad of ["10.88.40.132", "lan.example/24", "fd00::/8", "10.0.0.0/33"])
       expect(() => read(bad), bad).toThrow("NETWORK_LAN_CIDRS");
   });
 

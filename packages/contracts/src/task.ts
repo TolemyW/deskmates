@@ -1,6 +1,7 @@
 import type { BotId, IsoTimestamp, MessageId, RunId, ThreadId, WorkspaceId } from "./ids.js";
 import type { OffsetPageMeta } from "./pagination.js";
 import { PARKED_RUN_STATUSES, type RunStatus, isExecuting } from "./run.js";
+import type { TaskKindProgress, TaskKindStamp } from "./task-kind.js";
 
 export const TASK_STATUSES = [
   "planned",
@@ -69,12 +70,14 @@ export interface Task {
   acceptedAt: IsoTimestamp | null;
   acceptedBy: string | null;
   /**
-   * Advances only when an operator edit changes title, description or output schema (ADR-0021
-   * A3f). A delivery for an older scope is refused.
+   * Advances when an operator edit changes title, description or output schema (ADR-0021
+   * A3f), or explicitly requests a revision (ADR-0052). An older-scope delivery is refused.
    */
   scopeVersion: number;
   /** The task's one schedule (A3d), or null when it has none. */
   schedule: TaskSchedule | null;
+  /** Present when the task was created from a template (ADR-0021 A4c). */
+  kind?: TaskKindStamp;
 }
 
 /** How a create takes effect (ADR-0021 A3a). An omitted trigger is `manual`: no dispatch. */
@@ -160,6 +163,8 @@ export interface TaskDeliveryPublication {
 
 /** A bot's formal delivery (A3g); `partial` never completes the task. */
 export interface TaskDelivery {
+  /** Structured result at delivery time; absent on historical receipts without a snapshot. */
+  output?: TaskJson;
   id: string;
   kind: "complete" | "partial";
   runId: RunId | null;
@@ -172,14 +177,30 @@ export interface TaskDelivery {
   publications: TaskDeliveryPublication[];
 }
 
+/**
+ * What one checkpoint evidence entry is (issue #39 item 5): a workspace file path, a git commit
+ * hash (7 to 40 hex characters) or an http(s) URL. A commit or URL is a string the bot attached;
+ * nothing fetches it or checks it against a repository.
+ */
+export const TASK_EVIDENCE_KINDS = ["path", "commit", "url"] as const;
+export type TaskEvidenceKind = (typeof TASK_EVIDENCE_KINDS)[number];
+
 export interface TaskCheckpointUnit {
   unit: string;
   outcome: string;
+  /** Paths are stored absolute (a relative one resolved against the run's work directory). */
   evidence: string[];
+  /**
+   * The kind of each `evidence` entry, index for index, set by the Gateway. Absent on requests
+   * and on checkpoints recorded before kinds existed, whose entries are all paths.
+   */
+  evidenceKinds?: TaskEvidenceKind[];
 }
 
 /** Progress a run recorded (A3h); run, attempt and bot come from the run, never the model. */
 export interface TaskCheckpoint {
+  /** Scope at record time; absent on historical checkpoints of unknown scope. */
+  scopeVersion?: number;
   id: string;
   taskId: string;
   runId: RunId | null;
@@ -205,6 +226,8 @@ export interface TaskExecution {
 export interface TaskDetailResponse {
   task: Task;
   execution: TaskExecution;
+  /** A templated task's criteria progress (ADR-0021 A4e). */
+  kindProgress?: TaskKindProgress;
 }
 
 /** `POST /api/workspaces/:id/tasks` and `POST .../tasks/:taskId/run`. */
@@ -249,6 +272,10 @@ export interface CreateTaskRequest extends CreateTaskInput {
   schedule?: TaskScheduleInput;
   /** Client key; a repeat returns the first result and writes nothing. */
   idempotencyKey?: string;
+  /** Create from this template (ADR-0021 A4c): stamps its kind and copies its criteria. */
+  templateId?: string;
+  /** The template's field values; defaults fill the rest. Only with `templateId`. */
+  fields?: Record<string, string>;
 }
 
 /** Every mutation carries a version; acceptance has a separate operator-only endpoint. */
@@ -259,12 +286,16 @@ export interface UpdateTaskInput extends Partial<CreateTaskInput> {
   nextAction?: string;
   /** An explicit schedule change (A3d); null removes it. Never a rerun. */
   schedule?: TaskScheduleInput | null;
+  /** Corrected field values of a templated task (A4c); the description is not rewritten. */
+  fields?: Record<string, string>;
 }
 
 /** `POST .../tasks/:taskId/run`: an explicit execution (A3a, A3b). */
 export interface RunTaskRequest {
   version: number;
   idempotencyKey: string;
+  /** An explicit revision of a delivered task, kept in the execution message (ADR-0052). */
+  feedback?: string;
 }
 
 /** Client idempotency keys (A3b). */
@@ -288,6 +319,7 @@ export interface DeliverableTask {
 
 /** What a wake shows of a checkpoint: completed, missing evidence and outstanding (A3k). */
 export interface TaskCheckpointDigest {
+  scopeVersion?: number;
   runId: RunId | null;
   attempt: number;
   createdAt: IsoTimestamp;
@@ -317,9 +349,18 @@ export interface TaskDeliverResponse {
   delivery: TaskDelivery;
 }
 
+/**
+ * A valid call, attached as `details.example` when the Gateway refuses a `task_deliver` or
+ * `task_checkpoint` for a missing or malformed field (issue #39 item 5). `output` keys come from
+ * the task's `outputSchema` when it has one.
+ */
+export type TaskToolExample = Record<string, TaskJson>;
+
 /** `task_checkpoint` (A3h). */
 export interface TaskCheckpointRequest {
   taskId: string;
+  /** Scope supplied by the sidecar from its start request. */
+  scopeVersion?: number;
   completed: TaskCheckpointUnit[];
   outstanding?: string[];
   note?: string;

@@ -1,7 +1,7 @@
 # ADR-0029: An upgrade drains to a safe point, and a restart parks live runs for continuation
 
 Date: 2026-10-12
-Status: Proposed (needs product-owner sign-off; changes the outcome of a Gateway restart and amends ADR-0016 decision 2)
+Status: Accepted (owner-signed 2026-10-17, issue #3: "signed as written, including decision 11 (missed cron minutes are skipped, not back-filled)"; changes the outcome of a Gateway restart and amends ADR-0016 decision 2)
 Source: found in the long-horizon campaign of 2026-10-11 (campaign instance upgraded v0.5.0 → v0.5.3 with an always-on team; operator measurements below), the autonomous team's restart proposals of the same day, the independent review of those proposals, and the external references gathered in issue #54. Builds on ADR-0002 (park and resume, short-lived run tokens, SDK state on the workspace volume), ADR-0005 (lanes, threads), ADR-0016 (continuation, delegation outcome notices) and ADR-0023 (models frozen per run).
 
 ## Context
@@ -112,3 +112,34 @@ External practice (issue #54, read 2026-10-11): Grok Bot pauses agents at a safe
 - On acceptance ADR-0016 gets a pointer under decision 2 to decision 4 here.
 - An upgrade that drains cleanly costs each active run one extra resume: one more process start and the cached prefix of its session.
 - Decision 2 relies on `PreToolUse` `defer` for any tool, not only L2 calls. S0 verified `defer` for an L2 call; the T2 test of row 2 verifies the general case before implementation is called done.
+
+## Implementation clarification — descendant cleanup (2026-10-26)
+
+The owner requested complete cleanup of cancelled runs, including detached children
+that clear their environment. The marker scan in decision 4 identifies a run's
+supervisor, but cannot identify every descendant. Each `deskmates-sidecar run`
+therefore starts beneath a Linux child subreaper. The subreaper owns only process
+lifetime: it forwards stdin/stdout/stderr unchanged, adopts orphan descendants,
+and kills and reaps its children on termination or when the sidecar exits. It is
+not a tool interceptor, a new agent loop, or a per-bot security boundary. All runs
+retain the workspace's user, filesystem, network and shared Chromium.
+
+The provider first requests termination of matching subreapers and waits for their
+exit before legacy marker cleanup. A failed cleanup is reported rather than
+silently treated as a confirmed kill. Images without the helper keep legacy,
+best-effort cleanup; a new image is required for the stronger lifecycle guarantee.
+An uninterruptible kernel task, container failure or deliberate same-user killing
+of the supervisor cannot be reported as confirmed cleanup. No fallback stops the
+workspace or another run. Run token revocation remains independent.
+
+| Item | Means | Test | Metric |
+|---|---|---|---|
+| decision 4, descendant cleanup | Environment-free, setsid, double-fork and signal-resistant descendants are reaped before cancellation returns; unrelated run and workspace processes survive; timeout/abort and restart-by-run-id use the same cleanup | T2 `run-supervisor.container.test.ts`; T0 `docker-provider.test.ts` command/cleanup error coverage | cleanup failures, reported separately from token revocation |
+| decision 4, normal exit and compatibility | Sidecar exit status and stdin/output survive supervision; descendants do not outlive a completed sidecar; legacy images remain explicitly best effort | T2 `run-supervisor.container.test.ts`; T0 image wiring coverage | orphan descendants after a confirmed cleanup = 0 |
+
+Linux's [child-subreaper contract](https://www.man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html)
+keeps double-forked descendants parented to a living ancestor subreaper. Process
+identity for signaling uses Linux pidfds, as exposed by Python's
+[`pidfd_open`](https://docs.python.org/3/library/os.html#os.pidfd_open) and
+[`pidfd_send_signal`](https://docs.python.org/3/library/signal.html#signal.pidfd_send_signal),
+so a recycled numeric PID is never the target of a stale cleanup request.

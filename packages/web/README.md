@@ -56,7 +56,10 @@ Outside the features:
 - `src/styles/`: the stylesheet entry; `app.css` declares the single cascade layer order, then
   shell and feature stylesheets load by path, then `typography.css`.
 - `src/components/`, `src/lib/` and `src/state/`: shared parts. A screen part with no owning
-  feature, used by several (the resource page heading), lives in `src/components/`.
+  feature, used by several (the resource page heading, the password field), lives in
+  `src/components/`. These three import nothing from a feature (`src/shared-layers.test.tsx`):
+  a feature's part that shared state shows, such as the new-workspace dialog, is passed in by
+  the shell.
 
 Screens and their tests live in the feature that owns them (`features/<feature>/<screen>.tsx`).
 A part another feature also shows stays with the feature whose concept it is and is imported
@@ -89,6 +92,7 @@ Each feature documents itself in its own file under `docs/`. A new feature adds 
 `docs/<topic>.md` (kebab-case) and one line to this list, in its sorted place; it does not add
 a section to this README.
 
+- [Analytics (ADR-0046)](docs/analytics.md): the root's Grafana entry and the run drawer's link
 - [Application design preview](docs/application-design-preview.md): HeroUI theme, typography tokens
 - [Approvals (M1)](docs/approvals.md)
 - [B5: knowledge and memory](docs/knowledge-and-memory.md)
@@ -96,9 +100,10 @@ a section to this README.
 - [Bundled operator manual (issue #28)](docs/operator-manual.md)
 - [Chat details and presentation summaries](docs/chat-details-and-approval-summaries.md)
 - [Chat feedback update (2026-10-11)](docs/chat-feedback-2026-10-11.md)
+- [Chat reading and delivered output](docs/chat-reading-and-output.md)
+- [Connections › Apps (ADR-0013)](docs/integrations.md)
 - [Desktop workbench (ADR-0008)](docs/desktop-workbench.md)
 - [Group threads (M2)](docs/group-threads.md)
-- [Integrations (ADR-0013)](docs/integrations.md)
 - [Interaction development update (2026-09-30)](docs/interaction-update-2026-09-30.md)
 - [Interaction upgrade (2026-10-03)](docs/interaction-upgrade-2026-10-03.md): messaging-app shape, demo
 - [Languages (issue #23)](docs/languages.md)
@@ -106,10 +111,14 @@ a section to this README.
 - [Operator-maintained tasks (ADR-0021)](docs/task-management.md)
 - [Owned component library (ADR-0025)](docs/component-library.md)
 - [Private-chat collaboration reminders (ADR-0024)](docs/private-chat-reminders.md)
-- [Product-managed chat channels (issue #43)](docs/channels.md)
+- [Product-managed chat channels (issue #43)](docs/channels.md): Connections › Chat channels
 - [Reload drafts and authorized receipt identities (#73/#75)](docs/reload-drafts-and-receipt-identities.md)
 - [Responsive detail panes](docs/responsive-detail-panes.md)
 - [Roadmap](docs/roadmap.md): bot management
 - [Run progress: chat activity, run screen, approval waits (issue #9)](docs/run-progress.md)
 - [Run audit (ADR-0042)](docs/run-index.md): the run drawer's story, what a run changed, marks
+- [System interaction feedback (2026-10-19)](docs/system-interaction-feedback-2026-10-19.md)
+- [Selection design audit](docs/selection-design-audit.md): required patterns, migration debt and checks
+- [Tab layout checks](docs/tab-layout-checks.md): shared navigation and automated geometry regression
+- [Use and tune views](docs/use-and-tune-views.md): the everyday view and the tuning view
 - [Web interaction closeout: management and screen recovery](docs/management-and-screen-recovery.md)

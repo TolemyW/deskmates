@@ -9,13 +9,15 @@ import {
   type RunStatus,
   type ThreadSummary,
   type Workspace,
+  isBotName,
   isOwnSideChat,
 } from "@deskmates/contracts";
-import { ButtonLink, Card } from "@deskmates/ui";
+import { ButtonLink, Card, Pill } from "@deskmates/ui";
 import { MessageSquare, Search, UserRoundPlus } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import type { RunView } from "../../api/types.js";
+import { DeletedObjectState } from "../../components/deleted-object-state.js";
 import { Avatar } from "../../components/ui/avatar.js";
 import { Button } from "../../components/ui/button.js";
 import {
@@ -36,6 +38,7 @@ import { NextAction, RoleNote, useCan, useSessionActor } from "../../state/sessi
 import { useWorkspaceScope } from "../../state/workspace-scope.js";
 import { memberIdsOf } from "../chats/thread-rail.js";
 import { AvatarPicker } from "./avatar-picker.js";
+import { BotNameField } from "./bot-name-field.js";
 import { BotProfile } from "./bot-profile.js";
 import { SoulProposalPanel } from "./soul-proposal.js";
 
@@ -47,6 +50,7 @@ const SEARCH_DEBOUNCE_MS = 250;
 export function latestRunByBot(runs: readonly RunView[]): Map<string, RunView> {
   const latest = new Map<string, RunView>();
   for (const run of runs) {
+    if (run.triggerKind === "model_job" || run.config.runType) continue;
     const current = latest.get(run.botId);
     if (!current || run.createdAt >= current.createdAt) latest.set(run.botId, run);
   }
@@ -110,6 +114,8 @@ export function ContactsScreen({
   const [bots, setBots] = useState<readonly BotDefinition[]>([]);
   const [runs, setRuns] = useState<readonly RunView[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [rosterError, setRosterError] = useState<string>();
+  const [rosterRevision, setRosterRevision] = useState(0);
   const [error, setError] = useState<string>();
   const [query, setQuery] = useState("");
   const [opening, setOpening] = useState<string>();
@@ -125,8 +131,11 @@ export function ContactsScreen({
     if (creatingNew && workspace && canCreateBot.allowed) setCreating(true);
   }, [creatingNew, workspace, canCreateBot.allowed]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: explicit retry reloads the roster.
   useEffect(() => {
     let active = true;
+    setLoaded(false);
+    setRosterError(undefined);
     api
       .listBots()
       .then((b) => {
@@ -135,12 +144,12 @@ export function ContactsScreen({
         rememberBots(b);
         setError(undefined);
       })
-      .catch((err: unknown) => active && setError(errorMessage(err)))
+      .catch((err: unknown) => active && setRosterError(errorMessage(err)))
       .finally(() => active && setLoaded(true));
     return () => {
       active = false;
     };
-  }, [api, rememberBots]);
+  }, [api, rememberBots, rosterRevision]);
 
   // #113 slice R: each bot's newest run comes from a per-workspace summary, never from every run
   // of the tenant.
@@ -205,26 +214,22 @@ export function ContactsScreen({
   };
 
   return (
-    <div className={`contacts-screen${selected ? " has-profile" : ""}`}>
+    <div className={`contacts-screen${botId ? " has-profile" : ""}`}>
       <aside className="rail">
         <div className="rail-heading">
           <h2>{t("contacts.heading")}</h2>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={t("contacts.newContact.label")}
-            title={
-              canCreateBot.allowed
-                ? undefined
-                : t("contacts.newContact.onlyWho", { who: canCreateBot.who })
-            }
-            disabled={!workspace || !canCreateBot.allowed}
-            onClick={() => setCreating(true)}
-          >
-            <UserRoundPlus size={18} />
-          </button>
+          {canCreateBot.allowed ? (
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!workspace}
+              onClick={() => setCreating(true)}
+            >
+              <UserRoundPlus size={16} /> {t("contacts.newContact.label")}
+            </Button>
+          ) : null}
         </div>
-        {members.length > 3 ? (
+        {members.length > 3 || query ? (
           <div className="rail-search">
             <Search size={15} />
             <input
@@ -237,8 +242,29 @@ export function ContactsScreen({
           </div>
         ) : null}
         <div className="rail-scroll">
-          {error ? <p className="error small thread-empty">{error}</p> : null}
-          {loaded && scope.loaded && members.length === 0 ? (
+          {error ? (
+            <p role="alert" className="error small thread-empty">
+              {error}
+            </p>
+          ) : null}
+          {rosterError || pages.error ? (
+            <div className="contact-load-error" role="alert">
+              <p>{rosterError ?? errorMessage(pages.error)}</p>
+              <Button
+                onClick={() => {
+                  setRosterRevision((n) => n + 1);
+                  reloadPage();
+                }}
+              >
+                {t("contacts.retry")}
+              </Button>
+            </div>
+          ) : null}
+          {!loaded ? <p className="muted thread-empty">{t("contacts.loading")}</p> : null}
+          {loaded && !pages.loading && !pages.error && search && visible.length === 0 ? (
+            <p className="muted thread-empty">{t("contacts.noResults")}</p>
+          ) : null}
+          {loaded && !rosterError && scope.loaded && members.length === 0 ? (
             <div className="thread-empty">
               <p className="muted">
                 {workspace
@@ -260,51 +286,60 @@ export function ContactsScreen({
               )}
             </div>
           ) : null}
-          <ul className="contact-list">
-            {visible.map((b) => {
-              const run = latest.get(b.id);
-              return (
-                <li key={b.id} className={b.id === botId ? "selected" : ""}>
-                  <a href={contactHref(b.id)} className="contact-row">
-                    <Avatar name={b.name} />
-                    <span className="contact-main">
-                      <span className="contact-heading">
-                        <span className="contact-name">{b.name}</span>
-                        {run ? (
-                          <span className="muted small contact-time">
-                            {formatRelative(run.finishedAt ?? run.startedAt ?? run.createdAt)}
-                          </span>
-                        ) : null}
+          {botId ? (
+            <ul className="contact-list">
+              {visible.map((b) => {
+                const run = latest.get(b.id);
+                return (
+                  <li key={b.id} className={b.id === botId ? "selected" : ""}>
+                    <a href={contactHref(b.id)} className="contact-row">
+                      <Avatar name={b.name} />
+                      <span className="contact-main">
+                        <span className="contact-heading">
+                          <span className="contact-name">{b.name}</span>
+                          {b.id === workspace?.defaultBotId ? (
+                            <Pill tone="info" className="contact-default">
+                              {t("contacts.row.default")}
+                            </Pill>
+                          ) : null}
+                          {run ? (
+                            <span className="muted small contact-time">
+                              {formatRelative(run.finishedAt ?? run.startedAt ?? run.createdAt)}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="muted small contact-role">
+                          {b.role || t("contacts.row.noRole")}
+                        </span>
                       </span>
-                      <span className="muted small contact-role">
-                        {b.role || t("contacts.row.noRole")}
-                      </span>
-                    </span>
-                    <span className="contact-status">
-                      {run ? (
-                        <StatusDot status={run.status} />
-                      ) : (
-                        <span className="muted small">{t("contacts.row.neverRan")}</span>
-                      )}
-                    </span>
-                  </a>
-                  <div className="contact-actions">
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label={t("contacts.row.messageLabel", { name: b.name })}
-                      title={t("contacts.row.messageTitle")}
-                      disabled={opening === b.id}
-                      onClick={() => void message(b)}
-                    >
-                      <MessageSquare size={16} />
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          <PageBar query={pages} label={t("contacts.pages")} />
+                      {canReadRuns ? (
+                        <span className="contact-status">
+                          {run ? (
+                            <StatusDot status={run.status} />
+                          ) : (
+                            <span className="muted small">{t("contacts.row.neverRan")}</span>
+                          )}
+                        </span>
+                      ) : null}
+                    </a>
+                    <div className="contact-actions">
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={t("contacts.row.messageLabel", { name: b.name })}
+                        title={t("contacts.row.messageTitle")}
+                        disabled={opening === b.id}
+                        onClick={() => void message(b)}
+                      >
+                        <MessageSquare size={16} />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+          {botId ? <PageBar query={pages} label={t("contacts.pages")} /> : null}
         </div>
       </aside>
       <section className="contacts-main">
@@ -320,23 +355,37 @@ export function ContactsScreen({
               rememberBots([saved]);
               reloadPage();
             }}
+            onWorkspaceSaved={(saved) => {
+              // ADR-0051: the new default bot leads the rail on the next page load.
+              scope.update(saved);
+              reloadPage();
+            }}
           />
+        ) : rosterError || !loaded ? null : botId && loaded ? (
+          <DeletedObjectState />
         ) : members.length > 0 ? (
           <div className="team-overview">
-            <span className="eyebrow">{workspace?.name}</span>
-            <h1>{t("contacts.team.title")}</h1>
-            <p>{t("contacts.team.intro")}</p>
+            <p className="muted team-intro">{t("contacts.team.intro")}</p>
             <div className="team-card-grid">
               {visible.map((bot) => (
                 <Card key={bot.id} className="team-card">
                   <Avatar name={bot.name} size="lg" />
-                  <h2>{bot.name}</h2>
-                  <p>{bot.role || t("contacts.team.ready")}</p>
-                  {latest.get(bot.id) ? (
-                    <RunStatusPill status={latest.get(bot.id)?.status ?? "queued"} />
-                  ) : (
-                    <p>{t("contacts.team.noActivity")}</p>
-                  )}
+                  <div className="team-card-info">
+                    <div className="team-card-name">
+                      <h2>{bot.name}</h2>
+                      {bot.id === workspace?.defaultBotId ? (
+                        <Pill tone="info">{t("contacts.row.default")}</Pill>
+                      ) : null}
+                    </div>
+                    <p className="team-card-description">{bot.role || t("contacts.team.ready")}</p>
+                    {canReadRuns ? (
+                      latest.get(bot.id) ? (
+                        <RunStatusPill status={latest.get(bot.id)?.status ?? "queued"} />
+                      ) : (
+                        <p>{t("contacts.team.noActivity")}</p>
+                      )
+                    ) : null}
+                  </div>
                   <div className="team-card-actions">
                     <Button
                       aria-label={t("contacts.team.chatWith", { name: bot.name })}
@@ -353,6 +402,7 @@ export function ContactsScreen({
                 </Card>
               ))}
             </div>
+            <PageBar query={pages} label={t("contacts.pages")} />
           </div>
         ) : (
           <div className="contacts-empty">
@@ -360,27 +410,21 @@ export function ContactsScreen({
               {t("contacts.pick.body")}
               {workspace && members.length === 0 ? (
                 <>
-                  <Button
-                    variant="default"
-                    className="mt-3"
-                    disabled={!canCreateBot.allowed}
-                    onClick={() => setCreating(true)}
-                  >
-                    {t("contacts.pick.addFirst", { workspace: workspace.name })}
-                  </Button>
+                  {canCreateBot.allowed ? (
+                    <Button variant="primary" className="mt-3" onClick={() => setCreating(true)}>
+                      {t("contacts.pick.addFirst", { workspace: workspace.name })}
+                    </Button>
+                  ) : null}
                   <RoleNote action="bot.create" does={t("contacts.next.addBot.does")} />
                 </>
               ) : null}
               {scope.loaded && !workspace ? (
                 <>
-                  <Button
-                    variant="default"
-                    className="mt-3"
-                    disabled={!canCreateWorkspace.allowed}
-                    onClick={scope.openCreate}
-                  >
-                    {t("contacts.pick.createWorkspaceFirst")}
-                  </Button>
+                  {canCreateWorkspace.allowed ? (
+                    <Button variant="primary" className="mt-3" onClick={scope.openCreate}>
+                      {t("contacts.pick.createWorkspaceFirst")}
+                    </Button>
+                  ) : null}
                   <RoleNote
                     action="workspace.create"
                     does={t("contacts.next.createWorkspace.does")}
@@ -529,16 +573,12 @@ function NewContactDialog({
               >
                 <Avatar name={name || "bot"} avatar={avatar} size="lg" />
               </button>
-              <label>
-                {t("contacts.dialog.handle")}
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  pattern="[A-Za-z0-9_\-]+"
-                  placeholder={t("contacts.dialog.handlePlaceholder")}
-                  required
-                />
-              </label>
+              <BotNameField
+                label={t("contacts.dialog.handle")}
+                value={name}
+                onChange={setName}
+                disabled={busy}
+              />
             </div>
             {pickingAvatar ? (
               <AvatarPicker
@@ -569,7 +609,11 @@ function NewContactDialog({
               <p className="muted small">{t("contacts.dialog.draftRoleHelp")}</p>
             ) : null}
             {error ? <p className="error small">{error}</p> : null}
-            <Button type="submit" variant="default" disabled={busy || !workspace || !name.trim()}>
+            <Button
+              type="submit"
+              variant="default"
+              disabled={busy || !workspace || !isBotName(name)}
+            >
               {t("contacts.dialog.create")}
             </Button>
           </form>

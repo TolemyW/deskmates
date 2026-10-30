@@ -8,14 +8,18 @@ import type { RunId } from "@deskmates/contracts";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApiClient } from "../../api/client.js";
+import { InterfaceViewProvider } from "../../lib/interface-view.js";
 import {
   FakeEventSource,
   RUN_ID,
   THREAD_ID,
+  bot,
   fakeFetch,
   installFakeEventSource,
+  members,
   run,
   runEvent,
+  thread,
   usage,
 } from "../../test-support/fixtures.js";
 import { RunEventRow, screenshotSource } from "./run-event-row.js";
@@ -46,6 +50,35 @@ afterEach(() => {
 });
 
 describe("RunScreen", () => {
+  it("keeps the story and the facts in the use view and leaves usage and the log for tuning", async () => {
+    const routes = {
+      "GET /api/runs/run_1": { run: run({ status: "succeeded" }), usage: [usage("measured", 0.5)] },
+      "GET /api/runs/run_1/events": { events },
+    };
+    render(
+      <InterfaceViewProvider view="use">
+        <RunScreen runId={RUN_ID} api={createApiClient({ fetch: fakeFetch(routes).fetch })} />
+      </InterfaceViewProvider>,
+    );
+    expect(await screen.findByText("Details")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Usage" })).toBeNull();
+    expect(screen.queryByText(/Technical log/)).toBeNull();
+    expect(screen.queryByText("Startup timeline")).toBeNull();
+    cleanup();
+    render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch: fakeFetch(routes).fetch })} />);
+    expect(await screen.findByRole("heading", { name: "Usage" })).toBeTruthy();
+    expect(screen.getByText(/Technical log/)).toBeTruthy();
+  });
+
+  it("shows a terminal deleted state on 404 and stops the run stream", async () => {
+    const { fetch } = fakeFetch({});
+    render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
+    expect((await screen.findByTestId("deleted-object")).textContent).toContain(
+      "This item is no longer available",
+    );
+    expect(screen.queryByRole("button", { name: /cancel/i })).toBeNull();
+  });
+
   it.each([false, true])(
     "shows partial counters and explicit uncertain attribution (%s)",
     async (attributionUncertain) => {
@@ -131,9 +164,9 @@ describe("RunScreen", () => {
 
     fireEvent.click(screen.getByText("Details"));
     // Header facts.
-    expect(screen.getByText("succeeded").className).toContain("status");
-    expect(screen.getByText("interactive")).toBeTruthy();
-    expect(screen.getByText("thread_message")).toBeTruthy();
+    expect(screen.getByText("complete").className).toContain("status");
+    expect(screen.getByText("Chat reply")).toBeTruthy();
+    expect(screen.getByText("Chat message")).toBeTruthy();
     expect(screen.getByRole("link", { name: THREAD_ID }).getAttribute("href")).toBe(
       `#/threads/${THREAD_ID}`,
     );
@@ -206,8 +239,41 @@ describe("RunScreen", () => {
     render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
     const notice = await screen.findByText(/^No reply/);
     expect(notice.className).toContain("danger");
-    expect(notice.textContent).toContain("must-reply message");
-    expect(notice.textContent).toContain("no_reply");
+    expect(notice.textContent).toContain("send a new message");
+    expect(notice.textContent).not.toContain("no_reply");
+  });
+
+  it("links the run to its Analytics view when the Gateway reports an analyticsUrl (ADR-0046)", async () => {
+    const { fetch } = fakeFetch({
+      "GET /api/runs/run_1": { run: run({ status: "failed" }), usage: [] },
+      "GET /api/runs/run_1/events": { events: [] },
+      "GET /api/config": { release: null, analyticsUrl: "/analytics/" },
+    });
+    render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
+    const link = await screen.findByRole("link", { name: "Open in Analytics" });
+    expect(link.getAttribute("href")).toBe(
+      `/analytics/d/deskmates-agent-runs/agent-runs?var-run=${RUN_ID}`,
+    );
+    expect(link.getAttribute("target")).toBe("_blank");
+  });
+
+  it("labels a model job's trigger apart from a schedule (issue #39 item 7)", async () => {
+    const { fetch } = fakeFetch({
+      "GET /api/runs/run_1": {
+        run: run({
+          triggerKind: "model_job",
+          triggerRef: "round_triage:msg_1",
+          lane: "background",
+          status: "succeeded",
+          config: { runType: "round_triage" },
+        }),
+        usage: [],
+      },
+      "GET /api/runs/run_1/events": { events: [] },
+    });
+    render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
+    expect(await screen.findByText("Model job")).toBeTruthy();
+    expect(screen.getByText("round_triage:msg_1")).toBeTruthy();
   });
 
   it("explains a deadline cancellation", async () => {
@@ -216,8 +282,9 @@ describe("RunScreen", () => {
       "GET /api/runs/run_1/events": { events: [] },
     });
     render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
-    const notice = await screen.findByText(/^Deadline passed/);
-    expect(notice.textContent).toContain("(deadline)");
+    const notice = await screen.findByText(/^The chat deadline passed/);
+    expect(notice.textContent).toContain("set a new deadline");
+    expect(notice.textContent).not.toContain("(deadline)");
   });
 
   it("hides diagnostic log rows by default and reveals every raw event on request", async () => {
@@ -261,7 +328,7 @@ describe("RunScreen", () => {
     });
     render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
     await screen.findAllByText("start");
-    expect(screen.getByText("running").className).toContain("status");
+    expect(screen.getByText("working").className).toContain("status");
     expect(screen.getByText(/No usage recorded yet/)).toBeTruthy();
     await waitFor(() => expect(FakeEventSource.last.url).toBe(`/api/events?threadId=${THREAD_ID}`));
 
@@ -292,7 +359,7 @@ describe("RunScreen", () => {
     expect(screen.queryByText("other")).toBeNull();
 
     es.emit({ type: "run_status", threadId: THREAD_ID, run: run({ status: "succeeded" }) });
-    await screen.findByText("succeeded");
+    await screen.findByText("complete");
     await screen.findByText("unpriced");
     expect(getRunCalls).toBe(2);
   });
@@ -331,8 +398,8 @@ describe("RunScreen", () => {
     await screen.findAllByText("start");
     expect(subscribedAtFetch).toBe(true);
     // The status that arrived first is kept; the stale row does not roll it back to running.
-    expect(screen.getByText("succeeded").className).toContain("status");
-    expect(screen.queryByText("running")).toBeNull();
+    expect(screen.getByText("complete").className).toContain("status");
+    expect(screen.queryByText("working")).toBeNull();
     // Once the thread is known the stream narrows to it.
     expect(FakeEventSource.last.url).toBe(`/api/events?threadId=${THREAD_ID}`);
   });
@@ -389,7 +456,7 @@ describe("RunScreen", () => {
     await screen.findByText("late-priced-model");
     releaseFirst({ run: run({ status: "running" }), usage: [] });
     await screen.findAllByText("initial snapshot event");
-    expect(screen.getByText("succeeded").className).toContain("status");
+    expect(screen.getByText("complete").className).toContain("status");
     expect(screen.getByText("late-priced-model")).toBeTruthy();
     expect(screen.queryByText("No usage recorded.")).toBeNull();
   });
@@ -456,7 +523,7 @@ describe("RunScreen", () => {
     );
     await screen.findByLabelText("Run events");
     await waitFor(() =>
-      expect(document.querySelector(".run-title .status")?.textContent).toBe("succeeded"),
+      expect(document.querySelector(".run-title .status")?.textContent).toBe("complete"),
     );
     expect(screen.queryByRole("button", { name: "Cancel run" })).toBeNull();
     unmount();
@@ -577,4 +644,56 @@ describe("browser evidence download links", () => {
     );
     expect(screen.queryByRole("link")).toBeNull();
   });
+});
+
+it("recovers an initial run fetch failure without leaving a loading message", async () => {
+  let failed = false;
+  const good = fakeFetch({
+    "GET /api/runs/run_1": { run: run({ status: "running" }), usage: [] },
+    "GET /api/runs/run_1/events": { events: [] },
+  });
+  const api = createApiClient({
+    fetch: async (input, init) => {
+      if (String(input) === "/api/runs/run_1" && !failed) {
+        failed = true;
+        throw new Error("Replay unavailable");
+      }
+      return good.fetch(input, init);
+    },
+  });
+  const { container } = render(<RunScreen runId={RUN_ID} api={api} />);
+  expect((await screen.findByRole("alert")).textContent).toContain("Cannot connect to the server");
+  expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+  expect(container.querySelector(".run-metadata")?.hasAttribute("hidden")).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Reload run" }));
+  await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  await waitFor(() =>
+    expect(good.calls.some((call) => call.path === "/api/runs/run_1")).toBe(true),
+  );
+});
+
+it("retries related run details without cancelling or continuing work", async () => {
+  let failThread = true;
+  const wire = fakeFetch({
+    "GET /api/runs/run_1": { run: run({ status: "running" }), usage: [] },
+    "GET /api/runs/run_1/events": { events: [] },
+    "GET /api/bots?ids=bot_1": { bots: [bot] },
+    "GET /api/threads/thr_1": { thread, members },
+  });
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    if (String(input) === "/api/threads/thr_1" && failThread) {
+      failThread = false;
+      throw new Error("Temporary thread failure");
+    }
+    return wire.fetch(input, init);
+  };
+  render(<RunScreen runId={RUN_ID} api={createApiClient({ fetch })} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Retry run details" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("button", { name: "Retry run details" })).toBeNull(),
+  );
+  await waitFor(() =>
+    expect(wire.calls.some((call) => call.path === "/api/threads/thr_1")).toBe(true),
+  );
+  expect(wire.calls.some((call) => call.method === "POST")).toBe(false);
 });

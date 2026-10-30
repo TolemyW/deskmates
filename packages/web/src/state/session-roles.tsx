@@ -139,23 +139,27 @@ export function useCanPost(thread: ThreadFacts | undefined, _memberCount: number
  * Whether this session may take an action an Admin takes anywhere and a Member only in a
  * one-bot chat they opened or their own private chat (ADR-0022 amendments 1 and 6): cancelling
  * a run (A11), answering a continuation ask (A12). `thread` is the chat in question, if known.
- * A Guest takes none of them (W6).
+ * A Guest takes none of them (W6). An explicit null workspace keeps authenticated
+ * controls unavailable until the run workspace or thread has been resolved.
  */
 export function useCanInOwnSideChat(
   action: "run.cancel" | "run.continue",
   thread: ThreadFacts | undefined,
   memberCount: number,
+  workspaceId?: string | null,
 ): Can {
-  const can = useCan(action, thread?.workspaceId);
+  const scope = thread?.workspaceId ?? workspaceId;
+  const roles = useContext(SessionRolesContext);
+  const can = useCan(action, scope ?? undefined);
   const actorId = useContext(SessionActorContext);
-  const guest = useIsGuest(thread?.workspaceId);
+  const guest = useIsGuest(scope ?? undefined);
   const ownChat =
     !guest &&
     thread !== undefined &&
     actorId !== undefined &&
     (isOwnSideChat(thread, memberCount, actorId) ||
       (thread.privateToUserId !== undefined && `user:${thread.privateToUserId}` === actorId));
-  return { ...can, allowed: can.allowed || ownChat };
+  return { ...can, allowed: (scope !== null || roles === undefined) && (can.allowed || ownChat) };
 }
 
 export interface Can {

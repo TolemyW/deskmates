@@ -1,6 +1,6 @@
 // The application's page bar (#113): `@deskmates/ui`'s presentational Pager with the shared
-// strings and a `usePagedQuery` result. It shows nothing for an empty list (the screen's empty
-// state says so), and says "of more" instead of a number when the source has no cheap total.
+// strings and a `usePagedQuery` result. It shows nothing when the list fits on one page, and
+// says "of more" instead of a number when the source has no cheap total.
 
 import { type PageRange, Pager } from "@deskmates/ui";
 import { useT } from "../i18n/i18n-provider.js";
@@ -29,7 +29,9 @@ export function PageBar<T>({
   const t = useT();
   const rangeText = usePageRangeText();
   const { range } = query;
-  if (!range) return null;
+  // A pager with one range and two disabled buttons explains no action and wastes scarce rail
+  // width. The list itself already shows those rows, so navigation exists only when it can move.
+  if (!range || (!query.hasPrevious && !query.hasNext)) return null;
   return (
     <Pager
       label={label ?? t("pager.label")}

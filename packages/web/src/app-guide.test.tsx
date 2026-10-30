@@ -185,9 +185,11 @@ describe("Help", () => {
     render(<App />);
     fireEvent.click(await help());
     expect(manual()).not.toBeNull();
-    fireEvent.click(screen.getByRole("link", { name: "Account settings and preferences for Pat" }));
+    fireEvent.click(screen.getByRole("link", { name: "Account settings for Pat" }));
     await waitFor(() => expect(manual()).toBeNull());
-    await screen.findByRole("region", { name: "Preferences" });
+    await screen.findByRole("region", { name: "Profile" });
+    fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+    await screen.findByRole("dialog", { name: "Preferences" });
     await selectOption("Appearance", "Dark");
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
     await selectOption("Appearance", "Use system setting");

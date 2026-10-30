@@ -262,6 +262,45 @@ describe("submit and recovery", () => {
 });
 
 describe("tasks", () => {
+  it("list_tasks reads every page and filters on the server even for matches beyond the first page", async () => {
+    const seed = await submitOne();
+    const template = gateway.tasks.get(String(seed.data.taskId));
+    if (!template) throw new Error("missing task fixture");
+    gateway.tasks.clear();
+    for (let index = 0; index < 231; index++) {
+      const task = {
+        ...template,
+        id: `task_${index}`,
+        status: index < 225 ? ("planned" as const) : ("blocked" as const),
+      };
+      gateway.tasks.set(task.id, task);
+    }
+    gateway.tasks.set("other", {
+      ...template,
+      id: "other",
+      workspaceId: "ws_other" as typeof template.workspaceId,
+    });
+    const all = await harness.call("list_tasks", {});
+    expect(all.isError).toBe(false);
+    expect(all.data.tasks).toHaveLength(231);
+    expect(new Set((all.data.tasks as { id: string }[]).map((task) => task.id)).size).toBe(231);
+    const requests = gateway.requests.filter(
+      (request) => request.route === "GET /api/workspaces/:workspaceId/tasks",
+    );
+    expect(requests.map((request) => request.query)).toEqual([
+      { offset: "0", limit: "100" },
+      { offset: "100", limit: "100" },
+      { offset: "200", limit: "100" },
+    ]);
+    const filtered = await harness.call("list_tasks", { status: "blocked" });
+    expect(filtered.data.tasks).toHaveLength(6);
+    expect(gateway.requests.at(-1)?.query).toEqual({
+      offset: "0",
+      limit: "100",
+      status: "blocked",
+    });
+  });
+
   it("get_task returns the task", async () => {
     const submitted = await submitOne();
     const result = await harness.call("get_task", { taskId: submitted.data.taskId });

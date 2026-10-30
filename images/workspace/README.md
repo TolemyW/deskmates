@@ -28,7 +28,7 @@ Preinstalled (no `npx` or download at run time, see S0 results):
 - Node (from the base image), `playwright@1.58.2`, `@playwright/mcp@0.0.82`, `@playwright/cli@0.1.21`, `@anthropic-ai/claude-agent-sdk@0.3.278`, installed globally. The versions are Dockerfile `ARG`s and must agree with AGENTS.md; `workspace-image.container.test.ts` checks them.
 - The matching Linux native SDK package is a required, pinned global dependency. The build resolves its executable from the SDK and runs `--version` offline; optional installation failures cannot produce an image that only fails when the first run starts.
 - `undici@7.29.1`, linked into the sidecar runtime for explicit managed-proxy dispatch.
-- psql, git, gh, python3, curl
+- psql, git, gh, python3 with `pip` and `venv` (for a project's own packages, installed by the bot at run time), curl
 - `packages/contracts` at `/opt/deskmates/contracts`, `packages/sidecar` at `/opt/deskmates/sidecar`, and the exact release Starter Skill pack at `/opt/deskmates/starter-skills`. The Gateway still sends the run's recorded set over the start protocol; the image copy makes the audited release asset available offline and introduces no second discovery path. `/opt/deskmates/node_modules` symlinks `@deskmates/contracts`, the four global packages and `zod` (a sidecar dependency that npm nests under the SDK's global install) so the sidecar's ESM imports resolve (ESM ignores `NODE_PATH`). A new runtime dependency of the sidecar must be added to the global install and symlink list in the Dockerfile; `acceptance/m0-stack.container.test.ts` runs the real sidecar in the image and fails when one is missing.
 
 These are direct package pins. MCP 0.0.82 and CLI 0.1.21 each declare and resolve

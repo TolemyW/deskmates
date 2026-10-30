@@ -2,11 +2,17 @@
 // make, under the run-token scope of `/internal/runs/:runId/*`. A delivery's files are verified
 // through the workspace before anything is written (ADR-0014 A4) and published idempotently;
 // neither route starts or wakes a run, posts a message or accepts a task.
-import type { RunId, TaskCheckpointResponse, TaskDeliverResponse } from "@deskmates/contracts";
+import type {
+  RunId,
+  TaskCheckpointResponse,
+  TaskDeliverRequest,
+  TaskDeliverResponse,
+} from "@deskmates/contracts";
 import { DeskmatesError } from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
 import type { GatewayContext } from "../context.js";
 import { verifyWorkspaceFiles } from "../files/file-verification.js";
+import { withToolHelp } from "../tasks/tasks.js";
 import { deliverTaskInput } from "../tasks/validate.js";
 import { asRecord } from "./validate.js";
 
@@ -24,18 +30,32 @@ export function registerTaskInternalRoutes(app: FastifyInstance, ctx: GatewayCon
     "/internal/runs/:runId/tasks/:taskId/deliver",
     async (request): Promise<TaskDeliverResponse> => {
       const runId = request.params.runId as RunId;
-      const input = deliverTaskInput(bodyFor(request));
+      // Issue #39 item 5: a refused call shows the model a valid one and its work directory.
+      const help = () => ctx.tasks.toolHelp(runId, request.params.taskId, "task_deliver");
+      let raw: TaskDeliverRequest;
+      try {
+        raw = deliverTaskInput(bodyFor(request));
+      } catch (err) {
+        throw withToolHelp(err, help);
+      }
       const run = ctx.runs.mustGet(runId);
       // Everything that needs no workspace read is refused first, so a bad call costs no exec.
-      const scope = ctx.tasks.deliveryScope(runId, input);
-      const verified = await verifyWorkspaceFiles(
-        ctx,
-        scope.workspaceId,
-        input.artifacts.map((a) => a.path),
-      );
+      const scope = ctx.tasks.deliveryScope(runId, raw);
+      const input = scope.input;
+      let verified: Awaited<ReturnType<typeof verifyWorkspaceFiles>>;
+      try {
+        verified = await verifyWorkspaceFiles(
+          ctx,
+          scope.workspaceId,
+          input.artifacts.map((a) => a.path),
+        );
+      } catch (err) {
+        throw withToolHelp(err, help);
+      }
       return ctx.bus.batch(() =>
         ctx.db.transaction(() => {
-          const { task, delivery } = ctx.tasks.deliver(runId, input, verified);
+          const { task, delivery, replayed } = ctx.tasks.deliver(runId, input, verified);
+          if (replayed) return { task, delivery };
           ctx.events.append({
             runId,
             kind: "log",

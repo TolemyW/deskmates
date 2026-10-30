@@ -82,39 +82,12 @@
     font-size: var(--app-text-sm);
     margin-top: 6px;
   }
-  .costs-header {
+  .costs-controls {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 12px;
-  }
-  .period-picker {
-    display: inline-flex;
-    gap: 2px;
-    margin: 0;
-    padding: 3px;
-    border: 1px solid var(--app-border);
-    border-radius: var(--app-radius-full);
-    background: var(--app-surface);
-  }
-  .period-picker button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border: 0;
-    border-radius: var(--app-radius-full);
-    background: transparent 0 0;
-    color: var(--app-text-2);
-    font: inherit;
-    font-size: var(--app-text-sm);
-    cursor: pointer;
-  }
-  .period-picker button.active {
-    background: var(--primary-soft);
-    color: var(--primary-text);
-    font-weight: 600;
   }
   .cost-filters {
     display: grid;
@@ -462,9 +435,6 @@
     stroke: currentColor;
     stroke-dasharray: 3 2;
   }
-  .cost-view-toggle {
-    order: -1;
-  }
   .budget-list {
     display: grid;
     gap: 12px;
@@ -519,5 +489,50 @@
     display: grid;
     gap: 4px;
     font-size: var(--app-text-sm);
+  }
+}
+
+.cost-tiles {
+  position: relative;
+  align-items: start;
+}
+.cost-money {
+  position: relative;
+}
+.cost-money > .cost-tile {
+  padding-right: 12rem;
+}
+.cost-money > .cost-pricing-link {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  width: max-content;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.cost-summary-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+.cost-summary-notes:empty {
+  display: none;
+}
+.cost-pricing {
+  gap: 12px;
+}
+.cost-pricing p {
+  margin: 0;
+}
+
+@media (max-width: 540px) {
+  .cost-money > .cost-tile {
+    padding-right: 18px;
+    padding-bottom: 44px;
+  }
+  .cost-money > .cost-pricing-link {
+    top: auto;
+    bottom: 14px;
   }
 }

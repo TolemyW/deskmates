@@ -25,6 +25,7 @@ import { useWorkspaceScope } from "../../state/workspace-scope.js";
 import { type WorkspaceListState, workspaceDetailHref, workspacesHref } from "../account/route.js";
 import type { DetailShell } from "./detail-sections.js";
 import { markOpenedFromList } from "./list-return.js";
+import { useEnterWorkspace } from "./use-enter-workspace.js";
 import { WorkspaceDetail } from "./workspace-detail.js";
 
 const SEARCH_DELAY_MS = 250;
@@ -49,6 +50,7 @@ export function WorkspaceManagement({
 
 function WorkspaceList({ api, list }: { api: ApiClient; list: WorkspaceListState }) {
   const t = useT();
+  const entryAction = useEnterWorkspace(api);
   const scope = useWorkspaceScope(api);
   const canCreate = useCan("workspace.create").allowed;
   const [text, setText] = useState(list.q ?? "");
@@ -58,6 +60,8 @@ function WorkspaceList({ api, list }: { api: ApiClient; list: WorkspaceListState
   const [pinError, setPinError] = useState<string>();
   const [pinned, setPinned] = useState<ReadonlyMap<string, boolean>>(new Map());
   const heading = useRef<HTMLHeadingElement>(null);
+  const pinRequests = useRef(new Set<string>());
+  const [pendingPins, setPendingPins] = useState<ReadonlySet<string>>(new Set());
 
   // A real navigation (Back to list, a link) brings its own search and filters.
   const listKey = JSON.stringify(list);
@@ -99,10 +103,16 @@ function WorkspaceList({ api, list }: { api: ApiClient; list: WorkspaceListState
       return { items: page.workspaces, total: page.total };
     },
   });
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new page drops optimistic pins.
-  useEffect(() => setPinned(new Map()), [pages.page]);
+  // A directory refresh must not erase an optimistic pin whose request is still pending.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reconcile overrides when the page changes.
+  useEffect(() => {
+    setPinned((current) => new Map([...current].filter(([id]) => pinRequests.current.has(id))));
+  }, [pages.page]);
 
   const togglePin = async (entry: WorkspaceDirectoryEntry) => {
+    if (pinRequests.current.has(entry.id)) return;
+    pinRequests.current.add(entry.id);
+    setPendingPins(new Set(pinRequests.current));
     const next = !(pinned.get(entry.id) ?? entry.pinned);
     setPinError(undefined);
     setPinned((map) => new Map(map).set(entry.id, next));
@@ -112,6 +122,9 @@ function WorkspaceList({ api, list }: { api: ApiClient; list: WorkspaceListState
     } catch (err) {
       setPinned((map) => new Map(map).set(entry.id, !next));
       setPinError(t("workspaceManage.pinFailed", { error: errorMessage(err) }));
+    } finally {
+      pinRequests.current.delete(entry.id);
+      setPendingPins(new Set(pinRequests.current));
     }
   };
 
@@ -123,13 +136,9 @@ function WorkspaceList({ api, list }: { api: ApiClient; list: WorkspaceListState
     <section className="card workspace-manage" aria-labelledby="workspace-manage-title">
       <header className="workspace-manage-header">
         <h2 id="workspace-manage-title" ref={heading} tabIndex={-1}>
-          {t("workspaceManage.title")}
-          {total !== undefined ? (
-            <span className="muted workspace-manage-total">
-              {" "}
-              {t("workspaceManage.total", { count: total })}
-            </span>
-          ) : null}
+          {total === undefined
+            ? t("workspaceManage.title")
+            : t("workspaceManage.total", { count: total })}
         </h2>
         <Button
           type="button"
@@ -184,6 +193,11 @@ function WorkspaceList({ api, list }: { api: ApiClient; list: WorkspaceListState
           </select>
         </label>
       </div>
+      {entryAction.error ? (
+        <p role="alert" className="error small">
+          {entryAction.error}
+        </p>
+      ) : null}
       {pinError ? (
         <p role="alert" className="error small">
           {pinError}
@@ -220,6 +234,9 @@ function WorkspaceList({ api, list }: { api: ApiClient; list: WorkspaceListState
                   {t("workspaceManage.col.running")}
                 </th>
                 <th scope="col">{t("workspaceManage.col.activity")}</th>
+                <th scope="col" className="workspace-manage-actions">
+                  <span className="sr-only">{t("workspaceManage.col.actions")}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -233,6 +250,8 @@ function WorkspaceList({ api, list }: { api: ApiClient; list: WorkspaceListState
                           type="button"
                           className="workspace-manage-pin"
                           aria-pressed={isPinned}
+                          disabled={pendingPins.has(entry.id)}
+                          aria-busy={pendingPins.has(entry.id)}
                           aria-label={t(
                             isPinned ? "workspaceManage.unpin" : "workspaceManage.pin",
                             { name: entry.name },
@@ -264,9 +283,13 @@ function WorkspaceList({ api, list }: { api: ApiClient; list: WorkspaceListState
                         </span>
                       ) : null}
                     </td>
-                    <td>{t(`workspaceManage.role.${entry.myRole}`)}</td>
-                    <td className="num">{entry.botCount}</td>
-                    <td className="num">
+                    <td data-label={t("workspaceManage.col.role")}>
+                      {t(`workspaceManage.role.${entry.myRole}`)}
+                    </td>
+                    <td className="num" data-label={t("workspaceManage.col.bots")}>
+                      {entry.botCount}
+                    </td>
+                    <td className="num" data-label={t("workspaceManage.col.running")}>
                       {entry.activeRuns === null ? (
                         <span title={t("workspaceManage.runningHidden")}>
                           <span aria-hidden="true">—</span>
@@ -276,13 +299,34 @@ function WorkspaceList({ api, list }: { api: ApiClient; list: WorkspaceListState
                         entry.activeRuns
                       )}
                     </td>
-                    <td>
+                    <td data-label={t("workspaceManage.col.activity")}>
                       <time
                         dateTime={entry.lastActivityAt}
                         title={formatDateTime(entry.lastActivityAt)}
                       >
                         {formatRelative(entry.lastActivityAt)}
                       </time>
+                    </td>
+                    <td className="workspace-manage-actions">
+                      {!entry.archivedAt ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          aria-label={t("workspaceManage.enterNamed", { name: entry.name })}
+                          disabled={entryAction.opening !== undefined}
+                          onClick={() => void entryAction.enter(entry.id)}
+                        >
+                          {t("workspaceManage.enter")}
+                        </Button>
+                      ) : null}
+                      <a
+                        href={workspaceDetailHref(entry.id, state)}
+                        aria-label={t("workspaceManage.settingsNamed", { name: entry.name })}
+                        onClick={markOpenedFromList}
+                      >
+                        {t("workspaceManage.settings")}
+                      </a>
                     </td>
                   </tr>
                 );

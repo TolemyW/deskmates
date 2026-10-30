@@ -3,7 +3,8 @@
    design-refresh.css they override every layered rule.
    Rules inside @layer components rank with the shared components of app.css and lose to
    any unlayered rule; within the layer the later rule wins. */
-/* Account settings → Preferences: Language and Appearance side by side when there is room. */
+/* Account settings → Preferences: Language, Appearance and Interface side by side when there is
+   room, two to a row on the settings card. */
 .account-preferences {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -25,9 +26,9 @@
 .account-screen .account-section {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 20px 24px;
-  margin-top: 16px;
+  gap: 12px;
+  padding: 16px;
+  margin-top: 12px;
 }
 .account-section h2 {
   font-size: var(--app-text-lg);
@@ -64,25 +65,20 @@
 .account-form label {
   font-weight: 500;
 }
-.account-password-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.account-password-input {
+.account-value-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
 }
-.account-password-input > :first-child {
-  flex: 1;
+.account-value-row > div {
+  display: grid;
+  gap: 4px;
   min-width: 0;
 }
-.account-password-input .icon-button {
-  display: inline-grid;
-  place-items: center;
-  flex-shrink: 0;
-  font-size: var(--app-text-base);
+.account-value-row strong {
+  overflow-wrap: anywhere;
 }
 .account-facts {
   margin: 0;
@@ -130,27 +126,7 @@
   align-items: start;
   margin-top: 16px;
 }
-.settings-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  position: sticky;
-  top: 16px;
-}
-.settings-nav-link {
-  padding: 8px 12px;
-  border-radius: 9px;
-  color: var(--text);
-  text-decoration: none;
-}
-.settings-nav-link:hover,
-.settings-nav-link:focus-visible {
-  background: var(--surface-2);
-}
-.settings-nav-link.active {
-  background: var(--surface-2);
-  font-weight: 600;
-}
+
 .settings-content {
   min-width: 0;
 }
@@ -163,18 +139,16 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
-  .settings-nav {
-    position: static;
-    flex-direction: row;
-    overflow-x: auto;
-    border-bottom: 1px solid var(--app-border);
-  }
-  .settings-nav-link {
-    flex: 0 0 auto;
-    border-radius: 9px 9px 0 0;
-  }
 }
 /* Room for the category list beside the content. */
 .account-screen {
   max-width: 1040px;
+}
+
+.agent-prompt-details > summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.agent-prompt-details[open] > summary {
+  margin-bottom: 12px;
 }

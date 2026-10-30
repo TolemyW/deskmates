@@ -149,7 +149,7 @@ export class ApprovalReviews {
     const queued = this.deps.runs.create({
       botId: run.botId,
       lane: "background",
-      triggerKind: "cron",
+      triggerKind: "model_job",
       triggerRef: `${APPROVAL_REVIEW}:${approval.id}`,
       triggerPayload: { prompt: reviewPackage },
       config: {

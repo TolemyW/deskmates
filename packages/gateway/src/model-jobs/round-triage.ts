@@ -60,7 +60,7 @@ export function roundTriageRequester(deps: {
         botId: runner.botId,
         threadId: thread.id,
         lane: "background",
-        triggerKind: "cron",
+        triggerKind: "model_job",
         triggerRef: `${ROUND_TRIAGE}:${message.id}`,
         triggerPayload: { prompt: "" },
         config: {

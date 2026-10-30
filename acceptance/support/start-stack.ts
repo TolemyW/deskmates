@@ -32,6 +32,7 @@ import {
 } from "./docker.js";
 import { RecordingProvider } from "./recording-provider.js";
 import { POLL_MS } from "./runs.js";
+import { type StartedParts, abandonStart } from "./stop-stack.js";
 
 /** `DESKMATES_GROUP_ROUTING` as the Gateway itself reads it; empty means "use the default". */
 function groupRoutingFromEnv(): GroupRouting | undefined {
@@ -99,6 +100,11 @@ export interface StackOptions {
   cliSmallFastModel?: string;
   /** `MODEL_PRICES`; unset is an empty table, which is what the usage-count suites want. */
   modelPrices?: GatewayConfig["modelPrices"];
+  /**
+   * Installation configuration an evaluation campaign takes from its `.env` (protocol of
+   * 2026-10-17): hybrid retrieval (ADR-0041) and the model registry (ADR-0039). Unset, neither.
+   */
+  campaignConfig?: Pick<Partial<GatewayConfig>, "retrieval" | "modelUpstreams" | "search">;
 }
 
 /**
@@ -157,6 +163,12 @@ export interface Stack {
   volumes: string[];
   /** Workspaces `addWorkspace` provisioned on this stack; stop-stack destroys each of them. */
   extraWorkspaces: ExtraWorkspace[];
+  /**
+   * Every workspace id this stack created, recorded the moment the Gateway returned it, before
+   * any container exists. stop-stack removes every resource labelled with each one, so a start
+   * or `addWorkspace` that failed half way leaves nothing behind (ADR-0006 amendment 5).
+   */
+  createdWorkspaceIds?: string[];
   /**
    * Where stop-stack reports a teardown step that failed. Unset, it warns on stderr, which is right
    * for a real stack; a test that injects failures on purpose collects them here instead.
@@ -243,6 +255,7 @@ export async function addWorkspace(
   opts: AddWorkspaceOptions,
 ): Promise<ExtraWorkspace> {
   const created = await stack.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+    defaultBot: false,
     name: `m0-${opts.label}`,
     egressAllowlist: opts.egressAllowlist,
   });
@@ -253,6 +266,7 @@ export async function addWorkspace(
   }
   const { workspace } = created.json;
   journalWorkspace(workspace);
+  stack.createdWorkspaceIds = [...(stack.createdWorkspaceIds ?? []), workspace.id];
   const handle = await stack.app.deskmates.ctx.sandboxes.ensure(workspace);
   const volumes = stack.provider.specs.flatMap((s) =>
     s.workspaceId === workspace.id ? Object.values(s.volumes) : [],
@@ -264,20 +278,38 @@ export async function addWorkspace(
   return extra;
 }
 
+/**
+ * Start the stack. A start that fails after anything exists takes it down again: the Gateway, the
+ * golden site, the temp directory and every resource labelled with the workspace it created, so
+ * a failing T2 leaves no `deskmates-*` resource unless `DESKMATES_T2_KEEP_WORKSPACE=1` keeps it.
+ */
 export async function startStack(opts: StackOptions): Promise<Stack> {
+  const parts: StartedParts = { workspaceIds: [] };
+  try {
+    return await startStackParts(opts, parts);
+  } catch (error) {
+    await abandonStart(parts);
+    throw error;
+  }
+}
+
+async function startStackParts(opts: StackOptions, parts: StartedParts): Promise<Stack> {
   const image = workspaceImage();
   const docker = new DockerProvider(testDockerProviderOptions());
+  parts.docker = docker;
   await ensureWorkspaceImage(docker, image);
   const provider = new RecordingProvider(docker);
 
   // (a) golden site, reachable from the container.
   const site = await startGoldenSite({ host: "0.0.0.0", humanCheck: opts.humanCheck ?? false });
+  parts.site = site;
   const siteUrl = `http://127.0.0.1:${site.port}`;
   const siteOriginForBot = gatewayUrlForContainer(siteUrl);
   const siteHost = new URL(siteOriginForBot).hostname;
 
   // (b) Gateway with a real provider and an on-disk database.
   const tmpDir = mkdtempSync(join(tmpdir(), `deskmates-acceptance-${opts.label}-`));
+  parts.tmpDir = tmpDir;
   const dbPath = join(tmpDir, "gateway.sqlite");
   const groupRouting = opts.groupRouting ?? groupRoutingFromEnv();
   const config: GatewayConfig = {
@@ -321,12 +353,19 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
     maxTurns: 50,
     channelStateDir: join(tmpDir, "channels"),
     modelPrices: opts.modelPrices ?? [],
+    ...(opts.campaignConfig?.retrieval ? { retrieval: opts.campaignConfig.retrieval } : {}),
+    ...(opts.campaignConfig?.modelUpstreams
+      ? { modelUpstreams: opts.campaignConfig.modelUpstreams }
+      : {}),
+    // ADR-0049: the web search comparison points the Gateway at its search fixture.
+    ...(opts.campaignConfig?.search ? { search: opts.campaignConfig.search } : {}),
   };
   // The cron timer stays off unless the case asks for it (`StackOptions.startCron`).
   const app = buildGateway(config, provider, {
     surface: "combined-test",
     startCron: opts.startCron ?? false,
   });
+  parts.app = app;
   const gatewayUrl = await listen(app);
   // buildGateway resolves the sandbox-facing URL lazily at each run start, so it can be set once
   // the ephemeral port is known. This is GATEWAY_BASE_URL in .env for a deployed Gateway.
@@ -359,10 +398,13 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
   const { workspace } = expectCreated(
     "create workspace",
     await api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+      defaultBot: false,
       name: `m0-${opts.label}`,
       egressAllowlist: [siteHost],
     }),
   );
+
+  parts.workspaceIds.push(workspace.id);
 
   // Test-only ownership receipt, written before provisioning so an unattended supervisor
   // can recover interrupted setup without touching another test's Docker resources.
@@ -440,6 +482,7 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
     tmpDir,
     volumes,
     extraWorkspaces: [],
+    createdWorkspaceIds: [workspace.id],
     api,
   };
 }

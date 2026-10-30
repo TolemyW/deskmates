@@ -7,6 +7,7 @@ import {
   type BotId,
   type RunEvent,
   type RunId,
+  type RunTriggerKind,
   type ThreadId,
   type ThreadRound,
   isTerminal,
@@ -15,10 +16,12 @@ import { ChevronDown } from "lucide-react";
 import { useRef, useState } from "react";
 import type { RunView } from "../../api/types.js";
 import { Pill, runStatusTone } from "../../components/ui/pill.js";
-import { errorMessage, formatDateTime, formatRelative } from "../../format.js";
+import { describeRunError, errorMessage, formatDateTime, formatRelative } from "../../format.js";
+import type { MessageKey } from "../../i18n/catalogs.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { runHref, threadHref } from "../../router.js";
 import { runStatusLabel } from "../../state/thread-view.js";
+import { desktopDenials } from "./desktop-denials.js";
 import { ModelRetryLine } from "./model-retry.js";
 import { type RunMarkActions, RunMarkBadge, RunMarkControl } from "./run-mark.js";
 
@@ -224,9 +227,17 @@ export function ActivityTriggerLabel({ run }: { run: RunView }) {
   const t = useT();
   if (run.triggerKind === "thread_message")
     return <span className="activity-group-label">{t("activity.group.message")}</span>;
+  const triggerKey: Record<Exclude<RunTriggerKind, "thread_message">, MessageKey> = {
+    approval: "run.trigger.approval",
+    cron: "run.trigger.cron",
+    manual: "run.trigger.manual",
+    model_job: "run.trigger.modelJob",
+    webhook: "run.trigger.webhook",
+    welcome: "run.trigger.welcome",
+  };
   return (
     <span className="activity-group-label">
-      {t("activity.group.trigger", { trigger: run.triggerKind.replaceAll("_", " ") })}
+      {t("activity.group.trigger", { trigger: t(triggerKey[run.triggerKind]) })}
     </span>
   );
 }
@@ -234,13 +245,14 @@ export function ActivityTriggerLabel({ run }: { run: RunView }) {
 /** What a card says without a model: the live state, else the outcome's first line. */
 function deterministicLine(run: RunView, t: ReturnType<typeof useT>): string {
   if (!isTerminal(run.status)) return runStatusLabel(run.status);
+  const error = run.error ? describeRunError(run.error) : undefined;
   const text =
     run.status === "failed" || run.status === "stopped"
-      ? run.error
+      ? error
       : run.status === "silent"
         ? t("activity.silent")
         : run.status === "cancelled"
-          ? (run.error ?? t("activity.cancelled"))
+          ? (error ?? t("activity.cancelled"))
           : run.summary?.reply || run.summary?.done;
   const first = (text ?? "").split("\n")[0]?.trim() ?? "";
   return first.length > 120 ? `${first.slice(0, 119)}…` : first || runStatusLabel(run.status);
@@ -311,12 +323,20 @@ export function ActivityCard({
   }
   const retries = (events ?? []).filter((event) => event.kind === "model_retry");
   const tools = (events ?? []).filter((event) => event.kind === "tool_call");
+  // ADR-0048 amendment 1, A4: desktop network denials are counted in the opened record.
+  const denials = desktopDenials(events ?? []);
   return (
     <article className={`activity-card ${run.status}`} data-testid="activity-card">
       <header className="activity-card-head">
         <strong>{botName(run.botId)}</strong>
         <span className="muted small">
-          {t(run.lane === "interactive" ? "activity.lane.foreground" : "activity.lane.background")}
+          {t(
+            run.lane === "interactive"
+              ? "activity.lane.foreground"
+              : run.triggerKind === "thread_message"
+                ? "activity.lane.collaboration"
+                : "activity.lane.background",
+          )}
         </span>
         <Pill tone={runStatusTone(run.status)}>{runStatusLabel(run.status)}</Pill>
         <time dateTime={at} title={formatDateTime(at)} className="muted small">
@@ -381,6 +401,14 @@ export function ActivityCard({
                 </li>
               ))}
             </ul>
+          ) : null}
+          {denials.count > 0 ? (
+            <p className="small" data-testid="activity-desktop-denials">
+              {t("activity.desktopDenials", {
+                count: denials.count,
+                hosts: denials.hosts.join(", ") || "?",
+              })}
+            </p>
           ) : null}
           {markRun ? (
             <RunMarkControl

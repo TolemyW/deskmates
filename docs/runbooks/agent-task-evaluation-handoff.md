@@ -91,7 +91,7 @@ parallel work. Recheck with `git status --short`; do not reset, overwrite,
 stage wholesale or blanket-sync that tree.
 
 The last **recorded** Testbox L01 execution used SSH alias `testbox`
-(`10.20.40.132`) and isolated remote checkout
+(`10.88.40.132`) and isolated remote checkout
 `/home/owner/agent_workspace/deskmates-b4-native-20260924-1418` at Git
 revision `45724d73df42d929cae05ebbdfe6a77b5859034a`. The recorded images
 were `deskmates/workspace:m2-live-native-resume-20260924-1418` and

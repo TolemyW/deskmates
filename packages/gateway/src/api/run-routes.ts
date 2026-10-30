@@ -16,6 +16,7 @@ import {
   type ThreadId,
   type WorkspaceId,
   isRunFailureClass,
+  isRunTriggerKind,
   welcomeDelivery,
 } from "@deskmates/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -48,6 +49,7 @@ const RUN_STATUSES: readonly RunStatus[] = [
   "waiting_approval",
   "waiting_browser",
   "waiting_continuation",
+  "waiting_platform",
   "succeeded",
   "silent",
   "failed",
@@ -65,6 +67,8 @@ interface RunListQuery {
   /** Issue #11: one status or a comma-separated list. */
   status?: string;
   lane?: string;
+  /** What created the run (`RunTriggerKind`); `model_job` separates jobs from cron (issue #39). */
+  triggerKind?: string;
   since?: string;
   until?: string;
   failureClass?: string;
@@ -74,7 +78,7 @@ interface RunListQuery {
 
 type RunAuditFilter = Pick<
   RunPageFilter,
-  "statuses" | "lane" | "since" | "until" | "failureClass" | "errorText"
+  "statuses" | "lane" | "triggerKind" | "since" | "until" | "failureClass" | "errorText"
 >;
 
 /** The audit filters of the run list (issue #11, ADR-0042 decision 2), validated. */
@@ -93,6 +97,13 @@ function auditFilters(q: RunListQuery): RunAuditFilter {
         field: "lane",
       });
     filters.lane = q.lane;
+  }
+  if (q.triggerKind !== undefined && q.triggerKind !== "") {
+    if (!isRunTriggerKind(q.triggerKind))
+      throw new DeskmatesError("validation", `unknown trigger kind ${q.triggerKind}`, {
+        field: "triggerKind",
+      });
+    filters.triggerKind = q.triggerKind;
   }
   for (const key of ["since", "until"] as const) {
     const raw = q[key];
@@ -183,6 +194,8 @@ export function registerRunRoutes(app: FastifyInstance, ctx: GatewayContext): vo
       filter.until ?? null,
       filter.failureClass ?? null,
       filter.errorText ?? null,
+      // Appended only when set, so a cursor issued before this filter existed stays valid.
+      ...(filter.triggerKind ? [`triggerKind:${filter.triggerKind}`] : []),
     ];
     const query = parseCursorQuery(q, RUN_PAGE, scope, RUN_KEYS);
     // Without a phase, the first page also carries every unfinished run, so one request shows a

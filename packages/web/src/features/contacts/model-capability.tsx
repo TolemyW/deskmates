@@ -38,7 +38,7 @@ export function VisionCapability({
   model: string;
 }) {
   const t = useT();
-  const canRetry = useCan("bot.configure").allowed;
+  const canRetry = useCan("bot.configure", workspaceId).allowed;
   const [probe, setProbe] = useState<VisionProbeView>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);

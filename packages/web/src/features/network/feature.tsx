@@ -11,6 +11,7 @@ import { networkHref, routes } from "./route.js";
 export const feature = defineFeature(routes, {
   nav: {
     group: "operate",
+    audience: "tune",
     order: 50,
     icon: <Network size={18} />,
     label: "network.nav",

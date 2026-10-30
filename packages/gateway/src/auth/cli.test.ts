@@ -135,12 +135,19 @@ describe("auth CLI", () => {
 
   it("creates users, resets passwords and disables accounts with session revocation", async () => {
     await runAuthCli(["bootstrap-owner", "--name", "Owner"], io([PASSWORD, PASSWORD]));
+    let { db, auth } = service();
+    const root = await auth.login("admin", PASSWORD, "cli");
+    const rootSession = auth.resolve(root.token);
+    expect(rootSession && auth.mustChangePassword(rootSession.session)).toBe(false);
+    db.close();
+    const create = io([PASSWORD, PASSWORD]);
     expect(
       await runAuthCli(
         ["create-user", "--login", "bob", "--name", "Bob", "--role", "member"],
-        io([PASSWORD, PASSWORD]),
+        create,
       ),
     ).toBe(0);
+    expect(create.stdout.join("\n")).toContain("must change this password at first sign-in");
     expect(
       await runAuthCli(
         ["create-user", "--login", "bob2", "--name", "Bob", "--role", "root"],
@@ -148,17 +155,22 @@ describe("auth CLI", () => {
       ),
     ).toBe(2);
 
-    let { db, auth } = service();
+    ({ db, auth } = service());
     const bob = await auth.login("bob", PASSWORD, "cli");
-    expect(auth.resolve(bob.token)?.principal.role).toBe("guest"); // no workspace exists yet: no workspace role (ADR-0022 amendment 6 W1)
+    const bobSession = auth.resolve(bob.token);
+    expect(bobSession?.principal.role).toBe("guest"); // no workspace exists yet: no workspace role (ADR-0022 amendment 6 W1)
+    expect(bobSession && auth.mustChangePassword(bobSession.session)).toBe(true);
     db.close();
 
     const reset = io(["a different password", "a different password"]);
     expect(await runAuthCli(["reset-password", "--login", "bob"], reset)).toBe(0);
     expect(reset.stdout.join("\n")).toContain("1 session(s) revoked");
+    expect(reset.stdout.join("\n")).toContain("must change");
     ({ db, auth } = service());
     expect(auth.resolve(bob.token)).toBeUndefined();
     const again = await auth.login("bob", "a different password", "cli");
+    const resetSession = auth.resolve(again.token);
+    expect(resetSession && auth.mustChangePassword(resetSession.session)).toBe(true);
     db.close();
 
     const disable = io([]);

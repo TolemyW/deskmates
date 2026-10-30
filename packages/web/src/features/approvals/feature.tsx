@@ -11,7 +11,7 @@ import { approvalsHref, routes } from "./route.js";
 export const feature = defineFeature(routes, {
   nav: {
     group: "talk",
-    order: 40,
+    order: 30,
     icon: <ShieldCheck size={18} />,
     label: "app.nav.attention",
     href: approvalsHref,

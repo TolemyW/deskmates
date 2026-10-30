@@ -28,6 +28,7 @@ import {
   type RunSummary,
   type RunUsage,
   type StartRunRequest,
+  type TriggerPayload,
   botWorkDir,
   learnedFromSuggestions,
 } from "@deskmates/contracts";
@@ -43,9 +44,15 @@ import {
 import { ContextUsageProbe, type ContextUsageSource } from "./context-usage.js";
 import { buildContext, diaryPath, knowledgeQuery } from "./context.js";
 import type { SidecarDeps } from "./deps.js";
+import {
+  addDesktopServer,
+  desktopToolCallFields,
+  isInterruptedDesktopResult,
+} from "./desktop/desktop-run.js";
 import { GatewayClient } from "./gateway-client.js";
 import { createPreCompactHook } from "./hooks/pre-compact.js";
 import { createPreToolUseHook } from "./hooks/pre-tool-use.js";
+import { inheritedEnv } from "./inherited-env.js";
 import { EventSink } from "./ledger.js";
 import { managedProxyEnvironment } from "./managed-proxy.js";
 import { TaintTracker } from "./memory-taint.js";
@@ -57,10 +64,12 @@ import {
   BROWSER_MCP_SERVER,
   DESKMATES_MCP_SERVER,
   WORK_DIR,
+  isDesktopTool,
   riskTier,
   splitMcpToolName,
+  tierOptionsOf,
 } from "./risk-tier.js";
-import { createRunState } from "./run-state.js";
+import { type PendingDecision, createRunState } from "./run-state.js";
 import { SidecarTimeline, processStartedAt } from "./run-timeline.js";
 import { screenshotRecorder } from "./screenshot-budget.js";
 import {
@@ -82,6 +91,7 @@ import { toolResultText } from "./tool-result-text.js";
 import { TtySessions } from "./tty-session.js";
 import { TurnUsageTracker } from "./turn-usage.js";
 import { TurnWarning } from "./turn-warning.js";
+import { vaultCapturePath } from "./vault-capture.js";
 import { withholdsImages } from "./vision-withhold.js";
 
 /** Seconds added to the short wait so the SDK does not time the hook out mid-wait. */
@@ -168,43 +178,6 @@ export interface RunOnceOptions {
 }
 
 export type RunUsageEntry = Omit<RunUsage, "runId" | "costUsd">;
-
-/**
- * Environment variables the SDK's CLI subprocess may inherit from the container. An allowlist,
- * not a denylist: the container environment belongs to the whole workspace and holds whatever an
- * operator, an image layer or another process put there, and anything the CLI recognises changes
- * how the run behaves. `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` would give the run a
- * second, unmetered way to reach a model; `ANTHROPIC_MODEL` would silently swap the model the
- * Gateway chose and priced; `HTTPS_PROXY` would route every model call through a third party;
- * `NODE_OPTIONS` can load arbitrary code into the CLI process. None of them can be named here, so
- * none of them can be forwarded by accident when the next one is invented.
- */
-const ENV_PASSTHROUGH = new Set([
-  "PATH",
-  "HOME",
-  "LANG",
-  "TZ",
-  "DISPLAY",
-  "TMPDIR",
-  "TERM",
-  "SHELL",
-  "USER",
-]);
-
-/** Prefixes whose whole family passes: locale categories and this project's own settings. */
-const ENV_PASSTHROUGH_PREFIXES = ["LC_", "DESKMATES_"];
-
-function inheritedEnv(
-  env: Readonly<Record<string, string | undefined>>,
-): Record<string, string | undefined> {
-  const out: Record<string, string | undefined> = {};
-  for (const [k, v] of Object.entries(env)) {
-    if (ENV_PASSTHROUGH.has(k) || ENV_PASSTHROUGH_PREFIXES.some((p) => k.startsWith(p))) {
-      out[k] = v;
-    }
-  }
-  return out;
-}
 
 /**
  * The allowlist comes from the Gateway with the run and is used exactly as sent, empty list
@@ -298,6 +271,36 @@ function describeError(err: unknown): string {
   return `${String(err)}${cause}`;
 }
 
+/**
+ * The decisions a resume hands this process (issue #62 M8): every decided approval of the parked
+ * run when the Gateway lists them, in its order, otherwise the trigger's single decision.
+ */
+export function resumeDecisions(
+  trigger: Extract<TriggerPayload, { kind: "approval" }>,
+): PendingDecision[] {
+  const listed = trigger.decidedApprovals ?? [];
+  if (listed.length > 0) {
+    return listed.map((d) => ({
+      approvalId: d.approvalId,
+      decision: d.decision,
+      toolUseId: d.toolUseId,
+      deferredAction: d.deferredAction,
+      approvalKind: d.approvalKind,
+      reason: d.reason,
+    }));
+  }
+  return [
+    {
+      approvalId: trigger.approvalId,
+      decision: trigger.decision,
+      toolUseId: trigger.toolUseId,
+      deferredAction: trigger.deferredAction,
+      approvalKind: trigger.approvalKind,
+      reason: trigger.reason,
+    },
+  ];
+}
+
 function usageFromResult(
   modelUsage: Record<
     string,
@@ -325,6 +328,8 @@ export async function runOnce(
 ): Promise<RunEnded> {
   const secrets = [request.modelAuthToken];
   const browserToolUses = new Set<string>();
+  /** Desktop calls awaiting their result, for the interruption log (ADR-0048 decision 5). */
+  const desktopToolUses = new Set<string>();
   function protectToolInput(toolName: string, input: Record<string, unknown>): void {
     if (
       toolName !== "mcp__deskmates__tty_session" ||
@@ -340,6 +345,19 @@ export async function runOnce(
       if (value.length >= 4 && !secrets.includes(value)) secrets.push(value);
     }
   }
+  // Created before the ledger sink: an event acknowledgement may set `drainRequested` on it.
+  const trigger = request.trigger;
+  const state = createRunState(
+    trigger.kind === "approval" && request.sdkSessionId !== undefined
+      ? resumeDecisions(trigger)
+      : [],
+    // The browser is still on the page the parked process left it on, so a click in this process
+    // has that origin even though this process never navigated (ADR-0002 amendment 2).
+    trigger.kind === "approval" || trigger.kind === "platform_resume"
+      ? trigger.currentOrigin
+      : undefined,
+  );
+
   const client = new GatewayClient(
     deps.fetch,
     request.gatewayBaseUrl,
@@ -350,6 +368,10 @@ export async function runOnce(
     runId: request.runId,
     attempt: request.attempt,
     post: (batch) => client.postEvents(batch),
+    // ADR-0029 decision 2: the Gateway's drain reaches this run through its next acknowledgement.
+    onAck: (ack) => {
+      if (ack.drain === true) state.drainRequested = true;
+    },
     redact: (payload) => redactValue(payload, secrets),
     now: deps.now,
     ...(opts.batchDelayMs === undefined ? {} : { batchDelayMs: opts.batchDelayMs }),
@@ -445,22 +467,6 @@ export async function runOnce(
       return undefined;
     }
   }
-  const trigger = request.trigger;
-  const state = createRunState(
-    trigger.kind === "approval" && request.sdkSessionId !== undefined
-      ? {
-          approvalId: trigger.approvalId,
-          decision: trigger.decision,
-          toolUseId: trigger.toolUseId,
-          deferredAction: trigger.deferredAction,
-          reason: trigger.reason,
-        }
-      : undefined,
-    // The browser is still on the page the parked process left it on, so a click in this process
-    // has that origin even though this process never navigated (ADR-0002 amendment 2).
-    trigger.kind === "approval" ? trigger.currentOrigin : undefined,
-  );
-
   // One capture directory per run. The proxy writes `<n>.json` into it before it forwards the
   // nth page-changing action's result, so the file is there by the time this process sees the
   // SDK's `tool_result` for that call (`screenshots.ts`).
@@ -490,6 +496,8 @@ export async function runOnce(
   let usage: RunUsageEntry[] = [];
   let resultSubtype: string | undefined;
   let resultIsError = false;
+  /** The SDK started a session (init) or answered; a failure before either is a failed resume. */
+  let sdkStarted = false;
   let resultErrors: string[] = [];
   let canonicalSnapshots: CanonicalFileSnapshot[] = [];
 
@@ -623,13 +631,32 @@ export async function runOnce(
         ...(withholdsImages(request) ? { withholdImages: true } : {}),
       }),
     };
+    // ADR-0048 decision 3: the opt-in `desktop` server, when the run froze it and the image has it.
+    addDesktopServer(mcpServers, deps.env, request, sink, {
+      ...(withholdsImages(request) ? { withholdImages: true } : {}),
+      ...(request.browserCoordination
+        ? {
+            timeoutMs: Math.max(
+              1000,
+              Date.parse(request.browserCoordination.deadlineAt) - deps.now().getTime() + 60_000,
+            ),
+          }
+        : {}),
+    });
     if (request.tools.length > 0) {
       mcpServers[DESKMATES_MCP_SERVER] = createThreadTools({
         request,
         client,
         sink,
         ...(deps.operationFiles ? { operationFiles: deps.operationFiles } : {}),
+        ...(deps.imageOutputs ? { imageOutputs: deps.imageOutputs } : {}),
         ...(tty ? { tty, redactTerminal: (text: string) => redactText(text, secrets) } : {}),
+        // ADR-0045: the hook hands credential releases to the vault tools through the run state.
+        vault: {
+          state,
+          capturePath: vaultCapturePath(statePath),
+          writeMark: (path, text) => deps.fs.writeFile(path, text),
+        },
         browserCli: {
           context: {
             runId: request.runId,
@@ -811,7 +838,7 @@ export async function runOnce(
         PostModelSwitch: [{ hooks: [postModelSwitch] }],
         SessionStart: [{ hooks: [sessionStart] }],
       },
-      canUseTool: createCanUseTool(sink, state, { browserCode: request.browserCodeApproval }),
+      canUseTool: createCanUseTool(sink, state, tierOptionsOf(request)),
       ...(request.sdkSessionId === undefined ? {} : { resume: request.sdkSessionId }),
     };
 
@@ -839,6 +866,11 @@ export async function runOnce(
           readFile: (path) => deps.fs.readFile(path),
         },
         ...(maxContextTokens === undefined ? {} : { maxContextTokens }),
+        // Issue #62 M8: the parked calls people decided on are judged first on resume, in the
+        // trigger's order; each takes its own decision and the rest ask afresh.
+        ...(state.pendingDecisions.size > 0
+          ? { resumeToolUseIds: [...state.pendingDecisions.keys()].filter((id) => id !== "") }
+          : {}),
       }) as AsyncIterable<SDKMessage> & ContextUsageSource;
     } else {
       stream = deps.query({ prompt: context.prompt, options });
@@ -915,9 +947,9 @@ export async function runOnce(
    * (ADR-0002 amendment 2).
    */
   function settleConsumedDecision(toolUseId: string, isError: boolean): void {
-    const consumed = state.consumedDecision;
-    if (consumed === undefined || consumed.toolUseId !== toolUseId) return;
-    state.consumedDecision = undefined;
+    const consumed = state.consumedDecisions.get(toolUseId);
+    if (consumed === undefined) return;
+    state.consumedDecisions.delete(toolUseId);
     if (!isError || consumed.deferredAction === undefined) return;
     state.retryDecision = {
       approvalId: consumed.approvalId,
@@ -925,6 +957,7 @@ export async function runOnce(
       deferredAction: consumed.deferredAction,
       reason: consumed.reason,
       replayedToolUseId: toolUseId,
+      inputSha256: consumed.inputSha256,
     };
   }
 
@@ -1036,7 +1069,13 @@ export async function runOnce(
     }
     if (msg.type === "system" && msg.subtype === "init") {
       state.sdkSessionId = msg.session_id;
+      sdkStarted = true;
       sink.emit("log", sdkInitLog(msg, ended.maxContextTokens));
+      // ADR-0029 decision 4: a Gateway that restarts before this run ends resumes this session.
+      // Best effort and off the ledger, which carries only the session's fingerprint.
+      void client
+        .reportSession(request.attempt, msg.session_id)
+        .catch((err) => process.stderr.write(`session report failed: ${describeError(err)}\n`));
       contextUsage.sample("full", 0);
       return;
     }
@@ -1068,6 +1107,7 @@ export async function runOnce(
       return;
     }
     if (msg.type === "assistant") {
+      sdkStarted = true;
       state.sdkSessionId = msg.session_id;
       turnUsage.observe(msg);
       turnWarning.observeAssistant(msg.message.id);
@@ -1102,8 +1142,11 @@ export async function runOnce(
             toolUseId: block.id,
             toolName: block.name,
             input,
-            riskLevel: riskTier(block.name, input, { browserCode: request.browserCodeApproval }),
+            riskLevel: riskTier(block.name, input, tierOptionsOf(request)),
+            // ADR-0048 decision 2: what a desktop call's code names, recorded, never a tier.
+            ...desktopToolCallFields(block.name, input),
           });
+          if (isDesktopTool(block.name)) desktopToolUses.add(block.id);
           // Remembered here, numbered when its result arrives (`emitScreenshot`): the proxy
           // counts the calls that reach it, so action n is the nth page-changing call the hook
           // let through and the proxy's file n (`screenshots.ts`).
@@ -1130,6 +1173,13 @@ export async function runOnce(
         const isError = block.is_error === true;
         const resultText = toolResultText(block.content);
         taint.observeToolResult(block.tool_use_id, resultText);
+        if (desktopToolUses.delete(block.tool_use_id) && isInterruptedDesktopResult(resultText))
+          sink.emit("log", {
+            source: "desktop",
+            op: "call_interrupted",
+            toolUseId: block.tool_use_id,
+            effects: "unknown",
+          });
         sink.emit("tool_result", {
           toolUseId: block.tool_use_id,
           ...(await ledgerToolResult(
@@ -1165,10 +1215,17 @@ export async function runOnce(
 
   let summary: RunSummary | undefined;
   if (ended.error === undefined) {
-    if (state.deferredApprovalId !== undefined) {
+    if (state.deferredApprovalId !== undefined || state.platformInterruption !== undefined) {
       ended.outcome = "deferred";
-      ended.pendingApprovalId = state.deferredApprovalId;
+      if (state.deferredApprovalId !== undefined)
+        ended.pendingApprovalId = state.deferredApprovalId;
+      // Issue #62 M8: one OpenAI turn can park on several approvals; the Gateway hears of each.
+      if (state.deferredApprovalIds.length > 0)
+        ended.pendingApprovalIds = [...state.deferredApprovalIds];
       if (state.deferredToolUseId !== undefined) ended.pendingToolUseId = state.deferredToolUseId;
+      // ADR-0029 decision 2: the drain, not a human, deferred the call.
+      if (state.platformInterruption !== undefined)
+        ended.platformInterruption = { interruption: "platform", reason: "drain" };
       // The page the browser is left on, so the resumed process can judge a click before it
       // navigates again (ADR-0002 amendment 2).
       if (state.currentOrigin !== undefined) ended.currentOrigin = state.currentOrigin;
@@ -1195,6 +1252,13 @@ export async function runOnce(
         secrets,
       );
     }
+  }
+
+  // ADR-0029 decision 10: asked to resume a session, the SDK failed before it started one. The
+  // session could not be read; the Gateway continues on a fresh session with a handoff.
+  if (ended.outcome === "failed" && request.sdkSessionId !== undefined && !sdkStarted) {
+    ended.resumeFailed = true;
+    sink.emit("log", { source: "platform", op: "resume_failed" });
   }
 
   // The handoff is not only an exhaustion artifact (issue #68). A run whose SDK process dies

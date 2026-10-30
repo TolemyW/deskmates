@@ -1,0 +1,14 @@
+[
+  {
+    "id": "channels",
+    "route": "#/connections/channels"
+  },
+  {
+    "id": "apps",
+    "route": "#/connections/apps"
+  },
+  {
+    "id": "databases",
+    "route": "#/connections/databases"
+  }
+]

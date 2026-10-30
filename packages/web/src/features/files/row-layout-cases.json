@@ -1,0 +1,24 @@
+[
+  {
+    "id": "main",
+    "route": "#/resources/files"
+  },
+  {
+    "id": "preview",
+    "route": "#/resources/files",
+    "steps": [
+      {
+        "selector": ".files-name"
+      }
+    ]
+  },
+  {
+    "id": "filters",
+    "route": "#/resources/files",
+    "steps": [
+      {
+        "name": "Filters"
+      }
+    ]
+  }
+]

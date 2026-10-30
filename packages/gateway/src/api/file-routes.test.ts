@@ -9,7 +9,7 @@ import { buildGateway } from "../index.js";
 import { FakeProvider } from "../test-support/fake-provider.js";
 import { TEST_OPERATOR_TOKEN, testConfig } from "../test-support/harness.js";
 import { registerErrorHandler } from "./errors.js";
-import { registerFileRoutes } from "./file-routes.js";
+import { PREVIEW_MAX_LIVE_PER_CALLER, registerFileRoutes } from "./file-routes.js";
 
 const apps: ReturnType<typeof Fastify>[] = [];
 afterEach(async () => {
@@ -276,6 +276,61 @@ describe("GET /api/workspaces/:id/files", () => {
     expect(exec).toHaveBeenCalledTimes(64);
   });
 
+  it("serves a fresh preview identity per open, more than the cap in sequence (#61 L2)", async () => {
+    const { app, workspace, reply, exec } = await setup();
+    const preview = (id: string, path: string) =>
+      app.inject({
+        method: "GET",
+        url: url(workspace.id, path),
+        headers: { ...auth, range: "bytes=0-0", "x-deskmates-preview-id": `preview_open_${id}` },
+      });
+    // A whole small file: the identity reaches the end of its file.
+    reply(ok(Buffer.from("x")));
+    const opens = PREVIEW_MAX_LIVE_PER_CALLER + 20;
+    for (let i = 0; i < opens; i++)
+      expect((await preview(`${i}`.padStart(6, "0"), `/work/f${i}.md`)).statusCode).toBe(206);
+    // The first range of a large file: the identity stops mid-file and goes idle.
+    reply({
+      stdout: `${JSON.stringify({ base64: "eA==", size: 1, fileSize: GIB, offset: 0, eof: false })}\n`,
+    });
+    for (let i = 0; i < opens; i++)
+      expect((await preview(`big${i}`.padStart(6, "0"), "/work/big.pdf")).statusCode).toBe(206);
+    expect(exec).toHaveBeenCalledTimes(2 * opens);
+  });
+
+  it("refuses a new preview identity only while every held one is mid-stream (#61 L2)", async () => {
+    const { app, workspace, reply, exec } = await setup();
+    reply(ok(Buffer.from("x")));
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const respond = exec.getMockImplementation();
+    exec.mockImplementation(async (...args) => {
+      await gate;
+      return (respond as NonNullable<typeof respond>)(...args);
+    });
+    const preview = (id: string) =>
+      app.inject({
+        method: "GET",
+        url: url(workspace.id, "/work/a.md"),
+        headers: { ...auth, range: "bytes=0-0", "x-deskmates-preview-id": `preview_busy_${id}` },
+      });
+    const held = Array.from({ length: PREVIEW_MAX_LIVE_PER_CALLER }, (_, i) =>
+      preview(`${i}`.padStart(6, "0")),
+    );
+    await vi.waitFor(() => expect(exec).toHaveBeenCalledTimes(PREVIEW_MAX_LIVE_PER_CALLER));
+    const refused = await preview("fresh0");
+    expect(refused.statusCode).toBe(429);
+    expect(refused.json()).toMatchObject({
+      code: "rate_limited",
+      details: { reason: "preview_limit", maxPreviews: PREVIEW_MAX_LIVE_PER_CALLER },
+    });
+    release();
+    for (const response of await Promise.all(held)) expect(response.statusCode).toBe(206);
+    expect((await preview("fresh1")).statusCode).toBe(206);
+  });
+
   it("streams more than one sidecar range in order", async () => {
     const { app, workspace, exec } = await setup({ config: { fileDownloadMaxBytes: 4 * MIB } });
     const first = Buffer.alloc(MIB, 1);
@@ -302,7 +357,10 @@ describe("GET /api/workspaces/:id/files", () => {
       headers: auth,
     });
     expect(response.statusCode).toBe(200);
-    expect(response.rawPayload).toEqual(Buffer.concat([first, second]));
+    // Buffer.equals, not toEqual: a deep comparison of 1 MiB walked every byte and took this test
+    // past its 5 s timeout on CI runners (#97, #98).
+    expect(response.rawPayload.length).toBe(MIB + second.length);
+    expect(response.rawPayload.equals(Buffer.concat([first, second]))).toBe(true);
     expect(exec.mock.calls.map((call) => JSON.parse(call[1].stdin as string).offset)).toEqual([
       0,
       MIB,

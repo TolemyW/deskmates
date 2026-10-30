@@ -88,7 +88,7 @@ describe("welcome delivery in the chat pane", () => {
   ])("settles to delivered when live frames arrive %s", async (_label, order) => {
     renderPane(routes([welcome({ status: "running" })], []));
     await waitFor(() => expect(stream()).toBeDefined());
-    await screen.findByText("ops · ops running");
+    await screen.findByTestId("typing");
     for (const frame of order) {
       act(() => {
         if (frame === "message")
@@ -152,7 +152,7 @@ describe("welcome delivery in the chat pane", () => {
     renderPane(routes([welcome({ status: "failed", welcomeDelivery: "partial" })]));
     await screen.findByText("Hello, I am ops.");
     expect(await screen.findByRole("status")).toHaveTextContent(
-      /The welcome run ended .* after posting a message\./,
+      /The welcome work ended .* after posting a message\./,
     );
     expect(screen.queryByText(FAILED_TEXT)).toBeNull();
     expect(screen.queryByRole("button", { name: "Retry welcome" })).toBeNull();

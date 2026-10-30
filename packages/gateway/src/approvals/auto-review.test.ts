@@ -64,6 +64,8 @@ interface Scenario {
   verdicts: string[];
   /** Hold the reviewer's reply until this resolves. */
   holdReview?: Promise<void>;
+  /** The review sidecar is killed at its deadline and never posts a `run_ended`. */
+  killReview?: true;
 }
 
 /** Seeds a workspace, sets its approval mode, scripts both sidecars, and wakes the bot. */
@@ -78,6 +80,7 @@ async function scenario(s: Scenario, mode: ApprovalMode = "automatic") {
     if (req.modelJob?.kind === "approval_review") {
       packages.push(req.modelJob.reviewPackage);
       if (s.holdReview) await s.holdReview;
+      if (s.killReview) return { exitCode: -1, timedOut: true };
       const reply = s.verdicts[verdictIndex] ?? "";
       verdictIndex += 1;
       await gw.post("ended", {
@@ -180,6 +183,7 @@ describe("automatic approval review (ADR-0002 amendment 4)", () => {
     });
     expect(typeof review?.config.actionSha256).toBe("string");
     expect(review?.botId).toBe(s.run.botId);
+    expect(review?.triggerKind).toBe("model_job");
     expect(approval.decidedBy).toBe(`reviewer:${review?.config.model}`);
     expect(approval.reason).toBe("the human asked to push this branch");
     // The package: the human instruction and the action, never a tool result.
@@ -229,6 +233,46 @@ describe("automatic approval review (ADR-0002 amendment 4)", () => {
       .filter((e) => e.kind === "approval" && e.payload.phase === "review_escalated")
       .map((e) => e.payload.reason);
     expect(escalations).toEqual(["reviewer: unsure", "unreadable_verdict", "review_failed"]);
+  });
+
+  it("a review killed at its deadline posts the request for humans (B4)", async () => {
+    const s = await scenario({
+      commands: ["git push origin feature/x"],
+      verdicts: [],
+      killReview: true,
+    });
+    await waitFor(() => systemMessages(h, s.thread.id).length === 1, 3000, "escalated");
+    const [review] = reviewRuns(h);
+    expect(s.ctx.runs.mustGet(review?.id as never).status).toBe("failed");
+    expect(s.ctx.approvals.mustGet("apr-0" as ApprovalId).decision).toBeUndefined();
+    const escalated = s.ctx.events
+      .list(s.run.id)
+      .find((e) => e.kind === "approval" && e.payload.phase === "review_escalated");
+    expect(escalated?.payload).toMatchObject({ reason: "review_failed", reviewRunId: review?.id });
+    await h.api("POST", "/api/approvals/apr-0/decide", { decision: "allow_once" });
+    await waitFor(() => s.ctx.runs.mustGet(s.run.id).status === "succeeded", 3000, "end");
+    expect(s.responses[0]?.decision).toBe("allow");
+  });
+
+  it("a cancelled review posts the request for humans (B4)", async () => {
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const s = await scenario({
+      commands: ["git push origin feature/x"],
+      verdicts: [],
+      holdReview: hold,
+    });
+    await waitFor(() => s.packages.length === 1, 2000, "review started");
+    const [review] = reviewRuns(h);
+    h.app.deskmates.scheduler.cancel(review?.id as never, "human:test");
+    expect(systemMessages(h, s.thread.id)).toHaveLength(1);
+    expect(phases(h, s.run.id)).toEqual(["review_queued", "review_escalated", "posted"]);
+    release();
+    await h.api("POST", "/api/approvals/apr-0/decide", { decision: "deny" });
+    await waitFor(() => s.ctx.runs.mustGet(s.run.id).status === "succeeded", 3000, "end");
+    expect(s.ctx.approvals.mustGet("apr-0" as ApprovalId).decidedBy).toBe("human:web");
   });
 
   it("a protected action is never reviewed (B3)", async () => {

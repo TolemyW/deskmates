@@ -458,15 +458,17 @@
     flex-direction: column;
     gap: 10px;
   }
+  /* Inline text, not flex items: a long fact wraps inside itself and a separator stays at the end
+     of the line it follows instead of starting the next one. */
   .run-lede {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 10px;
+    display: block;
+    line-height: 1.55;
   }
   .run-lede > * + *::before {
     content: "·";
-    margin-right: 10px;
+    margin: 0 8px;
     color: var(--app-text-4);
+    font-weight: 400;
   }
   .story,
   .story-steps {

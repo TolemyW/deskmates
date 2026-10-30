@@ -1,0 +1,10 @@
+[
+  {
+    "id": "list",
+    "route": "#/threads"
+  },
+  {
+    "id": "group",
+    "route": "#/threads/thr_000s"
+  }
+]

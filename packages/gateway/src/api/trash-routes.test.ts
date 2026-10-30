@@ -19,7 +19,10 @@ afterEach(async () => {
 });
 
 async function workspace(name: string): Promise<{ workspace: Workspace; bot: BotDefinition }> {
-  const created = await h.api<{ workspace: Workspace }>("POST", "/api/workspaces", { name });
+  const created = await h.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+    name,
+    defaultBot: false,
+  });
   const bot = await h.api<{ bot: BotDefinition }>("POST", "/api/bots", {
     name: `${name.toLowerCase()}-bot`,
     workspaceId: created.json.workspace.id,
@@ -247,6 +250,7 @@ describe("ADR-0026 Trash lifecycle", () => {
     const ids: string[] = [];
     for (let i = 0; i < 7; i += 1) {
       const created = await h.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+        defaultBot: false,
         name: `Old ${i}`,
       });
       ids.push(created.json.workspace.id);

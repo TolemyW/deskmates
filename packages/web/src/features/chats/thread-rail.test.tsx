@@ -5,7 +5,7 @@
 // Nobody below Admin is offered the new-chat dialog, which creates only Admin things.
 import "@testing-library/jest-dom/vitest";
 import type { SessionRoles, ThreadSummary } from "@deskmates/contracts";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../../api/client.js";
@@ -119,5 +119,116 @@ describe("a bot's entry in the chat list (amendment 7 S7)", () => {
     cleanup();
     rail("admin");
     expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
+  });
+});
+
+describe("chat preview authors (issue #22 E6)", () => {
+  const peer = { ...bot, id: "bot_peer" as never, name: "peer" };
+  const group: ThreadSummary = {
+    ...thread,
+    id: "thr_group" as never,
+    title: "Team",
+    memberIds: [bot.id, peer.id],
+    lastMessage: {
+      seq: 1,
+      authorKind: "human",
+      authorId: "user:usr_owner",
+      authorName: "Olive Owner",
+      excerpt: "@ops please re-run the check",
+      ts: "2026-10-17T10:00:00.000Z",
+    },
+  };
+
+  it("says You only for the signed-in person's own message", () => {
+    const lastMessage = group.lastMessage;
+    if (!lastMessage) throw new Error("test fixture needs a last message");
+    as(
+      "member",
+      <ThreadRail
+        workspace={workspace}
+        bots={[bot, peer]}
+        threads={[group]}
+        onCreated={() => {}}
+      />,
+    );
+    expect(screen.getByText("Olive Owner:")).toBeInTheDocument();
+    expect(screen.queryByText("You:")).toBeNull();
+    cleanup();
+    as(
+      "member",
+      <ThreadRail
+        workspace={workspace}
+        bots={[bot, peer]}
+        threads={[
+          {
+            ...group,
+            lastMessage: { ...lastMessage, authorId: ME, authorName: "Mel" },
+          },
+        ]}
+        onCreated={() => {}}
+      />,
+    );
+    expect(screen.getByText("You:")).toBeInTheDocument();
+    expect(screen.queryByText("Mel:")).toBeNull();
+  });
+});
+
+describe("the first-run form (ADR-0051 decision 11)", () => {
+  it("creates the workspace without a bot and opens the assistant's chat", async () => {
+    const assistant = { ...bot, id: "bot_assistant" as never, name: "assistant" };
+    const privateChat = { ...thread, id: "thr_assistant" as never };
+    const { fetch, calls } = fakeFetch({
+      "POST /api/workspaces": {
+        workspace: { ...workspace, defaultBotId: assistant.id },
+        defaultBot: assistant,
+        privateChat,
+      },
+    });
+    const onCreated = vi.fn();
+    as(
+      "admin",
+      <ThreadRail
+        workspace={undefined}
+        bots={[]}
+        threads={[]}
+        onCreated={onCreated}
+        api={createApiClient({ fetch })}
+      />,
+    );
+    expect(screen.queryByLabelText("Bot name")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Create workspace" }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    expect(onCreated.mock.calls[0]?.[0]).toMatchObject({
+      thread: { id: "thr_assistant" },
+      bot: { id: "bot_assistant" },
+      workspace: { defaultBotId: "bot_assistant" },
+    });
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual(["POST /api/workspaces"]);
+  });
+});
+
+describe("the New chat dialog with fewer than two bots (ADR-0051)", () => {
+  it("offers the assistant's chat and New bot, and no form that cannot be sent", async () => {
+    const { fetch } = fakeFetch({
+      "POST /api/bots/bot_1/private-chat": { thread: canonical, members },
+    });
+    as(
+      "admin",
+      <ThreadRail
+        workspace={{ ...workspace, defaultBotId: bot.id }}
+        bots={[bot]}
+        threads={[canonical]}
+        onCreated={() => {}}
+        api={createApiClient({ fetch })}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByLabelText("Title (optional)")).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Create chat" })).toBeNull();
+    expect(within(dialog).getByRole("link", { name: "New bot" })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: `Chat with ${bot.name}` }));
+    await waitFor(() => expect(window.location.hash).toBe("#/threads/thr_canonical"));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

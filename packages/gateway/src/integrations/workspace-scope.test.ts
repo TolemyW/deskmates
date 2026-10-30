@@ -131,6 +131,26 @@ describe("workspace scope of integration connections", () => {
     expect(fx.fake.connections.has(connectionB?.runtimeConnectionId ?? "missing")).toBe(true);
   });
 
+  it("keeps a reused name's credential when the old revoked row is revoked again (#61 M12)", async () => {
+    const fx = await setup();
+    const [old] = fx.h.app.deskmates.ctx.integrations.listConnections(fx.a.workspace.id);
+    const path = `/api/integrations/workspaces/${fx.a.workspace.id}/connections/${old?.id}`;
+    expect((await fx.h.api("DELETE", path)).status).toBe(200);
+    const reused = await fx.apiKey(fx.a, "main", GITEA_KEY_A);
+    expect(reused.id).not.toBe(old?.id);
+    expect((await fx.h.api("DELETE", path)).status).toBe(200);
+    const live = fx.h.app.deskmates.ctx.integrations
+      .listConnections(fx.a.workspace.id)
+      .find((c) => c.id === reused.id);
+    expect(live?.revokedAt).toBeUndefined();
+    expect(fx.fake.connections.has(live?.runtimeConnectionId ?? "missing")).toBe(true);
+    const res = await fx.run<IntegrationExecuteResult>(fx.a, "POST", "/execute", {
+      actionId: "gitea.get_current_user",
+      connectionName: "main",
+    });
+    expect(res.json).toMatchObject({ ok: true, connectionName: "main" });
+  });
+
   it("refuses a revoke of another workspace's connection", async () => {
     const fx = await setup();
     const [ofB] = fx.h.app.deskmates.ctx.integrations.listConnections(fx.b.workspace.id);

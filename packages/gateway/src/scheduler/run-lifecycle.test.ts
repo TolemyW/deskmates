@@ -63,6 +63,12 @@ describe("maxTurns as a Gateway knob", () => {
       "run",
     );
     expect(h.provider.execCalls[0]?.request.maxTurns).toBe(7);
+    // Issue #39 item 4: the bot's role and workspace name reach the sidecar's identity line.
+    expect(h.provider.execCalls[0]?.request).toMatchObject({
+      botName: "alice",
+      botRole: "tester",
+      workspaceName: "ws-1",
+    });
     expect(h.provider.execCalls[0]?.request.browserSnapshotMode).toBeUndefined();
     expect(h.provider.execCalls[0]?.request).not.toHaveProperty("browserCodeApproval");
   });
@@ -105,6 +111,10 @@ describe("maxTurns as a Gateway knob", () => {
       "run",
     );
     expect(h.provider.execCalls[0]?.request.maxTurns).toBe(7);
+    expect(h.provider.execCalls[0]?.request).toMatchObject({
+      botRole: "tester",
+      workspaceName: "ws-1",
+    });
     expect(run.config.browserSnapshotMode).toBe("inline-v2");
     expect(h.provider.execCalls[0]?.request.browserSnapshotMode).toBe("inline-v2");
     // ADR-0002 amendment 5: the run row's policy, not the Gateway's current one, is sent.

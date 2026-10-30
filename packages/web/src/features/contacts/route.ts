@@ -41,4 +41,12 @@ export const routes = defineRoutes({
   },
   // The legacy `#/desktops` path renders the contacts list.
   shown: (route) => (route.name === "desktops" ? { name: "contacts" } : route),
+  canonicalHref: (route) =>
+    route.name === "contacts"
+      ? route.creating
+        ? newContactHref()
+        : route.id
+          ? contactHref(route.id)
+          : contactsHref()
+      : undefined,
 });

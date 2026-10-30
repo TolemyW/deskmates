@@ -1,0 +1,67 @@
+[
+  {
+    "id": "list",
+    "route": "#/account/workspaces"
+  },
+  {
+    "id": "settings",
+    "route": "#/account/workspaces",
+    "steps": [
+      {
+        "selector": "a.workspace-manage-name"
+      }
+    ]
+  },
+  {
+    "id": "tab-0",
+    "route": "#/account/workspaces",
+    "steps": [
+      {
+        "selector": "a.workspace-manage-name"
+      },
+      {
+        "role": "tab",
+        "name": "Basic"
+      }
+    ]
+  },
+  {
+    "id": "tab-1",
+    "route": "#/account/workspaces",
+    "steps": [
+      {
+        "selector": "a.workspace-manage-name"
+      },
+      {
+        "role": "tab",
+        "name": "Team & approvals"
+      }
+    ]
+  },
+  {
+    "id": "tab-2",
+    "route": "#/account/workspaces",
+    "steps": [
+      {
+        "selector": "a.workspace-manage-name"
+      },
+      {
+        "role": "tab",
+        "name": "Tools & network"
+      }
+    ]
+  },
+  {
+    "id": "tab-3",
+    "route": "#/account/workspaces",
+    "steps": [
+      {
+        "selector": "a.workspace-manage-name"
+      },
+      {
+        "role": "tab",
+        "name": "Lifecycle"
+      }
+    ]
+  }
+]

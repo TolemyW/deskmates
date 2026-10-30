@@ -1,0 +1,115 @@
+/* The workspace Vault (ADR-0045). */
+
+.vault-boundary,
+.vault-mode-warning {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--app-warning);
+  background: var(--app-warning-soft);
+  color: var(--warning-text);
+}
+
+.vault-entries {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vault-entry-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.vault-entry-head h3 {
+  margin: 0;
+}
+
+.vault-form {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  max-width: 560px;
+}
+
+.vault-field {
+  display: grid;
+  gap: 4px;
+}
+
+.vault-field input,
+.vault-field select,
+.vault-field textarea {
+  min-width: 0;
+}
+
+.vault-requests ul {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0;
+  padding-left: 16px;
+}
+
+.vault-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.vault-notice p {
+  margin: 0;
+}
+.vault-entries {
+  gap: 0;
+}
+.vault-entry {
+  border-bottom: 1px solid var(--app-border);
+}
+.vault-entry-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  width: 100%;
+  padding: 16px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+}
+.vault-entry-row:hover {
+  background: var(--surface-2);
+}
+.vault-entry-row:focus-visible {
+  outline: 2px solid var(--focus);
+}
+.vault-entry-row > span:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.vault-dialog {
+  gap: 12px;
+}
+.vault-dialog > p {
+  margin: 0;
+}
+
+.vault-policy {
+  display: grid;
+  gap: 4px;
+}
+.vault-notice > button {
+  padding: 0;
+  background: transparent;
+}

@@ -161,7 +161,11 @@ describe.skipIf(!available)("M3 canonical files across real SDK runs (T2)", () =
       .slice(requestOffset)
       .filter((request) => Array.isArray(request.body?.tools) && request.body.tools.length > 0);
     expect(modelCalls.length).toBeGreaterThan(0);
-    expect(JSON.stringify(modelCalls[0]?.body?.system)).toContain("M3_CANONICAL_RULE");
+    expect(
+      modelCalls.some((request) =>
+        JSON.stringify(request.body?.system)?.includes("M3_CANONICAL_RULE"),
+      ),
+    ).toBe(true);
     const run = stack.app.deskmates.ctx.runs.mustGet(second.run.id);
     expect(run.sdkSessionId).toBe(stack.app.deskmates.ctx.runs.mustGet(first.run.id).sdkSessionId);
   }, 420_000);

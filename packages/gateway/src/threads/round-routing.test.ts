@@ -175,7 +175,7 @@ describe("a human request to the group is triaged (decision 44)", () => {
       botId: s.ann.id,
       threadId: s.thread.id,
       lane: "background",
-      triggerKind: "cron",
+      triggerKind: "model_job",
       triggerRef: `${ROUND_TRIAGE}:${posted.message.id}`,
     });
     expect(triage.config).toMatchObject({
@@ -412,7 +412,7 @@ describe("one closer wake after every assigned run ended (decision 48)", () => {
     const { s, message, ben, cat } = dispatched();
     s.start(ben);
     s.end(ben, "succeeded");
-    s.threads.setStatus(s.thread.id, "paused");
+    s.threads.pause(s.thread.id, { reason: "turn_budget", seq: 0, at: new Date().toISOString() });
     s.start(cat);
     expect(s.end(cat, "succeeded")).toEqual([]);
     expect(s.plans.get(message.id)?.phase).toBe("closed");

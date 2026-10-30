@@ -1,0 +1,6 @@
+{
+  "reason": "Existing native dropdowns pending migration to the owned Select; no new instances allowed.",
+  "nativeSelects": {
+    "vault.tsx": 3
+  }
+}

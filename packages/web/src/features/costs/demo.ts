@@ -93,7 +93,9 @@ function ranking(s: DemoState, q: URLSearchParams): CostRankingPage {
   const metric = (q.get("metric") ?? "money") as CostRankingMetric;
   const offset = Number(q.get("offset") ?? 0);
   const groups = new Map<string, CostRankingEntry>();
-  for (const row of costs(s, q).rows) {
+  // The demo has no operation calls (ADR-0040 amendment A), so their ranking is empty.
+  const rows = by === "operation" ? [] : costs(s, q).rows;
+  for (const row of rows) {
     const key = by === "bot" ? row.botId : row.model;
     const entry = groups.get(key) ?? {
       ...row,

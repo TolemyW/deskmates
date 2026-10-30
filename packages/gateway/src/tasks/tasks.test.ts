@@ -458,7 +458,7 @@ describe("bot delivery and output schemas (ADR-0021 amendment 2)", () => {
       { label: "Counts", path: "/work/counts.csv", runId: source.run.id },
       { label: "New", path: "/work/a.md", runId: source.run.id },
     ]);
-    expect(again.output).toBeNull();
+    expect(again.output).toEqual(["any", 1]);
   });
 
   it("refuses an unlinked run, another workspace's task and a closed task without writing", () => {
@@ -526,9 +526,223 @@ describe("bot delivery and output schemas (ADR-0021 amendment 2)", () => {
     ).toThrowError(
       expect.objectContaining({
         code: "validation",
-        details: { errors: ["output: missing required property total"] },
+        details: {
+          errors: ["output: missing required property total"],
+          workDir: "/work",
+          example: {
+            taskId: task.id,
+            summary: expect.any(String),
+            artifacts: [{ label: expect.any(String), path: "/work/result.md" }],
+            output: { total: 0 },
+          },
+        },
       }),
     );
+  });
+
+  // Issue #39 item 5: a missing output shows a valid call whose output keys follow the schema.
+  it("refuses a missing output under a schema with an example built from the schema", () => {
+    const { run, task } = linkedTask({ outputSchema: schema });
+    expect(() => deliverRaw(run.id, delivery({ taskId: task.id }))).toThrowError(
+      expect.objectContaining({
+        code: "validation",
+        message: "output is required: this task has an outputSchema",
+        details: expect.objectContaining({
+          example: expect.objectContaining({ output: { total: 0 } }),
+        }),
+      }),
+    );
+  });
+
+  describe("paths and evidence a run names (issue #39 item 5)", () => {
+    function perBot() {
+      const source = linkedTask();
+      const run = new RunStore(db).create({
+        botId: source.bot.id,
+        threadId: source.thread.id,
+        lane: "interactive",
+        triggerKind: "thread_message",
+        triggerRef: "per-bot",
+        config: { botWorkdir: "per-bot" },
+      });
+      return { ...source, run };
+    }
+
+    it("resolves a relative artifact path under the per-bot work directory", () => {
+      const { run, task } = perBot();
+      const scope = store.deliveryScope(run.id, {
+        taskId: task.id,
+        summary: "Done",
+        artifacts: [{ label: "App", path: "web/./app.py" }],
+      });
+      expect(scope.input.artifacts).toEqual([
+        { label: "App", path: "/work/bots/deliverer/web/app.py" },
+      ]);
+    });
+
+    it("resolves against /work in shared mode and refuses .. escaping and /tmp", () => {
+      const { run, task } = linkedTask();
+      const scope = (path: string) =>
+        store.deliveryScope(run.id, {
+          taskId: task.id,
+          summary: "Done",
+          artifacts: [{ label: "x", path }],
+        });
+      expect(scope("out/report.md").input.artifacts[0]?.path).toBe("/work/out/report.md");
+      expect(() => scope("../../etc/passwd")).toThrowError(
+        expect.objectContaining({
+          code: "forbidden",
+          details: expect.objectContaining({
+            errors: [expect.stringContaining("../../etc/passwd: climbs above /")],
+          }),
+        }),
+      );
+      expect(() => scope("../etc/passwd")).toThrowError(
+        expect.objectContaining({
+          details: expect.objectContaining({
+            errors: [expect.stringContaining("(resolved to /etc/passwd): outside /work/")],
+          }),
+        }),
+      );
+    });
+
+    it("names the work directory and an example when /tmp is refused", () => {
+      const { run, task } = perBot();
+      let error: unknown;
+      try {
+        store.deliveryScope(run.id, {
+          taskId: task.id,
+          summary: "Done",
+          artifacts: [{ label: "x", path: "/tmp/x" }],
+        });
+      } catch (err) {
+        error = err;
+      }
+      expect(error).toMatchObject({
+        code: "forbidden",
+        message: expect.stringContaining("your work directory /work/bots/deliverer"),
+        details: {
+          workDir: "/work/bots/deliverer",
+          errors: [expect.stringContaining("/tmp/x: outside /work/ and /home/deliverer/")],
+          example: {
+            taskId: task.id,
+            artifacts: [{ path: "/work/bots/deliverer/result.md" }],
+          },
+        },
+      });
+      expect(String((error as { details: { errors: string[] } }).details.errors[0])).toContain(
+        "under /work/bots/deliverer/",
+      );
+    });
+
+    it("keeps accepting a teammate's directory, as the directory guard only refuses writes", () => {
+      const { run, task } = perBot();
+      const scope = store.deliveryScope(run.id, {
+        taskId: task.id,
+        summary: "Done",
+        artifacts: [{ label: "x", path: "/work/bots/someone-else/report.md" }],
+      });
+      expect(scope.input.artifacts[0]?.path).toBe("/work/bots/someone-else/report.md");
+    });
+
+    it("refuses a URL or a commit hash as an artifact and says where it belongs", () => {
+      const { run, task } = linkedTask();
+      expect(() =>
+        store.deliveryScope(run.id, {
+          taskId: task.id,
+          summary: "Done",
+          artifacts: [
+            { label: "pr", path: "https://example.com/pull/1" },
+            { label: "commit", path: "9489f6a" },
+          ],
+        }),
+      ).toThrowError(
+        expect.objectContaining({
+          details: expect.objectContaining({
+            errors: [
+              expect.stringContaining("a URL is not a file"),
+              expect.stringContaining("a commit hash is not a file"),
+            ],
+          }),
+        }),
+      );
+    });
+
+    it("stores commit and URL evidence with its kind and resolves relative evidence paths", () => {
+      const { run, task } = perBot();
+      const checkpoint = store.recordCheckpoint(run.id, {
+        taskId: task.id,
+        completed: [
+          {
+            unit: "fix",
+            outcome: "merged",
+            evidence: ["9489f6a", "https://example.com/pull/1", "web/app.py"],
+          },
+        ],
+      });
+      expect(checkpoint.completed).toEqual([
+        {
+          unit: "fix",
+          outcome: "merged",
+          evidence: ["9489f6a", "https://example.com/pull/1", "/work/bots/deliverer/web/app.py"],
+          evidenceKinds: ["commit", "url", "path"],
+        },
+      ]);
+    });
+
+    it("refuses /tmp evidence with the work directory and a checkpoint example", () => {
+      const { run, task } = perBot();
+      expect(() =>
+        store.recordCheckpoint(run.id, {
+          taskId: task.id,
+          completed: [{ unit: "fix", outcome: "done", evidence: ["/tmp/log.txt"] }],
+        }),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "forbidden",
+          message: expect.stringContaining("/work/bots/deliverer"),
+          details: expect.objectContaining({
+            workDir: "/work/bots/deliverer",
+            example: expect.objectContaining({ taskId: task.id, completed: expect.any(Array) }),
+          }),
+        }),
+      );
+      expect(store.latestCheckpoint(task.id)).toBeNull();
+    });
+
+    it("adds an example to a malformed checkpoint body", () => {
+      const { run, task } = linkedTask();
+      expect(() => store.recordCheckpoint(run.id, { taskId: task.id })).toThrowError(
+        expect.objectContaining({
+          code: "validation",
+          details: expect.objectContaining({
+            example: expect.objectContaining({ taskId: task.id }),
+          }),
+        }),
+      );
+    });
+
+    it("reads a checkpoint stored before evidence kinds existed", () => {
+      const { run, task } = linkedTask();
+      db.prepare(`INSERT INTO task_checkpoints (id, workspace_id, task_id, run_id, attempt,
+        bot_id, body_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        "tck_old",
+        task.workspaceId,
+        task.id,
+        run.id,
+        1,
+        run.botId,
+        JSON.stringify({
+          completed: [{ unit: "a", outcome: "b", evidence: ["/work/a.md"] }],
+          outstanding: [],
+          note: "",
+        }),
+        time.toISOString(),
+      );
+      expect(store.latestCheckpoint(task.id)?.completed).toEqual([
+        { unit: "a", outcome: "b", evidence: ["/work/a.md"] },
+      ]);
+    });
   });
 
   it("records the operator as deliverer and clears delivery facts when work reopens", () => {

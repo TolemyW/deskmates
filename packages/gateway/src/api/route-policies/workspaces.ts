@@ -10,6 +10,8 @@ export const workspacesRoutePolicies: PolicyTable = {
   "POST /api/workspaces": admin(),
   "GET /api/workspaces/:id": guest({ params: { id: "workspace" } }),
   "PATCH /api/workspaces/:id": admin({ params: { id: "workspace" } }),
+  // ADR-0051 decision 1: which bot is the workspace's default bot.
+  "PUT /api/workspaces/:id/default-bot": admin({ params: { id: "workspace" } }),
   "POST /api/workspaces/:id/restart": admin({ params: { id: "workspace" } }),
   "GET /api/workspaces/:id/restart-preflight": admin({ params: { id: "workspace" } }),
   "GET /api/workspace-directory": guest({

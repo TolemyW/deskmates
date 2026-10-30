@@ -7,6 +7,7 @@ import type {
   TaskSubmission,
   TaskSubmitResponse,
 } from "@deskmates/contracts";
+import { FILE_DIGEST_CHECK } from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildGateway, buildOperatorGateway } from "../index.js";
@@ -56,6 +57,118 @@ const audits = (action: string) =>
     .all(action) as Array<{ actor: string; target_id: string }>;
 
 describe("explicit task triggers (ADR-0021 amendment 3)", () => {
+  it("reopens a delivery and sends revision feedback once, preserving its earlier publication", async () => {
+    const { ctx, bot, workspace, url } = seed();
+    const thread = ctx.threads.create({ workspaceId: workspace.id, botIds: [bot.id] });
+    const task = ctx.tasks.create(workspace.id, {
+      title: "Report",
+      ownerBotId: bot.id,
+      threadIds: [thread.id],
+    });
+    const run = ctx.runs.create({
+      botId: bot.id,
+      threadId: thread.id,
+      lane: "interactive",
+      triggerKind: "manual",
+      triggerRef: "first-delivery",
+    });
+    const original = ctx.tasks.deliver(
+      run.id,
+      {
+        taskId: task.id,
+        summary: "First report",
+        artifacts: [{ label: "Report", path: "/work/report.md" }],
+      },
+      new Map([
+        [
+          "/work/report.md",
+          {
+            path: "/work/report.md",
+            sizeBytes: 8,
+            sha256: "c".repeat(64),
+            check: FILE_DIGEST_CHECK,
+            checkedAt: new Date().toISOString(),
+          },
+        ],
+      ]),
+    );
+    const delivered = original.task;
+    ctx.runs.transition(run.id, "running");
+    ctx.runs.transition(run.id, "succeeded");
+    const request = {
+      version: delivered.version,
+      idempotencyKey: "revision-key-01",
+      feedback: "Add sources and explain the missing period.",
+    };
+    const first = await api("POST", `${url}/${task.id}/run`, request);
+    expect(first.statusCode, first.body).toBe(201);
+    const result = first.json<TaskSubmitResponse>();
+    expect(result.task.status).toBe("in_progress");
+    expect(result.task.scopeVersion).toBe(delivered.scopeVersion + 1);
+    expect(() =>
+      ctx.tasks.deliveryScope(run.id, {
+        taskId: task.id,
+        scopeVersion: delivered.scopeVersion,
+        summary: "Late original result",
+        artifacts: [],
+      }),
+    ).toThrowError(
+      expect.objectContaining({ details: expect.objectContaining({ reason: "stale_scope" }) }),
+    );
+    expect(result.submission?.runs).toHaveLength(1);
+    const message = ctx.messages.get(result.submission?.messageId as never);
+    expect(message?.body).toContain(request.feedback);
+    expect(message?.body).toContain("Preserve earlier delivery evidence");
+    const retry = await api("POST", `${url}/${task.id}/run`, request);
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json().submission.id).toBe(result.submission?.id);
+    expect(count("task_submissions")).toBe(1);
+    expect(audits("task.run")).toHaveLength(1);
+    const after = (await api("GET", `${url}/${task.id}`)).json<TaskDetailResponse>();
+    expect(after.execution.deliveries[0]).toMatchObject({
+      id: original.delivery.id,
+      summary: "First report",
+      publications: [expect.objectContaining({ path: "/work/report.md", sha256: "c".repeat(64) })],
+    });
+    // A new feedback request may not restart work that has already left delivered.
+    expect(
+      (
+        await api("POST", `${url}/${task.id}/run`, {
+          ...request,
+          version: result.task.version,
+          idempotencyKey: "revision-key-02",
+        })
+      ).statusCode,
+    ).toBe(409);
+  });
+
+  it("keeps delivery intact when revision dispatch fails and refuses empty feedback", async () => {
+    const { ctx, workspace, url } = seed();
+    const task = ctx.tasks.create(workspace.id, {
+      title: "Unassigned",
+      artifacts: [{ label: "Report", path: "/work/report.md" }],
+    });
+    const delivered = ctx.tasks.update(
+      workspace.id,
+      task.id,
+      { version: task.version, status: "delivered" },
+      "human:web",
+    );
+    const input = {
+      version: delivered.version,
+      idempotencyKey: "revision-key-01",
+      feedback: "Fix the figures",
+    };
+    expect((await api("POST", `${url}/${task.id}/run`, input)).statusCode).toBe(400);
+    expect(ctx.tasks.mustGet(workspace.id, task.id)).toMatchObject({
+      status: "delivered",
+      version: delivered.version,
+    });
+    expect(count("task_submissions")).toBe(0);
+    expect(
+      (await api("POST", `${url}/${task.id}/run`, { ...input, feedback: " " })).statusCode,
+    ).toBe(400);
+  });
   it("dispatches an immediate create through the router: one submission, one queued run", async () => {
     const { ctx, bot, url } = seed();
     const response = await api("POST", url, {

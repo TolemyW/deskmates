@@ -14,6 +14,7 @@ import {
 } from "@deskmates/contracts";
 import { nowIso } from "../db/ids.js";
 import type { GatewayDb } from "../db/open.js";
+import { BUDGET_ORIGIN_SQL } from "./messages.js";
 
 interface PlanRow {
   message_id: string;
@@ -171,8 +172,9 @@ export class RoundPlanStore {
   }
 
   /**
-   * Decision 49: bot messages since the latest human message, where every message posted by the
-   * runs of one dispatched round (its related runs and its closer run) counts once together.
+   * Decision 49: bot messages since the budget origin (the latest human message or the last
+   * unpause, amendment 3 decision 22), where every message posted by the runs of one dispatched
+   * round (its related runs and its closer run) counts once together.
    */
   botCountByRound(threadId: ThreadId): number {
     const row = this.db
@@ -180,9 +182,7 @@ export class RoundPlanStore {
         `WITH since AS (
            SELECT m.seq, m.run_id FROM thread_messages m
            WHERE m.thread_id = ? AND m.author_kind = 'bot'
-             AND m.seq > coalesce(
-               (SELECT max(seq) FROM thread_messages WHERE thread_id = ? AND author_kind = 'human'),
-               0)
+             AND m.seq > ${BUDGET_ORIGIN_SQL}
          )
          SELECT count(DISTINCT coalesce(
            (SELECT p.message_id FROM thread_round_plans p
@@ -194,7 +194,7 @@ export class RoundPlanStore {
            'seq:' || since.seq)) AS count
          FROM since`,
       )
-      .get(threadId, threadId) as { count: number };
+      .get(threadId, threadId, threadId) as { count: number };
     return row.count;
   }
 

@@ -11,6 +11,13 @@ export type WebPhase =
   | "reconnecting"
   | "logged_out"
   | "error";
+/**
+ * The `name` of an error `onAccount` throws when the linked number may not be served (ADR-0047
+ * amendment 1: it is connected elsewhere, or differs from this connection's number). Its message
+ * is shown to the operator instead of the generic relay failure.
+ */
+export const ACCOUNT_REFUSED_ERROR = "WhatsAppAccountRefused";
+
 export interface WebStatus {
   phase: WebPhase;
   account: string | null;
@@ -167,10 +174,13 @@ export class WebSession {
           error: null,
           reconnects: 0,
         };
-      } catch {
+      } catch (error) {
         await this.stop();
         this.status.phase = "error";
-        this.status.error = "Could not prepare the Deskmates relay.";
+        this.status.error =
+          error instanceof Error && error.name === ACCOUNT_REFUSED_ERROR
+            ? error.message
+            : "Could not prepare the Deskmates relay.";
       } finally {
         this.accountReady = undefined;
       }

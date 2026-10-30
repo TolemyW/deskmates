@@ -7,6 +7,7 @@ import type { FastifyInstance } from "fastify";
 import { actorLabel } from "../auth/principal.js";
 import type { GatewayContext } from "../context.js";
 import { FileCollection, type FileCollectionOptions } from "../files/file-collection.js";
+import { workspaceRole } from "./workspace-access.js";
 
 type CollectionRoute = { Params: { id: string }; Querystring: Record<string, unknown> };
 
@@ -30,10 +31,16 @@ export function registerFileCollectionRoutes(
       throw new DeskmatesError("validation", `Invalid ${parsed.field} for the files collection`, {
         field: parsed.field,
       });
+    // ADR-0014 A7: references and "sent in chat" name only chats this caller may read.
+    const principal = request.principal;
     const page = collection.list(
       workspace.id,
       parsed.query,
       opts.scanLimit === undefined ? {} : { scanLimit: opts.scanLimit },
+      {
+        ...(principal?.kind === "user" ? { userId: principal.userId } : {}),
+        includeBus: workspaceRole(ctx, request, workspace.id) !== "guest",
+      },
     );
     const log: FileCollectionLog = opts.log ?? ((msg, data) => request.log.info(data, msg));
     log("workspace files listed", {

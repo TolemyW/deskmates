@@ -278,7 +278,6 @@ export function App() {
         release={release}
         flows={flows}
         onExpired={expire}
-        onSwitchTenant={switchTenant}
         onPreferences={storePreferences}
         onProfile={storeProfile}
         onSessionRotated={adoptRotatedSession}

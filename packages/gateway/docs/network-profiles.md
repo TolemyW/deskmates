@@ -2,15 +2,15 @@
 
 A network profile is a named, durable set of LAN grants that the root or a workspace Owner
 defines once and a workspace's Admins select where it is needed, such as a "VendorDB test environment" for functional tests against
-`http://10.20.30.24:23001`. Changes apply online: no Gateway, workspace or browser restart.
+`http://10.88.30.24:23001`. Changes apply online: no Gateway, workspace or browser restart.
 
 ## Rules
 
 A profile holds 1 to 64 rules:
 
-- `{"kind": "subnet", "cidr": "10.20.30.0/24", "schemes": ["http"], "ports": [23001]}` admits
+- `{"kind": "subnet", "cidr": "10.88.30.0/24", "schemes": ["http"], "ports": [23001]}` admits
   IP-literal URLs inside a canonical RFC1918 IPv4 network.
-- `{"kind": "host", "hostname": "console.vendordb.lan", "address": "10.20.36.35", "schemes":
+- `{"kind": "host", "hostname": "console.vendordb.lan", "address": "10.88.36.35", "schemes":
   ["https"], "ports": [443]}` admits one exact DNS name, connected to its pinned address with no
   DNS lookup. HTTPS keeps normal hostname and certificate verification.
 

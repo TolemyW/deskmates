@@ -231,6 +231,9 @@ export function requestFromTrace(trace: RunTrace): StartRunRequest {
     runId: trace.run.id,
     botId: trace.run.botId,
     botName: trace.run.botName,
+    // Issue #39 item 4: the identity line's inputs; a trace from an older Gateway has neither.
+    botRole: trace.run.botRole ?? "",
+    workspaceName: trace.run.workspaceName ?? "",
     workspaceId: trace.run.workspaceId,
     botHomeDir: trace.run.botHomeDir,
     attempt: 1,
@@ -477,7 +480,9 @@ export async function replayTrace(trace: RunTrace, file?: string): Promise<Trace
 function resumeRequest(
   previous: StartRunRequest,
   ended: RunEnded,
-  gateway: { approvals: readonly { approvalId: string; action: ToolAction }[] },
+  gateway: {
+    approvals: readonly { approvalId: string; action: ToolAction; kind?: "egress" }[];
+  },
   trace: RunTrace,
   attempt: number,
 ): StartRunRequest | string {
@@ -490,7 +495,8 @@ function resumeRequest(
   if (decision === undefined) {
     return `attempt ${attempt} cannot be replayed: the trace does not record what the human decided (no \`decided\` event from the Gateway and no \`resumed\` event from the sidecar)`;
   }
-  const action = gateway.approvals.find((a) => a.approvalId === ended.pendingApprovalId)?.action;
+  const approval = gateway.approvals.find((a) => a.approvalId === ended.pendingApprovalId);
+  const action = approval?.action;
   return {
     ...previous,
     attempt,
@@ -511,6 +517,8 @@ function resumeRequest(
                 ? {}
                 : { argumentPattern: action.argumentPattern }),
             },
+            // As the Gateway does (issue #62 H3): the decision answers only its own kind of ask.
+            approvalKind: approval?.kind === "egress" ? "egress" : "tool",
           }),
     },
   };

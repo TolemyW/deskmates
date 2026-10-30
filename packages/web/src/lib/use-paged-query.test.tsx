@@ -223,7 +223,14 @@ describe("PageBar", () => {
         ...(total === undefined ? { nextCursor: "c25" } : { total }),
       }),
     });
-    return <PageBar query={query} label="Things pages" />;
+    return (
+      <>
+        {query.items.map((item) => (
+          <span key={item}>{item}</span>
+        ))}
+        <PageBar query={query} label="Things pages" />
+      </>
+    );
   }
 
   it("says 'of more' rather than inventing a total", async () => {
@@ -234,9 +241,9 @@ describe("PageBar", () => {
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
-  it("shows an honest total when the source counts", async () => {
+  it("hides navigation when the counted result fits on one page", async () => {
     render(<Bar total={2} />);
-    expect(await screen.findByText("1–2 of 2")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    await screen.findByText("y");
+    expect(screen.queryByRole("navigation", { name: "Things pages" })).not.toBeInTheDocument();
   });
 });

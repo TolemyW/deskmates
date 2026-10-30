@@ -3,12 +3,12 @@
 // schedule on top. The bot writes nothing here itself; the Gateway's records are the feed.
 
 import type { BotDefinition, RunStatus, RunTriggerKind } from "@deskmates/contracts";
-import { nextCronFire } from "@deskmates/contracts";
+import { boundActivitySummary, nextCronFire } from "@deskmates/contracts";
 import { CalendarClock } from "lucide-react";
 import type { RunView } from "../../api/types.js";
 import { Avatar } from "../../components/ui/avatar.js";
 import { RUN_STATUS_LABEL, RunStatusPill } from "../../components/ui/pill.js";
-import { formatDateTime } from "../../format.js";
+import { describeRunError, formatDateTime } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
 import { currentI18n } from "../../i18n/intl.js";
 import { Markdown } from "../../lib/markdown.js";
@@ -29,6 +29,8 @@ export function triggerLabel(kind: RunTriggerKind): string {
       return t("botActivity.trigger.approval");
     case "manual":
       return t("botActivity.trigger.manual");
+    case "model_job":
+      return t("botActivity.trigger.modelJob");
     default:
       return String(kind).replaceAll("_", " ");
   }
@@ -71,21 +73,31 @@ export function feedItemOf(run: RunView): FeedItem {
   const trigger = triggerLabel(run.triggerKind);
   const wokenBy = t("botActivity.feed.wokenBy", { trigger });
   const base = { id: run.id, at, status: run.status, runId: run.id, threadId: run.threadId };
+  const error = run.error ? describeRunError(run.error) : undefined;
+  if (run.triggerKind === "model_job" || run.config.runType)
+    return {
+      ...base,
+      title: t("botActivity.feed.background"),
+      detail: error ?? (run.summary?.done ? boundActivitySummary(run.summary.done) : wokenBy),
+    };
   switch (run.status) {
     case "succeeded":
       return {
         ...base,
-        title: run.summary?.done || t("botActivity.feed.finishedTask"),
-        detail: run.summary?.reply ? run.summary.reply.slice(0, 240) : undefined,
+        title: t("botActivity.feed.finishedTask"),
+        detail:
+          run.summary?.done || run.summary?.reply
+            ? boundActivitySummary(run.summary.done || run.summary.reply)
+            : undefined,
       };
     case "silent":
       return { ...base, title: t("botActivity.feed.silent"), detail: wokenBy };
     case "failed":
-      return { ...base, title: t("botActivity.feed.failed"), detail: run.error };
+      return { ...base, title: t("botActivity.feed.failed"), detail: error };
     case "cancelled":
-      return { ...base, title: t("botActivity.feed.cancelled"), detail: run.error };
+      return { ...base, title: t("botActivity.feed.cancelled"), detail: error };
     case "stopped":
-      return { ...base, title: t("botActivity.feed.stopped"), detail: run.error };
+      return { ...base, title: t("botActivity.feed.stopped"), detail: error };
     case "waiting_approval":
     case "waiting_approval_live":
       return { ...base, title: t("botActivity.feed.waitingApproval"), detail: wokenBy };

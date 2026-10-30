@@ -1,4 +1,7 @@
-FROM node:22-bookworm-slim
+# The base is pinned to the tag's multi-architecture index digest (read on 2026-10-19 from the
+# Docker Hub mirrors mirror.gcr.io and public.ecr.aws, which agreed), so a new base is a change
+# here that scripts/image-tag.mjs sees, never a silent rebuild drift.
+FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 
 COPY images/egress/egress-policy.mjs /opt/deskmates/egress-policy.mjs
 COPY images/egress/doh-lookup.mjs /opt/deskmates/doh-lookup.mjs

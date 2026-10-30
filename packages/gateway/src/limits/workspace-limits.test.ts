@@ -40,16 +40,21 @@ describe("defaults (decision 37, amendment 2 decision 14)", () => {
       maxTurns: { value: 80, source: "gateway" },
       relayCountMax: { value: 5, source: "default" },
       turnBudget: { value: null, source: "default" },
+      turnBudgetResetMinutes: { value: 60, source: "default" },
     });
     expect(limits.threadCaps(WS, 8)).toEqual({
       turnBudget: { value: null, source: "default" },
       relayCountMax: { value: 5, source: "default" },
       volumeBreaker: false,
+      budgetResetMinutes: 60,
     });
     expect(limits.view(WS)).toMatchObject({
-      defaults: { turnBudget: null, relayCountMax: 5 },
+      defaults: { turnBudget: null, relayCountMax: 5, turnBudgetResetMinutes: 60 },
       loopBreaker: { relayMax: 50, botMessages: 300, repeats: 3 },
-      ranges: { turnBudget: { min: 1, max: 300, off: true } },
+      ranges: {
+        turnBudget: { min: 1, max: 300, off: true },
+        turnBudgetResetMinutes: { min: 5, max: 1440, off: false },
+      },
     });
     expect(audits()).toHaveLength(0);
   });
@@ -120,9 +125,22 @@ describe("set (decisions 37 and 39)", () => {
       turnBudget: { value: null, source: "workspace" },
       relayCountMax: { value: null, source: "workspace" },
       volumeBreaker: false,
+      budgetResetMinutes: 60,
     });
     expect(limits.relayLimit(WS)).toBe(50);
     expect(limits.runLimits(WS)).toMatchObject({ maxTurns: null, continuationLimit: null });
+  });
+
+  it("stores the turn-budget reset window in range and never off (amendment 3, decision 22)", () => {
+    limits.set(WS, { turnBudgetResetMinutes: 15 }, "user:admin");
+    expect(limits.threadCaps(WS, 8).budgetResetMinutes).toBe(15);
+    expect(limits.effective(WS).turnBudgetResetMinutes).toEqual({ value: 15, source: "workspace" });
+    for (const bad of ["off", 4, 1441, 30.5])
+      expect(() => limits.set(WS, { turnBudgetResetMinutes: bad }, "user:admin")).toThrow();
+    limits.set(WS, { turnBudgetResetMinutes: null }, "user:admin");
+    expect(limits.threadCaps(WS, 8).budgetResetMinutes).toBe(60);
+    // Each change is audited like every limit (decision 37).
+    expect(audits()).toHaveLength(2);
   });
 
   it("with requireBudgetForOff refuses off without a monetary limit and accepts it with one", () => {

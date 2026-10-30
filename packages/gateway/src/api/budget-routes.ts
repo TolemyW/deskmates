@@ -8,6 +8,7 @@ import type { Scheduler } from "../scheduler/scheduler.js";
 import { requestActorId } from "./actor.js";
 import { requestTenant } from "./route-policy.js";
 import { asRecord } from "./validate.js";
+import { readableWorkspaceIds } from "./workspace-access.js";
 
 interface WorkspaceParams {
   workspaceId: string;
@@ -22,7 +23,11 @@ export function registerBudgetRoutes(
     ctx.budget.overview(workspaceId, ctx.workspaces.mustGet(workspaceId).name);
 
   app.get("/api/budgets", async (request) => {
-    const workspaces = ctx.workspaces.list(requestTenant(request));
+    // A workspace's budget and spend reach its Members only (ADR-0022 amendment 6 W1).
+    const readable = readableWorkspaceIds(ctx, request, "member");
+    const workspaces = ctx.workspaces
+      .list(requestTenant(request))
+      .filter((w) => readable === undefined || readable.has(w.id));
     return { budgets: workspaces.map((w) => overview(w.id)) };
   });
 

@@ -23,14 +23,7 @@ export function entryLabel(entry: CostRankingEntry): string {
   return entry.workspaceName ? `${entry.label} · ${entry.workspaceName}` : entry.label;
 }
 
-export function CostRanking({
-  api,
-  by,
-  view,
-  filters,
-  scale,
-  title,
-}: {
+interface CostRankingProps {
   api: ApiClient;
   by: CostRankingDimension;
   view: CostView;
@@ -38,23 +31,32 @@ export function CostRanking({
   /** The report's total in the view's unit: the bars' denominator. */
   scale: number;
   title: string;
-}) {
+}
+
+export function CostRanking(props: CostRankingProps) {
+  return (
+    <CostRankingContent
+      key={`${props.by}:${props.view}:${JSON.stringify(props.filters)}`}
+      {...props}
+    />
+  );
+}
+
+function CostRankingContent({ api, by, view, filters, scale, title }: CostRankingProps) {
   const t = useT();
   const listId = useId();
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<CostRankingPage>();
   const [error, setError] = useState("");
   const revision = useRef(0);
+  const [retryRevision, setRetryRevision] = useState(0);
   const filterKey = JSON.stringify(filters);
 
-  // A new view or filter starts again at the first page.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: filterKey stands for filters
-  useEffect(() => setOffset(0), [view, filterKey]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: filterKey stands for filters
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filterKey stands for filters; retryRevision explicitly reloads.
   useEffect(() => {
     const request = ++revision.current;
     setError("");
+    setPage(undefined);
     api
       .getCostRanking(by, view, filters, offset)
       .then((next) => {
@@ -63,7 +65,10 @@ export function CostRanking({
       .catch((err: unknown) => {
         if (request === revision.current) setError(errorMessage(err));
       });
-  }, [api, by, view, filterKey, offset]);
+    return () => {
+      revision.current += 1;
+    };
+  }, [api, by, view, filterKey, offset, retryRevision]);
 
   const entries = page?.entries ?? [];
   const total = page?.total ?? 0;
@@ -73,7 +78,16 @@ export function CostRanking({
   return (
     <section className="card cost-card" aria-label={title}>
       <h3>{title}</h3>
-      {error ? <p role="alert">{error}</p> : null}
+      {error ? (
+        <div role="alert">
+          <p>{error}</p>
+          <Button onClick={() => setRetryRevision((value) => value + 1)}>
+            {t("costs.ranking.retry")}
+          </Button>
+        </div>
+      ) : !page ? (
+        <p aria-busy="true">{t("costs.loading")}</p>
+      ) : null}
       <ul className="cost-slices" id={listId}>
         {entries.map((entry) => {
           const money = moneyOf(entry);

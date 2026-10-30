@@ -24,7 +24,7 @@ function consolidationWrites(proposal: ProposedSkill) {
   const run = fx.ctx.runs.create({
     botId: fx.a.bot.id,
     lane: "background",
-    triggerKind: "cron",
+    triggerKind: "model_job",
     triggerRef: `consolidation-${Math.random()}`,
     config: {
       runType: "memory_consolidation",

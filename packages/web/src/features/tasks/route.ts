@@ -14,7 +14,9 @@ export function taskHref(id?: string): string {
 
 export const routes = defineRoutes({
   screens: { tasks: "tasks" },
+  canonicalHref: (route) => taskHref(route.id),
   segments: {
+    "task-kinds": () => ({ name: "tasks" }),
     tasks: (rest) => (rest ? { name: "tasks", id: decodeURIComponent(rest) } : { name: "tasks" }),
   },
 });

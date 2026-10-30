@@ -10,7 +10,8 @@ rule stay on as runaway guards.
 
 | Setting | Counts | Default | Range | `off` |
 |---|---|---|---|---|
-| `turnBudget` | bot-authored messages in one thread since its latest human message | off | 1 to 300 | yes |
+| `turnBudget` | bot-authored messages in one thread since its budget origin (the latest human message or the last unpause) | off | 1 to 300 | yes |
+| `turnBudgetResetMinutes` | minutes after which a turn-budget pause ends by itself ([thread pauses](thread-pauses.md)) | 60 | 5 to 1440 | no |
 | `relayCountMax` | hop depth of one message chain, inherited through `message_bot` | 5 | 1 to 50 | yes |
 | `maxTurns` | SDK assistant turns per physical attempt | `DESKMATES_MAX_TURNS` (80) | 1 to 1000 | yes |
 | `continuationLimit` | continuations offered after turn exhaustion | 2 | 0 to 20 | yes |

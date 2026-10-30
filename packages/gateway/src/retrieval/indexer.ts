@@ -174,52 +174,89 @@ export class RetrievalIndexer {
       scopes.set(scopeOf(source), list);
     }
     let count = 0;
+    let refusedAny = false;
     for (const sources of scopes.values()) {
       const flat = sources.flatMap((item, at) => item.inputs.map((text) => ({ at, text })));
-      const vectors: Float32Array[] = [];
+      const indexed = flat.map((item, index) => ({ ...item, index }));
+      const vectors: (Float32Array | undefined)[] = [];
+      /** Sources of this scope the service refused; the rest of the scope is still written. */
+      const dropped = new Set<number>();
+      const tenantId = tenantOf((sources[0] as Source<T>).source);
+      const refuse = (at: number) => {
+        const id = (sources[at] as Source<T>).source.id;
+        dropped.add(at);
+        this.refused.add(id);
+        refusedAny = true;
+        this.options.log?.("retrieval indexing refused a source; not retried until restart", {
+          corpus,
+          sourceId: id,
+        });
+      };
       for (let start = 0; start < flat.length; start += this.batchInputs) {
         if (this.stopped) return { count, failed: false };
-        const batch = flat.slice(start, start + this.batchInputs);
-        const first = sources[0] as Source<T>;
-        try {
-          const embedded = await this.usage.timed(
-            {
-              tenantId: tenantOf(first.source),
-              corpus,
-              purpose: "index",
-              service: "embedding",
-              model: this.client.service.model,
-              inputs: batch.length,
-            },
-            () =>
-              this.client.embed(
-                batch.map((item) => item.text),
-                this.timeoutMs,
-                this.abort.signal,
-              ),
-            (answer) => answer.inputTokens,
-          );
-          vectors.push(...embedded.vectors);
-        } catch (error) {
-          if (this.stopped) return { count, failed: false };
-          if (error instanceof RetrievalCallError && error.refused)
-            for (const item of new Set(batch.map((b) => b.at)))
-              this.refused.add((sources[item] as Source<T>).source.id);
-          this.options.log?.("retrieval indexing call failed", {
-            corpus,
-            error: String(error),
-          });
-          return { count, failed: true };
+        const batch = indexed.slice(start, start + this.batchInputs);
+        const outcome = await this.embedInto(corpus, tenantId, batch, vectors);
+        if (outcome === "stopped") return { count, failed: false };
+        if (outcome === "failed") return { count, failed: true };
+        if (outcome === "ok") continue;
+        // A refusal names no input: retry one source at a time so only the refused one is
+        // marked, not every source that shared its batch.
+        const owners = [...new Set(batch.map((item) => item.at))];
+        if (owners.length === 1) {
+          refuse(owners[0] as number);
+          continue;
+        }
+        for (const at of owners) {
+          const own = batch.filter((item) => item.at === at);
+          const retried = await this.embedInto(corpus, tenantId, own, vectors);
+          if (retried === "stopped") return { count, failed: false };
+          if (retried === "failed") return { count, failed: true };
+          if (retried === "refused") refuse(at);
         }
       }
       if (this.stopped) return { count, failed: false };
       let offset = 0;
-      for (const item of sources) {
+      for (const [at, item] of sources.entries()) {
         const own = vectors.slice(offset, offset + item.inputs.length);
         offset += item.inputs.length;
-        if (write(item.source, own)) count += 1;
+        if (dropped.has(at)) continue;
+        if (write(item.source, own as Float32Array[])) count += 1;
       }
     }
-    return { count, failed: false };
+    return { count, failed: refusedAny };
+  }
+
+  /** One embedding call; its vectors land at each input's index in `vectors`. */
+  private async embedInto(
+    corpus: RetrievalCorpus,
+    tenantId: string,
+    batch: readonly { text: string; index: number }[],
+    vectors: (Float32Array | undefined)[],
+  ): Promise<"ok" | "refused" | "failed" | "stopped"> {
+    try {
+      const embedded = await this.usage.timed(
+        {
+          tenantId,
+          corpus,
+          purpose: "index",
+          service: "embedding",
+          model: this.client.service.model,
+          inputs: batch.length,
+        },
+        () =>
+          this.client.embed(
+            batch.map((item) => item.text),
+            this.timeoutMs,
+            this.abort.signal,
+          ),
+        (answer) => answer.inputTokens,
+      );
+      for (const [i, item] of batch.entries()) vectors[item.index] = embedded.vectors[i];
+      return "ok";
+    } catch (error) {
+      if (this.stopped) return "stopped";
+      this.options.log?.("retrieval indexing call failed", { corpus, error: String(error) });
+      return error instanceof RetrievalCallError && error.refused ? "refused" : "failed";
+    }
   }
 }

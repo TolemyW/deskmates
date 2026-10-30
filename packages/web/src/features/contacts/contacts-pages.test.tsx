@@ -81,10 +81,10 @@ describe("Contacts rail pages (#113 B)", () => {
     await waitFor(() => expect(g.calls.some((c) => c.includes("q=ana"))).toBe(true));
     // A newer search replaces the held one; the held answer must not land afterwards.
     fireEvent.change(search, { target: { value: "agent-1" } });
-    await screen.findByText("1–10 of 10");
+    await screen.findAllByText("agent-10");
     g.release();
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(screen.getByText("1–10 of 10")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Bot pages" })).not.toBeInTheDocument();
     expect(
       g.calls.filter((c) => c.includes("q=agent-1")).every((c) => c.includes("offset=0")),
     ).toBe(true);

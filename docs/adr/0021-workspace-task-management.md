@@ -93,6 +93,8 @@ for thread routing, approvals, continuation or the SDK loop.
 
 ## Amendment 1 (2026-10-05, proposed with ADR-0022 P1): acceptance names the signed-in person
 
+Status: Accepted under owner delegation (2026-10-17), with ADR-0022's single-tenant sessions.
+
 A1. Decision 3's `human:web` label recorded that the shared operator credential identifies no
 individual. With ADR-0022 sessions, acceptance records the authenticated principal instead:
 `user:<id>` for a signed-in person, and still `human:web` when the shared operator credential
@@ -152,6 +154,8 @@ change for runs with linked tasks; its effect on agent behaviour is unmeasured u
 paired evaluation runs.
 
 ## Amendment 3 (2026-10-13, proposed from the owner-confirmed contracts of issues #64, #74 and #63): explicit triggers, formal delivery and checkpoints
+
+Status: Accepted under owner delegation (2026-10-17). The owner confirmed the contracts; the engineering detail is consistent with ADR-0029 decision 11 (missed occurrences are skipped, never back-filled) and adds no budget or scheduler bypass. Real-model and runtime acceptance of task dispatch and delivery remain pending, as the M4 status records.
 
 Amends decisions 2, 3 and 6 and amendment 2. The owner confirmed on 2026-10-13 (issue #64) that
 creating a task offers Immediately, Scheduled or Manual, that there is no task draft lifecycle,
@@ -297,6 +301,146 @@ threads by name (issue #64, 2026-10-12 comment) are not part of this amendment.
 | A3l | The task detail returns `observedAt`, submissions with run status and Gateway times, the schedule and deliveries; the Web shows declared and execution state side by side with a discrepancy note | T1 `task-triggers.test.ts` ("reports execution"); T0 Web `features/tasks/tasks.test.tsx` | Live UI review pending |
 | A3m | Run, schedule change and deletion each write one audit row in their transaction | T1 `task-triggers.test.ts` ("audits") | none |
 
+## Amendment 4 (2026-10-18): task templates are task kinds; a kind view and related tasks
+
+Status: Accepted under owner delegation (2026-10-18). Issue #3 E1: the owner asked the
+coordinator to set the first templates ("这个你先订一个吧"). Issue #3 D2: the owner described the
+operator view wanted ("是想看相似的任务的关联，比如用 deskmates 做网页产品客服，怎么监控管理任务完成情况这样"):
+many tasks of one kind, such as support tickets, arrive, and the operator needs to see how that
+kind of work is getting done and which tasks relate to each other. The built-in contents of A4b are
+the coordinator's choice and a strategy change that has not been evaluated (A4j). A4h extends the
+ADR-0041 decision 2 embedding use to one operator lookup; the owner may overrule that use.
+
+Amends decisions 1, 2 and 6 and amendment 3. Nothing here dispatches: creating a task from a
+template is an ordinary create with the trigger of A3a, and the views are reads.
+
+A4a. **A template is data and names a kind.** A task template has a name, a kind key
+(`[a-z0-9][a-z0-9-]{0,47}`), a description, ordered stages (key, name, done criteria), the stages
+that require a checkpoint, a review role (`human`, `peer_bot` or `none`), an optional target time
+(SLA, in minutes) and field definitions (key, label, required, a default, and whether equal values
+relate tasks). A workspace's own templates are rows (`task_templates`, one kind key per
+workspace), versioned like tasks, and only its Owners and Admins create, edit and archive them;
+each change is audited (`task_template.create`, `.update`, `.archive`). Archiving stops new tasks
+from the template and changes no existing task. Members read templates. Built-in templates are
+constants in the Gateway, read-only and offered in every workspace; a custom template cannot take
+a built-in kind key, and an Admin copies a built-in to change it.
+
+A4b. **The first built-in templates (coordinator-chosen).** Criteria are labelled `<stage>.<n>`.
+- `support-ticket`, *Customer support ticket*: triage → resolve → confirm. Fields: customer
+  (required, relates), channel (default `web`), priority (default `P3`). Target 24 hours.
+  Checkpoints required at triage and resolve. Review by a human.
+- `research-report`, *Research report*: discovery (at least 10 logged sources, with their search
+  queries) → draft (every claim cites a logged source) → peer review (by a teammate who did not
+  write the draft) → deliver. Field: audience. No target. Checkpoints at discovery and peer review.
+  Review by a peer bot.
+- `coding-task`, *Coding task*: plan → implement → tests pass (the command and its output as
+  evidence) → review → deliver. Fields: repository (relates), branch. No target. Checkpoints at
+  tests and review. Review by a peer bot.
+- `functional-test`, *Functional test*: plan cases (steps and expected result, before running) →
+  execute with evidence per case → report pass, fail and blocked per case. Fields: target
+  (relates), environment. No target. Checkpoint at execute. Review by a human.
+
+The numbers (10 sources, 24 hours) are starting guesses, not measured values.
+
+A4c. **Creating from a template stamps the kind and copies the criteria.** `POST .../tasks` takes
+an optional `templateId` and `fields`. The Gateway checks the fields against the template (known
+keys, required ones present, at most 200 characters each, defaults filled) and stores them in
+`task_field_values`. It stores on the task its kind and a snapshot of the template (stages,
+criteria, required checkpoints, review role, target, field definitions, template id and version),
+so a later template edit changes no task. The criteria enter the existing outstanding-criteria and
+checkpoint machinery of A3g and A3h by label: the task description gets one appended,
+human-readable section listing the stages, the labelled criteria, the fields, the target and the
+review role, and asking that `task_checkpoint` units and `task_deliver` `outstanding` items start
+with the criterion's label. No checkpoint is seeded: A3h binds every checkpoint to a run, and a
+seeded one would read as written by an earlier attempt (A3k). Field values may be corrected later
+by PATCH; the appended section is ordinary description text the operator may edit.
+
+A4d. **Using a template changes no default prompt.** The template's text reaches a bot only as the
+description of the task a human created, through the existing dispatch message (A3c) and start
+request. No SOUL, skill, system prompt, tool, approval rule or default changes, and a task created
+without a template is exactly as before. The template contents are a strategy change for the runs
+of those tasks, to be evaluated with the long-horizon harness (issue #3 E2, whose code is not in
+this repository); until then no template is called better.
+
+A4e. **Criteria progress is read from checkpoints and deliveries.** For a templated task the detail
+returns each criterion's state from the task's checkpoints and deliveries in Gateway time order:
+`met` when a completed checkpoint unit starts with its label (with that unit's evidence count),
+`open` when an outstanding item starts with it, `unreported` otherwise; the last mention wins. The
+current stage is the first stage with a criterion not met. A delivered or accepted task whose
+required checkpoint stage no checkpoint reported, or whose criteria were last reported open, is
+named as a discrepancy and never corrected.
+
+A4f. **Status and owner transitions are recorded from now on.** Every task write that changes the
+status or the owner bot appends a `task_transitions` row (field, from, to, actor, Gateway time). An
+escalation is a transition into `blocked` (a blocked task needs a person's next action); a
+reassignment is an owner change from one bot to another value. Tasks older than this migration
+have no transitions, so their counts start at zero.
+
+A4g. **A kind view for the people who work the workspace.** `GET .../task-kinds` lists the
+workspace's kinds (templates and stamped tasks) with totals. `GET .../task-kinds/:kind` returns,
+read at one Gateway instant:
+- current counts by status, and a daily series over the window (default 30 days, at most 90) of
+  created, delivered, accepted, cancelled and escalated;
+- completion (delivered or accepted over all but cancelled) and acceptance rates;
+- time to done (creation to delivery, p50 and p90 by nearest rank) against the target;
+- overdue tasks (open past the target) and at-risk tasks (past 80 % of it);
+- stalled tasks by reason: `waiting_approval` when a linked run has a pending approval,
+  `waiting_human` when the task is blocked, `awaiting_acceptance` when it was delivered longer than
+  the stall window ago, and `no_activity` when an open task's linked runs, checkpoints and
+  deliveries show nothing for the stall window (default 60 minutes); there is no reason while a
+  linked run is queued or executing;
+- escalations and reassignments;
+- known and estimated cost per task from the linked runs (ADR-0032);
+- a drill-down row per task (at most 200, newest first).
+
+The thresholds are guesses. Owners, Admins and Members of the workspace read the view; Guests do
+not. It carries task records and numbers only: no message text, no approval text, no run summary
+and no thread link. Another person's private chat (ADR-0022 amendment 6) therefore reveals nothing
+beyond the task record a Member already reads.
+
+A4h. **Related tasks of the same kind.** `GET .../tasks/:id/related` lists at most 10 tasks of the
+same kind, each with its reasons:
+- equal values of a relating field ("same customer");
+- textual similarity of the title, the description without the template section, and the latest
+  delivery summary. Summaries of runs in a private chat are never used.
+
+With `EMBEDDING_URL` configured (ADR-0041 decision 1), the similarity is the cosine of one vector
+per task. Vectors are kept in `task_text_vectors`, keyed by model and text hash; a stale or
+other-model vector is replaced, never read. Texts are embedded in batches of at most 16, and each
+call is recorded in `retrieval_calls` with corpus `task`. Without the service, or when a call fails
+or times out, the similarity is a deterministic token Jaccard over words and CJK character bigrams;
+the response names the method. A pair at or above 0.9 cosine or 0.6 Jaccard is flagged as a
+possible duplicate; these thresholds are guesses. Nothing is merged, closed or linked automatically.
+
+This lookup serves operators only and no run reads it, so it is not a retrieval-parameter strategy
+change. It extends ADR-0041 decision 2's "for retrieval, and nothing else" to this one operator
+lookup, which returns only scores.
+
+A4i. **Web.** Owners and Admins manage templates. The create form offers a template, its fields and
+a preview of the appended section. The task page shows the kind, the fields, criteria progress and
+related tasks. The kind view shows the figures of A4g with the drill-down. Every locale carries the
+new strings.
+
+A4j. **What is not evidence.** The built-in contents, the target, the stall window and the
+similarity thresholds are unmeasured. Whether templated tasks finish better needs the paired
+long-horizon evaluation of issue #3 E2; none has run.
+
+### Verification (amendment 4)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| A4a | Admins create, edit (versioned) and archive custom templates, each audited; a built-in is read-only and its kind key is refused for a custom template; an archived template creates no task | T1 `gateway/src/api/task-kind-routes.test.ts` ("manages templates"); T0 `gateway/src/tasks/task-templates.test.ts` ("templateInput") | none |
+| A4b | The four built-ins exist with labelled criteria, required checkpoints, review role, target and fields, and pass the custom-template check | T0 `task-templates.test.ts` ("built-ins") | Template effect unmeasured (A4j) |
+| A4c | A create with a template stores the kind, the snapshot and the fields, appends the criteria section and seeds no checkpoint; a missing required, unknown or template-less field and an unknown or foreign template write nothing; a later template edit leaves the task unchanged | T1 `task-kind-routes.test.ts` ("stamps the kind", "keeps a stamped task"); T0 `task-templates.test.ts` ("field values", "template section") | none |
+| A4d | A task without a template keeps its description and has no kind; its dispatch message carries no template text; a templated task's message carries its description in the same shape; no sidecar or prompt file changes | T1 `task-kind-routes.test.ts` ("changes no default") | Effect on behaviour not measured (no paired eval) |
+| A4e | Criteria move from unreported to open to met by label in Gateway time order; a longer label is not matched; a delivered task missing a required checkpoint or with open criteria is a discrepancy | T0 `gateway/src/tasks/task-kind-progress.test.ts` | none |
+| A4f | Status and owner changes append transitions with the actor; escalations and reassignments count them | T1 `task-kind-routes.test.ts` ("counts, completes") | none |
+| A4g | Counts, series, completion, p50/p90, target within and breached, overdue, each stall reason, the stall window, cost per task and the kind list are as specified; deleted and other-kind tasks are not counted | T1 `task-kind-routes.test.ts` ("counts, completes") | none |
+| A4g (roles) | Owners, Admins and Members read the views; Guests are refused; a Member cannot write a template; another person's private-chat delivery summary appears in no response and relates no task | T1 `task-kind-routes.test.ts` ("lets Members read the views") | none |
+| A4h | Same-field and lexical reasons without a service, duplicates flagged and nothing changed; with a fake embedding service the cosine path, vectors reused by text hash, a changed text re-embedded alone, calls recorded with corpus `task`, and a failing service falling back to lexical with the failed call recorded | T1 `task-kind-routes.test.ts` ("relates by equal field values", "uses the embedding service"); T0 `gateway/src/tasks/related-tasks.test.ts` | retrieval calls per day (corpus `task`) |
+| A4i | Template management, create from a template, the kind view and related tasks render and call the API; every locale has the strings | T0 Web `features/task-kinds/task-kinds.test.tsx`; Web i18n catalog tests | Live UI review pending |
+| A4j | No default enables or prefers a template; every threshold is named a guess here and in `packages/gateway/docs/task-kinds.md` | none (review); A4d's test shows a task without a template is unchanged | paired long-horizon eval of templated vs plain tasks (pending, issue #3 E2) |
+
 ## Consequences
 
 Contracts gains task types. Gateway gains migration 0027, a task store and
@@ -307,4 +451,90 @@ closure remains intact; its deferred runtime/statistical gates are not promoted
 to passes or closed by this feature. Release/PR publication requires separate
 authorization; Docker/model/live UI gates retain their actual execution status.
 Amendment 2 later adds one sidecar tool, an internal route and migration 0041; it needs
-no container image or scheduling policy change.
+no container image or scheduling policy change. Amendment 4 adds templates, field values,
+transitions and task vectors in one migration, operator routes and a Web feature; it changes no
+sidecar, prompt, image or scheduling policy.
+
+## Amendment 5 (2026-10-19): goal-first task surface and task-owned conversation history
+
+Status: accepted by the product owner on 2026-10-19. This amendment changes presentation and
+navigation, not stored task states, scheduler admission, delivery verification or acceptance.
+
+### Context
+
+The complete task record exposed version, actor attribution, output schema, raw output, link
+identifiers, artifacts, checkpoints, submissions and run timestamps together with the task's
+title and description. Operators could not tell what a task asked for or what they should do
+next. Task-created one-Bot conversations also accumulated in Chats as peer navigation even after
+the work ended, although Tasks, Bot Activity and Run details already retain the history.
+
+### Decision
+
+A5a. **The default task model is goal, responsible Bot and time.** Create and edit lead with the
+goal (the existing title and description), responsible Bot, and Immediate, Scheduled or Manual.
+The current stored state vocabulary remains authoritative. The default UI retains Planned,
+In progress, Blocked and Cancelled, presents delivery as Needs your review and accepted work as
+Completed in the compact list, and puts the state-specific next action first.
+Delivery awaiting acceptance puts Accept delivery and Request changes
+at the top. Reload appears only for a real version conflict or an explicit discard.
+
+A5b. **Technical evidence is available, not primary.** Version, actor audit, output schema, raw
+structured output and thread/run ids live under a closed System details disclosure. Checkpoint
+internals and full submission diagnostics live under closed Technical activity details. The
+goal, schedule, latest bounded result, verified files and a short activity timeline remain visible;
+editing the existing goal opens a separate disclosure. No stored field or audit evidence is removed.
+
+A5c. **A task conversation belongs to Tasks and Activity.** A one-Bot conversation linked to a
+task, unless it is that Bot's canonical or a person's private chat, is omitted from the Chats
+rail. It stays readable by direct URL and reachable from the Task, Bot Activity and Run details.
+Group chats and canonical/private chats remain in Chats even when linked to a task. The Gateway's
+thread summary carries the linked task context so clients do not infer it from a title.
+
+A5d. **Goals do not become instructions by accident.** A task goal and its schedule are supplied
+to each task execution at the current scope version. Completion records activity and may produce
+task-history or experience candidates through ADR-0011, but it never copies the goal into human
+rules or `MEMORY.md`, and memory never changes the goal, schedule, acceptance or task state.
+
+### Verification (amendment 5)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| A5a | create leads with goal, Bot and time; a delivered task shows its review action before technical data; ordinary detail has no reload action | T0 Web `features/tasks/tasks.test.tsx` | task detail primary-action ambiguity (manual review) |
+| A5b | schema, raw output, ids and audit are collapsed under System details; the inert JSON and links remain intact after opening | T0 Web `features/tasks/tasks.test.tsx` | none |
+| A5c | a linked extra one-Bot task conversation is absent from Chats and carries task context; canonical/private and group conversations remain | T1 Gateway `api/thread-list-routes.test.ts`; T0 Web `features/chats/thread-rail-inboxes.test.tsx` | task conversations shown as chat peers = 0 |
+| A5d | the UI explains that the goal drives runs and reusable lessons may become experience, while long-term instructions remain human-authored | T0 Web message-catalog coverage; ADR-0011 memory tests retain their guarantees | goals promoted to rules = 0 |
+
+This presentation retains amendment 4 task templates, named reference pickers and related-task views. Those features remain available without taking over the primary goal/result surface. Local prototype checks of 2026-10-19 are layout evidence only, not deployed, runtime or real-model acceptance.
+
+Local browser review, **Goal-first operator UI, 2026-10-19**: the Deskmates in-memory demo
+showed the goal and latest result side by side at 1920×1080, top-level review actions,
+closed edit/system disclosures, and goal/owner/time/template controls on new tasks. Approvals
+used two aligned columns at 1920×1080 and one column with wrapping buttons at 390×844.
+The existing editable Always scope was opened and cancelled without a decision. No real
+approval, run, schedule, model or memory write was exercised; the viewport override was reset.
+
+## Amendment 6 (owner-decided 2026-10-19): withdraw the separate monitoring screen
+
+The owner withdrew the separate execution-monitor prototype and chose periodic reviews of real
+requirements, execution logs, deliveries and feedback to identify product and agent improvements.
+This supersedes the Web navigation and kind-view presentation of A4i, not the data/API of A4g.
+
+A6a. **Tasks owns the entry points.** Remove the independent Task kinds navigation and statistics
+screen. Do not add an execution-monitor destination. Old kind URLs open Tasks; old monitor URLs
+with a task id open that task. Template management moves to a secondary **Templates** dialog on
+Tasks. It retains Member read access and Owner/Admin writes; Guests see no entry. Closing the
+dialog discards unsaved template edits. Creating from templates, task criteria and related tasks
+retain their existing behaviour. No task data or Gateway endpoints are removed.
+
+A6b. **A retrospective is evidence, not a runtime decision.** Reviews compare original scope,
+execution evidence and outcome, distinguishing required work, explicit exclusions, allowed
+fallbacks and human follow-up. A successful run alone is not proof of task completion. Review
+findings do not dispatch work, decide approvals, change acceptance or tune agent strategy.
+Changes resulting from findings follow the existing test and paired-measurement rules.
+
+### Verification (amendment 6)
+
+| Item | Concrete meaning | Test | Metric |
+|---|---|---|---|
+| A6a | No separate navigation; old links reach Tasks; templates load on demand, retain role gates, and discard edits on close; template creation and related tasks remain | T0 Web `app-navigation.test.tsx`, `features/tasks/route.test.ts`, `features/task-kinds/templates-dialog.test.tsx`, `features/task-kinds/task-kinds.test.tsx` | Independent monitoring destinations = 0 |
+| A6b | Review records cite requirements and observed execution, keep unknowns and exclusions explicit, and never claim a strategy improvement without comparison | Manual review of the private record **Real-task execution retrospective, 2026-10-19**; measurement protocol `docs/design/measurement-2026-09-20.md` | Confirmed findings, false positives and previously reported findings counted separately |

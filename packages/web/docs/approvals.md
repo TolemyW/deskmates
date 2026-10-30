@@ -1,8 +1,21 @@
 # M1: approvals
 
+## Responsive presentation
+
+The inbox is a readable single-column queue. Each request shows the asking bot once,
+the proposed action, age and chat link, with Allow/Deny together. Technical facts
+open in the shared detail pane; persistent rules and redirect instructions use the
+secondary menu. Egress and continuation warnings stay visible. Group decisions are
+still distinct from the representative request's single decision.
+
+A failed request shows its error and a retry control; it never claims the inbox is
+empty. Existing pagination, live updates, role checks and decision authority remain
+unchanged. See [chat presentation](chat-details-and-approval-summaries.md) for the
+shared confirmation strip and completed receipt behavior.
+
 An approval request is a `system` thread message whose `attachments` carries `{name: "approval", mimeType: APPROVAL_ATTACHMENT_MIME, ref: <approvalId>}` (ADR-0002 amendment 2). The UI joins that message to the `Approval` the Gateway returns; it never re-derives the action from the message body.
 
-- **Inline card.** In the transcript, the first message carrying a given approval ref renders as an `ApprovalCard` (`src/features/approvals/approval-card.tsx`) instead of its plain body: risk level, tool name, target origin, argument summary and the human instruction that woke the run. While pending it offers **Allow once**, **Always** and **Deny**; Deny reveals an optional reason field and a **Confirm deny**, so nothing is sent on the first click. A decision `POST`s to `/api/approvals/:id/decide` and the response is dispatched straight into the thread state, so the card settles without waiting for the stream. Decided, it shows `Allowed once` / `Always allowed` / `Denied` followed by `decidedBy` (`human:<authorId>`, `bot:<botId>` or `rule:<ruleId>`) and the reason, and offers no buttons. Until the approval itself has loaded the card falls back to the three-line message body the Gateway wrote, so a transcript opened mid-fetch is still readable. The decision echo — the second `system` message carrying the same ref — renders as one muted line, never a second card.
+- **Inline card.** In the transcript, the first message carrying a given approval ref renders as an `ApprovalCard` (`src/features/approvals/approval-card.tsx`) instead of its plain body: risk level, tool name, target origin, argument summary and the human instruction that woke the run. While pending it offers **Allow once**, **Always** and **Deny**; Deny reveals an optional reason field and a **Confirm deny**, so nothing is sent on the first click. **Always** opens the rule's scope (`always-scope.tsx`, ADR-0002 amendment 3, A6): the tool and the stable target the Gateway would store, as editable origin, arguments and path fields (empty matches anything, `*` any run of characters) and, for a free-text tool, an "Only this exact input" box. The checks the Gateway runs (`checkAlwaysRule` from contracts) run as the human types: a pattern ending in `…` or a scope that does not match the action disables **Confirm Always** with the reason, and a pattern without `*` or an exact-input rule shows that it matches only this action again. An unchanged scope sends no `matcher`, so the Gateway stores its own proposal; an edited one is sent and stored as edited. A decision `POST`s to `/api/approvals/:id/decide` and the response is dispatched straight into the thread state, so the card settles without waiting for the stream. Decided, it shows `Allowed once` / `Always allowed` / `Denied` followed by `decidedBy` (`human:<authorId>`, `bot:<botId>` or `rule:<ruleId>`) and the reason, and offers no buttons. Until the approval itself has loaded the card falls back to the three-line message body the Gateway wrote, so a transcript opened mid-fetch is still readable. The decision echo — the second `system` message carrying the same ref — renders as one muted line, never a second card.
 - **Reconnect and conflicts.** Pending snapshots remove cached pending records absent from the
   server response, while preserving events received after the request began. A 409 decision
   conflict refreshes the current decision instead of leaving stale action buttons.

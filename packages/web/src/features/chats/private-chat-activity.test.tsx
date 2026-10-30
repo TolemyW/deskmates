@@ -12,6 +12,7 @@ import {
   run,
 } from "../../test-support/fixtures.js";
 import {
+  ElsewhereActivityError,
   ElsewhereActivityItem,
   ElsewhereActivityOlder,
   useElsewhereActivity,
@@ -29,7 +30,11 @@ function Elsewhere({ api, exclude }: { api: ApiClient; exclude?: readonly string
   return (
     <ol>
       <ElsewhereActivityOlder older={activity.older} />
-      {activity.error ? <li role="alert">{activity.error}</li> : null}
+      {activity.error ? (
+        <li>
+          <ElsewhereActivityError activity={activity} />
+        </li>
+      ) : null}
       {activity.runs.map((item) => (
         <ElsewhereActivityItem key={item.id} run={item} api={api} botName={() => "ops"} />
       ))}
@@ -62,7 +67,7 @@ it("shows work from other chats and background runs, excludes local runs, handof
   expect(screen.getAllByTestId("activity-card")).toHaveLength(1);
   expect(link.getAttribute("href")).toBe("#/threads/thr_group");
   expect(screen.getByTestId("elsewhere-activity").textContent).toContain(
-    "A message in another conversation",
+    "A message in another chat",
   );
   expect(listRuns).toHaveBeenCalledWith({ botId: BOT_ID });
   act(() =>
@@ -86,10 +91,10 @@ it("preserves a live update when an older initial snapshot resolves afterwards",
   render(<Elsewhere api={{ listRuns } as unknown as ApiClient} />);
   const other = run({ threadId: "thr_group" as ThreadId, status: "running" });
   act(() => FakeEventSource.instances[0]?.emit({ type: "run_status", run: other }));
-  await screen.findAllByText("running");
+  await screen.findAllByText("working");
   await act(async () => finish({ runs: [{ ...other, status: "queued" }] }));
   await waitFor(() => expect(screen.queryByText("queued")).toBeNull());
-  expect(screen.getAllByText("running").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("working").length).toBeGreaterThan(0);
 });
 
 it("offers older finished work while the feed has a cursor", async () => {
@@ -108,4 +113,20 @@ it("offers older finished work while the feed has a cursor", async () => {
   await screen.findByTestId("activity-card");
   expect(listRuns).toHaveBeenLastCalledWith({ botId: BOT_ID, cursor: "c1" });
   expect(screen.queryByRole("button", { name: "Load older activity" })).toBeNull();
+});
+
+it("recovers an incidental activity read without remounting the conversation", async () => {
+  const listRuns = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("Activity unavailable"))
+    .mockResolvedValueOnce({
+      runs: [run({ threadId: "thr_group" as ThreadId, status: "running" })],
+    });
+  render(<Elsewhere api={{ listRuns } as unknown as ApiClient} />);
+  expect((await screen.findByRole("alert")).textContent).toContain("Activity unavailable");
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await screen.findByTestId("activity-card");
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(listRuns).toHaveBeenCalledTimes(2);
+  expect(listRuns).toHaveBeenLastCalledWith({ botId: BOT_ID });
 });

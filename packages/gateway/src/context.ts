@@ -19,7 +19,6 @@ import { OidcStore } from "./auth/oidc-store.js";
 import { BotStore } from "./bots/bots.js";
 import { BudgetStore } from "./budget/budget-store.js";
 import { ChannelManager } from "./channels/channel-manager.js";
-import { ChannelStore } from "./channels/channel-store.js";
 import { GROUP_ROUTING_DEFAULT, type GatewayConfig } from "./config.js";
 import { modelRegistryOf } from "./config/model-upstreams.js";
 import { createConnectorModule } from "./connectors/connector-module.js";
@@ -260,7 +259,8 @@ export function buildContext(
     ownSecrets: modelRegistryOf(config).secrets(),
   });
   const channels = new ChannelManager({
-    store: new ChannelStore(db),
+    db,
+    runs,
     secrets,
     workspaces,
     bots,

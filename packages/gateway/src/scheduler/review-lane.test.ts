@@ -43,7 +43,7 @@ describe("review runs and lanes (B5)", () => {
       ctx.runs.create({
         botId: bot.id,
         lane: "background",
-        triggerKind: "cron",
+        triggerKind: "model_job",
         triggerRef: `${APPROVAL_REVIEW}:apr-${n}`,
         triggerPayload: { prompt: '{"action":{}}' },
         config: { runType: APPROVAL_REVIEW, approvalId: `apr-${n}`, maxTurns: 1 },

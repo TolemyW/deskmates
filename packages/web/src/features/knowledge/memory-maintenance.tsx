@@ -93,6 +93,7 @@ export function MemoryMaintenance({
   }>({ total: 0, needsHuman: 0, byReason: {} });
   const [upkeep, setUpkeep] = useState<MemoryMaintenanceView>();
   const [limitDraft, setLimitDraft] = useState("");
+  const settingsDirty = useRef(false);
   const [organizeDaily, setOrganizeDaily] = useState(true);
   const [flagCursor, setFlagCursor] = useState<string>();
   const [topics, setTopics] = useState<MemoryTopicCount[]>([]);
@@ -105,6 +106,11 @@ export function MemoryMaintenance({
   const [splitTotal, setSplitTotal] = useState(0);
   const [accepted, setAccepted] = useState<MemorySplitProposal[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [reading, setReading] = useState(true);
+  const [readError, setReadError] = useState("");
+  const readSequence = useRef(0);
+  const morePending = useRef(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -117,6 +123,9 @@ export function MemoryMaintenance({
   }, []);
 
   const reload = useCallback(async () => {
+    const request = ++readSequence.current;
+    setReading(true);
+    setReadError("");
     try {
       const [page, topicPage, latest, splitPage, maintenance] = await Promise.all([
         api.listMemoryRevalidations(workspaceId, { view }),
@@ -125,22 +134,24 @@ export function MemoryMaintenance({
         api.listMemorySplits(workspaceId),
         api.getMemoryMaintenance(workspaceId),
       ]);
-      if (!live.current) return;
+      if (!live.current || request !== readSequence.current) return;
       setFlags(page.revalidations);
       setFlagCursor(page.nextCursor);
       setFlagTotals({ total: page.total, needsHuman: page.needsHuman, byReason: page.byReason });
       setUpkeep(maintenance);
-      setLimitDraft(String(maintenance.settings.recheckDailyLimit));
-      setOrganizeDaily(maintenance.settings.organizeDaily);
+      if (!settingsDirty.current) {
+        setLimitDraft(String(maintenance.settings.recheckDailyLimit));
+        setOrganizeDaily(maintenance.settings.organizeDaily);
+      }
       setTopics(topicPage.topics);
       setJob(latest);
       setSplits(splitPage.splits);
       setSplitTotal(splitPage.total);
-      setError("");
+      setLoaded(true);
     } catch (err) {
-      if (live.current) setError(errorMessage(err));
+      if (live.current && request === readSequence.current) setReadError(errorMessage(err));
     } finally {
-      if (live.current) setLoaded(true);
+      if (live.current && request === readSequence.current) setReading(false);
     }
   }, [api, workspaceId, view]);
 
@@ -156,6 +167,7 @@ export function MemoryMaintenance({
     return () => clearTimeout(timer);
   }, [job, recheckPending, reload]);
 
+  const topicLabel = topics.find((tag) => tag.key === topic)?.label ?? topic;
   useEffect(() => {
     setChosen(new Set());
     setCandidates([]);
@@ -167,7 +179,7 @@ export function MemoryMaintenance({
         if (!current || !live.current) return;
         setCandidates(page.entries);
         setChosen(new Set(page.entries.filter(citable).map((e) => e.id)));
-        setTitle(topics.find((tag) => tag.key === topic)?.label ?? topic);
+        setTitle(topicLabel);
       })
       .catch((err) => {
         if (current && live.current) setError(errorMessage(err));
@@ -175,7 +187,7 @@ export function MemoryMaintenance({
     return () => {
       current = false;
     };
-  }, [api, workspaceId, topic, topics]);
+  }, [api, workspaceId, topic, topicLabel]);
 
   const perform = async (action: () => Promise<unknown>, done: string) => {
     setBusy(true);
@@ -194,17 +206,24 @@ export function MemoryMaintenance({
   };
 
   const loadMoreFlags = async () => {
-    if (!flagCursor) return;
+    if (!flagCursor || reading || morePending.current) return;
+    const request = readSequence.current;
+    morePending.current = true;
+    setLoadingMore(true);
+    setError("");
     try {
       const page = await api.listMemoryRevalidations(workspaceId, { view, cursor: flagCursor });
-      if (!live.current) return;
+      if (!live.current || request !== readSequence.current) return;
       setFlags((rows) => [
         ...rows,
         ...page.revalidations.filter((r) => !rows.some((x) => x.id === r.id)),
       ]);
       setFlagCursor(page.nextCursor);
     } catch (err) {
-      if (live.current) setError(errorMessage(err));
+      if (live.current && request === readSequence.current) setError(errorMessage(err));
+    } finally {
+      morePending.current = false;
+      if (live.current) setLoadingMore(false);
     }
   };
 
@@ -227,6 +246,18 @@ export function MemoryMaintenance({
     limitValue <= 1000;
   const recheck = upkeep?.recheck;
 
+  const readFailure = readError ? (
+    <div>
+      <p role="alert" className="error">
+        {readError}
+      </p>
+      <Button size="sm" disabled={reading} onClick={() => void reload()}>
+        {t("observations.maintenance.retry")}
+      </Button>
+    </div>
+  ) : null;
+
+  if (!loaded && readFailure) return readFailure;
   if (!loaded)
     return (
       <p className="muted small" aria-busy="true">
@@ -235,7 +266,8 @@ export function MemoryMaintenance({
     );
 
   return (
-    <div className="memory-maintenance">
+    <div className="memory-maintenance" aria-busy={reading}>
+      {readFailure}
       {error ? (
         <p role="alert" className="error">
           {error}
@@ -330,7 +362,12 @@ export function MemoryMaintenance({
               </div>
             ))}
             {flagCursor ? (
-              <Button size="sm" onClick={() => void loadMoreFlags()}>
+              <Button
+                size="sm"
+                disabled={reading || loadingMore}
+                aria-busy={loadingMore}
+                onClick={() => void loadMoreFlags()}
+              >
                 {t("observations.maintenance.loadMore")}
               </Button>
             ) : null}
@@ -377,14 +414,22 @@ export function MemoryMaintenance({
                 max={1000}
                 step={1}
                 value={limitDraft}
-                onChange={(event) => setLimitDraft(event.target.value)}
+                disabled={busy}
+                onChange={(event) => {
+                  settingsDirty.current = true;
+                  setLimitDraft(event.target.value);
+                }}
               />
             </label>
             <label className="memory-draft-field">
               <input
                 type="checkbox"
                 checked={organizeDaily}
-                onChange={(event) => setOrganizeDaily(event.target.checked)}
+                disabled={busy}
+                onChange={(event) => {
+                  settingsDirty.current = true;
+                  setOrganizeDaily(event.target.checked);
+                }}
               />{" "}
               {t("observations.maintenance.settings.organizeDaily")}
             </label>
@@ -394,10 +439,15 @@ export function MemoryMaintenance({
               onClick={() =>
                 void perform(
                   () =>
-                    api.updateMemoryMaintenanceSettings(workspaceId, {
-                      recheckDailyLimit: limitValue,
-                      organizeDaily,
-                    }),
+                    api
+                      .updateMemoryMaintenanceSettings(workspaceId, {
+                        recheckDailyLimit: limitValue,
+                        organizeDaily,
+                      })
+                      .then((settings) => {
+                        settingsDirty.current = false;
+                        return settings;
+                      }),
                   t("observations.maintenance.settings.saved"),
                 )
               }

@@ -1,5 +1,6 @@
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import {
+  ACTIVITY_SUMMARY_MAX_OUTPUT_TOKENS,
   ACTIVITY_SUMMARY_SOURCE_MAX,
   type RunEnded,
   type StartRunRequest,
@@ -58,9 +59,17 @@ export async function presentationSummary(
           DISABLE_TELEMETRY: "1",
           DISABLE_ERROR_REPORTING: "1",
           DISABLE_AUTOUPDATER: "1",
-          CLAUDE_CODE_MAX_OUTPUT_TOKENS: activity ? "256" : "512",
+          CLAUDE_CODE_MAX_OUTPUT_TOKENS: activity
+            ? String(ACTIVITY_SUMMARY_MAX_OUTPUT_TOKENS)
+            : "512",
         },
         systemPrompt: activity ? ACTIVITY_INSTRUCTION : APPROVAL_INSTRUCTION,
+        // The reasoning the Gateway froze for the job (`MODEL_JOB_THINKING`), so a bot's own
+        // reasoning never reaches it. SDK 0.3.278 omits a disabled thinking key on the wire and
+        // an upstream that thinks by default still thinks, which is why the Activity cap leaves
+        // room for it. Absent keys leave the SDK's defaults.
+        ...(request.effort === undefined ? {} : { effort: request.effort }),
+        ...(request.thinking === undefined ? {} : { thinking: request.thinking }),
         settingSources: [],
         plugins: [],
         skills: [],

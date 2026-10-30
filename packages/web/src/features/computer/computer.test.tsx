@@ -44,9 +44,9 @@ function renderComputer(roles: SessionRoles, workspaces: Workspace[]) {
 it("shows the shared computer's settings and links to bot desktops without changing anything", async () => {
   const gateway = renderComputer(ADMIN, [workspace]);
   expect(await screen.findByRole("heading", { level: 1, name: "Computer" })).toBeInTheDocument();
-  expect(await screen.findByText("2 bots")).toBeInTheDocument();
-  expect(screen.getByText("1 allowed domain")).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Allowed domains" })).toBeInTheDocument();
+  expect(await screen.findByText("2 Bots")).toBeInTheDocument();
+  expect(screen.getByText("1 allowed website")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Allowed websites" })).toBeInTheDocument();
   expect(
     screen.getByText(/Bots here share browser logins and files/, { exact: false }),
   ).toBeInTheDocument();
@@ -63,7 +63,7 @@ it("shows the shared computer's settings and links to bot desktops without chang
   expect(gateway.calls.some((call) => call.path === "/api/bots")).toBe(false);
 });
 
-it("counts the workspace's bots from the Gateway total and pages the desktops", async () => {
+it("counts the workspace's Bots from the server total and pages the desktops", async () => {
   installFakeEventSource();
   const many = Array.from({ length: 25 }, (_, i) => ({
     ...bot,
@@ -90,12 +90,47 @@ it("counts the workspace's bots from the Gateway total and pages the desktops", 
       <ComputerScreen api={createApiClient({ fetch: gateway.fetch })} />
     </SessionRolesProvider>,
   );
-  expect(await screen.findByText("30 bots")).toBeInTheDocument();
+  expect(await screen.findByText("30 Bots")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   expect(await screen.findByText("last-bot")).toBeInTheDocument();
 });
 
-it("offers New workspace when there is none, disabled for a Member", async () => {
+it("hides workspace creation when a Member cannot use it", async () => {
   renderComputer(MEMBER, []);
-  expect(await screen.findByRole("button", { name: "New workspace" })).toBeDisabled();
+  expect(
+    await screen.findByText(
+      "Next: ask an Admin or Owner to create a workspace. Only an Admin or Owner can.",
+    ),
+  ).toBeVisible();
+  expect(screen.queryByRole("button", { name: "New workspace" })).toBeNull();
+});
+
+it("shows workspace facts but hides configuration controls from a Member", async () => {
+  renderComputer(MEMBER, [workspace]);
+  expect(await screen.findByRole("heading", { level: 1, name: "Computer" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "Allowed websites" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Save egress allowlist" })).toBeNull();
+});
+
+it("does not report zero Bots when the desktop roster fails and can retry locally", async () => {
+  installFakeEventSource();
+  const gateway = fakeFetch({ "GET /api/workspaces": { workspaces: [workspace] } });
+  const api = createApiClient({ fetch: gateway.fetch });
+  vi.spyOn(api, "listBotPage")
+    .mockRejectedValueOnce(new Error("Roster unavailable"))
+    .mockResolvedValue({ bots: [bot], offset: 0, limit: 25, total: 1 });
+  render(
+    <SessionRolesProvider roles={MEMBER}>
+      <ComputerScreen api={api} />
+    </SessionRolesProvider>,
+  );
+  expect(await screen.findByRole("alert")).toHaveTextContent("Roster unavailable");
+  expect(screen.queryByText("0 Bots")).toBeNull();
+  expect(screen.queryByText(/No Bots yet/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(
+    await screen.findByRole("link", { name: `Open desktop for ${bot.name}` }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(gateway.calls.every((call) => call.method === "GET")).toBe(true);
 });

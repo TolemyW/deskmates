@@ -1,0 +1,70 @@
+/* Task templates and the task detail kind panel. */
+
+.task-kind-stats-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.task-kind-stats-heading h2,
+.task-kind-stats-heading h3 {
+  margin: 0;
+}
+.task-templates {
+  margin-top: 24px;
+}
+.task-template-list {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+.task-template-list > li {
+  padding: 12px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
+}
+.task-template-editor {
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+}
+.task-template-editor textarea {
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text-sm);
+}
+.task-template-fields {
+  display: grid;
+  gap: 10px;
+}
+.task-template-preview ol,
+.task-template-preview ul,
+.task-kind-progress ul,
+.task-kind-related ul {
+  margin: 4px 0;
+  padding-left: 18px;
+  font-size: var(--app-text-sm);
+}
+.task-kind-panel {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+}
+.task-kind-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 8px 0;
+  font-size: var(--app-text-sm);
+}
+.task-kind-fields dt {
+  font-weight: 600;
+}
+.task-kind-fields dd {
+  margin: 0;
+}

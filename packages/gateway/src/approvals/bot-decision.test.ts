@@ -8,7 +8,7 @@ import { type GatewayDb, openDatabase } from "../db/open.js";
 import type { RunRecord } from "../ledger/runs.js";
 import { FakeProvider } from "../test-support/fake-provider.js";
 import { testConfig } from "../test-support/harness.js";
-import { assertBotMayDecide } from "./bot-decision.js";
+import { announceRefusedBotDecision, assertBotMayDecide } from "./bot-decision.js";
 
 const databases: GatewayDb[] = [];
 afterEach(() => {
@@ -136,5 +136,29 @@ describe("no self-approval (ADR-0002 amendment 3, A10)", () => {
     expect(refusal(() => assertBotMayDecide(ctx, approval, expert.id, "allow_once"))).toBe(
       undefined,
     );
+  });
+});
+
+describe("a refused bot decision is said in the thread (issue #89)", () => {
+  it("posts a system line that names the bot and the reason, waking nobody", () => {
+    const { ctx, chief, thread, expertRun, request } = setup();
+    const approval = request(expertRun);
+    const before = ctx.messages.list(thread.id).length;
+    let error: DeskmatesError | undefined;
+    try {
+      assertBotMayDecide(ctx, approval, chief.id, "allow_once");
+    } catch (err) {
+      error = err as DeskmatesError;
+    }
+    expect(error).toBeDefined();
+    announceRefusedBotDecision(ctx, approval, chief.id, "allow_once", error as DeskmatesError);
+    const posted = ctx.messages.list(thread.id).slice(before);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]?.authorKind).toBe("system");
+    expect(posted[0]?.body).toBe(
+      "Not recorded: chief tried to approve this request, but a bot may not decide a request that came from work it delegated. The request is still waiting for a decision.",
+    );
+    expect(posted[0]?.attachments ?? []).toHaveLength(0);
+    expect(ctx.runs.findQueued(chief.id, thread.id)).toBeUndefined();
   });
 });

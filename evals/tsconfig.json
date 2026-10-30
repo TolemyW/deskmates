@@ -11,7 +11,10 @@
     "paths": {
       "@deskmates/contracts": ["../packages/contracts/src/index.ts"],
       "@deskmates/testkit": ["../packages/testkit/src/index.ts"],
-      "@deskmates/sidecar/*": ["../packages/sidecar/src/*"]
+      "@deskmates/sidecar/*": ["../packages/sidecar/src/*"],
+      "@deskmates/gateway": ["../packages/gateway/src/index.ts"],
+      "@deskmates/golden-site": ["../packages/golden-site/src/index.ts"],
+      "@deskmates/sandbox-docker": ["../packages/sandbox-docker/src/index.ts"]
     }
   },
   "include": ["**/*.ts"]

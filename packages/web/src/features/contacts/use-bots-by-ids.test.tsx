@@ -3,12 +3,12 @@
 // never the whole roster, and does not ask again for ids it already has.
 
 import type { BotDefinition, BotId } from "@deskmates/contracts";
-import { renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../../api/client.js";
 import { MockGateway } from "../../demo/mock-gateway.js";
 import { bot, fakeFetch } from "../../test-support/fixtures.js";
-import { useBotsByIds } from "./use-bots-by-ids.js";
+import { useBotLookup, useBotsByIds } from "./use-bots-by-ids.js";
 
 describe("useBotsByIds (#113 §3.2)", () => {
   it("asks only for the named ids, and only once per id", async () => {
@@ -53,4 +53,26 @@ describe("useBotsByIds (#113 §3.2)", () => {
       .json as { bots: BotDefinition[] };
     expect(named.bots.map((b) => b.id)).toEqual([first.id]);
   });
+});
+
+it("does not show an old page lookup failure on the successfully loaded current page", async () => {
+  let rejectOld: (error: Error) => void = () => {};
+  const second = { ...bot, id: "bot_2" as BotId };
+  const api = {
+    listBotsByIds: vi.fn(async (ids: readonly string[]) => {
+      if (ids.includes("bot_1"))
+        return new Promise<BotDefinition[]>((_resolve, reject) => {
+          rejectOld = reject;
+        });
+      return [second];
+    }),
+  };
+  const { result, rerender } = renderHook(({ ids }) => useBotLookup(api, ids), {
+    initialProps: { ids: ["bot_1"] },
+  });
+  rerender({ ids: ["bot_2"] });
+  await waitFor(() => expect(result.current.bots.has("bot_2")).toBe(true));
+  await act(async () => rejectOld(new Error("Previous page failed")));
+  expect(result.current.error).toBe(false);
+  expect(result.current.bots.has("bot_2")).toBe(true);
 });

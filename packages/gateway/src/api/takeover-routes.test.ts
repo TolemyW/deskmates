@@ -36,6 +36,7 @@ interface WorkspaceView {
   workspace: Workspace;
   bots: BotDefinition[];
   browserLock: BrowserLock | null;
+  browserLockHeldByMe: boolean;
   takeoverScreen: boolean;
 }
 
@@ -61,7 +62,10 @@ function summary(reply: string) {
 let h: Harness;
 
 async function seedWorkspace(name: string): Promise<Seeded> {
-  const ws = await h.api<{ workspace: Workspace }>("POST", "/api/workspaces", { name });
+  const ws = await h.api<{ workspace: Workspace }>("POST", "/api/workspaces", {
+    name,
+    defaultBot: false,
+  });
   const workspace = ws.json.workspace;
   const webhookToken = newWebhookToken();
   const bot = h.app.deskmates.ctx.bots.create({
@@ -140,6 +144,7 @@ describe("takeover routes (design v0.3 §3.3; ADR-0004 decision 6)", () => {
 
     const held = await h.api<WorkspaceView>("GET", `/api/workspaces/${s.workspace.id}`);
     expect(held.json.browserLock?.holderKind).toBe("human");
+    expect(held.json.browserLockHeldByMe).toBe(true);
 
     const back = await h.api<{ released: boolean }>(
       "POST",
@@ -151,6 +156,7 @@ describe("takeover routes (design v0.3 §3.3; ADR-0004 decision 6)", () => {
 
     const free = await h.api<WorkspaceView>("GET", `/api/workspaces/${s.workspace.id}`);
     expect(free.json.browserLock).toBeNull();
+    expect(free.json.browserLockHeldByMe).toBe(false);
 
     // Nobody holds it; handing back again is still a 200 and writes nothing.
     const again = await h.api<{ released: boolean }>(

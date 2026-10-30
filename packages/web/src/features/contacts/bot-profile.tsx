@@ -3,17 +3,28 @@
 // notes live on the profile, workspace facts on the workspace page and task notes on the chat.
 
 import type { BotDefinition, OperatorConfig, Workspace } from "@deskmates/contracts";
-import { Activity, MessageSquare, Pencil, Settings2, Sparkles, StickyNote } from "lucide-react";
+import { Pill, SectionTabs } from "@deskmates/ui";
+import {
+  Activity,
+  MessageSquare,
+  Pencil,
+  Settings2,
+  Sparkles,
+  Star,
+  StickyNote,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import type { RunView } from "../../api/types.js";
 import { Avatar } from "../../components/ui/avatar.js";
 import { Button } from "../../components/ui/button.js";
-import { RUN_STATUS_LABEL, RunStatusPill } from "../../components/ui/pill.js";
+import { RunStatusPill } from "../../components/ui/pill.js";
 import { errorMessage, formatDateTime, formatRelative } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
+import { useTuneView } from "../../lib/interface-view.js";
 import { useCan } from "../../state/session-roles.js";
 import { DesktopCard } from "../computer/desktop-rail.js";
+import { BotChannels } from "../integrations/bot-channels.js";
 import { MemoryPanel } from "../knowledge/knowledge.js";
 import { LearnedMemoryScreen } from "../knowledge/learned-memory.js";
 import { useRunFeed } from "../runs/run-feed.js";
@@ -32,6 +43,7 @@ export function BotProfile({
   latestRun,
   onMessage,
   onSaved,
+  onWorkspaceSaved,
 }: {
   api: ApiClient;
   bot: BotDefinition;
@@ -39,15 +51,21 @@ export function BotProfile({
   latestRun: RunView | undefined;
   onMessage: () => void;
   onSaved: (bot: BotDefinition) => void;
+  /** The workspace after this bot became its default bot (ADR-0051). */
+  onWorkspaceSaved?: (workspace: Workspace) => void;
 }) {
   const [tab, setTab] = useState<Tab>("activity");
   const [config, setConfig] = useState<OperatorConfig>();
   const [error, setError] = useState<string>();
   const [editingAvatar, setEditingAvatar] = useState(false);
-  const canConfigure = useCan("bot.configure");
+  const canConfigure = useCan("bot.configure", bot.workspaceId);
+  const canSetDefault = useCan("workspace.setDefaultBot", bot.workspaceId).allowed;
+  const [settingDefault, setSettingDefault] = useState(false);
+  const isDefault = workspace?.defaultBotId === bot.id;
   // A Guest reads no runs (ADR-0022 amendment 6 W6); the feed stays empty instead of failing.
-  const canReadRuns = useCan("runs.read").allowed;
+  const canReadRuns = useCan("runs.read", bot.workspaceId).allowed;
   const t = useT();
+  const tune = useTuneView();
 
   // #113 slice R: unfinished runs plus the newest finished page, live; older pages on request.
   // A Guest reads no runs (ADR-0022 amendment 6 W6): no scope, so the feed stays empty.
@@ -64,17 +82,42 @@ export function BotProfile({
       active = false;
     };
   }, [api, bot.id]);
-  const shownError = error ?? feed.error;
+  const shownError = error;
+
+  const makeDefault = async () => {
+    setSettingDefault(true);
+    setError(undefined);
+    try {
+      onWorkspaceSaved?.(await api.setDefaultBot(bot.workspaceId, bot.id));
+    } catch (err) {
+      setError(t("botProfile.makeDefaultFailed", { name: bot.name, error: errorMessage(err) }));
+    } finally {
+      setSettingDefault(false);
+    }
+  };
 
   const runList = [...feed.runs];
-  const latest = runList.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? latestRun;
+  const latest =
+    runList
+      .filter((run) => run.triggerKind !== "model_job" && !run.config.runType)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? latestRun;
 
+  // The long-term instructions (MEMORY.md with its versions, and the diary) are for tuning.
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: "activity", label: t("botProfile.tab.activity"), icon: <Activity size={15} /> },
     { key: "experience", label: t("botProfile.tab.experience"), icon: <Sparkles size={15} /> },
-    { key: "notes", label: t("botProfile.tab.notes"), icon: <StickyNote size={15} /> },
+    ...(tune
+      ? [
+          {
+            key: "notes" as const,
+            label: t("botProfile.tab.notes"),
+            icon: <StickyNote size={15} />,
+          },
+        ]
+      : []),
     { key: "settings", label: t("workspace.tabs.settings"), icon: <Settings2 size={15} /> },
   ];
+  const shownTab: Tab = tabs.some((item) => item.key === tab) ? tab : "activity";
 
   return (
     <article className="profile">
@@ -117,152 +160,176 @@ export function BotProfile({
             {workspace ? <> · {workspace.name}</> : null}
           </p>
           <p className="profile-status">
+            {isDefault ? (
+              <Pill tone="info" title={t("botProfile.defaultTitle")}>
+                {t("botProfile.default")}
+              </Pill>
+            ) : null}
             {bot.pausedAt ? (
               <span className="pill warning" title={t("botProfile.pausedTitle")}>
                 {t("botProfile.paused")}
               </span>
             ) : null}
-            {latest ? (
+            {canReadRuns && latest ? (
               <>
                 <RunStatusPill status={latest.status} />
                 <span className="muted small">
                   {formatRelative(latest.finishedAt ?? latest.startedAt ?? latest.createdAt)}
                 </span>
               </>
-            ) : (
+            ) : canReadRuns && !feed.loading && !feed.error ? (
               <span className="muted small">{t("botProfile.notRunYet")}</span>
-            )}
+            ) : null}
           </p>
         </div>
         <div className="profile-actions">
+          {canSetDefault && workspace && !isDefault ? (
+            <Button
+              variant="tertiary"
+              disabled={settingDefault}
+              title={t("botProfile.makeDefaultTitle", { name: bot.name })}
+              onClick={() => void makeDefault()}
+            >
+              <Star size={15} /> {t("botProfile.makeDefault")}
+            </Button>
+          ) : null}
           <Button variant="default" onClick={onMessage}>
             <MessageSquare size={15} /> {t("botProfile.message")}
           </Button>
         </div>
       </header>
-      <nav className="app-tabs" aria-label={t("botProfile.sections")}>
-        {tabs.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            className={tab === item.key ? "active" : ""}
-            aria-pressed={tab === item.key}
-            onClick={() => setTab(item.key)}
-          >
-            {item.icon}
-            {item.label}
-          </button>
-        ))}
-      </nav>
-      {shownError ? <p className="error">{shownError}</p> : null}
+      <SectionTabs label={t("botProfile.sections")} items={tabs} value={shownTab} onChange={setTab}>
+        {shownError ? <p className="error">{shownError}</p> : null}
 
-      {tab === "activity" ? (
-        <div className="activity">
-          <div className="activity-top">
-            <DesktopCard
-              api={api}
-              member={{ botId: bot.id, name: bot.name }}
-              workspaceId={bot.workspaceId}
-            />
-            <section className="card">
-              <h3>{t("botProfile.glance.title")}</h3>
-              <dl className="kv">
-                <dt>{t("botProfile.glance.model")}</dt>
-                <dd>
-                  <code>
-                    {bot.model || config?.defaultModel || t("botProfile.glance.defaultModel")}
-                  </code>
-                </dd>
-                <dt>{t("botProfile.glance.schedules")}</dt>
-                <dd>
-                  {bot.cron.length > 0
-                    ? t("botProfile.glance.scheduleCount", { count: bot.cron.length })
-                    : t("botProfile.glance.none")}
-                  {" · "}
-                  <button type="button" className="link-button" onClick={() => setTab("settings")}>
+        {shownTab === "activity" ? (
+          <div className="activity">
+            {canReadRuns ? (
+              <>
+                <h3>{t("botProfile.recentActivity")}</h3>
+                {feed.loading && runList.length === 0 ? <output>{t("run.loading")}</output> : null}
+                {feed.error ? (
+                  <div role="alert">
+                    <p className="error">{feed.error}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={feed.loading}
+                      onClick={() => void feed.reload()}
+                    >
+                      {t("contacts.retry")}
+                    </Button>
+                  </div>
+                ) : null}
+                {runList.length > 0 || (!feed.loading && !feed.error) ? (
+                  <BotActivity
+                    bot={bot}
+                    runs={runList}
+                    timeZone={config?.cronTimeZone}
+                    onEditSchedules={() => setTab("settings")}
+                    older={
+                      feed.hasOlder
+                        ? { loading: feed.loadingOlder, onLoad: () => void feed.loadOlder() }
+                        : undefined
+                    }
+                  />
+                ) : null}
+              </>
+            ) : null}
+            <div className="activity-top">
+              <DesktopCard
+                api={api}
+                member={{ botId: bot.id, name: bot.name }}
+                workspaceId={bot.workspaceId}
+              />
+              <details className="card profile-summary">
+                <summary>{t("botProfile.glance.title")}</summary>
+                <dl className="kv">
+                  <dt>{t("botProfile.glance.model")}</dt>
+                  <dd>
+                    <code title={bot.model || config?.defaultModel || undefined}>
+                      {bot.model || config?.defaultModel || t("botProfile.glance.defaultModel")}
+                    </code>
+                  </dd>
+                  <dt>{t("botProfile.glance.schedules")}</dt>
+                  <dd>
                     {bot.cron.length > 0
-                      ? t("botProfile.glance.edit")
-                      : t("botProfile.glance.addOne")}
-                  </button>
-                </dd>
-                <dt>{t("botProfile.glance.connectors")}</dt>
-                <dd>
-                  {bot.connectors.length > 0
-                    ? bot.connectors.join(", ")
-                    : t("botProfile.glance.none")}
-                </dd>
-                <dt>{t("botProfile.glance.lastStatus")}</dt>
-                <dd>
-                  {latest ? RUN_STATUS_LABEL[latest.status] : t("botProfile.glance.neverRan")}
-                </dd>
-                <dt>{t("botProfile.glance.created")}</dt>
-                <dd>{formatDateTime(bot.createdAt)}</dd>
-              </dl>
-            </section>
+                      ? t("botProfile.glance.scheduleCount", { count: bot.cron.length })
+                      : t("botProfile.glance.none")}
+                    {" · "}
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => setTab("settings")}
+                    >
+                      {bot.cron.length > 0
+                        ? t("botProfile.glance.edit")
+                        : t("botProfile.glance.addOne")}
+                    </button>
+                  </dd>
+                  <BotChannels api={api} bot={bot} />
+                  <dt>{t("botProfile.glance.connectors")}</dt>
+                  <dd>
+                    {bot.connectors.length > 0
+                      ? bot.connectors.join(", ")
+                      : t("botProfile.glance.none")}
+                  </dd>
+                  <dt>{t("botProfile.glance.created")}</dt>
+                  <dd>{formatDateTime(bot.createdAt)}</dd>
+                </dl>
+              </details>
+            </div>
           </div>
-          <h3>{t("botProfile.recentActivity")}</h3>
-          <BotActivity
-            bot={bot}
-            runs={runList}
-            timeZone={config?.cronTimeZone}
-            onEditSchedules={() => setTab("settings")}
-            older={
-              feed.hasOlder
-                ? { loading: feed.loadingOlder, onLoad: () => void feed.loadOlder() }
-                : undefined
-            }
-          />
-        </div>
-      ) : null}
+        ) : null}
 
-      {tab === "experience" ? (
-        <section className="card">
-          <h3>{t("botProfile.experience.title")}</h3>
-          <p className="muted small">{t("botProfile.experience.body", { name: bot.name })}</p>
-          <LearnedMemoryScreen
-            api={api}
-            embedded
-            workspaceId={bot.workspaceId}
-            owner={{ kind: "bot", botId: bot.id }}
-          />
-        </section>
-      ) : null}
-
-      {tab === "notes" ? (
-        <>
+        {shownTab === "experience" ? (
           <section className="card">
-            <MemoryPanel
+            <h3>{t("botProfile.experience.title")}</h3>
+            <p className="muted small">{t("botProfile.experience.body", { name: bot.name })}</p>
+            <LearnedMemoryScreen
               api={api}
-              botId={bot.id}
-              versions={(current) => (
-                <RuleVersions
-                  api={api}
-                  bot={bot}
-                  file="memory"
-                  currentVersion={current.version}
-                  refreshKey={current.version}
-                  disabled={current.dirty}
-                  onRestored={current.reload}
-                />
-              )}
+              embedded
+              workspaceId={bot.workspaceId}
+              owner={{ kind: "bot", botId: bot.id }}
             />
           </section>
-          <section className="card">
-            <BotDiary api={api} bot={bot} />
-          </section>
-        </>
-      ) : null}
+        ) : null}
 
-      {tab === "settings" && config ? (
-        <BotEditor
-          api={api}
-          bot={bot}
-          config={config}
-          timeZone={config.cronTimeZone}
-          workspaceName={workspace?.name ?? t("botProfile.unknownWorkspace")}
-          onSaved={onSaved}
-        />
-      ) : null}
+        {shownTab === "notes" ? (
+          <>
+            <section className="card">
+              <MemoryPanel
+                api={api}
+                botId={bot.id}
+                versions={(current) => (
+                  <RuleVersions
+                    api={api}
+                    bot={bot}
+                    file="memory"
+                    currentVersion={current.version}
+                    refreshKey={current.version}
+                    disabled={current.dirty}
+                    onRestored={current.reload}
+                  />
+                )}
+              />
+            </section>
+            <section className="card">
+              <BotDiary api={api} bot={bot} />
+            </section>
+          </>
+        ) : null}
+
+        {shownTab === "settings" && config ? (
+          <BotEditor
+            api={api}
+            bot={bot}
+            config={config}
+            timeZone={config.cronTimeZone}
+            workspaceName={workspace?.name ?? t("botProfile.unknownWorkspace")}
+            onSaved={onSaved}
+          />
+        ) : null}
+      </SectionTabs>
     </article>
   );
 }

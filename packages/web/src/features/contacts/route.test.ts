@@ -10,7 +10,7 @@ describeRoutes({
   screens: { contacts: "bots", channels: "channels", desktops: "workspaces" },
   addresses: [
     ["#/contacts", { name: "contacts" }],
-    ["#/contacts/", { name: "contacts" }],
+    ["#/contacts/", { name: "contacts" }, "#/contacts"],
     ["#/contacts/new", { name: "contacts", creating: true }],
     ["#/contacts/bot_1", { name: "contacts", id: "bot_1" }],
     ["#/contacts/a%2Fb", { name: "contacts", id: "a/b" }],

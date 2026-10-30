@@ -32,6 +32,13 @@ export type RoutePolicy =
       handlerCheck?: string;
     }
   | {
+      /**
+       * The root's own browser session: the protected account signed in, never the operator
+       * credential, a service principal or a run token (ADR-0046 amendment 1 decision 13).
+       */
+      access: "root_session";
+    }
+  | {
       /** Any signed-in principal; the response holds no tenant data (catalogs, model names). */
       access: "authenticated";
     };
@@ -52,3 +59,4 @@ export const platform = { access: "platform" } as const;
 export const root = (handlerCheck?: string) =>
   ({ access: "root", ...(handlerCheck ? { handlerCheck } : {}) }) as const;
 export const authenticated = { access: "authenticated" } as const;
+export const rootSession = { access: "root_session" } as const;

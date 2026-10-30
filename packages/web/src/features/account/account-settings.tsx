@@ -1,7 +1,7 @@
+import { TabNavigation } from "@deskmates/ui";
 // `#/account`: the signed-in person's own settings (ADR-0022 amendment 3, issue #26). Profile
-// (photo and display name) and password are separate forms with separate actions; Preferences
-// (language, appearance) and Sign out are here too, so the sidebar footer holds only the identity
-// link that opens this page. Every call acts on this session's own account; the Gateway enforces
+// (photo and display name) and password have explicit editors; Sign out is here too. Preferences
+// live behind the shared sidebar entry. Every call acts on this session's own account; the Gateway enforces
 // that. Password fields live only in component state, are cleared after every attempt and on
 // leaving, and are never stored.
 
@@ -12,19 +12,17 @@ import {
   type AvatarContentType,
   DISPLAY_NAME_MAX_LENGTH,
   type ProfileView,
-  type UiLocale,
   isAvatarContentType,
 } from "@deskmates/contracts";
-import { Avatar, Select } from "@deskmates/ui";
-import { Eye, EyeOff } from "lucide-react";
+import { Avatar, PageHeader } from "@deskmates/ui";
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import type { AccountClient } from "../../api/account-client.js";
 import { ApiError } from "../../api/types.js";
+import { PasswordField } from "../../components/password-field.js";
 import { Button } from "../../components/ui/button.js";
 import { Input } from "../../components/ui/input.js";
 import { useT } from "../../i18n/i18n-provider.js";
-import { LanguageControl } from "../../i18n/language-control.js";
-import type { ThemePreference } from "../../lib/theme.js";
+import { useEditorFocus } from "../../lib/use-editor-focus.js";
 import { accountHref, agentAccessHref, workspacesHref } from "./route.js";
 
 type T = ReturnType<typeof useT>;
@@ -79,22 +77,11 @@ function failure(err: unknown, t: T): string {
   return t("account.error.generic");
 }
 
-/** Language and appearance as the shell holds them; the shell stores each change. */
-export interface PreferenceControls {
-  locale: UiLocale;
-  /** Applies at once and is stored as this person's preference (`PATCH /auth/preferences`). */
-  onLocaleChange: (locale: UiLocale) => void;
-  theme: ThemePreference;
-  /** Kept in this browser only. */
-  onThemeChange: (theme: ThemePreference) => void;
-}
-
 export function AccountSettingsScreen({
   session,
   client,
   onProfile,
   onSessionRotated,
-  preferences,
   onSignOut,
   page = "personal",
   workspaces,
@@ -105,7 +92,6 @@ export function AccountSettingsScreen({
   onProfile: (profile: ProfileView) => void;
   /** The rotated session `POST /auth/password` returned; its CSRF token replaces the old one. */
   onSessionRotated: (view: AuthenticatedSessionView) => void;
-  preferences: PreferenceControls;
   /** End this session (`POST /auth/logout`) or every session (`POST /auth/logout-all`). */
   onSignOut: (everywhere: boolean) => void;
   /** Which of the three User Settings pages is open (ADR-0034 decision 7). */
@@ -125,12 +111,14 @@ export function AccountSettingsScreen({
       className={`account-screen page page-container${page === "workspaces" ? "" : " page-container--narrow"}`}
       aria-labelledby="account-title"
     >
-      <header className="costs-header">
-        <div>
-          <h1 id="account-title">{t("account.title")}</h1>
-          <p>{intro}</p>
-        </div>
-      </header>
+      <PageHeader
+        title={
+          <span id="account-title">
+            {t(page === "workspaces" ? "account.nav.workspaces" : "account.title")}
+          </span>
+        }
+        description={intro}
+      />
       <div className="settings-layout">
         <SettingsNav page={page} />
         <div className="settings-content">
@@ -146,7 +134,6 @@ export function AccountSettingsScreen({
                 client={client}
                 onSessionRotated={onSessionRotated}
               />
-              <PreferencesSection {...preferences} />
               <SignOutSection onSignOut={onSignOut} />
             </>
           )}
@@ -170,50 +157,12 @@ function SettingsNav({ page }: { page: SettingsPage }) {
     ["workspaces", workspacesHref(), t("account.nav.workspaces")],
   ];
   return (
-    <nav className="settings-nav" aria-label={t("account.nav.label")}>
-      {entries.map(([key, href, label]) => (
-        <a
-          key={key}
-          href={href}
-          className={`settings-nav-link${key === page ? " active" : ""}`}
-          aria-current={key === page ? "page" : undefined}
-        >
-          {label}
-        </a>
-      ))}
-    </nav>
-  );
-}
-
-/** Language and appearance (formerly the sidebar's Settings gear). Every role has them. */
-function PreferencesSection({ locale, onLocaleChange, theme, onThemeChange }: PreferenceControls) {
-  const t = useT();
-  return (
-    <section className="card account-section" aria-labelledby="account-preferences-title">
-      <h2 id="account-preferences-title">{t("account.preferences.title")}</h2>
-      <p className="account-explainer">{t("account.preferences.intro")}</p>
-      <div className="account-preferences">
-        <div className="preferences-field">
-          <span aria-hidden="true">{t("app.language.label")}</span>
-          <LanguageControl locale={locale} onChange={onLocaleChange} />
-        </div>
-        <div className="preferences-field">
-          <span aria-hidden="true">{t("account.preferences.appearance")}</span>
-          <Select
-            aria-label={t("account.preferences.appearance")}
-            value={theme}
-            onValueChange={(value) => {
-              if (value === "light" || value === "dark" || value === "system") onThemeChange(value);
-            }}
-            options={[
-              { value: "system", label: t("account.preferences.system") },
-              { value: "light", label: t("account.preferences.light") },
-              { value: "dark", label: t("account.preferences.dark") },
-            ]}
-          />
-        </div>
-      </div>
-    </section>
+    <TabNavigation
+      sidebar
+      label={t("account.nav.label")}
+      value={page}
+      items={entries.map(([key, href, label]) => ({ key, href, label }))}
+    />
   );
 }
 
@@ -269,7 +218,7 @@ function AgentAccessSection({
   client: AccountClient;
 }) {
   const t = useT();
-  const manager = session.tenant.role === "owner" || session.tenant.role === "admin";
+  const manager = session.root === true;
   const [token, setToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -285,6 +234,7 @@ function AgentAccessSection({
   });
 
   const create = async (): Promise<void> => {
+    if (!manager || busy) return;
     setBusy(true);
     setError(null);
     setCopied("idle");
@@ -348,9 +298,6 @@ function AgentAccessSection({
           {error}
         </p>
       ) : null}
-      <pre className="agent-prompt" aria-label={t("account.agent.promptLabel")}>
-        {prompt}
-      </pre>
       <div className="account-actions">
         <Button variant="outline" type="button" onClick={() => void copy()}>
           {t("account.agent.copy")}
@@ -363,6 +310,12 @@ function AgentAccessSection({
           </p>
         ) : null}
       </div>
+      <details className="agent-prompt-details">
+        <summary>{t("account.agent.promptLabel")}</summary>
+        <pre className="agent-prompt" aria-label={t("account.agent.promptLabel")}>
+          {prompt}
+        </pre>
+      </details>
     </section>
   );
 }
@@ -378,6 +331,8 @@ function ProfileSection({
 }) {
   const t = useT();
   const saved = session.user.displayName;
+  const [editingName, setEditingName] = useState(false);
+  const nameFocus = useEditorFocus(editingName);
   const [name, setName] = useState(saved);
   const [nameError, setNameError] = useState<string>();
   const [nameNotice, setNameNotice] = useState<string>();
@@ -388,6 +343,14 @@ function ProfileSection({
   const [savingPhoto, setSavingPhoto] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const changeButton = useRef<HTMLButtonElement>(null);
+  const savePhotoButton = useRef<HTMLButtonElement>(null);
+  const wasPreviewingPhoto = useRef(false);
+  const previewingPhoto = !!photo;
+  useEffect(() => {
+    if (previewingPhoto) savePhotoButton.current?.focus();
+    else if (wasPreviewingPhoto.current) changeButton.current?.focus();
+    wasPreviewingPhoto.current = previewingPhoto;
+  }, [previewingPhoto]);
   const loginName = session.account?.localLoginName ?? session.user.loginName;
   const dirty = name !== saved;
 
@@ -412,6 +375,7 @@ function ProfileSection({
       const profile = await client.updateDisplayName(trimmed);
       onProfile(profile);
       setName(profile.displayName);
+      setEditingName(false);
       setNameNotice(t("account.name.saved"));
     } catch (err) {
       // The edit stays in the field so it can be corrected or retried.
@@ -442,7 +406,6 @@ function ProfileSection({
       onProfile(await client.uploadAvatar(photo.blob, photo.type));
       setPhoto(undefined);
       setPhotoNotice(t("account.photo.saved"));
-      changeButton.current?.focus();
     } catch (err) {
       // The previous photo stays; the chosen one stays previewed for a retry.
       setPhotoError(failure(err, t));
@@ -492,6 +455,7 @@ function ProfileSection({
                 variant="primary"
                 type="button"
                 disabled={savingPhoto}
+                ref={savePhotoButton}
                 onClick={() => void savePhoto()}
               >
                 {savingPhoto ? t("account.saving") : t("account.photo.save")}
@@ -503,7 +467,6 @@ function ProfileSection({
                 onClick={() => {
                   setPhoto(undefined);
                   setPhotoError(undefined);
-                  changeButton.current?.focus();
                 }}
               >
                 {t("account.photo.discard")}
@@ -546,50 +509,75 @@ function ProfileSection({
       ) : photoNotice ? (
         <output className="account-notice">{photoNotice}</output>
       ) : null}
-      <form className="account-form" onSubmit={saveName} noValidate>
-        <label htmlFor="account-display-name">{t("account.name.label")}</label>
-        <Input
-          id="account-display-name"
-          name="name"
-          autoComplete="name"
-          maxLength={DISPLAY_NAME_MAX_LENGTH}
-          value={name}
-          disabled={savingName}
-          aria-invalid={nameError ? true : undefined}
-          aria-describedby={nameError ? "account-display-name-error" : "account-display-name-hint"}
-          onChange={(event) => {
-            setName(event.target.value);
-            setNameError(undefined);
-            setNameNotice(undefined);
-          }}
-        />
-        {nameError ? (
-          <p id="account-display-name-error" role="alert" className="error">
-            {nameError}
-          </p>
-        ) : (
-          <small id="account-display-name-hint">
-            {dirty ? t("account.name.unsaved") : t("account.name.hint")}
-          </small>
-        )}
-        {nameNotice ? <output className="account-notice">{nameNotice}</output> : null}
-        <div className="account-actions">
-          <Button variant="primary" type="submit" disabled={!dirty || savingName}>
-            {savingName ? t("account.saving") : t("account.name.save")}
-          </Button>
+      {editingName ? (
+        <form ref={nameFocus.form} className="account-form" onSubmit={saveName} noValidate>
+          <label htmlFor="account-display-name">{t("account.name.label")}</label>
+          <Input
+            id="account-display-name"
+            name="name"
+            autoComplete="name"
+            maxLength={DISPLAY_NAME_MAX_LENGTH}
+            value={name}
+            disabled={savingName}
+            aria-invalid={nameError ? true : undefined}
+            aria-describedby={
+              nameError ? "account-display-name-error" : "account-display-name-hint"
+            }
+            onChange={(event) => {
+              setName(event.target.value);
+              setNameError(undefined);
+              setNameNotice(undefined);
+            }}
+          />
+          {nameError ? (
+            <p id="account-display-name-error" role="alert" className="error">
+              {nameError}
+            </p>
+          ) : (
+            <small id="account-display-name-hint">
+              {dirty ? t("account.name.unsaved") : t("account.name.hint")}
+            </small>
+          )}
+          <div className="account-actions">
+            <Button variant="primary" type="submit" disabled={!dirty || savingName}>
+              {savingName ? t("account.saving") : t("account.name.save")}
+            </Button>
+            <Button
+              variant="outline"
+              type="button"
+              disabled={savingName}
+              onClick={() => {
+                setName(saved);
+                setNameError(undefined);
+                setEditingName(false);
+              }}
+            >
+              {t("account.name.cancel")}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <div className="account-value-row">
+          <div>
+            <span className="small muted">{t("account.name.label")}</span>
+            <strong>{saved}</strong>
+          </div>
           <Button
-            variant="outline"
+            ref={nameFocus.button}
             type="button"
-            disabled={!dirty || savingName}
+            variant="outline"
             onClick={() => {
               setName(saved);
               setNameError(undefined);
+              setNameNotice(undefined);
+              setEditingName(true);
             }}
           >
-            {t("account.name.cancel")}
+            {t("account.name.change")}
           </Button>
         </div>
-      </form>
+      )}
+      {nameNotice ? <output className="account-notice">{nameNotice}</output> : null}
       <dl className="account-facts">
         <div>
           <dt>{t("account.loginName.label")}</dt>
@@ -607,62 +595,6 @@ function ProfileSection({
   );
 }
 
-export function PasswordField({
-  id,
-  label,
-  value,
-  onChange,
-  autoComplete,
-  disabled,
-  invalid,
-  describedBy,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  autoComplete: "current-password" | "new-password";
-  disabled: boolean;
-  invalid?: boolean;
-  describedBy?: string;
-}) {
-  const t = useT();
-  const [visible, setVisible] = useState(false);
-  return (
-    <div className="account-password-field">
-      <label htmlFor={id}>{label}</label>
-      <div className="account-password-input">
-        <Input
-          id={id}
-          type={visible ? "text" : "password"}
-          autoComplete={autoComplete}
-          value={value}
-          disabled={disabled}
-          spellCheck={false}
-          aria-invalid={invalid ? true : undefined}
-          aria-describedby={describedBy}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <button
-          type="button"
-          className="icon-button"
-          aria-label={
-            visible
-              ? t("account.password.hide", { field: label })
-              : t("account.password.show", { field: label })
-          }
-          aria-pressed={visible}
-          aria-controls={id}
-          disabled={disabled}
-          onClick={() => setVisible((shown) => !shown)}
-        >
-          {visible ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function PasswordSection({
   session,
   client,
@@ -674,6 +606,8 @@ function PasswordSection({
 }) {
   const t = useT();
   const id = useId();
+  const [editing, setEditing] = useState(false);
+  const focus = useEditorFocus(editing);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -708,6 +642,7 @@ function PasswordSection({
       const rotated = await client.changePassword(current, next);
       clear();
       setDone(true);
+      setEditing(false);
       onSessionRotated(rotated);
     } catch (err) {
       clear();
@@ -744,8 +679,25 @@ function PasswordSection({
             loginName: session.account?.localLoginName ?? "",
           })}
         </p>
+      ) : !editing ? (
+        <div className="account-value-row">
+          <p className="account-explainer">{t("account.password.closed")}</p>
+          <Button
+            ref={focus.button}
+            type="button"
+            variant="outline"
+            onClick={() => {
+              clear();
+              setError(undefined);
+              setDone(false);
+              setEditing(true);
+            }}
+          >
+            {t("account.password.submit")}
+          </Button>
+        </div>
       ) : (
-        <form className="account-form" onSubmit={submit} noValidate>
+        <form ref={focus.form} className="account-form" onSubmit={submit} noValidate>
           {/* Lets a password manager pair the new password with this account. */}
           <input
             type="text"
@@ -802,18 +754,27 @@ function PasswordSection({
               {error.text}
             </p>
           ) : null}
-          {done ? (
-            <output className="account-notice">{t("account.password.changed")}</output>
-          ) : (
-            <small>{t("account.password.hint")}</small>
-          )}
+          <small>{t("account.password.hint")}</small>
           <div className="account-actions">
             <Button variant="primary" type="submit" disabled={busy}>
-              {busy ? t("account.saving") : t("account.password.submit")}
+              {busy ? t("account.saving") : t("account.password.save")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                clear();
+                setError(undefined);
+                setEditing(false);
+              }}
+            >
+              {t("account.name.cancel")}
             </Button>
           </div>
         </form>
       )}
+      {done ? <output className="account-notice">{t("account.password.changed")}</output> : null}
     </section>
   );
 }

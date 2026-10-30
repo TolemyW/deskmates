@@ -1,14 +1,19 @@
-// Look/OCR and speech-to-text services (ADR-0040 decision 2): installation configuration only.
-// Each operation is on when its URL and model are both set, off when neither is; anything else
-// stops startup. Credentials stay in Gateway memory and never reach a sandbox.
+// Look/OCR, speech-to-text and text-to-image services (ADR-0040 decision 2, amendment B):
+// installation configuration only. Each operation is on when its URL and model are both set, off
+// when neither is; anything else stops startup. Credentials stay in Gateway memory and never reach
+// a sandbox.
 
 import { createHash } from "node:crypto";
 import {
   ASR_DEFAULT_MAX_BYTES,
   ASR_DEFAULT_MAX_SECONDS,
   DeskmatesError,
+  IMAGE_DEFAULT_SIZE,
+  IMAGE_SIDE_MAX,
+  IMAGE_SIDE_MIN,
   type OperationName,
   type OperationStamp,
+  parseImageSize,
 } from "@deskmates/contracts";
 import { type Env, httpUrl, optionalInt } from "./env.js";
 
@@ -20,7 +25,7 @@ interface OperationServiceConfig {
   model: string;
   /** Bearer for the service; absent for an unauthenticated local service. */
   authToken?: string;
-  /** USD per unit (image or page; audio second). Absent: unpriced. 0 is a known zero. */
+  /** USD per unit (image or page; audio second; generated image). Absent: unpriced. 0 is a known zero. */
   priceUsd?: number;
   /** sha256 of the request URL, recorded instead of the URL. */
   endpointSha256: string;
@@ -35,17 +40,27 @@ export interface AsrOperationConfig extends OperationServiceConfig {
   maxSeconds: number;
 }
 
+/** Text-to-image (ADR-0040 amendment B, decision 17): OpenAI-compatible image generations. */
+export interface ImageOperationConfig extends OperationServiceConfig {
+  /** `<width>x<height>` used when a call names no size. */
+  defaultSize: string;
+}
+
 export interface OperationsConfig {
   operations?: {
     look?: LookOperationConfig;
     asr?: AsrOperationConfig;
+    image_generation?: ImageOperationConfig;
   };
 }
+
+type OperationPrefix = "VISION" | "ASR" | "IMAGE";
 
 const PATHS = {
   "anthropic-messages": "/v1/messages",
   "openai-chat": "/v1/chat/completions",
   asr: "/v1/audio/transcriptions",
+  image: "/v1/images/generations",
 } as const;
 
 /** A base URL gets the route's path; a URL that already ends in it is kept. */
@@ -66,7 +81,7 @@ function price(env: Env, key: string): number | undefined {
   return n;
 }
 
-function pair(env: Env, prefix: "VISION" | "ASR"): { url: string; model: string } | undefined {
+function pair(env: Env, prefix: OperationPrefix): { url: string; model: string } | undefined {
   const urlKey = `${prefix}_OPERATION_URL`;
   const modelKey = `${prefix}_OPERATION_MODEL`;
   const url = env[urlKey]?.trim() ?? "";
@@ -87,7 +102,7 @@ const sha256 = (text: string) => createHash("sha256").update(text, "utf8").diges
 
 function service(
   env: Env,
-  prefix: "VISION" | "ASR",
+  prefix: OperationPrefix,
   url: string,
   model: string,
 ): OperationServiceConfig {
@@ -105,7 +120,8 @@ function service(
 export function readOperationsConfig(env: Env): OperationsConfig {
   const vision = pair(env, "VISION");
   const asr = pair(env, "ASR");
-  if (!vision && !asr) return {};
+  const image = pair(env, "IMAGE");
+  if (!vision && !asr && !image) return {};
   const operations: NonNullable<OperationsConfig["operations"]> = {};
   if (vision) {
     const protocolRaw = env.VISION_OPERATION_PROTOCOL?.trim() || "anthropic-messages";
@@ -134,18 +150,29 @@ export function readOperationsConfig(env: Env): OperationsConfig {
       maxSeconds: optionalInt(env, "ASR_OPERATION_MAX_SECONDS", ASR_DEFAULT_MAX_SECONDS),
     };
   }
+  if (image) {
+    const url = endpoint("IMAGE_OPERATION_URL", image.url, PATHS.image);
+    const defaultSize = env.IMAGE_OPERATION_DEFAULT_SIZE?.trim() || IMAGE_DEFAULT_SIZE;
+    if (!parseImageSize(defaultSize))
+      throw new DeskmatesError(
+        "validation",
+        `IMAGE_OPERATION_DEFAULT_SIZE must be <width>x<height>, each side ${IMAGE_SIDE_MIN} to ${IMAGE_SIDE_MAX} and a multiple of 64`,
+        { key: "IMAGE_OPERATION_DEFAULT_SIZE", raw: defaultSize },
+      );
+    operations.image_generation = { ...service(env, "IMAGE", url, image.model), defaultSize };
+  }
   return { operations };
 }
 
 /**
- * The run-config entry: `{ operations: { look?, asr? } }` with model and endpoint hash per
+ * The run-config entry: `{ operations: { look?, asr?, image_generation? } }` with model and endpoint hash per
  * configured operation, or nothing at all, so a run of an installation without them is unchanged.
  */
 export function operationStamps(config: OperationsConfig): {
   operations?: Partial<Record<OperationName, OperationStamp>>;
 } {
   const ops = config.operations;
-  if (!ops || (!ops.look && !ops.asr)) return {};
+  if (!ops || (!ops.look && !ops.asr && !ops.image_generation)) return {};
   const stamp = (s: OperationServiceConfig): OperationStamp => ({
     model: s.model,
     endpointSha256: s.endpointSha256,
@@ -154,6 +181,7 @@ export function operationStamps(config: OperationsConfig): {
     operations: {
       ...(ops.look ? { look: stamp(ops.look) } : {}),
       ...(ops.asr ? { asr: stamp(ops.asr) } : {}),
+      ...(ops.image_generation ? { image_generation: stamp(ops.image_generation) } : {}),
     },
   };
 }

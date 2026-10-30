@@ -69,6 +69,22 @@ export interface SandboxConfig {
   fileUploadWorkspaceQuotaBytes?: number;
 }
 
+/** A typo in `EGRESS_PRIVATE_TARGETS` is a startup error that names the key, like `MODEL_PRICES`. */
+function privateEgressTargets(env: Env): Pick<SandboxConfig, "privateEgressTargets"> {
+  const raw = env.EGRESS_PRIVATE_TARGETS?.trim();
+  if (!raw) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new DeskmatesError(
+      "validation",
+      `EGRESS_PRIVATE_TARGETS is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  return { privateEgressTargets: parsePrivateEgressTargets(parsed) };
+}
+
 function lanCidrs(env: Env): Pick<SandboxConfig, "lanCidrs"> {
   const raw = env.NETWORK_LAN_CIDRS?.trim();
   if (!raw) return {};
@@ -97,9 +113,7 @@ export function readSandboxConfig(env: Env): SandboxConfig {
     egressImage: env.EGRESS_PROXY_IMAGE?.trim() || "deskmates/egress-proxy:dev",
     ...egressProxyDns(env),
     ...egressProxyDohUrl(env),
-    ...(env.EGRESS_PRIVATE_TARGETS?.trim()
-      ? { privateEgressTargets: parsePrivateEgressTargets(JSON.parse(env.EGRESS_PRIVATE_TARGETS)) }
-      : {}),
+    ...privateEgressTargets(env),
     ...lanCidrs(env),
     workspaceMemoryLimitMb: optionalInt(
       env,

@@ -7,6 +7,7 @@
 
 import type { RunEvent } from "@deskmates/contracts";
 import type { MessageKey } from "../../i18n/catalogs.js";
+import { isDesktopDenial } from "./desktop-denials.js";
 import { type LedgerRow, ledgerRows } from "./ledger-rows.js";
 import { shortToolName } from "./run-activity.js";
 
@@ -331,6 +332,17 @@ function takeoverStep(event: RunEvent): StoryStep | undefined {
 function logStep(event: RunEvent): StoryStep | undefined {
   const p = event.payload;
   const base = { seq: event.seq, ts: event.ts };
+  // ADR-0048 amendment 1, A4: a desktop call refused for a network target, named by its host.
+  if (isDesktopDenial(event)) {
+    const reason = str(p.reason);
+    return {
+      ...base,
+      verb: "runStory.verb.desktopEgressDenied",
+      values: { host: str(p.host) ?? "?" },
+      tone: "error",
+      ...(reason === undefined ? {} : { text: reason }),
+    };
+  }
   if (p.source === "stall") {
     const idle = num(p.idleMs) ?? 0;
     return p.op === "resumed"

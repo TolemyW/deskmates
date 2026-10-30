@@ -1,5 +1,5 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@deskmates/ui";
-import { Avatar, Pill, Select } from "@deskmates/ui";
+import { Avatar, PageHeader, Pill, Select } from "@deskmates/ui";
 // People of the selected workspace (ADR-0022 P4, amendment 6 W3, W4, W9): roles there, role
 // changes and removal, and invitations with a one-time link. Every call names the workspace. The
 // Gateway enforces every rule (an Admin manages Members and Guests and promotes to Admin; only an
@@ -14,7 +14,7 @@ import {
   type TenantRole,
   mayTakeAction,
 } from "@deskmates/contracts";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MembersClient } from "../../api/members-client.js";
 import { Button } from "../../components/ui/button.js";
 import { errorMessage } from "../../format.js";
@@ -44,7 +44,12 @@ const INVITATION_STATUS_WORDS: Readonly<Record<InvitationView["status"], Message
   expired: "members.invitation.status.expired",
 };
 
-export function MembersScreen({
+export function MembersScreen(props: Parameters<typeof MembersPanel>[0]) {
+  const scope = useWorkspaceForCalls();
+  return <MembersPanel key={props.workspaceId ?? scope.workspaceId ?? "pending"} {...props} />;
+}
+
+function MembersPanel({
   client,
   tenantRole,
   userId,
@@ -69,6 +74,14 @@ export function MembersScreen({
   const [roleFilter, setRoleFilter] = useState<TenantRole | "all">("all");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const mutationPending = useRef(false);
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
   const t = useT();
   const selected = useOptionalWorkspaceScope()?.current;
   const forCalls = useWorkspaceForCalls();
@@ -117,22 +130,25 @@ export function MembersScreen({
   const invitations = invitationPages.items;
   const loading = memberPages.loading;
   const loadFailed = memberPages.error !== undefined;
-  const loadError = memberPages.error ?? invitationPages.error;
+  const loadError = memberPages.error;
   const reload = useCallback(async () => {
     memberPages.reload();
     invitationPages.reload();
   }, [memberPages.reload, invitationPages.reload]);
 
   const act = async (action: () => Promise<unknown>): Promise<void> => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
     setBusy(true);
     setError("");
     try {
       await action();
-      await reload();
+      if (live.current) await reload();
     } catch (err) {
-      setError(errorMessage(err));
+      if (live.current) setError(errorMessage(err));
     } finally {
-      setBusy(false);
+      mutationPending.current = false;
+      if (live.current) setBusy(false);
     }
   };
 
@@ -153,10 +169,8 @@ export function MembersScreen({
   const Root = embedded ? "div" : "section";
   return (
     <Root className={embedded ? "members-embedded" : "members-screen page page-container"}>
-      <header className="costs-header" hidden={embedded}>
-        <div>
-          <h1>{t("members.title")}</h1>
-          <p>{t("members.intro")}</p>
+      {!embedded ? (
+        <PageHeader title={t("members.title")} description={t("members.intro")}>
           {selected && selected.id === workspaceId ? (
             <p className="muted small" data-testid="members-workspace">
               {t("members.workspace", { workspace: selected.name })}
@@ -172,8 +186,8 @@ export function MembersScreen({
             does={t("members.roleNote.admins")}
             allowed={canManageAdmins || !canChangeRoles}
           />
-        </div>
-      </header>
+        </PageHeader>
+      ) : null}
       {error || loadError !== undefined ? (
         <p role="alert" className="error">
           {error || errorMessage(loadError)}
@@ -237,7 +251,7 @@ export function MembersScreen({
                     </div>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell data-label={t("members.list.role")}>
                   {canChange(member) && member.status === "active" ? (
                     <Select
                       aria-label={t("members.list.roleOf", { name: member.displayName })}
@@ -259,7 +273,7 @@ export function MembersScreen({
                     </span>
                   )}
                 </TableCell>
-                <TableCell>
+                <TableCell data-label={t("members.list.status")}>
                   <Pill tone={member.status === "active" ? "success" : "neutral"}>
                     {t(MEMBER_STATUS_WORDS[member.status])}
                   </Pill>
@@ -291,6 +305,7 @@ export function MembersScreen({
       <section className="card" aria-label={t("members.invite.label")}>
         <h2>{t("members.invite.title")}</h2>
         <MemberOnboarding
+          key={workspaceId ?? "only"}
           client={client}
           tenantName={tenantName}
           canInviteAdmin={canInviteAdmin}
@@ -319,7 +334,21 @@ export function MembersScreen({
             ) : undefined
           }
         />
-        <ul className="invitation-list">
+        {invitationPages.error ? (
+          <div role="alert">
+            <p className="error">{errorMessage(invitationPages.error)}</p>
+            <Button onClick={() => invitationPages.reload()}>
+              {t("members.invitation.retry")}
+            </Button>
+          </div>
+        ) : invitationPages.loading && invitations.length === 0 ? (
+          <p className="muted" aria-busy="true">
+            {t("members.invitation.loading")}
+          </p>
+        ) : invitationPages.page && invitations.length === 0 ? (
+          <p className="muted">{t("members.invitation.empty")}</p>
+        ) : null}
+        <ul className="invitation-list" aria-busy={invitationPages.loading}>
           {invitations.map((invitation) => (
             <li key={invitation.id}>
               <span>

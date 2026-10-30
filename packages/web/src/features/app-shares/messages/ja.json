@@ -7,9 +7,11 @@
   "appShares.open.continue": "続行",
   "appShares.open.failed": "アプリを開けませんでした: {error}",
   "appShares.open.opening": "アプリを開いています…",
+  "appShares.open.retry": "再試行",
   "appShares.open.title": "公開されたアプリ",
   "appShares.openApp": "開く",
   "appShares.port": "ポート {port}",
+  "appShares.portInvalid": "1024〜65535のポートを指定してください。6080〜6086はワークスペースのデスクトップ用に予約されています。",
   "appShares.publish": "共有",
   "appShares.publishIntro": "ワークスペースですでに動いている Web アプリ（0.0.0.0 で待ち受け）を共有します。",
   "appShares.publishLabel": "名前",
@@ -21,6 +23,6 @@
   "appShares.state.unavailable": "停止中",
   "appShares.stop": "共有を停止",
   "appShares.stopConfirm": "「{label}」の共有を停止しますか？開いているタブはすぐにアクセスできなくなります。アプリはワークスペースで動き続けます。",
-  "appShares.title": "アプリ",
+  "appShares.title": "共有アプリ",
   "appShares.unavailableHint": "このポートは応答していません。ボットにアプリを再起動するよう依頼してください。アドレスは変わりません。"
 }

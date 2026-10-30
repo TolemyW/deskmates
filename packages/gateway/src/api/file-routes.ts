@@ -16,6 +16,7 @@ import {
   workspaceFileRoot,
 } from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
+import { actorLabel } from "../auth/principal.js";
 import type { GatewayContext } from "../context.js";
 
 type FileRoute = { Params: { id: string }; Querystring: { path?: unknown } };
@@ -31,6 +32,13 @@ export interface FileRouteOptions {
 const OPERATOR_IDENTITY = "operator";
 const EXEC_TIMEOUT_MS = 15_000;
 const PREVIEW_ID = /^[A-Za-z0-9_-]{16,80}$/;
+/**
+ * Live preview identities one caller may hold at once in one workspace. The client chooses a
+ * preview id and opens a fresh one per preview, so at the cap a new identity evicts the caller's
+ * oldest finished one there (read to the end of the file first, then the longest idle); it is
+ * refused only while every held identity has a range read in flight (#61 L2).
+ */
+export const PREVIEW_MAX_LIVE_PER_CALLER = 64;
 const POLICY_MESSAGE =
   "Only regular files under /work/ or /home/<bot>/ of this workspace can be downloaded";
 
@@ -42,11 +50,50 @@ interface FileChunk {
 }
 
 interface PreviewBudget {
+  /** The caller's actor label: a budget belongs to the person or principal that opened it. */
+  caller: string;
   workspaceId: WorkspaceId;
   path: string;
   createdAt: number;
+  /** When this identity last requested a range; the longest idle is evicted first. */
+  usedAt: number;
   ranges: number;
   bytes: number;
+  /** Range reads still in flight; an identity with one is mid-stream and never evicted. */
+  inFlight: number;
+  /** The identity has read the last byte of its file. */
+  eof: boolean;
+}
+
+/**
+ * Make room for a new preview identity of `caller` in `workspaceId`: below the cap nothing is
+ * evicted; at the cap the caller's identity there that reached the end of its file goes first,
+ * then the one idle longest. Returns false when every held identity is mid-stream.
+ */
+function makeRoomForPreview(
+  budgets: Map<string, PreviewBudget>,
+  caller: string,
+  workspaceId: WorkspaceId,
+): boolean {
+  let held = 0;
+  let victim: [string, PreviewBudget] | undefined;
+  for (const entry of budgets) {
+    const value = entry[1];
+    if (value.caller !== caller || value.workspaceId !== workspaceId) continue;
+    held += 1;
+    if (value.inFlight > 0) continue;
+    const current = victim?.[1];
+    if (
+      !current ||
+      (value.eof && !current.eof) ||
+      (value.eof === current.eof && value.usedAt < current.usedAt)
+    )
+      victim = entry;
+  }
+  if (held < PREVIEW_MAX_LIVE_PER_CALLER) return true;
+  if (!victim) return false;
+  budgets.delete(victim[0]);
+  return true;
 }
 
 function refusal(code: string, maxBytes: number): DeskmatesError {
@@ -192,11 +239,13 @@ export function registerFileRoutes(
         const previewId = request.headers["x-deskmates-preview-id"];
         if (typeof previewId !== "string" || !PREVIEW_ID.test(previewId))
           throw new DeskmatesError("validation", "A valid preview identity is required for ranges");
-        const key = `${workspace.id}:${previewId}`;
+        const caller = actorLabel(request.principal);
+        const key = `${workspace.id}:${caller}:${previewId}`;
         const requestedAt = now();
         for (const [budgetKey, value] of budgets) {
           if (
             budgetKey !== key &&
+            value.inFlight === 0 &&
             requestedAt - value.createdAt > WORKSPACE_FILE_PREVIEW_TIMEOUT_MS
           )
             budgets.delete(budgetKey);
@@ -204,12 +253,21 @@ export function registerFileRoutes(
         const existing = budgets.get(key);
         if (existing && (existing.workspaceId !== workspace.id || existing.path !== path))
           throw new DeskmatesError("forbidden", "A preview identity is bound to one file");
+        if (!existing && !makeRoomForPreview(budgets, caller, workspace.id))
+          throw new DeskmatesError("rate_limited", "Too many file previews are open at once", {
+            reason: "preview_limit",
+            maxPreviews: PREVIEW_MAX_LIVE_PER_CALLER,
+          });
         const budget = existing ?? {
+          caller,
           workspaceId: workspace.id,
           path,
           createdAt: requestedAt,
+          usedAt: requestedAt,
           ranges: 0,
           bytes: 0,
+          inFlight: 0,
+          eof: false,
         };
         if (requestedAt - budget.createdAt > WORKSPACE_FILE_PREVIEW_TIMEOUT_MS) {
           budgets.delete(key);
@@ -228,17 +286,25 @@ export function registerFileRoutes(
           });
         budget.ranges += 1;
         budget.bytes += range.length;
+        budget.usedAt = requestedAt;
+        budget.inFlight += 1;
         budgets.set(key, budget);
-        const chunk = await readWorkspaceFileRange(
-          ctx,
-          workspace.id,
-          path,
-          botNames,
-          maxBytes,
-          range.start,
-          range.length,
-          true,
-        );
+        let chunk: FileChunk;
+        try {
+          chunk = await readWorkspaceFileRange(
+            ctx,
+            workspace.id,
+            path,
+            botNames,
+            maxBytes,
+            range.start,
+            range.length,
+            true,
+          );
+        } finally {
+          budget.inFlight -= 1;
+        }
+        if (chunk.eof || range.start + chunk.bytes.length >= chunk.fileSize) budget.eof = true;
         if (range.start >= chunk.fileSize)
           return reply.code(416).header("content-range", `bytes */${chunk.fileSize}`).send();
         const end = range.start + chunk.bytes.length - 1;

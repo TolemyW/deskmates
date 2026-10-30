@@ -200,6 +200,22 @@ describe("configured (decisions 5, 7, 8)", () => {
     expect(first.hits).toHaveLength(1);
   });
 
+  it("fuses as many memory lexical candidates as RETRIEVAL_CANDIDATES records (#61 L9)", async () => {
+    const { fx, retrieval, fake } = await hybrid({ candidates: 80 });
+    const ws = fx.a.workspace.id;
+    for (let i = 0; i < 70; i++) note(fx, ws, `Zebra crossing number ${i}.`);
+    // No dense list, so every fused id is a lexical candidate.
+    fake.failEmbed = "error";
+    const page = await retrieval.memorySearchPage({
+      workspaceId: ws,
+      query: "zebra",
+      limit: 50,
+      offset: 50,
+    });
+    expect(page.hits).toHaveLength(20);
+    expect(retrieval.knobs()).toMatchObject({ candidates: 80 });
+  });
+
   it("keeps empty and invalid queries as FTS5 does", async () => {
     const { retrieval, fake } = await hybrid();
     expect(await retrieval.knowledgeSearch(T, "?!")).toEqual([]);

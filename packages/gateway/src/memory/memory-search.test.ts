@@ -78,10 +78,21 @@ it("finds a CJK word inside a longer run of characters", async () => {
   expect(searchMemory(f.ctx.db, { workspaceId: f.a.workspace.id, query: "分号" })).toHaveLength(1);
 });
 
+it("matches underscores literally in the substring fallback, never every note (#61 L8)", async () => {
+  f = await memoryFixture();
+  f.learn(f.run(), [item("Invoice export uses semicolons."), item("The key is a__b in config.")]);
+  const ws = f.a.workspace.id;
+  expect(searchMemory(f.ctx.db, { workspaceId: ws, query: "___" })).toEqual([]);
+  expect(searchMemory(f.ctx.db, { workspaceId: ws, query: "__" }).map((hit) => hit.body)).toEqual([
+    "The key is a__b in config.",
+  ]);
+});
+
 it("scopes the internal route to the run's own workspace", async () => {
   h = await startHarness();
   const { bot, workspace } = await h.seed();
   const other = await h.api<{ workspace: { id: string } }>("POST", "/api/workspaces", {
+    defaultBot: false,
     name: "other",
     egressAllowlist: [],
   });

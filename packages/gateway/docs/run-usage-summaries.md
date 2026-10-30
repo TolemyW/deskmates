@@ -29,6 +29,10 @@ Ordering, keyset cursors and every response field are the same as before;
 `ledger/run-usage-summaries.test.ts` compares every report, row page and ranking with the earlier
 per-request computation (`test-support/legacy-cost-report.ts`).
 
+Operation calls (ADR-0040 amendment A) are not summarised: their receipts in `operation_requests`
+are priced once when recorded, so each group adds their grouped sums read live
+(`ledger/operation-costs.ts`) to its money fields, never to its tokens.
+
 ## Not re-priced
 
 A price-table edit does not touch stored summaries; a run is priced again only when its own usage

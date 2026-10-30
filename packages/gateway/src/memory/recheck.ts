@@ -22,6 +22,13 @@ import { newId } from "../db/ids.js";
 import type { RunRecord } from "../ledger/runs.js";
 import { modelsForJob } from "../scheduler/job-models.js";
 import { readMaintenanceSettings } from "./maintenance-settings.js";
+import {
+  type RecheckSnapshot,
+  evidenceHash,
+  hasRenewalEvidence,
+  recheckSnapshot,
+} from "./recheck-evidence.js";
+import { sanitizeMemoryBody } from "./sanitize.js";
 
 export const MEMORY_RECHECK = "memory_recheck";
 
@@ -138,9 +145,15 @@ export class MemoryRecheck {
             AND e.episode_id IS NULL AND e.kind = 'note' AND e.scope IN ('workspace', 'bot')
             AND (r.model_verdict IS NULL OR r.model_entry_version IS NOT e.version
                  OR (r.model_verdict = 'unclear' AND r.model_checked_at <= ?))
+            AND NOT EXISTS (
+              SELECT 1 FROM memory_recheck_jobs j JOIN runs x ON x.id = j.run_id,
+                json_each(x.config_json, '$.memoryRecheckInput') i
+              WHERE j.workspace_id = r.workspace_id AND j.created_at > ?
+                AND json_extract(i.value, '$[1]') = e.id
+                AND json_extract(i.value, '$[2]') = e.version)
           ORDER BY (r.model_verdict IS NOT NULL), r.flagged_at, r.id LIMIT ?`,
       )
-      .all(workspaceId, ...MEMORY_RECHECK_REASONS, dayAgo, limit) as {
+      .all(workspaceId, ...MEMORY_RECHECK_REASONS, dayAgo, dayAgo, limit) as {
       flag_id: string;
       entry_id: string;
       version: number;
@@ -188,14 +201,15 @@ export class MemoryRecheck {
       const run = this.ctx.runs.create({
         botId: bot.id,
         lane: "background",
-        triggerKind: "cron",
+        triggerKind: "model_job",
         triggerRef: `${MEMORY_RECHECK}:${id}`,
         triggerPayload: { prompt: "" },
         config: {
           ...this.ctx.runConfig(),
           runType: MEMORY_RECHECK,
           memoryRecheckJobId: id,
-          memoryRecheckVersion: 1,
+          memoryRecheckVersion: 2,
+          memoryRecheckSnapshot: this.snapshot(workspaceId, now),
           memoryRecheckInput: input.map((n) => [n.flagId, n.entryId, n.version]),
           memoryRecheckBounds: {
             maxNotes: MEMORY_RECHECK_MAX_NOTES,
@@ -226,6 +240,10 @@ export class MemoryRecheck {
    * tasks. Private chats are never read.
    */
   activity(workspaceId: WorkspaceId, now: Date = new Date()): string {
+    return this.snapshot(workspaceId, now).activity;
+  }
+
+  private snapshot(workspaceId: WorkspaceId, now: Date): RecheckSnapshot {
     const L = RECHECK_ACTIVITY_LIMITS;
     const since = new Date(now.getTime() - L.days * DAY_MS).toISOString();
     const botName = new Map(this.ctx.bots.list(workspaceId).map((b) => [b.id as string, b.name]));
@@ -236,19 +254,39 @@ export class MemoryRecheck {
           ? "a person"
           : "system";
     const lines: string[] = [`As of ${now.toISOString()}.`, "Shared threads (newest first):"];
+    const evidence: RecheckSnapshot["evidence"] = [];
+    let used = lines.join("\n").length;
+    const add = (line: string) => {
+      const redacted = sanitizeMemoryBody(line);
+      if (used + redacted.length + 1 > L.total) return false;
+      lines.push(redacted);
+      used += redacted.length + 1;
+      return true;
+    };
+    const source = (id: string, at: string, body: string, limit: number) => {
+      const text = cut(sanitizeMemoryBody(body), limit);
+      // Count the source text as well as the contextual line in the shared input budget.
+      if (used + text.length + 1 > L.total || at > now.toISOString()) return;
+      used += text.length + 1;
+      evidence.push({ id, at, text, sha256: evidenceHash(text) });
+    };
     const threads = this.ctx.threads
       .list(workspaceId)
       .filter((t) => t.privateToUserId === undefined && t.updatedAt >= since)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, L.threads);
-    if (threads.length === 0) lines.push("- none");
+    if (threads.length === 0) add("- none");
     for (const thread of threads) {
-      lines.push(
-        `- ${thread.title ?? thread.id} (${thread.kind}, last update ${thread.updatedAt})`,
-      );
+      add(`- ${thread.title ?? thread.id} (${thread.kind}, last update ${thread.updatedAt})`);
       const latest = this.ctx.messages.maxSeq(thread.id);
       for (const m of this.ctx.messages.list(thread.id, Math.max(0, latest - L.messagesPerThread)))
-        if (m.ts >= since) lines.push(`  - ${m.ts} ${author(m)}: ${cut(m.body, L.messageChars)}`);
+        if (m.ts >= since && m.ts <= now.toISOString()) {
+          if (
+            add(`  - ${m.ts} ${author(m)}: ${cut(sanitizeMemoryBody(m.body), L.messageChars)}`) &&
+            m.authorKind !== "system"
+          )
+            source(`message:${m.id}`, m.ts, m.body, L.messageChars);
+        }
     }
     const tasks = this.db
       .prepare(
@@ -262,8 +300,8 @@ export class MemoryRecheck {
       blocked_reason: string;
       updated_at: string;
     }[];
-    lines.push("Tasks (most recently updated first):");
-    if (tasks.length === 0) lines.push("- none");
+    add("Tasks (most recently updated first):");
+    if (tasks.length === 0) add("- none");
     for (const t of tasks) {
       const extra = [
         t.next_action ? `next: ${t.next_action}` : "",
@@ -271,14 +309,14 @@ export class MemoryRecheck {
       ]
         .filter(Boolean)
         .join("; ");
-      lines.push(
+      add(
         `- ${t.updated_at} [${t.status}] ${cut(`${t.title}${extra ? ` (${extra})` : ""}`, L.taskChars)}`,
       );
     }
-    return cut(lines.join("\n"), L.total);
+    return { asOf: now.toISOString(), activity: lines.join("\n"), evidence };
   }
 
-  /** The sidecar's job: the notes still current at the versions sent, and the activity now. */
+  /** The sidecar reads current input versions and the evidence frozen when the job was queued. */
   jobRequest(run: RunRecord): ModelJobRequest | undefined {
     const workspaceId = this.ctx.bots.mustGet(run.botId).workspaceId;
     const notes: Extract<ModelJobRequest, { kind: "memory_recheck" }>["notes"] = [];
@@ -302,7 +340,11 @@ export class MemoryRecheck {
       });
     }
     return notes.length
-      ? { kind: "memory_recheck", notes, activity: this.activity(workspaceId) }
+      ? {
+          kind: "memory_recheck",
+          notes,
+          ...(recheckSnapshot(run) ?? { activity: "Legacy job: no frozen evidence was supplied." }),
+        }
       : undefined;
   }
 
@@ -360,9 +402,17 @@ export class MemoryRecheck {
         )
           continue;
         seen.add(v.id);
-        record.run(v.verdict, v.reason, at, run.id, entry.version, sent.flagId);
-        counts[v.verdict] += 1;
-        if (v.verdict !== "still_true") continue;
+        const verdict =
+          v.verdict === "still_true" && !hasRenewalEvidence(run, entry, v.evidence)
+            ? "unclear"
+            : v.verdict;
+        const reason =
+          verdict !== v.verdict
+            ? "No valid fresh supporting quote in this job's frozen evidence; confirmation withheld."
+            : v.reason;
+        record.run(verdict, reason, at, run.id, entry.version, sent.flagId);
+        counts[verdict] += 1;
+        if (verdict !== "still_true") continue;
         // A model confirmation: body, trust, authority and scope unchanged; `by` names the run.
         this.ctx.memory.entries.appendVersion(entry.id, "confirm", { lastConfirmedAt: at }, by);
         this.db

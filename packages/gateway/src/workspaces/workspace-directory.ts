@@ -41,6 +41,7 @@ const ACTIVE_RUN_STATUSES = [
   "waiting_approval",
   "waiting_browser",
   "waiting_continuation",
+  "waiting_platform",
 ] as const;
 
 interface DirectoryRow {

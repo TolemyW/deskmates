@@ -5,6 +5,7 @@ import type {
   ApprovalMode,
   BotDefinition,
   ChannelPlugin,
+  ChannelPluginV2,
   Thread,
   Workspace,
 } from "@deskmates/contracts";
@@ -72,12 +73,15 @@ export async function startHarness(
     connectorFetch?: typeof fetch;
     connectorLookup?: (hostname: string) => Promise<string[]>;
     integrationFetch?: typeof fetch;
-    channelPlugins?: Map<string, ChannelPlugin>;
+    channelPlugins?: Map<string, ChannelPlugin | ChannelPluginV2>;
+    /** A provider prepared before the Gateway starts, e.g. with sandboxes a restart re-attaches. */
+    provider?: FakeProvider;
   } = {},
 ): Promise<Harness> {
-  const provider = new FakeProvider();
+  const { provider: given, ...buildExtra } = extra;
+  const provider = given ?? new FakeProvider();
   const app = buildGateway(testConfig(overrides), provider, {
-    ...extra,
+    ...buildExtra,
     surface: "combined-test",
     sseHeartbeatMs: 50,
     // Tests drive `app.deskmates.cron.tick(<minute>)` with an injected clock; a wall-clock timer
@@ -103,9 +107,12 @@ export async function startHarness(
   };
 
   const seed = async (options: { approvalMode?: ApprovalMode } = {}) => {
+    // No default bot (ADR-0051 decision 2): its welcome run would be one more run in every test;
+    // `default-bot.test.ts` creates workspaces with one.
     const ws = await api<{ workspace: Workspace }>("POST", "/api/workspaces", {
       name: "ws-1",
       egressAllowlist: ["*.example.test"],
+      defaultBot: false,
     });
     // A new workspace starts in automatic review (ADR-0002 amendment 6, D1); most tests pin the
     // human approval path, so the fixture is `manual` unless a test asks for another mode. The

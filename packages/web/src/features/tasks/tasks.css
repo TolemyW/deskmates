@@ -5,26 +5,28 @@
    any unlayered rule; within the layer the later rule wins.
    This file skips Tailwind's compile. `background: none 0 0` and `transparent 0 0` spell
    what that compile shipped for `none` and `transparent` (it set the position to 0 0). */
-.task-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  margin-bottom: 28px;
-}
-.task-metric-card {
-  padding: 24px;
-}
-.task-metric-card > div {
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 6px;
-}
 .tasks-screen {
   padding: 32px;
+  container-type: inline-size;
+}
+.tasks-screen.page-container {
+  max-width: none;
+}
+.tasks-screen > .gb-page-header {
+  margin-bottom: 12px;
+}
+.task-kind-details {
+  grid-column: 1 / -1;
 }
 .tasks-layout {
-  grid-template-columns: minmax(280px, .9fr) minmax(0, 1.65fr);
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 24px;
+}
+.tasks-layout.list-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+.tasks-layout.list-only .task-list {
+  max-width: 760px;
 }
 .task-list {
   padding: 0;
@@ -76,11 +78,10 @@
 }
 .task-list li a {
   border: 0;
-  border-radius: 18px;
+  border-radius: 12px;
   background: var(--surface);
-  padding: 16px;
-  gap: 12px;
-  box-shadow: var(--app-shadow-xs);
+  padding: 11px 12px;
+  gap: 6px;
 }
 .task-list li a:hover,
 .task-list li a.active {
@@ -95,8 +96,8 @@
 }
 .task-detail {
   border: 0;
-  border-radius: 24px;
-  padding: 28px;
+  border-radius: 18px;
+  padding: 24px;
   box-shadow: var(--app-shadow-sm);
 }
 .task-detail h2 {
@@ -118,17 +119,42 @@
 .task-form-row {
   gap: 20px;
 }
+@container (min-width: 1300px) {
+  .task-detail {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .task-detail > .task-detail-heading,
+  .task-detail > .task-goal-editor,
+  .task-detail > .task-system-details,
+  .task-detail > .task-acceptance,
+  .task-detail > .task-notice,
+  .task-detail > .task-warning,
+  .task-detail > .error {
+    grid-column: 1 / -1;
+    margin-block: 0;
+  }
+  .task-detail > .task-goal-overview {
+    grid-column: 1;
+  }
+  .task-detail > .task-execution {
+    grid-column: 2;
+    margin: 0;
+    padding: 0 0 0 24px;
+    border-top: 0;
+    border-left: 1px solid var(--separator);
+  }
+}
 @media (max-width: 1100px) {
   .tasks-layout {
-    grid-template-columns: minmax(230px, .8fr) minmax(0, 1.4fr);
+    grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
   }
 }
 @media (max-width: 960px) {
   .tasks-screen {
     padding: 24px;
-  }
-  .task-metrics {
-    gap: 12px;
   }
 }
 @media (max-width: 720px) {
@@ -137,13 +163,6 @@
   }
   .tasks-layout {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .task-metrics {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .task-metric-card {
-    padding: 18px;
-    gap: 12px;
   }
   .task-detail {
     padding: 20px;
@@ -283,6 +302,37 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
   }
+  .task-reference-picker {
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius);
+  }
+  .task-reference-picker legend {
+    padding: 0 4px;
+    font-size: var(--app-text-sm);
+    font-weight: 600;
+  }
+  .task-reference-choices {
+    display: grid;
+    max-height: 180px;
+    gap: 8px;
+    overflow: auto;
+  }
+  .task-reference-choices label {
+    display: flex;
+    grid-template-columns: none;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .task-reference-choices label > span {
+    display: grid;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .task-field-error {
+    margin: 4px 0 0;
+  }
   .task-artifact-fields,
   .task-saved-artifact {
     padding: 14px;
@@ -295,6 +345,75 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
+  }
+  .task-primary-actions {
+    justify-content: flex-end;
+  }
+  .task-goal-note {
+    max-width: 68ch;
+    margin: 0;
+  }
+  .task-goal-overview {
+    display: grid;
+    gap: 10px;
+  }
+  .task-goal-overview > p {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    white-space: pre-wrap;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+  details.task-goal-editor {
+    margin-top: 20px;
+    border-top: 1px solid var(--app-border);
+    padding-top: 16px;
+  }
+  details.task-goal-editor > summary {
+    cursor: pointer;
+    width: fit-content;
+    font-size: var(--app-text-sm);
+    font-weight: 600;
+  }
+  details.task-goal-editor > .task-form {
+    margin-top: 16px;
+  }
+  .task-advanced,
+  .task-system-details,
+  .task-execution-details {
+    min-width: 0;
+  }
+  .task-advanced > summary,
+  .task-system-details > summary,
+  .task-execution-details > summary {
+    width: fit-content;
+    cursor: pointer;
+    color: var(--app-text-2);
+    font-size: var(--app-text-sm);
+    font-weight: 600;
+  }
+  .task-advanced-body,
+  .task-system-body,
+  .task-execution-details-body {
+    display: grid;
+    gap: 14px;
+    min-width: 0;
+    margin-top: 14px;
+  }
+  .task-system-details {
+    margin-top: 24px;
+    border-top: 1px solid var(--app-border);
+    padding-top: 16px;
+  }
+  .task-system-details .task-record,
+  .task-system-details .task-json,
+  .task-system-details .task-linked-records {
+    margin: 0;
+  }
+  .task-system-details .task-linked-records {
+    border-top: 1px solid var(--app-border);
+    padding-top: 16px;
   }
   .task-acceptance,
   .task-linked-records {
@@ -347,18 +466,56 @@
   }
 
   .task-execution {
-    margin-top: 16px;
-    padding-top: 12px;
+    margin-top: 24px;
+    padding-top: 20px;
     border-top: 1px solid var(--border, rgba(127, 127, 127, 0.25));
   }
 
   .task-submissions,
-  .task-deliveries ul {
+  .task-deliveries ul,
+  .task-activity-timeline {
     display: grid;
     gap: 8px;
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+  .task-activity-timeline > li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .task-deliveries {
+    display: grid;
+    gap: 8px;
+    overflow-wrap: anywhere;
+  }
+  .task-deliveries li > p {
+    white-space: pre-wrap;
+  }
+
+  .task-result,
+  .task-revision {
+    display: grid;
+    gap: 12px;
+    margin-top: 20px;
+    overflow-wrap: anywhere;
+  }
+  .task-result-fields {
+    display: grid;
+    gap: 12px;
+  }
+  .task-result dt {
+    font-weight: 600;
+  }
+  .task-result dd {
+    margin: 4px 0 0;
+    white-space: pre-wrap;
+  }
+  .task-result ul {
+    padding-left: 20px;
+    list-style: disc;
   }
 
   .task-execution-state {
@@ -379,5 +536,105 @@
     display: grid;
     gap: 4px;
     min-width: 0;
+  }
+}
+
+/* Arbitrary output fields share one compact grid. Titles/descriptions come from the schema;
+   no business-specific field names, units, percentages or translations are inferred. */
+.task-result .task-result-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 12px;
+}
+.task-result-fields > .task-result-field {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--app-border);
+  background: var(--surface-secondary);
+}
+.task-result-fields > .task-result-field[data-kind="detail"],
+.task-result-fields > .task-warning {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.task-result-fields > .task-warning {
+  background: var(--app-warning-soft);
+  border-color: transparent;
+}
+.task-result .task-result-field > dt {
+  font-size: var(--app-text-sm);
+  font-weight: 500;
+  color: var(--muted);
+}
+.task-result .task-warning > dt {
+  color: inherit;
+}
+.task-result .task-result-field[data-kind="number"] > dd:not(.task-result-description) {
+  font-size: var(--app-text-2xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+.task-result .task-result-description {
+  margin-top: 8px;
+  white-space: pre-wrap;
+}
+
+/* Keep list controls together, and let narrow screens drill into one task at a time. */
+.task-list-tools {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.tasks-layout.list-only .task-list {
+  max-width: 960px;
+}
+.tasks-layout.list-only .task-list-tools {
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  align-items: end;
+}
+.task-back-link {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--app-text-sm);
+}
+.tasks-screen.is-creating .task-back-link {
+  display: inline-flex;
+  margin-bottom: 18px;
+}
+@media (max-width: 720px) {
+  .tasks-screen.has-selection .task-list {
+    display: none;
+  }
+  .task-back-link {
+    display: inline-flex;
+    margin-bottom: 18px;
+  }
+  .tasks-screen.has-selection .task-detail {
+    padding: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  .tasks-layout.list-only .task-list-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .tasks-screen.has-selection > .gb-page-header {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .tasks-layout.list-only .task-list-tools {
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 40%);
+    gap: 8px;
+    align-items: center;
+  }
+  .tasks-screen > .gb-page-header {
+    margin-bottom: 12px;
   }
 }

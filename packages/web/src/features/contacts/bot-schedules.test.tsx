@@ -3,6 +3,7 @@ import type { BotDefinition } from "@deskmates/contracts";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ApiClient } from "../../api/client.js";
+import { SessionRolesProvider } from "../../state/session-roles.js";
 import { BotSchedules } from "./bot-schedules.js";
 
 afterEach(() => {
@@ -69,7 +70,7 @@ it("rejects invalid drafts before an API mutation and removes entries through PA
       onSaved={vi.fn()}
     />,
   );
-  fireEvent.change(screen.getByLabelText("Cron expression 1"), { target: { value: "bad cron" } });
+  fireEvent.change(screen.getByLabelText("Repeat pattern 1"), { target: { value: "bad cron" } });
   fireEvent.click(screen.getByRole("button", { name: "Save schedules" }));
   expect(await screen.findByRole("alert")).toBeTruthy();
   expect(updateBot).not.toHaveBeenCalled();
@@ -137,4 +138,62 @@ it("refreshes the next occurrence when a suspended page becomes visible", () => 
     timeZoneName: "short",
   });
   expect(screen.getByText(`Next occurrence: ${at}`)).toBeTruthy();
+});
+
+it("uses the bot workspace role even when the viewer owns another workspace", () => {
+  render(
+    <SessionRolesProvider
+      roles={{
+        tenantRole: "owner",
+        platformMaintainer: false,
+        workspaceRoles: { ws_1: "guest", ws_other: "owner" },
+      }}
+    >
+      <BotSchedules
+        api={{ updateBot: vi.fn() } as unknown as ApiClient}
+        bot={bot}
+        timeZone="UTC"
+        onSaved={vi.fn()}
+      />
+    </SessionRolesProvider>,
+  );
+  expect((screen.getByLabelText("Scheduled instruction 1") as HTMLTextAreaElement).disabled).toBe(
+    true,
+  );
+  expect(screen.queryByRole("button", { name: "Start schedule 1 now" })).toBeNull();
+  expect(screen.getByText(/Only an Admin or Owner/)).toBeTruthy();
+});
+
+it("starts a saved schedule once while its request is pending and allows retry after failure", async () => {
+  let rejectRun: (error: Error) => void = () => {};
+  const runCronNow = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectRun = reject;
+        }),
+    )
+    .mockResolvedValue({ id: "run_1" });
+  render(
+    <BotSchedules
+      api={{ runCronNow } as unknown as ApiClient}
+      bot={bot}
+      timeZone="UTC"
+      onSaved={vi.fn()}
+    />,
+  );
+  const start = screen.getByRole("button", { name: "Start schedule 1 now" });
+  act(() => {
+    fireEvent.click(start);
+    fireEvent.click(start);
+  });
+  expect(runCronNow).toHaveBeenCalledOnce();
+  await act(async () => {
+    rejectRun(new Error("Start unavailable"));
+  });
+  expect((await screen.findByRole("alert")).textContent).toContain("Start unavailable");
+  fireEvent.click(start);
+  await screen.findByText(/Schedule 1 started/);
+  expect(runCronNow).toHaveBeenCalledTimes(2);
 });

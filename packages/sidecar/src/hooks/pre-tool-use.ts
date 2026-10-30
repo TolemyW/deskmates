@@ -22,16 +22,19 @@
 // approval request, polls for up to `shortWaitSeconds`, and returns allow, deny, or defer
 // (ADR-0002 amendment 1). On a resumed run the SDK replays the deferred call through this hook,
 // which consumes the human's decision from the `approval` trigger for that call, matched by
-// tool-use id. A resumed run is a new process and a new browser MCP session, so the replayed call
+// tool-use id, by the approval's kind (an egress decision answers only the egress ask, a tool
+// decision only the L2 ask) and by the call's stable dimensions (issue #62 H3). A resumed run is a new process and a new browser MCP session, so the replayed call
 // carries a `ref` from a snapshot that no longer exists and usually fails; when its result is an
 // error the decision is re-armed and the first later call in this process whose stable dimensions
 // `(toolName, targetOrigin, argumentPattern)` equal the deferred action's consumes it instead
-// (`consumedBy: retry`). Either way the decision is spent after one use, a call with different
+// (`consumedBy: retry`); for any tool but a browser one the retry's input, keys sorted and the
+// model's `description` aside, must also equal the replayed call's, since only a browser `ref`
+// goes stale (issue #62 M15). Either way the decision is spent after one use, a call with different
 // dimensions is judged afresh, and nothing survives the process (ADR-0002 amendment 2).
 // `canUseTool` (can-use-tool.ts) is the fail-closed backstop for anything that reaches it without
 // a hook decision.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { HookCallback, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import {
   type ApprovalDecision,
@@ -46,6 +49,7 @@ import {
   type StartRunRequest,
   type StoredConnectorValidation,
   type ToolAction,
+  VAULT_FILL_TOOL,
   botWorkDir,
   egressAllows,
   isDeskmatesError,
@@ -53,10 +57,16 @@ import {
   networkGrantAllowsUrl,
   riskForEffect,
   tierForAction,
+  vaultActionPattern,
 } from "@deskmates/contracts";
 import { waitForApproval } from "../approval-wait.js";
 import { botDirectoryRefusal } from "../bot-directory-guard.js";
 import type { BrowserState } from "../browser-state.js";
+import {
+  desktopCallTargets,
+  desktopNetworkDenial,
+  desktopShellRefusal,
+} from "../desktop/desktop-hook.js";
 import type { GatewayClient } from "../gateway-client.js";
 import { integrationApprovalPreview } from "../integration-approval-preview.js";
 import type { EventSink } from "../ledger.js";
@@ -65,9 +75,12 @@ import {
   classifyTool,
   isBrowserTool,
   isConnectorSubmit,
+  isDesktopTool,
   isIntegrationExecute,
   isNavigation,
   isShellTool,
+  isVaultUse,
+  tierOptionsOf,
 } from "../risk-tier.js";
 import type { PendingDecision, RunState } from "../run-state.js";
 import { skillOfToolInput } from "../skill-plugin.js";
@@ -79,6 +92,7 @@ import {
   targetUrl,
   toToolAction,
 } from "../tool-action.js";
+import { rememberVaultRelease, vaultCallKey } from "../vault-release.js";
 import {
   imageReadNotice,
   isImagePath,
@@ -149,6 +163,10 @@ function deny(reason: string): HookJSONOutput {
   };
 }
 
+/** ADR-0029 decision 2: the reason a call deferred at the drain's safe point carries. */
+export const DRAIN_DEFER_REASON =
+  "The platform is pausing this run for an upgrade; it resumes on its own and this call is judged again then.";
+
 function defer(reason: string): HookJSONOutput {
   return {
     hookSpecificOutput: {
@@ -182,6 +200,58 @@ function sameAction(action: ToolAction, deferred: DeferredAction): boolean {
   );
 }
 
+/**
+ * Why the human's decision on resume does not answer this ask of the replayed call, or undefined
+ * when it does (issue #62 H3). One call can raise an egress ask and then an L2 ask; "allow this
+ * site" is not an approval of the call's side effect, and a tool decision is not a new allowlist
+ * entry. The kind decides when the Gateway sent it; the dimensions must match either way, which
+ * also keeps an egress decision for one host off another host of the same command.
+ */
+function decisionMismatch(
+  decided: PendingDecision,
+  action: ToolAction,
+  kind: "egress" | undefined,
+): string | undefined {
+  const asked = kind ?? "tool";
+  if (decided.approvalKind !== undefined && decided.approvalKind !== asked)
+    return `the decision was for the ${decided.approvalKind} approval, not the ${asked} approval`;
+  if (decided.deferredAction === undefined) return "the decision named no action";
+  if (!sameAction(action, decided.deferredAction)) return "the decision was for another action";
+  return undefined;
+}
+
+/** JSON with every object's keys sorted, so the model's key order does not change a hash. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+/**
+ * The hash a retry of a non-browser tool must repeat (issue #62 M15): the action's stable
+ * dimensions and every input field that says what the call does (the command, URL, body), in a
+ * canonical form. `description` is the model's own label for the call and is reworded on a
+ * retry, so it is left out; any other field that differs still asks afresh.
+ */
+function inputHash(action: ToolAction, input: Record<string, unknown>): string {
+  const { description: _label, ...effective } = input;
+  return createHash("sha256")
+    .update(
+      canonicalJson({
+        toolName: action.toolName,
+        targetOrigin: action.targetOrigin,
+        argumentPattern: action.argumentPattern,
+        input: effective,
+      }),
+    )
+    .digest("hex");
+}
+
 function asRecord(input: unknown): Record<string, unknown> {
   return input && typeof input === "object" && !Array.isArray(input)
     ? (input as Record<string, unknown>)
@@ -190,8 +260,10 @@ function asRecord(input: unknown): Record<string, unknown> {
 
 export function createPreToolUseHook(ctx: HookContext): HookCallback {
   const { request, client, sink, state } = ctx;
+  const reusedApprovals = new Set<ApprovalId>();
   // ADR-0002 amendment 5: the run's frozen browser-code tier policy; absent is `name-v1`.
-  const tierOptions = { browserCode: request.browserCodeApproval };
+  // Amendment 3, A5: the workspace operator's tier overrides, frozen on the run row.
+  const tierOptions = tierOptionsOf(request);
 
   /**
    * The workspace's egress allowlist as this hook last saw it. It starts as the copy the run was
@@ -257,13 +329,19 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
     input: Record<string, unknown>,
     riskLevel: RiskLevel,
     toolUseId: string,
-    decided: PendingDecision | undefined,
+    pending: PendingDecision | undefined,
     holdsBrowserLock: boolean,
     signal: AbortSignal | undefined,
     actionOverride?: ToolAction,
     kind?: "egress",
     labels: ActionLabels = {},
+    /** Called with the approval an allow answer rests on (ADR-0045: a release names it). */
+    onAllow?: (approvalId: ApprovalId) => void,
   ): Promise<HookJSONOutput> {
+    const settled = (approvalId: ApprovalId, output: HookJSONOutput): HookJSONOutput => {
+      if (onAllow !== undefined && isAllow(output)) onAllow(approvalId);
+      return output;
+    };
     // The labels are display only (ADR-0002 amendment 3, A5): they ride on the posted action and
     // the ledger event, and never enter a rule's dimensions.
     const action: ToolAction = {
@@ -272,17 +350,36 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
       ...labels,
     };
 
-    // Resume: the replayed call, matched by tool-use id, consumes the human's decision. It is
-    // remembered until its tool result arrives: an error there hands it on to the retry.
+    // Resume: the replayed call, matched by tool-use id, consumes the human's decision when the
+    // decision is for this ask: same kind, same dimensions (issue #62 H3). A tool decision is
+    // left alone by the egress ask in front of the L2 ask, which may still take it; any other
+    // mismatch discards it and the ask is judged afresh.
+    let decided = pending;
+    const mismatch = decided === undefined ? undefined : decisionMismatch(decided, action, kind);
+    if (decided !== undefined && mismatch !== undefined) {
+      if (kind !== "egress" || decided.approvalKind === "egress") {
+        sink.emit("approval", {
+          phase: "discarded",
+          approvalId: decided.approvalId,
+          toolUseId,
+          toolName,
+          decision: decided.decision,
+          reason: mismatch,
+        });
+      }
+      decided = undefined;
+    }
+    // It is remembered until its tool result arrives: an error there hands it on to the retry.
     if (decided) {
       if (decided.decision === "deny") ctx.onDoNotLearn?.("approval_denied");
-      state.consumedDecision = {
+      state.consumedDecisions.set(toolUseId, {
         approvalId: decided.approvalId,
         decision: decided.decision,
         deferredAction: decided.deferredAction,
         reason: decided.reason,
         toolUseId,
-      };
+        inputSha256: inputHash(action, input),
+      });
       sink.emit("approval", {
         phase: "resumed",
         consumedBy: "replay",
@@ -292,14 +389,21 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
         riskLevel,
         decision: decided.decision,
       });
-      return applyDecision(decided.approvalId, decided.decision, decided.reason);
+      return settled(
+        decided.approvalId,
+        applyDecision(decided.approvalId, decided.decision, decided.reason),
+      );
     }
 
     // The replayed call failed, most often on a `ref` from the old process's snapshot. The first
     // later call that is the same action takes the decision the human already gave; a call with
     // any other dimension is judged afresh (ADR-0002 amendment 2).
     const retry = state.retryDecision;
-    if (retry !== undefined && sameAction(action, retry.deferredAction)) {
+    if (
+      retry !== undefined &&
+      sameAction(action, retry.deferredAction) &&
+      (isBrowserTool(toolName) || inputHash(action, input) === retry.inputSha256)
+    ) {
       if (retry.decision === "deny") ctx.onDoNotLearn?.("approval_denied");
       state.retryDecision = undefined;
       sink.emit("approval", {
@@ -312,20 +416,42 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
         riskLevel,
         decision: retry.decision,
       });
-      return applyDecision(retry.approvalId, retry.decision, retry.reason);
+      return settled(
+        retry.approvalId,
+        applyDecision(retry.approvalId, retry.decision, retry.reason),
+      );
     }
 
-    const approvalId = randomUUID() as ApprovalId;
+    const redactedAction = ctx.redact(action) as ToolAction;
+    const fingerprint = createHash("sha256").update(canonicalJson(redactedAction)).digest("hex");
+    const pendingCard = request.pendingApprovals?.find(
+      (candidate) =>
+        !reusedApprovals.has(candidate.approvalId) &&
+        candidate.toolUseId === toolUseId &&
+        candidate.kind === (kind ?? "tool") &&
+        candidate.actionFingerprint === fingerprint,
+    );
+    const approvalId = pendingCard?.approvalId ?? (randomUUID() as ApprovalId);
+    if (pendingCard) reusedApprovals.add(pendingCard.approvalId);
+    // ADR-0029 decision 5: the same action as the L2 call a restart interrupted. The Gateway
+    // decides by its own record; the flag lets it say why on the card.
+    const interrupted =
+      request.trigger.kind === "platform_resume" ? request.trigger.interruptedCall : undefined;
+    const afterInterruption =
+      interrupted !== undefined &&
+      interrupted.riskLevel === "L2" &&
+      sameAction(action, interrupted);
     const req: ApprovalRequest = {
       type: "approval_request",
       runId: request.runId,
       approvalId,
       // The tier and the rule dimensions above were computed from the raw input; only what leaves
       // the process is redacted.
-      action: ctx.redact(action) as ToolAction,
+      action: redactedAction,
       riskLevel,
       toolUseId,
       ...(kind === undefined ? {} : { kind }),
+      ...(afterInterruption ? { afterInterruption: true as const } : {}),
     };
     sink.emit("approval", {
       phase: "requested",
@@ -368,6 +494,7 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
     if (outcome.kind === "timeout") {
       ctx.onDoNotLearn?.("approval_timeout");
       state.deferredApprovalId = approvalId;
+      state.deferredApprovalIds.push(approvalId);
       state.deferredToolUseId = toolUseId;
       sink.emit("approval", {
         phase: "deferred",
@@ -379,14 +506,31 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
       return defer(`Waiting for human approval (${approvalId})`);
     }
     const { decision, reason } = outcome.response;
+    // ADR-0029 decision 2: the Gateway is draining. The wait ends here, the approval stays open,
+    // and the run parks for the platform; the resumed attempt waits on this same approval.
+    if (decision === "defer" && outcome.response.platform === "drain") {
+      state.platformInterruption = "drain";
+      state.deferredApprovalId = approvalId;
+      state.deferredApprovalIds.push(approvalId);
+      state.deferredToolUseId = toolUseId;
+      sink.emit("approval", {
+        phase: "deferred",
+        approvalId,
+        toolUseId,
+        toolName,
+        reason: "platform drain",
+      });
+      return defer(DRAIN_DEFER_REASON);
+    }
     sink.emit("approval", { phase: "decided", approvalId, toolUseId, toolName, decision, reason });
-    if (decision === "allow") return allow();
+    if (decision === "allow") return settled(approvalId, allow());
     if (decision === "deny") {
       ctx.onDoNotLearn?.("approval_denied");
       return deny(reason ?? `Denied by human (approval ${approvalId})`);
     }
     ctx.onDoNotLearn?.("approval_deferred");
     state.deferredApprovalId = approvalId;
+    state.deferredApprovalIds.push(approvalId);
     state.deferredToolUseId = toolUseId;
     return defer(reason ?? `Waiting for human approval (${approvalId})`);
   }
@@ -536,27 +680,167 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
   }
 
   /**
-   * On resume the SDK replays the deferred call through the hook before anything else, so the
-   * first hook call settles the pending decision: it applies when the replayed call carries the
-   * tool-use id the decision was given for, and is discarded otherwise. Either way it cannot
-   * leak to a later call, even when the replayed one is stopped by egress or the browser lock.
+   * ADR-0045 decisions 4 and 5. A credential release is L2 under every override; its action is
+   * built from the Gateway's entry, never from the input alone: the entry's exact origin is the
+   * target and `vault:<id> rev:<n> op:<operation>` the stable dimension an Always rule must bind
+   * exactly. A fill also needs the run's tab on that exact origin and the workspace browser,
+   * checked here before anyone is asked and again next to the page before anything is filled. The
+   * approval the call is allowed under is handed to the tool handler (`vault-release.ts`).
    */
-  function settlePendingDecision(toolUseId: string, toolName: string): PendingDecision | undefined {
-    const pending = state.pendingDecision;
-    if (pending === undefined) return undefined;
-    state.pendingDecision = undefined;
-    if (pending.toolUseId !== undefined && pending.toolUseId === toolUseId) return pending;
-    sink.emit("approval", {
-      phase: "discarded",
-      approvalId: pending.approvalId,
+  async function decideVaultUse(
+    toolName: string,
+    input: Record<string, unknown>,
+    toolUseId: string,
+    decided: PendingDecision | undefined,
+    signal: AbortSignal | undefined,
+    labels: ActionLabels,
+  ): Promise<HookJSONOutput> {
+    const fill = toolName === VAULT_FILL_TOOL;
+    const tool = fill ? "vault_fill" : "vault_request";
+    const refuse = (reason: string): HookJSONOutput => {
+      sink.emit("log", { source: "pre_tool_use", toolUseId, toolName, decision: "deny", reason });
+      return deny(`${tool} refused before release: ${reason}`);
+    };
+    const entryId = typeof input.entryId === "string" ? input.entryId : "";
+    const revision = input.revision;
+    if (entryId === "" || !Number.isSafeInteger(revision))
+      return refuse("entryId and revision are required; call vault_list");
+    let entry: Awaited<ReturnType<GatewayClient["vaultEntry"]>>;
+    try {
+      entry = await client.vaultEntry(entryId);
+    } catch (err) {
+      return refuse(
+        `the Vault entry could not be read (${isDeskmatesError(err) ? err.code : "unavailable"})`,
+      );
+    }
+    if (!entry.enabled) return refuse("the entry is disabled or not usable");
+    if (entry.type !== (fill ? "browser_login" : "http_header_token"))
+      return refuse(`the entry is a ${entry.type}`);
+    if (entry.revision !== revision)
+      return refuse(`the entry is now at revision ${entry.revision}; call vault_list`);
+    const requestId = typeof input.requestId === "string" ? input.requestId : undefined;
+    const definition = fill ? undefined : entry.requests?.find((r) => r.id === requestId);
+    if (!fill && definition === undefined) return refuse("no such request definition");
+
+    let tabId: string | undefined;
+    let tabUrl: string | undefined;
+    if (fill) {
+      const browser = await ctx.readBrowserState?.();
+      const tab = browser?.tabs.find((t) => t.id === browser.tabId);
+      tabId = tab?.id;
+      tabUrl = tab?.url;
+      if (tabId === undefined || tabUrl === undefined)
+        return refuse("this run has no browser tab yet; open the login page first");
+      if (targetOrigin({ url: tabUrl }) !== entry.targetOrigin)
+        return refuse(
+          `this run's tab is not on ${entry.targetOrigin}; open that origin's login page first (the Vault never navigates)`,
+        );
+      const lock = await client.browserLock({
+        type: "browser_lock",
+        runId: request.runId,
+        op: "acquire",
+        tabId,
+      });
+      if (!lock.granted) {
+        ctx.onDoNotLearn?.("browser_wait");
+        const message = lock.waitMessage ?? HUMAN_HOLDS_BROWSER_MESSAGE;
+        sink.emit("takeover", { toolUseId, toolName, waitMessage: message });
+        return deny(message);
+      }
+    }
+    const pattern = vaultActionPattern({
+      entryId,
+      revision: entry.revision,
+      operation: fill ? "fill" : "request",
+      ...(requestId === undefined ? {} : { requestId }),
+    });
+    const action: ToolAction = {
+      toolName,
+      input: {
+        entryId,
+        entryName: entry.name,
+        type: entry.type,
+        revision: entry.revision,
+        operation: fill ? "fill" : "request",
+        targetOrigin: entry.targetOrigin,
+        ...(definition
+          ? {
+              requestId: definition.id,
+              requestName: definition.name,
+              method: definition.method,
+              path: definition.path,
+              effect: definition.effect,
+              params: input.params ?? {},
+            }
+          : {}),
+        ...(fill && typeof input.frameUrl === "string" ? { frameUrl: input.frameUrl } : {}),
+      },
+      targetOrigin: entry.targetOrigin,
+      argumentSummary: pattern,
+      argumentPattern: pattern,
+    };
+    sink.emit("log", {
+      source: "pre_tool_use",
       toolUseId,
       toolName,
-      decision: pending.decision,
-      reason:
-        pending.toolUseId === undefined
-          ? "the approval trigger named no tool call"
-          : `the decision was for tool call ${pending.toolUseId}`,
+      op: "vault_tier",
+      entryId,
+      revision: entry.revision,
+      riskLevel: "L2",
     });
+    const key = vaultCallKey(toolName, input);
+    return decideL2(
+      toolName,
+      input,
+      "L2",
+      toolUseId,
+      decided,
+      fill,
+      signal,
+      action,
+      undefined,
+      labels,
+      (approvalId) =>
+        rememberVaultRelease(state.vaultReleases, key, {
+          approvalId,
+          toolUseId,
+          ...(tabId === undefined ? {} : { tabId }),
+          ...(tabUrl === undefined ? {} : { tabUrl }),
+          origin: entry.targetOrigin,
+        }),
+    );
+  }
+
+  /**
+   * On resume the SDK replays the deferred calls through the hook before anything else, so the
+   * first hook calls settle the pending decisions: a replayed call carrying the tool-use id a
+   * decision was given for takes that decision (issue #62 M8: one OpenAI turn can park on several
+   * calls, each with its own). The first call that has none ends the replay, and every decision
+   * left is discarded. Either way none can leak to a later call, even when the replayed one is
+   * stopped by egress or the browser lock.
+   */
+  function settlePendingDecision(toolUseId: string, toolName: string): PendingDecision | undefined {
+    const pending = state.pendingDecisions;
+    if (pending.size === 0) return undefined;
+    const own = pending.get(toolUseId);
+    if (own !== undefined) {
+      pending.delete(toolUseId);
+      return own;
+    }
+    for (const left of pending.values()) {
+      sink.emit("approval", {
+        phase: "discarded",
+        approvalId: left.approvalId,
+        toolUseId,
+        toolName,
+        decision: left.decision,
+        reason:
+          left.toolUseId === undefined
+            ? "the approval trigger named no tool call"
+            : `the decision was for tool call ${left.toolUseId}`,
+      });
+    }
+    pending.clear();
     return undefined;
   }
 
@@ -593,7 +877,17 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
     const input = asRecord(hookInput.tool_input);
     ctx.protectToolInput?.(toolName, input);
     const toolUseId = toolUseID ?? hookInput.tool_use_id;
-    const decided = settlePendingDecision(toolUseId, toolName);
+    let decided = settlePendingDecision(toolUseId, toolName);
+    // ADR-0029 decision 2: the safe point. The Gateway is draining, so this call is deferred
+    // before it starts, whatever its tier; the resumed attempt replays it through this hook. A
+    // call carrying a human's decision (the replay of an approved call, or a decision waiting for
+    // its retry) goes ahead, so the decision is not lost; the next call parks instead.
+    if (state.drainRequested && decided === undefined && state.retryDecision === undefined) {
+      state.platformInterruption = "drain";
+      state.deferredToolUseId = toolUseId;
+      sink.emit("log", { source: "platform", op: "drain_deferred", toolUseId, toolName });
+      return defer(DRAIN_DEFER_REASON);
+    }
     // A call made inside a subagent the run spawned: the SDK sets `agent_id` (A5).
     const subagent: ActionLabels =
       hookInput.agent_id === undefined
@@ -660,6 +954,17 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
       return deny(dirs.message);
     }
 
+    // ADR-0048 decision 3: LCU from the shell skips the lock, takeover and ledger labels of the
+    // desktop tools, so a line that runs the binary is refused with where to go instead. A guard
+    // rail: it reads the literal line, and a script that starts LCU itself passes.
+    if (isShellTool(toolName) || toolName === "mcp__deskmates__tty_session") {
+      const refusal = desktopShellRefusal(command, request.desktopTools === "lcu-v1");
+      if (refusal !== undefined) {
+        sink.emit("log", { source: "desktop", op: "shell_refused", toolName, toolUseId });
+        return deny(refusal);
+      }
+    }
+
     // A call that cannot reach the network never asks the Gateway anything: the refresh is one
     // round trip per navigation check, not one per tool call.
     const workflow = toolName === "mcp__deskmates__browser_cli_workflow";
@@ -717,7 +1022,7 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
         decision: "ask",
         reason: `egress_ask: ${host} is not in the workspace allowlist`,
       });
-      return decideL2(
+      const verdict = await decideL2(
         toolName,
         input,
         "L2",
@@ -729,6 +1034,12 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
         "egress",
         subagent,
       );
+      // The egress ask took the decision: it is spent, and the L2 ask behind it asks anew. An
+      // egress decision was offered to its own ask either way; the L2 ask never takes it, so it
+      // is not discarded a second time there (issue #62).
+      if (state.consumedDecisions.has(toolUseId) || decided?.approvalKind === "egress")
+        decided = undefined;
+      return verdict;
     };
     const blockEgress = (reason: string): HookJSONOutput => {
       ctx.onDoNotLearn?.("egress_block");
@@ -771,21 +1082,62 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
         } catch {
           h = undefined;
         }
-        if (h === undefined) blocked = "an unreadable URL";
+        // A host the shell expands at run time ("https://$h/…") is not a host name either.
+        if (h === undefined || /[$`{}]/.test(h)) blocked = "an unreadable URL";
         else if (!egressAllows(h, egressAllowlist)) blocked = h;
         if (blocked !== undefined) break;
       }
       if (blocked !== undefined) {
-        const reason = `egress_blocked: shell fetch to ${blocked} is not in the workspace allowlist`;
-        if (
-          blocked === "no readable URL" ||
-          blocked === "an unreadable URL" ||
-          !isPublicHostname(blocked)
-        )
-          return blockEgress(reason);
+        const unreadable = blocked === "no readable URL" || blocked === "an unreadable URL";
+        // Issue #91: an unreadable target is not a policy refusal, and a live bot read "not in the
+        // allowlist" in an open workspace as one; it is told how to make the target readable.
+        const reason = unreadable
+          ? `egress_blocked: shell fetch with ${blocked}: the target is built at run time (a shell variable, command substitution or a program found at run time), so it cannot be checked against the workspace allowlist. Run the command again with the URL written out literally.`
+          : `egress_blocked: shell fetch to ${blocked} is not in the workspace allowlist`;
+        if (unreadable || !isPublicHostname(blocked)) return blockEgress(reason);
         const verdict = await askEgress(blocked, undefined);
         if (!isAllow(verdict)) return verdict;
       }
+    }
+
+    // (b'') desktop (ADR-0048 decisions 2 and 6): allowed without asking anyone, after the hard
+    // denies on the network targets the code names and the human-hold check. The tier table says
+    // L1; the effect labels go on `tool_call`, not into a tier. Every network denial is recorded
+    // with its host (amendment 1, A4). The shared-screen lease itself is the proxy's, taken at
+    // dispatch with the mode the call's labels choose (A3).
+    if (isDesktopTool(toolName)) {
+      if (request.desktopTools !== "lcu-v1")
+        return deny("desktop tools are not enabled for this run");
+      const targets = desktopCallTargets(toolName, input);
+      if (targets.length > 0) {
+        const denial = desktopNetworkDenial(targets, await refreshAllowlist(), grants);
+        if (denial !== undefined) {
+          ctx.onDoNotLearn?.("egress_block");
+          sink.emit("log", {
+            source: "desktop",
+            op: "egress_denied",
+            level: "warn",
+            toolName,
+            toolUseId,
+            ...(denial.host === undefined ? {} : { host: denial.host }),
+            kind: denial.kind,
+            reason: denial.reason,
+          });
+          return deny(denial.reason);
+        }
+      }
+      const lock = await client.desktopLock({
+        type: "desktop_lock",
+        runId: request.runId,
+        op: "probe",
+      });
+      if (!lock.granted) {
+        ctx.onDoNotLearn?.("browser_wait");
+        const message = lock.waitMessage ?? HUMAN_HOLDS_BROWSER_MESSAGE;
+        sink.emit("takeover", { toolUseId, toolName, waitMessage: message });
+        return deny(message);
+      }
+      return allow();
     }
 
     // (c) browser lock: acquire before every browser tool; a human holder means wait, no retry.
@@ -831,6 +1183,10 @@ export function createPreToolUseHook(ctx: HookContext): HookCallback {
         options?.signal,
         subagent,
       );
+
+    // (d''') a Vault credential release: L2, built from the Gateway's entry (ADR-0045 decision 4).
+    if (isVaultUse(toolName))
+      return decideVaultUse(toolName, input, toolUseId, decided, options?.signal, subagent);
 
     // (d) risk tier. A tool in no table is L2 and labelled `unclassified` (ADR-0002 amendment 3, A5).
     const tier = classifyTool(toolName, input, tierOptions);

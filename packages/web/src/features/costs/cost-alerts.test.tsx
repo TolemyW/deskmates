@@ -153,7 +153,7 @@ describe("Alerts card", () => {
     expect(row.textContent).toContain("Known cost");
     expect(row.textContent).toContain("triage");
     expect(row.textContent).toContain("UTC day 2026-10-02");
-    expect(row.textContent).toContain("$2.500000 known + 1 unpriced");
+    expect(row.textContent).toContain("$2.50 known + 1 unpriced");
     expect(screen.queryByText(/\$0\.000000/)).toBeNull();
     expect(within(alertsCard()).getByText("1 open")).toBeTruthy();
 
@@ -166,7 +166,7 @@ describe("Alerts card", () => {
     expect(within(row).getByRole("link", { name: "Open run" }).getAttribute("href")).toBe(
       "#/runs/run_1",
     );
-    expect(row.textContent).toContain("$2.000000");
+    expect(row.textContent).toContain("$2.00");
     expect(row.textContent).toContain("3 priced, 1 unpriced");
 
     fireEvent.click(within(row).getByRole("button", { name: "Acknowledge" }));
@@ -201,9 +201,9 @@ describe("Alerts card", () => {
       (button) => button.closest("li"),
     );
     expect(first?.textContent).toContain("Unpriced usage");
-    expect(first?.textContent).toContain("All bots");
+    expect(first?.textContent).toContain("All Bots");
     expect(first?.textContent).toContain("Unknown spend · 4 unpriced");
-    expect(second?.textContent).toContain("$3.000000");
+    expect(second?.textContent).toContain("$3.00");
     expect(second?.textContent).not.toContain("unpriced");
     expect(screen.queryByText(/\$0\.000000/)).toBeNull();
   });
@@ -228,7 +228,7 @@ describe("Alerts card", () => {
     // No configuration form on the report itself.
     expect(screen.queryByLabelText("Threshold (USD)")).toBeNull();
     expect(screen.queryByRole("button", { name: "Create rule" })).toBeNull();
-    expect(screen.getByText(/report filters do not apply/)).toBeTruthy();
+    expect(screen.queryByText(/report filters do not apply/)).toBeNull();
   });
 
   it("shows a failed load as an error, not as an empty success", async () => {
@@ -285,8 +285,10 @@ describe("Alerts card", () => {
     FakeEventSource.last.readyState = 0;
     FakeEventSource.last.onerror?.(new Event("error"));
     FakeEventSource.last.open();
-    await waitFor(() => expect(nav().textContent).toContain("1–3 of 3"));
-    expect(screen.getAllByRole("button", { name: "Acknowledge" })).toHaveLength(3);
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "Acknowledge" })).toHaveLength(3),
+    );
+    expect(screen.queryByRole("navigation", { name: "Alert pagination" })).toBeNull();
   });
 
   it("keeps an acknowledgement error on the alerts card", async () => {
@@ -341,10 +343,10 @@ describe("Alert rules panel", () => {
     expect(known?.textContent).toContain("Known cost");
     expect(known?.textContent).toContain("Day");
     expect(known?.textContent).toContain("triage");
-    expect(known?.textContent).toContain("$2.000000");
+    expect(known?.textContent).toContain("$2.00");
     expect(unpriced?.textContent).toContain("Unpriced usage");
     expect(unpriced?.textContent).toContain("Month");
-    expect(unpriced?.textContent).toContain("All bots");
+    expect(unpriced?.textContent).toContain("All Bots");
     expect(unpriced?.textContent).toContain("No monetary threshold");
   });
 
@@ -368,7 +370,7 @@ describe("Alert rules panel", () => {
         body: { kind: "known_cost", window: "month", thresholdUsd: 15 },
       }),
     );
-    await within(panel).findByText("$15.000000");
+    await within(panel).findByText("$15.00");
     // A created rule clears the draft and closes the form.
     expect(within(panel).queryByLabelText("Threshold (USD)")).toBeNull();
     fireEvent.click(within(panel).getByRole("button", { name: "New rule" }));
@@ -572,4 +574,68 @@ describe("stale responses", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByText("No open alerts.")).toBeTruthy();
   });
+});
+
+it("keeps the submitted rule draft locked until a failed request can be retried", async () => {
+  const { fetcher } = renderPanel({ alerts: [], rules: [] });
+  await screen.findByText("No rules configured");
+  const panel = await openRules();
+  fireEvent.click(within(panel).getByRole("button", { name: "New rule" }));
+  const threshold = within(panel).getByLabelText("Threshold (USD)") as HTMLInputElement;
+  fireEvent.change(threshold, { target: { value: "15" } });
+  let rejectRequest: (reason: Error) => void = () => {};
+  fetcher.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectRequest = reject;
+      }),
+  );
+  const form = threshold.closest("form") as HTMLFormElement;
+  const before = fetcher.mock.calls.length;
+  act(() => {
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+  });
+  expect(fetcher.mock.calls.length).toBe(before + 1);
+  expect(threshold.disabled).toBe(true);
+  expect(
+    (within(panel).getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled,
+  ).toBe(true);
+  for (const control of within(panel).getAllByRole("button", { name: /Rule type|Window|Scope/ })) {
+    expect(
+      control.getAttribute("aria-disabled") === "true" || control.hasAttribute("disabled"),
+    ).toBe(true);
+  }
+  await act(async () => {
+    rejectRequest(new Error("Rule save unavailable"));
+  });
+  expect((await within(panel).findByRole("alert")).textContent).toContain(
+    "Cannot connect to the server",
+  );
+  expect(threshold.value).toBe("15");
+  expect(threshold.disabled).toBe(false);
+  fireEvent.click(within(panel).getByRole("button", { name: "Create rule" }));
+  await within(panel).findByText("$15.00");
+});
+
+it("retries each failed list locally without discarding an open rule draft", async () => {
+  const { fetcher } = fakeFetch({ alerts: [], rules: [] });
+  fetcher.mockImplementationOnce(async () =>
+    Response.json({ code: "internal", message: "Alerts unavailable" }, { status: 503 }),
+  );
+  fetcher.mockImplementationOnce(async () =>
+    Response.json({ code: "internal", message: "Rules unavailable" }, { status: 503 }),
+  );
+  render(<CostAlertsPanel api={createApiClient({ fetch: fetcher })} bots={[bot]} />);
+  const retryAlerts = await screen.findByRole("button", { name: "Retry alerts" });
+  const panel = await openRules();
+  fireEvent.click(within(panel).getByRole("button", { name: "New rule" }));
+  fireEvent.change(within(panel).getByLabelText("Threshold (USD)"), { target: { value: "23" } });
+  fireEvent.click(within(panel).getByRole("button", { name: "Retry rules" }));
+  await within(panel).findByText("No alert rules.");
+  expect((within(panel).getByLabelText("Threshold (USD)") as HTMLInputElement).value).toBe("23");
+  expect(screen.getByRole("button", { name: "Retry alerts" })).toBe(retryAlerts);
+  fireEvent.click(retryAlerts);
+  await screen.findByText("No open alerts.");
+  expect(fetcher.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
 });

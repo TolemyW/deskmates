@@ -191,6 +191,38 @@
     color: var(--accent);
     background: var(--accent-soft);
   }
+  .gb-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+  }
+  .gb-page-header-text {
+    display: grid;
+    flex: 1 1 320px;
+    gap: 6px;
+    min-width: 0;
+  }
+  .gb-page-header h1 {
+    margin: 0;
+    font-size: 1.375rem;
+    font-weight: 600;
+    letter-spacing: -0.025rem;
+  }
+  .gb-page-header-description {
+    margin: 0;
+    max-width: 72ch;
+    color: var(--muted);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .gb-page-header-action {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 8px;
+  }
 }
 
 @layer components {
@@ -344,18 +376,51 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
     overflow-anchor: none;
   }
+  .gb-chat-viewport[data-scrolling="true"],
+  .gb-chat-viewport:focus-visible {
+    scrollbar-color: color-mix(in srgb, var(--foreground) 25%, transparent) transparent;
+  }
+  .gb-chat-viewport::-webkit-scrollbar {
+    width: 6px;
+  }
+  .gb-chat-viewport::-webkit-scrollbar-thumb {
+    border-radius: 6px;
+    background: transparent;
+  }
+  .gb-chat-viewport[data-scrolling="true"]::-webkit-scrollbar-thumb,
+  .gb-chat-viewport:focus-visible::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--foreground) 25%, transparent);
+  }
+  .gb-chat-scroll-frame::after {
+    content: "";
+    position: absolute;
+    inset: auto 6px 0 0;
+    height: 40px;
+    pointer-events: none;
+    background: linear-gradient(transparent, var(--background));
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    mask-image: linear-gradient(transparent, black);
+  }
   .gb-chat-content {
-    padding: 20px 36px 44px;
+    padding: 20px 36px 64px;
   }
   .gb-chat-latest {
-    flex-shrink: 0;
-    padding: 8px;
-    text-align: center;
-    border-top: 1px solid var(--gb-border);
+    position: absolute;
+    inset: auto 12px 16px;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 2;
   }
   .gb-chat-latest > button {
+    pointer-events: auto;
+    background: color-mix(in srgb, var(--background) 65%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
     box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
   }
   /* Touch/narrow chat surfaces scroll without a permanently visible scrollbar. */
@@ -446,4 +511,71 @@
   display: block;
   margin: 0;
   flex-shrink: 0;
+}
+
+/* Tabs own their overflow; the surrounding page must never become the scroller. */
+.gb-section-tabs {
+  min-width: 0;
+  max-width: 100%;
+}
+.gb-tab-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.gb-tab-list {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  gap: 4px;
+}
+.gb-tab-list .gb-tab-item {
+  flex: 0 0 auto;
+  width: auto;
+  white-space: nowrap;
+  gap: 8px;
+}
+.gb-tab-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.gb-tab-navigation--sidebar .gb-tab-list {
+  flex-direction: column;
+}
+@media (max-width: 760px) {
+  .gb-tab-navigation--sidebar .gb-tab-list {
+    flex-direction: row;
+  }
+}
+
+/* Selection controls share native Button sizing; consumers own only placement. */
+.gb-choice-group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.gb-choice-group .gb-choice-item {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.gb-choice-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.gb-help-tip {
+  max-width: min(22rem, calc(100vw - 32px));
+  white-space: normal;
+}
+.gb-control-popover {
+  display: grid;
+  gap: 12px;
+  min-width: min(240px, calc(100vw - 48px));
 }

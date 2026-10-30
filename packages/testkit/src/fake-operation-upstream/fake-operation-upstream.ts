@@ -1,7 +1,8 @@
-// In-process fake of the look/OCR and speech services the operation proxy forwards to
-// (ADR-0040), served through a `fetch` function so a T1 Gateway calls it with no socket. It
-// answers the Anthropic Messages, OpenAI chat and OpenAI transcription routes, records every
-// request it received, and lets a test script the next answers, including failures.
+// In-process fake of the look/OCR, speech and image generation services the operation proxy
+// forwards to (ADR-0040 and amendment B), served through a `fetch` function so a T1 Gateway calls
+// it with no socket. It answers the Anthropic Messages, OpenAI chat, OpenAI transcription and
+// OpenAI image generations routes, records every request it received, and lets a test script the
+// next answers, including failures.
 
 export interface FakeOperationRequest {
   url: string;
@@ -29,6 +30,20 @@ export interface FakeOperationUpstreamOptions {
   lookText?: string;
   /** Default transcript, language and duration of a transcription answer. */
   transcript?: { text: string; language?: string; duration?: number };
+}
+
+/**
+ * A PNG signature and IHDR chunk of the given size, padded: enough for a sniffer and a header
+ * reader, not a decodable picture (ADR-0040 amendment B fixtures).
+ */
+export function fakePng(width: number, height: number): Buffer {
+  const ihdr = Buffer.alloc(25);
+  ihdr.writeUInt32BE(13, 0);
+  ihdr.write("IHDR", 4, "latin1");
+  ihdr.writeUInt32BE(width, 8);
+  ihdr.writeUInt32BE(height, 12);
+  ihdr.set([8, 6, 0, 0, 0], 16);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), ihdr]);
 }
 
 const json = (body: unknown, status = 200) =>
@@ -113,6 +128,18 @@ export class FakeOperationUpstream {
         choices: [{ index: 0, message: { role: "assistant", content: this.lookText } }],
         usage: { prompt_tokens: 812, completion_tokens: 14 },
       });
+    if (request.path.endsWith("/v1/images/generations")) {
+      const n = typeof request.json?.n === "number" ? request.json.n : 1;
+      const [w, h] = String(request.json?.size ?? "1024x1024")
+        .split("x")
+        .map(Number);
+      return json({
+        created: 0,
+        data: Array.from({ length: n }, () => ({
+          b64_json: fakePng(w ?? 1024, h ?? 1024).toString("base64"),
+        })),
+      });
+    }
     if (request.path.endsWith("/v1/audio/transcriptions"))
       return json({
         text: this.transcript.text,

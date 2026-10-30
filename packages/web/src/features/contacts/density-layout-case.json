@@ -1,0 +1,8 @@
+{
+  "route": "contacts",
+  "ready": ".team-card",
+  "rows": ".team-card",
+  "maxRowHeight": 180,
+  "minRows": 3,
+  "maxFirstTop": 240
+}

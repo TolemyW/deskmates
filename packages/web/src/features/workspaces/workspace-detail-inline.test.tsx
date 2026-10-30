@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApiClient } from "../../api/client.js";
 import type { MembersClient } from "../../api/members-client.js";
 import { SessionRolesProvider } from "../../state/session-roles.js";
+import { NetworkSection } from "./detail/network-section.js";
 import { WorkspaceManagement } from "./workspace-management.js";
 
 const WS = "ws_07" as WorkspaceId;
@@ -55,6 +56,8 @@ function fakeApi(row: WorkspaceDirectoryEntry, allowlist: string[]) {
     archiveWorkspace,
     getAutoApproval: vi.fn(async (workspaceId: string) => ({ workspaceId, enabled: false })),
     getWorkspace: vi.fn(async () => ({ workspace: stored, bots: [], browserLock: null })),
+    getWorkspaceDesktopTools: vi.fn(() => new Promise(() => {})),
+    getWorkspaceWebSearch: vi.fn(() => new Promise(() => {})),
     getWorkspaceLimits: vi.fn(() => new Promise(() => {})),
     getWorkspaceWorkdir: vi.fn(() => new Promise(() => {})),
     listWorkspaceDirectory,
@@ -98,8 +101,16 @@ function renderAs(role: TenantRole, api: ApiClient, people = shell()) {
   );
 }
 
-const section = (name: string) =>
-  screen.getByRole("heading", { name }).closest("section") as HTMLElement;
+const section = (name: string) => {
+  const group =
+    name === "Network policy"
+      ? "Tools & network"
+      : name === "People"
+        ? "Team & approvals"
+        : "Lifecycle";
+  fireEvent.click(screen.getByRole("tab", { name: group }));
+  return screen.getByRole("heading", { name }).closest("section") as HTMLElement;
+};
 
 beforeEach(() => {
   window.history.replaceState(null, "", `#/account/workspaces?ws=${WS}`);
@@ -199,4 +210,16 @@ describe("workspace detail: archive in place", () => {
     await screen.findByRole("heading", { name: "Research" });
     expect(screen.queryByRole("heading", { name: "Archive" })).toBeNull();
   });
+});
+
+it("retries a failed network read locally without submitting a policy change", async () => {
+  const row = directoryEntry();
+  const { api, updateWorkspaceEgress } = fakeApi(row, ["example.test"]);
+  vi.mocked(api.getWorkspace).mockRejectedValueOnce(new Error("Network unavailable"));
+  render(<NetworkSection api={api} entry={row} onChanged={vi.fn()} />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Network unavailable");
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(await screen.findByText("example.test")).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(updateWorkspaceEgress).not.toHaveBeenCalled();
 });

@@ -19,7 +19,8 @@ describeNavEntry({
   label: "app.nav.chats",
   english: "Chats",
   href: "#/threads",
-  currentAt: ["", "#/nowhere", "#/threads", "#/threads/thr_1"],
+  currentAt: ["", "#/threads", "#/threads/thr_1"],
+  noneCurrentAt: ["#/nowhere"],
   visibleTo: { manager: true, member: true },
 });
 

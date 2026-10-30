@@ -7,6 +7,7 @@ import {
   type RunEventKind,
   type RunId,
   type SidecarEvent,
+  type SidecarEventsAck,
 } from "@deskmates/contracts";
 
 export interface EventSinkOptions {
@@ -17,7 +18,13 @@ export interface EventSinkOptions {
    * redelivery of the first process's (ADR-0002 amendment 2, "Resume keeps the ledger whole").
    */
   attempt: number;
-  post: (batch: readonly SidecarEvent[]) => Promise<void>;
+  // biome-ignore lint/suspicious/noConfusingVoidType: a post with no acknowledgement resolves to nothing
+  post: (batch: readonly SidecarEvent[]) => Promise<SidecarEventsAck | undefined | void>;
+  /**
+   * Every acknowledgement the Gateway sent back. ADR-0029 decision 2: `drain` asks the run to
+   * park at its next safe point; this is how a live run hears it, with no poll of its own.
+   */
+  onAck?: (ack: SidecarEventsAck) => void;
   redact: (payload: Record<string, unknown>) => Record<string, unknown>;
   now: () => Date;
   /** Delay before a queued batch is sent; the final `flush()` sends whatever is left. */
@@ -106,8 +113,9 @@ export class EventSink {
     const sleep = this.opts.sleep ?? defaultSleep;
     for (let attempt = 0; ; attempt += 1) {
       try {
-        await this.opts.post(batch);
+        const ack = await this.opts.post(batch);
         this.gatewayGone = false;
+        if (ack) this.opts.onAck?.(ack);
         return;
       } catch (err) {
         const delay = delays[attempt];

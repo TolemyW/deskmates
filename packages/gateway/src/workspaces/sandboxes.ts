@@ -131,9 +131,9 @@ export class SandboxRegistry {
   }
 
   /**
-   * The workspace's handle without starting anything: the cached one, else whatever `attach`
-   * finds. The takeover UI asks for the noVNC address of a workspace that may have no container
-   * yet, and reading a URL must never be what creates one.
+   * Look up a handle without creating a workspace. Cached handles get a read-only presence
+   * check; confirmed absence returns immediately. With no cached handle the existing attach
+   * path may restore an existing runtime, but it never creates a missing workspace.
    */
   peek(workspaceId: WorkspaceId): Promise<SandboxHandle | undefined> {
     return this.exclusive(workspaceId, () => this.peekUnlocked(workspaceId));
@@ -141,7 +141,14 @@ export class SandboxRegistry {
 
   private async peekUnlocked(workspaceId: WorkspaceId): Promise<SandboxHandle | undefined> {
     const cached = this.handles.get(workspaceId);
-    if (cached) return cached;
+    if (cached) {
+      const handle = await cached;
+      if (!this.provider.isPresent || (await this.provider.isPresent(handle))) return handle;
+      // Only confirmed absence evicts the cache. A status read must not call attach here:
+      // providers may start or repair a stopped runtime while attaching it.
+      this.handles.delete(workspaceId);
+      return undefined;
+    }
     const attached = await this.provider.attach(workspaceId, this.tenantOf(workspaceId));
     return this.handles.get(workspaceId) ?? attached;
   }

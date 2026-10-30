@@ -5,4 +5,4 @@
 {"section":"after session","request":"GET /api/workspaces/ws_001q/board","status":200,"json":{"posts":[],"canModerate":true}}
 {"section":"after session","request":"GET /api/workspaces/ws_001w/board","status":200,"json":{"posts":[],"canModerate":true}}
 {"section":"after session","request":"GET /api/workspaces/ws_003u/board","status":200,"json":{"posts":[],"canModerate":true}}
-{"section":"after session","request":"GET /api/workspaces/ws_003v/board","status":200,"json":{"posts":[],"canModerate":true}}
+{"section":"after session","request":"GET /api/workspaces/ws_003x/board","status":200,"json":{"posts":[],"canModerate":true}}

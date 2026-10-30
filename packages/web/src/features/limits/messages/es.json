@@ -11,6 +11,7 @@
   "limits.key.maxTurns": "Turnos del modelo por intento",
   "limits.key.relayCountMax": "Tope de reenvíos (saltos en una cadena de mensajes)",
   "limits.key.turnBudget": "Presupuesto de turnos (mensajes de bots por chat desde el último mensaje humano)",
+  "limits.key.turnBudgetResetMinutes": "Minutos hasta que un chat pausado por su presupuesto de turnos se reanuda solo",
   "limits.loading": "Cargando límites…",
   "limits.off": "Desactivado",
   "limits.offNeedsBudget": "Este espacio de trabajo exige un presupuesto semanal o acumulado (página Costos) antes de desactivar un límite.",

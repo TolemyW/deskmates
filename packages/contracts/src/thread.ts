@@ -2,12 +2,21 @@
 // each bot keeps its own SDK session per thread. Membership is routing, not access control.
 
 import type { BotId, IsoTimestamp, MessageId, RunId, ThreadId, WorkspaceId } from "./ids.js";
+import { mentionRoutingText } from "./mention-text.js";
 import type { RunStatus } from "./run.js";
+import type { TaskStatus } from "./task.js";
 
 /** `chat` is created by a human and runs on the interactive lane; `bus` by `message_bot`, background lane. */
 export type ThreadKind = "chat" | "bus";
 
 export type ThreadStatus = "active" | "paused";
+
+/**
+ * Why a thread is paused (ADR-0005 amendment 3, decision 20). `turn_budget`: a turn-budget or
+ * loop-breaker breach; it ends by itself after the workspace's reset window, on a human message
+ * or on Resume. `operator`: an Owner or Admin paused it; it ends only on Resume (decision 24).
+ */
+export type ThreadPauseReason = "turn_budget" | "operator";
 
 export type MessageAuthorKind = "human" | "bot" | "system";
 
@@ -55,9 +64,30 @@ export interface Thread {
    * decision 2); unique per channel. Absent for the operator UI's own threads.
    */
   externalKey?: string;
+  /**
+   * ABI-2 channel threads (ADR-0047 decision 10): the connection and binding generation the
+   * conversation belongs to. A rebind starts new threads; these stay as read-only mirrors.
+   */
+  channelConnectionId?: string;
+  bindingGeneration?: number;
   title: string;
   turnBudget: number;
   status: ThreadStatus;
+  /** Set exactly when `status` is `paused` (ADR-0005 amendment 3, decision 20). */
+  pauseReason?: ThreadPauseReason;
+  /** The seq of the message that caused the pause; absent for a pause recorded before it. */
+  pausedSeq?: number;
+  pausedAt?: IsoTimestamp;
+  /**
+   * When a `turn_budget` pause ends by itself: the pause time plus the workspace's reset window
+   * (rewritten decision 22). Never set for an `operator` pause.
+   */
+  resumeAt?: IsoTimestamp;
+  /**
+   * The budget origin an unpause moved (decision 22): the turn budget counts bot messages after
+   * both it and the latest human message. Absent while 0.
+   */
+  budgetResetSeq?: number;
   /**
    * The member that took the latest unaddressed human request (ADR-0005 amendment 2, decision
    * 15). A routing fact and an accountability label, never access control: it decides who is
@@ -192,7 +222,12 @@ export interface ThreadLastMessage {
   seq: number;
   authorKind: MessageAuthorKind;
   authorId: string;
-  /** The first 160 characters of the body; the full text is on the message itself. */
+  /** Human display name when the Gateway can resolve one; absent for legacy/opaque actors. */
+  authorName?: string;
+  /**
+   * `messageExcerpt(body, CHAT_PREVIEW_MAX)`, derived when read (issue #16): no leading code fence,
+   * whitespace collapsed. The full text is on the message itself.
+   */
   excerpt: string;
   ts: IsoTimestamp;
 }
@@ -203,6 +238,13 @@ export interface ThreadLastMessage {
  */
 export interface ThreadSummary extends Thread {
   memberIds: readonly BotId[];
+  /**
+   * The oldest task linked to this conversation, when one exists and the caller may read tasks.
+   * Clients use this Gateway
+   * projection to keep task-owned one-Bot history in Tasks/Activity instead of guessing from a
+   * title (ADR-0021 amendment 5). Canonical/private and group chats remain normal chat rows.
+   */
+  taskContext?: { id: string; title: string; status: TaskStatus };
   /** Workspace-shared presentation order; absent when this thread is not pinned. */
   pinPosition?: number;
   /**
@@ -291,6 +333,11 @@ export interface ThreadMessageTrigger {
      * decision 50), present only when it wrote an `@name` no member has.
      */
     lastReply?: PostedMessageRouting;
+    /**
+     * The thread is paused while this run is delivered its messages (ADR-0005 amendment 3,
+     * decision 27): a post wakes nobody until it resumes.
+     */
+    paused?: ThreadPauseState;
   };
   relayCount: number;
 }
@@ -309,7 +356,8 @@ export interface MentionOptions {
 
 /**
  * Parse `@name` mentions against a member list. Unknown names and self-mentions are ignored;
- * `@everyone` yields a single `everyone` mention and drops the rest (ADR-0005 item 3, 4). With
+ * A bot's `@everyone` broadcasts only in its leading address list (ADR-0056). Human broadcasts
+ * retain their placement; code and escaped mentions are literal. A broadcast drops other mentions. With
  * `spaced`, a member name written `@ name` is a mention too (ADR-0005 amendment 6, decision 50).
  */
 export function parseMentions(
@@ -320,13 +368,19 @@ export function parseMentions(
 ): Mention[] {
   const byName = new Map<string, BotId>();
   for (const m of members) byName.set(m.name.toLowerCase(), m.botId);
-  const text = options.spaced ? closeSpacedMentions(body, byName) : body;
+  const prose = mentionRoutingText(body);
+  const text = options.spaced ? closeSpacedMentions(prose, byName) : prose;
+  const addressEnd = /^\s*(?:@[\w-]+[\s,，:：;；]*)*/.exec(text)?.[0].length ?? 0;
 
   const seen = new Set<BotId>();
   const out: Mention[] = [];
   for (const match of text.matchAll(MENTION_PATTERN)) {
     const name = (match[2] ?? "").toLowerCase();
-    if (name === "everyone") return [{ kind: "everyone" }];
+    if (name === "everyone") {
+      const offset = match.index + (match[1]?.length ?? 0);
+      if (authorBotId === undefined || offset < addressEnd) return [{ kind: "everyone" }];
+      continue;
+    }
     const botId = byName.get(name);
     if (botId === undefined || botId === authorBotId || seen.has(botId)) continue;
     seen.add(botId);
@@ -370,10 +424,11 @@ export function mentionDiagnostics(
   authorBotId?: BotId,
   options: MentionOptions = {},
 ): { unknown: string[]; spaced: string[] } {
+  const text = mentionRoutingText(body);
   const byName = new Map<string, { botId: BotId; name: string }>();
   for (const m of members) byName.set(m.name.toLowerCase(), m);
   const unknown = new Set<string>();
-  for (const match of body.matchAll(MENTION_PATTERN)) {
+  for (const match of text.matchAll(MENTION_PATTERN)) {
     const name = match[2] ?? "";
     const key = name.toLowerCase();
     if (key === "everyone" || HUMAN_ADDRESSES.has(key) || byName.has(key)) continue;
@@ -382,7 +437,7 @@ export function mentionDiagnostics(
   const spaced = new Set<string>();
   // With spaced mentions parsed, `@ name` is an address, so there is nothing to correct.
   if (options.spaced) return { unknown: [...unknown], spaced: [] };
-  for (const match of body.matchAll(SPACED_MENTION_PATTERN)) {
+  for (const match of text.matchAll(SPACED_MENTION_PATTERN)) {
     const member = byName.get((match[2] ?? "").toLowerCase());
     if (member && member.botId !== authorBotId) spaced.add(member.name);
   }
@@ -406,6 +461,17 @@ export interface PostedMessageRouting {
    * woke nobody (issue #68). The message itself is stored either way.
    */
   wakeBlocked?: WakeBlockedReason;
+  /**
+   * The thread is paused after this post (ADR-0005 amendment 3, decision 27): why, and for a
+   * `turn_budget` pause when it resumes by itself. Nobody was woken.
+   */
+  paused?: ThreadPauseState;
+}
+
+/** A paused thread's state as a run is told it (decision 27). */
+export interface ThreadPauseState {
+  reason: ThreadPauseReason;
+  resumeAt?: IsoTimestamp;
 }
 
 /**

@@ -13,15 +13,16 @@ import type {
   ThreadSummary,
   Workspace,
 } from "@deskmates/contracts";
+import { DEFAULT_BOT_NAME } from "@deskmates/contracts";
 import { ArrowUpRight, Bot, MessageSquare, Monitor } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ApiClient, api as defaultApi } from "../../api/client.js";
 import { subscribeEvents } from "../../api/events.js";
 import type { NamedThreadMember } from "../../api/types.js";
-import { FirstRunChecklist } from "../../app/first-run-checklist.js";
+import { type FirstRunAssistant, FirstRunChecklist } from "../../app/first-run-checklist.js";
 import { errorMessage } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
-import { navigate, threadHref } from "../../router.js";
+import { contactHref, navigate, threadHref } from "../../router.js";
 import { useRememberBots } from "../../state/bot-avatars.js";
 import { useWorkspaceScope } from "../../state/workspace-scope.js";
 import { ChatPane } from "./chat-pane.js";
@@ -56,7 +57,7 @@ export function ThreadScreen(props: ThreadScreenProps) {
     observer.observe(frame.current);
     return () => observer.disconnect();
   }, []);
-  const railWidth = usePanelWidth("chats", 280, 220, () => Math.min(460, availableWidth - 320));
+  const railWidth = usePanelWidth("chats", 260, 220, () => Math.min(460, availableWidth - 320));
   const api = props.api ?? defaultApi;
   const t = useT();
   const scope = useWorkspaceScope(api);
@@ -400,6 +401,7 @@ export function ThreadScreen(props: ThreadScreenProps) {
                 workspaces={scope.workspaces.length}
                 bots={bots.length}
                 threads={threads.length}
+                assistant={assistantOf(workspace, scopedBots, scopedThreads)}
               />
             ) : null}
           </div>
@@ -407,4 +409,20 @@ export function ThreadScreen(props: ThreadScreenProps) {
       )}
     </div>
   );
+}
+
+/**
+ * The workspace's default bot and its private chat, for the first-run checklist (ADR-0051).
+ * Before any workspace exists, the one the first-run form creates comes with `assistant`.
+ */
+function assistantOf(
+  workspace: Workspace | undefined,
+  bots: readonly BotDefinition[],
+  threads: readonly ThreadSummary[],
+): FirstRunAssistant | undefined {
+  if (!workspace) return { name: DEFAULT_BOT_NAME, href: threadsHref() };
+  const bot = bots.find((item) => item.id === workspace.defaultBotId);
+  if (!bot) return undefined;
+  const chat = threads.find((thread) => thread.privateChatBotId === bot.id);
+  return { name: bot.name, href: chat ? threadHref(chat.id) : contactHref(bot.id) };
 }

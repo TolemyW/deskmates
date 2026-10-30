@@ -367,7 +367,7 @@ async function* runOpenAi(
       baseline = usageTotals(state.usage);
       latest = baseline;
       let stillParked = false;
-      for (const item of state.getInterruptions()) {
+      for (const item of decidedFirst(state.getInterruptions())) {
         const decision = await judgeInterruption(item);
         if (decision.kind === "allow") state.approve(item);
         else if (decision.kind === "deny") state.reject(item, { message: decision.reason });
@@ -498,6 +498,20 @@ async function* runOpenAi(
     });
   } finally {
     await Promise.all(servers.map((s) => s.close()));
+  }
+
+  /**
+   * The parked calls in the order the hook must see them on resume: those people decided on
+   * first, in the trigger's order, since the hook's replay ends at the first call without a
+   * decision and discards what is left; then the rest, which ask afresh. One turn's calls are
+   * gated in parallel, so a run can park on several (issue #62 M8).
+   */
+  function decidedFirst(items: RunToolApprovalItem[]): RunToolApprovalItem[] {
+    const ids = params.resumeToolUseIds ?? [];
+    if (ids.length === 0) return items;
+    const callId = (item: RunToolApprovalItem) => (item.rawItem as { callId?: unknown }).callId;
+    const decided = ids.flatMap((id) => items.filter((item) => callId(item) === id));
+    return [...decided, ...items.filter((item) => !decided.includes(item))];
   }
 
   /**

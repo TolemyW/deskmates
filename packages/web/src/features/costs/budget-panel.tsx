@@ -3,7 +3,7 @@
 // Continue that is the only way that work resumes. Money only; tokens are not a budget.
 
 import type { WorkspaceBudget } from "@deskmates/contracts";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { Button } from "../../components/ui/button.js";
 import { errorMessage } from "../../format.js";
@@ -28,12 +28,22 @@ function BudgetCard({
   onChange: (next: WorkspaceBudget) => void;
 }) {
   const t = useT();
-  const canSet = useCan("budget.set").allowed;
-  const canContinue = useCan("budget.continue").allowed;
+  const canSet = useCan("budget.set", budget.workspaceId).allowed;
+  const canContinue = useCan("budget.continue", budget.workspaceId).allowed;
   const [editing, setEditing] = useState(false);
+  const weeklyInput = useRef<HTMLInputElement>(null);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const wasEditing = useRef(false);
+
   const [weekly, setWeekly] = useState("");
   const [cumulative, setCumulative] = useState("");
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (busy) return;
+    if (editing) weeklyInput.current?.focus();
+    else if (wasEditing.current) editButton.current?.focus();
+    wasEditing.current = editing;
+  }, [editing, busy]);
   const [error, setError] = useState("");
   const { limits, week, cumulative: total, exhausted, parks } = budget;
 
@@ -46,6 +56,7 @@ function BudgetCard({
 
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (busy || !canSet) return;
     const weeklyLimitUsd = parseLimit(weekly);
     const cumulativeLimitUsd = parseLimit(cumulative);
     if (weeklyLimitUsd === undefined || cumulativeLimitUsd === undefined) {
@@ -65,6 +76,7 @@ function BudgetCard({
   };
 
   const resume = () => {
+    if (busy || !canContinue || exhausted !== null) return;
     setBusy(true);
     setError("");
     api
@@ -144,12 +156,14 @@ function BudgetCard({
           {exhausted ? <p className="muted small">{t("costs.budget.raiseFirst")}</p> : null}
         </div>
       ) : null}
-      {editing ? (
+      {editing && canSet ? (
         <form className="budget-form" onSubmit={save}>
           <label>
             {t("costs.budget.weeklyLimit")}
             <input
+              disabled={busy}
               inputMode="decimal"
+              ref={weeklyInput}
               value={weekly}
               placeholder={t("costs.budget.noLimitPlaceholder")}
               onChange={(event) => setWeekly(event.target.value)}
@@ -158,6 +172,7 @@ function BudgetCard({
           <label>
             {t("costs.budget.cumulativeLimit")}
             <input
+              disabled={busy}
               inputMode="decimal"
               value={cumulative}
               placeholder={t("costs.budget.noLimitPlaceholder")}
@@ -167,12 +182,20 @@ function BudgetCard({
           <Button type="submit" disabled={busy}>
             {t("costs.budget.save")}
           </Button>
-          <Button type="button" variant="tertiary" onClick={() => setEditing(false)}>
+          <Button
+            disabled={busy}
+            type="button"
+            variant="tertiary"
+            onClick={() => {
+              setEditing(false);
+              setError("");
+            }}
+          >
             {t("costAlerts.form.cancel")}
           </Button>
         </form>
       ) : canSet ? (
-        <Button type="button" variant="tertiary" onClick={open}>
+        <Button ref={editButton} disabled={busy} type="button" variant="tertiary" onClick={open}>
           {t("costs.budget.edit")}
         </Button>
       ) : (
@@ -187,9 +210,12 @@ export function BudgetPanel({ api }: { api: ApiClient }) {
   const t = useT();
   const [budgets, setBudgets] = useState<WorkspaceBudget[]>();
   const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: revision retries the budget read.
   useEffect(() => {
     let active = true;
+    setError("");
     api
       .listBudgets()
       .then((list) => {
@@ -201,7 +227,7 @@ export function BudgetPanel({ api }: { api: ApiClient }) {
     return () => {
       active = false;
     };
-  }, [api]);
+  }, [api, revision]);
 
   const replace = (next: WorkspaceBudget) =>
     setBudgets((list) => list?.map((b) => (b.workspaceId === next.workspaceId ? next : b)));
@@ -209,8 +235,14 @@ export function BudgetPanel({ api }: { api: ApiClient }) {
   return (
     <section className="card cost-card budget-panel" aria-label={t("costs.budget.title")}>
       <h3>{t("costs.budget.title")}</h3>
-      <p className="muted small">{t("costs.budget.explanation")}</p>
-      {error ? <p role="alert">{error}</p> : null}
+      {error ? (
+        <div role="alert">
+          <p>{error}</p>
+          <Button onClick={() => setRevision((value) => value + 1)}>
+            {t("costs.budget.retry")}
+          </Button>
+        </div>
+      ) : null}
       {budgets === undefined && !error ? <p>{t("costs.budget.loading")}</p> : null}
       {budgets && budgets.length === 0 ? <p>{t("costs.budget.none")}</p> : null}
       <ul className="budget-list">

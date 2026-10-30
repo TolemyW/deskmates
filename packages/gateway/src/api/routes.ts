@@ -8,8 +8,10 @@ import { modelRegistryOf } from "../config/model-upstreams.js";
 import type { GatewayContext } from "../context.js";
 import { frozenModelsOf } from "../model-proxy/frozen-models.js";
 import { registerModelProxy } from "../model-proxy/model-proxy.js";
+import { registerRunStatsRoutes } from "../run-stats/run-stats-routes.js";
 import type { RunLifecycle } from "../scheduler/run-lifecycle.js";
 import type { Scheduler } from "../scheduler/scheduler.js";
+import { registerAnalyticsRoutes } from "./analytics-routes.js";
 import { registerApprovalRoutes } from "./approval-routes.js";
 import { registerAuthRoutes } from "./auth-routes.js";
 import { registerBoardRoutes } from "./board-routes.js";
@@ -21,11 +23,13 @@ import { registerConfigRoutes } from "./config-routes.js";
 import { registerConnectorRoutes } from "./connector-routes.js";
 import { registerCostAlertRoutes } from "./cost-alert-routes.js";
 import { registerCostRoutes } from "./cost-routes.js";
+import { registerDesktopToolsRoutes } from "./desktop-tools-routes.js";
 import { registerErrorHandler } from "./errors.js";
 import { registerEventsRoute } from "./events-route.js";
 import { registerFileCollectionRoutes } from "./file-collection-routes.js";
 import { registerFileRoutes } from "./file-routes.js";
 import { registerFileUploadRoutes } from "./file-upload-routes.js";
+import { registerHostResourceRoutes } from "./host-resource-routes.js";
 import {
   registerIntegrationOAuthCallbackRoute,
   registerIntegrationRoutes,
@@ -40,6 +44,7 @@ import { registerMemoryRoutes } from "./memory-routes.js";
 import { registerMemorySuggestionRoutes } from "./memory-suggestion-routes.js";
 import { registerModelJobRoutes } from "./model-job-routes.js";
 import { registerNetworkRoutes } from "./network-routes.js";
+import { registerObservabilityRoutes } from "./observability-routes.js";
 import { registerOperatorAuth } from "./operator-auth.js";
 import { registerPreferenceRoutes } from "./preference-routes.js";
 import { registerPriceRoutes } from "./price-routes.js";
@@ -57,10 +62,13 @@ import { registerServicePrincipalRoutes } from "./service-principal-routes.js";
 import { registerSkillRoutes } from "./skill-routes.js";
 import { registerSubmitRoutes } from "./submit-routes.js";
 import { registerTakeoverRoutes } from "./takeover-routes.js";
+import { registerTaskKindRoutes } from "./task-kind-routes.js";
 import { registerTaskRoutes } from "./task-routes.js";
 import { registerThreadRoundRoutes } from "./thread-round-routes.js";
 import { registerThreadRoutes } from "./thread-routes.js";
 import { registerTrashRoutes } from "./trash-routes.js";
+import { registerVaultRoutes } from "./vault-routes.js";
+import { registerWebSearchRoutes } from "./web-search-routes.js";
 import { registerWebhookDeliveryRoute, registerWebhookTokenRoute } from "./webhook-routes.js";
 import { registerWorkdirRoutes } from "./workdir-routes.js";
 import { registerWorkspaceRoutes } from "./workspace-routes.js";
@@ -87,6 +95,8 @@ type RegisterFamily = (scope: FastifyInstance, deps: OperatorRouteDeps) => void;
  * guard hooks are installed before the list, and no family's routes depend on another's.
  */
 export const OPERATOR_ROUTE_FAMILIES: ReadonlyArray<readonly [name: string, RegisterFamily]> = [
+  // `/analytics` sits outside `/api` but is admitted by this scope's session and Origin checks.
+  ["analytics", (scope, { ctx }) => registerAnalyticsRoutes(scope, ctx)],
   ["app-shares", (scope, { ctx }) => registerAppShareRoutes(scope, ctx)],
   ["approvals", (scope, { ctx, scheduler }) => registerApprovalRoutes(scope, ctx, scheduler)],
   ["board", (scope, { ctx }) => registerBoardRoutes(scope, ctx)],
@@ -98,10 +108,12 @@ export const OPERATOR_ROUTE_FAMILIES: ReadonlyArray<readonly [name: string, Regi
   ["connectors", (scope, { ctx }) => registerConnectorRoutes(scope, ctx)],
   ["cost-alerts", (scope, { ctx }) => registerCostAlertRoutes(scope, ctx)],
   ["costs", (scope, { ctx }) => registerCostRoutes(scope, ctx)],
+  ["desktop-tools", (scope, { ctx }) => registerDesktopToolsRoutes(scope, ctx)],
   ["events", (scope, { ctx, opts }) => registerEventsRoute(scope, ctx, opts.sseHeartbeatMs)],
   ["file-collection", (scope, { ctx }) => registerFileCollectionRoutes(scope, ctx)],
   ["file-uploads", (scope, { ctx }) => registerFileUploadRoutes(scope, ctx)],
   ["files", (scope, { ctx }) => registerFileRoutes(scope, ctx)],
+  ["host-resources", (scope, { ctx }) => registerHostResourceRoutes(scope, ctx)],
   ["integrations", (scope, { ctx }) => registerIntegrationRoutes(scope, ctx)],
   ["knowledge", (scope, { ctx }) => registerKnowledgeRoutes(scope, ctx)],
   [
@@ -118,6 +130,7 @@ export const OPERATOR_ROUTE_FAMILIES: ReadonlyArray<readonly [name: string, Regi
   ["memory-suggestions", (scope, { ctx }) => registerMemorySuggestionRoutes(scope, ctx)],
   ["model-jobs", (scope, { ctx, scheduler }) => registerModelJobRoutes(scope, ctx, scheduler)],
   ["network", (scope, { ctx }) => registerNetworkRoutes(scope, ctx)],
+  ["observability", (scope, { ctx }) => registerObservabilityRoutes(scope, ctx)],
   // `/auth/preferences` sits outside `/api` but needs this scope's session and CSRF checks.
   ["preferences", (scope, { ctx }) => registerPreferenceRoutes(scope, ctx)],
   ["prices", (scope, { ctx }) => registerPriceRoutes(scope, ctx)],
@@ -127,14 +140,16 @@ export const OPERATOR_ROUTE_FAMILIES: ReadonlyArray<readonly [name: string, Regi
   ["run-audit", (scope, { ctx }) => registerRunAuditRoutes(scope, ctx)],
   ["run-cancel", (scope, { ctx, scheduler }) => registerRunCancelRoutes(scope, ctx, scheduler)],
   ["run-context", (scope, { ctx }) => registerRunContextRoutes(scope, ctx)],
+  ["run-stats", (scope, { ctx }) => registerRunStatsRoutes(scope, ctx)],
   ["run-timeline", (scope, { ctx }) => registerRunTimelineRoutes(scope, ctx)],
   ["runs", (scope, { ctx }) => registerRunRoutes(scope, ctx)],
-  ["runtime", (scope, { ctx }) => registerRuntimeRoutes(scope, ctx)],
+  ["runtime", (scope, { ctx, scheduler }) => registerRuntimeRoutes(scope, ctx, scheduler)],
   ["screens", (scope, { ctx }) => registerScreenRoutes(scope, ctx)],
   ["service-principals", (scope, { ctx }) => registerServicePrincipalRoutes(scope, ctx)],
   ["skills", (scope, { ctx }) => registerSkillRoutes(scope, ctx)],
   ["submit", (scope, { ctx, scheduler }) => registerSubmitRoutes(scope, ctx, scheduler)],
   ["takeover", (scope, { ctx }) => registerTakeoverRoutes(scope, ctx)],
+  ["task-kinds", (scope, { ctx }) => registerTaskKindRoutes(scope, ctx)],
   ["tasks", (scope, { ctx, scheduler }) => registerTaskRoutes(scope, ctx, scheduler)],
   [
     "thread-rounds",
@@ -142,6 +157,8 @@ export const OPERATOR_ROUTE_FAMILIES: ReadonlyArray<readonly [name: string, Regi
   ],
   ["threads", (scope, { ctx, scheduler }) => registerThreadRoutes(scope, ctx, scheduler)],
   ["trash", (scope, { ctx, scheduler }) => registerTrashRoutes(scope, ctx, scheduler)],
+  ["vault", (scope, { ctx }) => registerVaultRoutes(scope, ctx)],
+  ["web-search", (scope, { ctx }) => registerWebSearchRoutes(scope, ctx)],
   ["webhook-token", (scope, { ctx }) => registerWebhookTokenRoute(scope, ctx)],
   ["workdir", (scope, { ctx }) => registerWorkdirRoutes(scope, ctx)],
   ["workspaces", (scope, { ctx, scheduler }) => registerWorkspaceRoutes(scope, ctx, scheduler)],

@@ -11,11 +11,13 @@ import { type BrowserConfig, readBrowserConfig } from "./config/browser.js";
 import { type CliSurfaceConfig, readCliSurfaceConfig } from "./config/cli-surface.js";
 import { type IntegrationsConfig, readIntegrationsConfig } from "./config/integrations.js";
 import { type ModelConfig, readModelConfig } from "./config/model.js";
+import { type ObservabilityConfig, readObservabilityConfig } from "./config/observability.js";
 import { type OperationsConfig, readOperationsConfig } from "./config/operations.js";
 import { type RetrievalConfig, readRetrievalConfig } from "./config/retrieval.js";
 import { type RunsConfig, readRunsConfig } from "./config/runs.js";
 import { type RuntimeConfig, readRuntimeConfig } from "./config/runtime.js";
 import { type SandboxConfig, readSandboxConfig, readSandboxProvider } from "./config/sandbox.js";
+import { type SearchConfig, readSearchConfig } from "./config/search.js";
 import { type ServerConfig, readServerConfig } from "./config/server.js";
 import { type TenancyConfig, readTenancyConfig } from "./config/tenancy.js";
 
@@ -43,11 +45,13 @@ export interface GatewayConfig
     CliSurfaceConfig,
     IntegrationsConfig,
     ModelConfig,
+    ObservabilityConfig,
     OperationsConfig,
     RetrievalConfig,
     RunsConfig,
     RuntimeConfig,
     SandboxConfig,
+    SearchConfig,
     ServerConfig,
     TenancyConfig {}
 
@@ -66,7 +70,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GatewayConfig 
     ...readAppSharesConfig(env),
     ...readOperationsConfig(env),
     ...readRetrievalConfig(env),
+    ...readSearchConfig(env),
     ...readRuntimeConfig(env),
+    ...readObservabilityConfig(env),
     auth: authConfig(env),
   };
 }

@@ -53,6 +53,8 @@ export interface SidecarDeps {
   observeResources?: () => Promise<import("./resource-observation.js").ResourceObservation>;
   /** Files for the look/OCR and speech tools (ADR-0040); absent means the container itself. */
   operationFiles?: import("./operation-input.js").OperationFiles;
+  /** Where `image_generate` writes images (ADR-0040 amendment B); tests use a temp root. */
+  imageOutputs?: import("./operation-output.js").ImageOutputs;
   query: QueryFn;
   /** Present when the sidecar can host the `openai-agents` runtime; a run asking for it without one fails. */
   queryOpenAi?: OpenAiQueryFn;

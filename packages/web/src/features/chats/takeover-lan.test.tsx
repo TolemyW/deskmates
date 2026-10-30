@@ -13,6 +13,7 @@ import { rfbOpenings } from "../../test-support/fake-rfb.js";
 import {
   type RouteTable,
   THREAD_ID,
+  WS_ID,
   browserLock,
   fakeFetch,
   installFakeEventSource,
@@ -36,6 +37,13 @@ function routes(extra: RouteTable = {}): RouteTable {
     "GET /api/approvals?status=pending&threadId=thr_1": { approvals: [] },
     "GET /api/approvals?status=decided&threadId=thr_1": { approvals: [] },
     "GET /api/workspaces/ws_1": workspaceView(),
+    "GET /api/bots/bot_1/screen": {
+      botId: "bot_1",
+      workspaceId: WS_ID,
+      state: "ready",
+      humanHeld: true,
+    },
+    "POST /api/bots/bot_1/screen/access": screenTicket({ protocol: "ticket-1" }),
     "POST /api/workspaces/ws_1/takeover/open-screen": screenTicket(),
     "POST /api/screen-access/acc_1/close": { closed: true },
     ...extra,

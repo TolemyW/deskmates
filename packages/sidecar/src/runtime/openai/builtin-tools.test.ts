@@ -4,7 +4,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { builtinTools, globToRegExp } from "./builtin-tools.js";
 import type { ToolSpec } from "./types.js";
 
@@ -83,6 +83,41 @@ describe("builtin tools", () => {
     const slow = await run("Bash", { command: "sleep 5", timeout: 1000 });
     expect(slow.isError).toBe(true);
     expect(slow.text).toContain("killed after 1000 ms");
+  });
+
+  // #62 L18: the shell child gets the CLI's allowlist and the managed proxy, not the sidecar's
+  // whole environment.
+  it("Bash inherits only the allowlisted environment and the managed proxy", async () => {
+    const bash = builtinTools(dir, {
+      PATH: process.env.PATH,
+      HOME: "/home/nova",
+      DESKMATES_RUN_NOTE: "kept",
+      DESKMATES_EGRESS_PROXY: "http://egress-proxy:3128",
+      ANTHROPIC_AUTH_TOKEN: "run-token-not-for-shell",
+      OPENAI_API_KEY: "upstream-key-not-for-shell",
+      NODE_OPTIONS: "--require /tmp/x.js",
+      HTTPS_PROXY: "http://someone-else:8080",
+    }).find((t) => t.name === "Bash");
+    const out = (await bash?.run({ command: "env" }))?.text ?? "";
+    expect(out).toContain("HOME=/home/nova");
+    expect(out).toContain("DESKMATES_RUN_NOTE=kept");
+    expect(out).toContain("HTTPS_PROXY=http://egress-proxy:3128");
+    expect(out).not.toContain("run-token-not-for-shell");
+    expect(out).not.toContain("upstream-key-not-for-shell");
+    expect(out).not.toContain("NODE_OPTIONS");
+    expect(out).not.toContain("someone-else");
+  });
+
+  it("Bash filters the process environment when no environment is given", async () => {
+    vi.stubEnv("ANTHROPIC_AUTH_TOKEN", "process-token-not-for-shell");
+    try {
+      const bash = builtinTools(dir).find((t) => t.name === "Bash");
+      const out = (await bash?.run({ command: "env" }))?.text ?? "";
+      expect(out).toContain("PATH=");
+      expect(out).not.toContain("process-token-not-for-shell");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("Glob, Grep and LS search below the working directory", async () => {

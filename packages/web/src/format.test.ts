@@ -2,7 +2,9 @@
 // 3). English output is what it was before localization; another locale changes dates, units
 // and number punctuation.
 import {
+  RUN_ERROR_CRON_MISFIRE,
   RUN_ERROR_DEADLINE,
+  RUN_ERROR_GATEWAY_RESTARTED,
   RUN_ERROR_NO_REPLY,
   RUN_ERROR_TURN_BUDGET,
   UI_LOCALES,
@@ -45,24 +47,33 @@ describe("in English", () => {
     expect(formatDay(new Date(NOW).toISOString(), now)).toBe("Today");
     expect(formatDay(ago(86_400_000), now)).toBe("Yesterday");
     expect(describeRunError(RUN_ERROR_NO_REPLY)).toBe(
-      `No reply: the run was woken by a must-reply message and ended without replying (${RUN_ERROR_NO_REPLY}).`,
+      "No reply was sent. Check the partial work below, then send a new message if the Bot should try again.",
     );
     expect(describeRunError(RUN_ERROR_DEADLINE)).toBe(
-      `Deadline passed: the conversation's deadline passed before the run ended (${RUN_ERROR_DEADLINE}).`,
+      "The chat deadline passed before the work finished. Review the partial work, then set a new deadline before trying again.",
     );
     expect(describeRunError(RUN_ERROR_TURN_BUDGET)).toBe(
-      `Turn budget reached: the conversation hit its bot-message limit, paused, and cancelled this queued run (${RUN_ERROR_TURN_BUDGET}); a human message resumes it.`,
+      "The chat reached its message limit, so this work was paused. Send a message to continue now, or wait for the limit to reset.",
+    );
+    expect(describeRunError(RUN_ERROR_GATEWAY_RESTARTED)).toBe(
+      "The server restarted before the work could continue. Review the partial work, then start it again.",
     );
     expect(describeRunError("anything else")).toBe("anything else");
   });
 
-  it("gives every Gateway-recorded run error a sentence in every locale, code kept", () => {
+  it("turns every server-recorded run error into user-facing guidance in every locale", () => {
     for (const locale of UI_LOCALES) {
       setCurrentI18n(createI18n(locale));
-      for (const code of [RUN_ERROR_NO_REPLY, RUN_ERROR_DEADLINE, RUN_ERROR_TURN_BUDGET]) {
+      for (const code of [
+        RUN_ERROR_NO_REPLY,
+        RUN_ERROR_DEADLINE,
+        RUN_ERROR_TURN_BUDGET,
+        RUN_ERROR_GATEWAY_RESTARTED,
+        RUN_ERROR_CRON_MISFIRE,
+      ]) {
         const text = describeRunError(code);
         expect(text, `${locale} ${code}`).not.toBe(code);
-        expect(text, `${locale} ${code}`).toContain(code);
+        if (code.includes("_")) expect(text, `${locale} ${code}`).not.toContain(code);
       }
     }
   });
@@ -70,6 +81,19 @@ describe("in English", () => {
   it("formats a date and time the way the locale writes them", () => {
     const iso = "2026-09-21T10:00:00.000Z";
     expect(formatDateTime(iso)).toBe(new Date(iso).toLocaleString("en"));
+  });
+
+  it("summarizes SDK model-access failures in every locale without exposing the stack", () => {
+    const error =
+      "There's an issue with the selected model (unavailable-model). It may not exist or you may not have access to it.\n at sdk.mjs:1";
+    for (const locale of UI_LOCALES) {
+      setCurrentI18n(createI18n(locale));
+      const text = describeRunError(error);
+      expect(text).not.toBe(error);
+      expect(text).not.toContain("unavailable-model");
+      expect(text).not.toContain("sdk.mjs");
+      expect(text).not.toContain("format.runError");
+    }
   });
 });
 

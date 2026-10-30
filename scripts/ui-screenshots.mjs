@@ -91,7 +91,10 @@ if (contactHref) {
 
 await page.goto(`${base}/${links[0] ?? "#/threads"}`);
 await page.waitForTimeout(800);
-await page.click("button[aria-label='Switch to dark theme']");
+await page.getByRole("button", { name: "Preferences", exact: true }).click();
+await page.locator(".theme-preference-selector").selectOption("dark");
+await page.getByRole("button", { name: "Close preferences", exact: true }).click();
+await page.goto(`${base}/${links[0] ?? "#/threads"}`);
 await page.waitForTimeout(500);
 await shot("21-dark-thread");
 if (run) {
@@ -99,7 +102,9 @@ if (run) {
   await page.waitForTimeout(1200);
   await shot("22-dark-run");
 }
-await page.click("button[aria-label='Switch to light theme']");
+await page.getByRole("button", { name: "Preferences", exact: true }).click();
+await page.locator(".theme-preference-selector").selectOption("light");
+await page.getByRole("button", { name: "Close preferences", exact: true }).click();
 
 await page.setViewportSize({ width: 390, height: 844 });
 await page.goto(`${base}/${links[0] ?? "#/threads"}`);

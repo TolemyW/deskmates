@@ -1,6 +1,7 @@
 // Vite config for the operator UI. The dev server proxies the Gateway's operator routes (`/api`,
-// `/auth` for sign-in, `/hooks`) so the UI runs on WEB_PORT same-origin, without CORS, and the
-// session cookie belongs to the page's origin; ports come from the repo-root `.env`.
+// `/auth` for sign-in, `/analytics` for the Grafana relay, `/hooks`) so the UI runs on WEB_PORT
+// same-origin, without CORS, and the session cookie belongs to the page's origin; ports come from
+// the repo-root `.env`.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -73,6 +74,9 @@ export default defineConfig(({ mode }) => {
         // ADR-0022 sign-in. Without it `/auth/session` gets Vite's HTML fallback and the UI
         // reports the Gateway as unreachable.
         "/auth": { target: gateway, changeOrigin: false },
+        // ADR-0046 amendment 1: the Gateway's relay to Grafana, for the root's session. Grafana
+        // Live is off, so no WebSocket.
+        "/analytics": { target: gateway, changeOrigin: false },
         "/hooks": { target: gateway, changeOrigin: false, ws: true },
       },
     },

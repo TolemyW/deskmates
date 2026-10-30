@@ -12,6 +12,7 @@
 import {
   RUN_ERROR_BUDGET,
   RUN_ERROR_DEADLINE,
+  RUN_ERROR_GATEWAY_RESTARTED,
   RUN_ERROR_NO_REPLY,
   RUN_ERROR_TURN_BUDGET,
   type RunFailureClass,
@@ -31,6 +32,11 @@ export const FAILURE_RULES: readonly FailureRule[] = [
   { failureClass: "no_reply", exact: [RUN_ERROR_NO_REPLY] },
   { failureClass: "wall_clock", exact: [RUN_ERROR_DEADLINE] },
   { failureClass: "budget_limit", exact: [RUN_ERROR_TURN_BUDGET, RUN_ERROR_BUDGET] },
+  // ADR-0029 decision 7; the prose a Gateway before it wrote at restart is the same cause.
+  {
+    failureClass: "platform_interruption",
+    exact: [RUN_ERROR_GATEWAY_RESTARTED, "gateway restarted while the run was live"],
+  },
   // The sidecar rejected its start request: since v0.6.9 that has been a tool name it did not
   // know (exit 2 with the zod issue list on stderr).
   {
@@ -41,6 +47,21 @@ export const FAILURE_RULES: readonly FailureRule[] = [
       "tool is not allowed",
       "tool not allowed",
       "is not an allowed tool",
+    ],
+  },
+  // ADR-0042 amendment 2: the workspace's computer could not be prepared, so no sidecar ran and
+  // no model was asked. The Gateway writes `sandbox error:` for any failure of the attempt before
+  // or around the exec; the provider's own messages name the usual causes. Named before the model
+  // rules so a provider message is never read as a model's.
+  {
+    failureClass: "sandbox_unavailable",
+    any: [
+      "sandbox error:",
+      "legacy or mismatched network",
+      "non-overlapping ipv4 address pool",
+      "managed egress proxy is missing",
+      "egress proxy image is unavailable",
+      "ownership is unverified",
     ],
   },
   // The model is not there: named before the deadline that ran out waiting for it, and before
@@ -55,6 +76,8 @@ export const FAILURE_RULES: readonly FailureRule[] = [
       "model_not_selected",
       "pricing_missing",
       "does not exist or you do not have access",
+      "issue with the selected model",
+      "it may not exist or you may not have access",
       "unknown model",
       "invalid model",
       "no available channel",
@@ -123,6 +146,10 @@ export const FAILURE_RULES: readonly FailureRule[] = [
     failureClass: "sdk_abort",
     any: ["process aborted by user", "aborterror", "operation was aborted", "aborted by user"],
   },
+  // ADR-0042 amendment 2: the sidecar process ended without its `run_ended` and the stderr tail
+  // the Gateway appends names no cause above (a crash in the sidecar itself). Last, so any cause
+  // the tail does name wins.
+  { failureClass: "sidecar_exit", any: ["sidecar exited without run_ended"] },
 ];
 
 /** The class of one run error; `undefined` for a run with no error. */

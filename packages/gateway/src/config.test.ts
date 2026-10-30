@@ -173,7 +173,17 @@ describe("config", () => {
         EGRESS_PRIVATE_TARGETS: JSON.stringify([{ ...target, address: "127.0.0.1" }]),
       }),
     ).toThrow();
-    expect(() => loadConfig({ ...BASE_ENV, EGRESS_PRIVATE_TARGETS: "broken" })).toThrow();
+    // A typo names the key in a typed validation error, not a raw SyntaxError (#61 L15).
+    let thrown: unknown;
+    try {
+      loadConfig({ ...BASE_ENV, EGRESS_PRIVATE_TARGETS: "broken" });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toMatchObject({
+      code: "validation",
+      message: expect.stringMatching(/^EGRESS_PRIVATE_TARGETS is not valid JSON/),
+    });
   });
 
   it("reads EGRESS_PROXY_DOH_URL as an https URL on an IP literal and fails startup otherwise (ADR-0010 4a)", () => {

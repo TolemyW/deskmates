@@ -68,12 +68,12 @@ it("places a finished run from elsewhere before the messages that came after it,
   const msg = (id: string) => document.getElementById(`message-${id}`) as HTMLElement;
   expect(before(msg("msg_1"), delivered)).toBe(true);
   expect(before(delivered, msg("msg_2"))).toBe(true);
-  const live = rows.find((row) => row.textContent?.includes("running")) as HTMLElement;
+  const live = rows.find((row) => row.textContent?.includes("working")) as HTMLElement;
   expect(before(msg("msg_3"), live)).toBe(true);
-  expect(rows[0]?.textContent).toContain("A message in another conversation");
+  expect(rows[0]?.textContent).toContain("A message in another chat");
   expect(screen.getAllByRole("link", { name: "Open chat" })[0]?.getAttribute("href")).toBe(
     "#/threads/thr_other",
   );
   // The section that used to pin every card under the newest message is gone.
-  expect(screen.queryByText(/Activity in other conversations/)).toBeNull();
+  expect(screen.queryByText(/Activity in other chats/)).toBeNull();
 });

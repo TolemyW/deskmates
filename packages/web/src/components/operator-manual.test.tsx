@@ -61,7 +61,7 @@ describe("OperatorManual", () => {
       "Deskmates operator guide",
     );
     const topics = within(manual).getByRole("navigation", { name: "Manual topics" });
-    for (const title of ["Getting started", "Tasks", "Approvals", "Channels", "Costs"])
+    for (const title of ["Getting started", "Tasks", "Approvals", "Chat channels", "Costs"])
       expect(within(topics).getByRole("button", { name: title })).toBeTruthy();
     expect(document.activeElement).toBe(within(manual).getByRole("heading", { name: "Help" }));
   });
@@ -102,9 +102,9 @@ describe("OperatorManual", () => {
     fireEvent.change(search, { target: { value: "WhatsApp" } });
     const results = within(manual).getByRole("list", { name: "Search results" });
     const first = within(results).getAllByRole("button")[0] as HTMLElement;
-    expect(first.textContent).toContain("Channels");
+    expect(first.textContent).toContain("Chat channels");
     fireEvent.click(first);
-    expect(within(article()).getByRole("heading", { level: 1 }).textContent).toBe("Channels");
+    expect(within(article()).getByRole("heading", { level: 1 }).textContent).toBe("Chat channels");
 
     fireEvent.change(search, { target: { value: "qqq-no-such-words" } });
     expect(within(manual).getByText("No topics match “qqq-no-such-words”.")).toBeTruthy();
@@ -163,11 +163,11 @@ describe("About", () => {
     );
     cleanup();
     expect(openAbout({ runningRelease: "v0.5.0", build }).textContent).toContain(
-      "This manual was built for v0.4.0, but the Gateway reports v0.5.0.",
+      "This manual was built for v0.4.0, but the server reports v0.5.0.",
     );
     cleanup();
     expect(openAbout({ runningRelease: null, build }).textContent).toContain(
-      "The Gateway did not report a release",
+      "The server did not report a release",
     );
   });
 

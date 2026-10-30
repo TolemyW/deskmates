@@ -33,13 +33,13 @@ import { RoleNote, useCan } from "../../state/session-roles.js";
 export const ALERT_PAGE_SIZE = 10;
 export const RULE_PAGE_SIZE = 25;
 
-/** US dollars to the micro-dollar, written the active locale's way. */
+/** US dollars to two decimals, matching every other Costs surface. */
 function dollars(value: number): string {
   return value.toLocaleString(currentI18n().locale, {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: 6,
-    maximumFractionDigits: 6,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
     useGrouping: false,
   });
 }
@@ -140,6 +140,7 @@ export function CostAlertsPanel({ api, bots }: { api: ApiClient; bots: BotDefini
   // The draft lives here, not in the panel, so closing and reopening the panel keeps it.
   const [draft, setDraft] = useState<RuleDraft>(EMPTY_DRAFT);
   const [busy, setBusy] = useState(false);
+  const mutationPending = useRef(false);
   const canCreate = useCan("costRule.create").allowed;
   const canDelete = useCan("costRule.delete").allowed;
   const listId = useId();
@@ -177,6 +178,8 @@ export function CostAlertsPanel({ api, bots }: { api: ApiClient; bots: BotDefini
     operation: () => Promise<unknown>,
     setError: (message: string) => void,
   ): Promise<void> => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
     setBusy(true);
     try {
       await operation();
@@ -186,12 +189,14 @@ export function CostAlertsPanel({ api, bots }: { api: ApiClient; bots: BotDefini
     } catch (err) {
       setError(errorMessage(err));
     } finally {
+      mutationPending.current = false;
       setBusy(false);
     }
   };
 
   const create = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
+    if (!canCreate) return;
     const parsed = Number(draft.threshold);
     void act(async () => {
       await api.createCostAlertRule({
@@ -260,8 +265,20 @@ export function CostAlertsPanel({ api, bots }: { api: ApiClient; bots: BotDefini
           </Dialog>
         </div>
       </header>
-      <p className="muted small">{t("costAlerts.scopeNote")}</p>
-      {alertsError || ackError ? <p role="alert">{ackError || alertsError}</p> : null}
+      {ackError ? <p role="alert">{ackError}</p> : null}
+      {alertsError ? (
+        <div role="alert">
+          <p>{alertsError}</p>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={alertPages.loading}
+            onClick={reloadAlerts}
+          >
+            {t("costAlerts.retryAlerts")}
+          </Button>
+        </div>
+      ) : null}
       {alertTotal === undefined ? (
         alertsError ? null : (
           <p className="muted">{t("costAlerts.loading")}</p>
@@ -458,6 +475,7 @@ function AlertRulesSheet({
         {draft.open && canCreate ? (
           <form className="cost-rule-form" onSubmit={onCreate}>
             <Select
+              disabled={busy}
               label={t("costAlerts.form.kind")}
               value={draft.kind}
               onValueChange={(value) => set({ kind: value as CostAlertKind })}
@@ -467,6 +485,7 @@ function AlertRulesSheet({
               ]}
             />
             <Select
+              disabled={busy}
               label={t("costAlerts.form.window")}
               value={draft.window}
               onValueChange={(value) => set({ window: value as CostAlertWindow })}
@@ -476,6 +495,7 @@ function AlertRulesSheet({
               ]}
             />
             <Select
+              disabled={busy}
               label={t("costAlerts.form.scope")}
               value={draft.botId}
               onValueChange={(value) => set({ botId: value })}
@@ -488,6 +508,7 @@ function AlertRulesSheet({
               <div className="cost-rule-field">
                 <label htmlFor={thresholdId}>{t("costAlerts.form.threshold")}</label>
                 <Input
+                  disabled={busy}
                   id={thresholdId}
                   type="number"
                   min="0"
@@ -500,7 +521,7 @@ function AlertRulesSheet({
             ) : null}
             {actionError ? <p role="alert">{actionError}</p> : null}
             <div className="cost-rule-form-actions">
-              <Button type="button" variant="tertiary" onClick={onCancel}>
+              <Button type="button" variant="tertiary" disabled={busy} onClick={onCancel}>
                 {t("costAlerts.form.cancel")}
               </Button>
               <Button type="submit" variant="primary" disabled={busy}>
@@ -514,7 +535,7 @@ function AlertRulesSheet({
               type="button"
               variant="primary"
               size="sm"
-              disabled={!canCreate}
+              disabled={busy || !canCreate}
               onClick={() => set({ open: true })}
             >
               {t("costAlerts.rules.new")}
@@ -523,7 +544,19 @@ function AlertRulesSheet({
           </div>
         )}
         {actionError && !(draft.open && canCreate) ? <p role="alert">{actionError}</p> : null}
-        {loadError ? <p role="alert">{loadError}</p> : null}
+        {loadError ? (
+          <div role="alert">
+            <p>{loadError}</p>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={rules.loading}
+              onClick={rules.reload}
+            >
+              {t("costAlerts.retryRules")}
+            </Button>
+          </div>
+        ) : null}
         {rules.page === undefined ? (
           loadError ? null : (
             <p className="muted">{t("costAlerts.rules.loading")}</p>

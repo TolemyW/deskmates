@@ -3,6 +3,8 @@
 // acknowledged.
 
 import type {
+  HostResourceActionResult,
+  HostResourceReport,
   NetworkOverlap,
   NetworkPreflightResult,
   NetworkProfile,
@@ -52,10 +54,16 @@ export interface NetworkOverlapReport {
 export interface NetworkApi {
   createNetworkProfile(input: NetworkProfileInput): Promise<NetworkProfile>;
   deleteNetworkProfile(id: string): Promise<NetworkProfileChange>;
+  /** ADR-0006 amendment 5: the Docker host's leftover resources and pool headroom (root). */
+  getHostResources(): Promise<HostResourceReport>;
   /** Amendment 2 decision 15: LAN targets inside a Docker network of the daemon (root). */
   getNetworkOverlaps(): Promise<NetworkOverlapReport>;
   getWorkspaceNetwork(id: WorkspaceId): Promise<WorkspaceNetworkView>;
   listNetworkProfiles(): Promise<NetworkProfileList>;
+  /** Amendment 5 decision 13: put a mismatched workspace back on its own network (root). */
+  reattachHostResource(findingId: string): Promise<HostResourceActionResult>;
+  /** Amendment 5 decision 13: remove what one finding names (root). */
+  removeHostResource(findingId: string): Promise<HostResourceActionResult>;
   /** Decision 14: one URL probed from the workspace's proxy; changes and stores nothing. */
   preflightWorkspaceNetwork(id: WorkspaceId, url: string): Promise<NetworkPreflightResult>;
   replaceNetworkProfile(
@@ -83,6 +91,9 @@ export function createNetworkApi(t: HttpTransport): NetworkApi {
     deleteNetworkProfile(id) {
       return t.json("DELETE", `/api/network-profiles/${encodeURIComponent(id)}`);
     },
+    getHostResources() {
+      return t.json("GET", "/api/runtime/resources");
+    },
     getNetworkOverlaps() {
       return t.json("GET", "/api/network-overlaps");
     },
@@ -94,6 +105,12 @@ export function createNetworkApi(t: HttpTransport): NetworkApi {
     },
     preflightWorkspaceNetwork(id, url) {
       return t.json("POST", `/api/workspaces/${encodeURIComponent(id)}/network-preflight`, { url });
+    },
+    reattachHostResource(findingId) {
+      return t.json("POST", "/api/runtime/resources/reattach", { findingId });
+    },
+    removeHostResource(findingId) {
+      return t.json("POST", "/api/runtime/resources/remove", { findingId });
     },
     replaceNetworkProfile(id, input, expectedRevision) {
       return t.json("PUT", `/api/network-profiles/${encodeURIComponent(id)}`, {

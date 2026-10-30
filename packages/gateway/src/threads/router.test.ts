@@ -485,7 +485,7 @@ describe("a bot post reports a wake the Gateway refused", () => {
   it("reports a paused thread", () => {
     const s = setup();
     const { thread, run } = chatRun(s);
-    s.threads.setStatus(thread.id, "paused");
+    s.threads.pause(thread.id, { reason: "turn_budget", seq: 0, at: new Date().toISOString() });
     const posted = s.router.postFromRunRouted(run, "@bob any luck?");
     expect(posted.wakeBlocked).toBe("thread_paused");
     expect(s.runs.list({ botId: s.bob.id })).toHaveLength(0);
@@ -503,7 +503,7 @@ describe("a bot post reports a wake the Gateway refused", () => {
   it("keeps the stored and published message free of routing facts", () => {
     const s = setup();
     const { thread, run } = chatRun(s);
-    s.threads.setStatus(thread.id, "paused");
+    s.threads.pause(thread.id, { reason: "turn_budget", seq: 0, at: new Date().toISOString() });
     const posted = s.router.postFromRunRouted(run, "@bob any luck?");
     for (const key of ["runs", "changed", "blocked", "wakeBlocked"]) {
       expect(posted.message).not.toHaveProperty(key);

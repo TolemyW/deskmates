@@ -1,0 +1,3 @@
+# The upstream LCU archive and desktop application package, placed by the operator. Their terms
+# are not settled (ADR-0048 decision 12), so they never enter git.
+inputs/

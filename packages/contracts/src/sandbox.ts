@@ -1,6 +1,7 @@
 // The SandboxProvider interface. Implemented by @deskmates/sandbox-docker (M0) and a Desktop VM
 // provider (M3). The Gateway talks to sandboxes only through this interface.
 
+import type { HostResource, HostResourceInventory, HostResourceTarget } from "./host-resources.js";
 import type { WorkspaceId } from "./ids.js";
 import type { SandboxNetworkSubnet } from "./network-overlap.js";
 import type { EgressProbeRequest, EgressProbeResult, NetworkGrant } from "./network-profile.js";
@@ -68,6 +69,12 @@ export interface SandboxHandle {
   /** The relay's per-proxy key. Gateway memory only, like the VNC passwords. */
   appRelayKey?: string;
 }
+
+/**
+ * Env var the scheduler sets on every sidecar exec: the run it belongs to. A new Gateway finds and
+ * kills an old process of a live run by it (`SandboxProvider.killRun`, ADR-0029 decision 4).
+ */
+export const RUN_MARKER_ENV = "DESKMATES_RUN_ID";
 
 export interface ExecRequest {
   cmd: readonly string[];
@@ -142,11 +149,34 @@ export interface SandboxProvider {
    * same network error attach would (amendment 2 decision 16). Read-only; optional.
    */
   verifyTopology?(handle: SandboxHandle): Promise<void>;
+  /**
+   * Every resource the provider owns on its host, former-name workspace networks included, and
+   * the daemon's address pools (ADR-0006 amendment 5 decision 11). Read-only; optional.
+   */
+  listHostResources?(): Promise<HostResourceInventory>;
+  /**
+   * Remove what one finding names (decision 13): a workspace's containers (the workspace, then
+   * its proxy), its network and, unless kept, its volumes, in that order; or one former-name
+   * network while nothing is attached. Ownership labels are checked again before each delete.
+   * Returns what was removed. The caller has classified the target and checked for live runs.
+   */
+  removeHostResources?(target: HostResourceTarget): Promise<HostResource[]>;
+  /**
+   * Put a workspace's container and proxy back on the workspace's own network (decision 13):
+   * disconnect every other network, create the own one if missing, connect both with their
+   * aliases, inspect again. Resolves with the topology problem still left, if any.
+   */
+  reattachWorkspaceNetwork?(workspaceId: WorkspaceId): Promise<{ problem?: string }>;
   /** Read-only metadata inspection of temporary prerequisites that replacement may discard. */
   inspectVolatilePrerequisites?(
     spec: SandboxSpec,
     requiredProviderRef?: string,
   ): Promise<readonly SandboxVolatilePrerequisite[]>;
+  /**
+   * The labels of an image on the provider's daemon, read only, never a pull (ADR-0048
+   * decision 11: the desktop capability). Optional; without it a capability reads as unknown.
+   */
+  imageLabels?(image: string): Promise<Readonly<Record<string, string>>>;
   create(spec: SandboxSpec): Promise<SandboxHandle>;
   /**
    * Re-attach to a sandbox that already exists, e.g. after a Gateway restart. With `tenantId`, a
@@ -154,6 +184,12 @@ export interface SandboxProvider {
    * none) is refused rather than attached (ADR-0022 DOCKER-01).
    */
   attach(workspaceId: WorkspaceId, tenantId?: string): Promise<SandboxHandle | undefined>;
+  /**
+   * Read-only existence check of one exact cached sandbox, stopped instances included. False
+   * means confirmed absence; daemon, permission and transport failures reject. Never starts,
+   * repairs or reattaches resources. Optional for providers without an independent inspector.
+   */
+  isPresent?(handle: SandboxHandle): Promise<boolean>;
   /**
    * Remove the workspace's sandbox when any part of it runs an image other than the one it would
    * be created from now: `image` for the sandbox itself, the provider's own configured images for
@@ -175,6 +211,12 @@ export interface SandboxProvider {
     beforeRemove?: (drift: readonly SandboxImageDrift[]) => Promise<void>,
   ): Promise<readonly SandboxImageDrift[]>;
   exec(handle: SandboxHandle, req: ExecRequest): Promise<ExecResult>;
+  /**
+   * Kill every process in the sandbox whose environment carries `RUN_MARKER_ENV=<runId>`: the
+   * sidecar of a run whose Gateway is gone (ADR-0029 decision 4). Best effort and idempotent; no
+   * such process is not an error.
+   */
+  killRun(handle: SandboxHandle, runId: string): Promise<void>;
   /**
    * Deliver per-run environment (short-lived model token) to the sandbox without restarting it.
    * The values never enter the create spec, so they are not visible via `docker inspect`.

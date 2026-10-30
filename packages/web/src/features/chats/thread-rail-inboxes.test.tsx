@@ -29,7 +29,7 @@ import {
   thread,
   workspace,
 } from "../../test-support/fixtures.js";
-import { ThreadRail } from "./thread-rail.js";
+import { ThreadRail, railSections } from "./thread-rail.js";
 import { ThreadScreen } from "./thread.js";
 
 const T = "2026-09-21T10:00:00.000Z";
@@ -122,7 +122,7 @@ describe("Chats rail bot inboxes", () => {
     expect(resolves(calls)).toEqual([]);
     expect(sideEffects(calls)).toEqual([]);
     // Bots exist, so the create dialog does not force itself open.
-    expect(screen.queryByLabelText("New thread")).toBeNull();
+    expect(screen.queryByLabelText("New chat")).toBeNull();
   });
 
   it("opens an unopened inbox through the resolver once, with no message or run", async () => {
@@ -167,7 +167,7 @@ describe("Chats rail bot inboxes", () => {
     expect(within(rail()).queryByRole("button", { name: "Private chat with analyst" })).toBeNull();
   });
 
-  it("reuses the listed canonical chat and nests newer task chats and older history as other conversations", async () => {
+  it("keeps task chats in Tasks/Activity and nests only non-task history under the bot", async () => {
     const canonical = summary("thr_canon", {
       memberIds: [analyst.id],
       privateChatBotId: analyst.id,
@@ -178,6 +178,7 @@ describe("Chats rail bot inboxes", () => {
     const task = summary("thr_task", {
       title: "Quarterly task",
       memberIds: [analyst.id],
+      taskContext: { id: "task_1", title: "Quarterly task", status: "accepted" },
       lastMessage: { seq: 2, authorKind: "bot", authorId: analyst.id, excerpt: "task done", ts: T },
     });
     const older = summary("thr_old", {
@@ -196,22 +197,51 @@ describe("Chats rail bot inboxes", () => {
     expect(links.filter((a) => a.getAttribute("href") === "#/threads/thr_canon")).toHaveLength(1);
     expect(within(rail()).queryByRole("button", { name: "Private chat with analyst" })).toBeNull();
     expect(within(rail()).getByLabelText("2 unread collaboration requests")).toBeInTheDocument();
-    // Both one-member chats stay readable under the bot, with no catch-all Other section and no
-    // claim that the newer task chat is earlier history (ADR-0024 amendment 2, decision 12).
+    // The task transcript stays reachable from its task/activity links but is not chat
+    // navigation. The unrelated retained history stays under the bot.
     expect(within(rail()).queryByText("Other chats")).not.toBeInTheDocument();
     expect(within(rail()).queryByText(/Earlier conversations/)).not.toBeInTheDocument();
-    expect(within(rail()).getByText("Other conversations (2)")).toBeInTheDocument();
+    expect(within(rail()).getByText("Other chats (1)")).toBeInTheDocument();
+    expect(within(rail()).getByText("Other chats (1)").closest("details")).not.toHaveAttribute(
+      "open",
+    );
     const nested = within(rail())
       .getAllByRole("link")
       .map((a) => a.getAttribute("href"))
       .filter((href) => href === "#/threads/thr_task" || href === "#/threads/thr_old");
-    expect(nested).toEqual(["#/threads/thr_task", "#/threads/thr_old"]);
+    expect(nested).toEqual(["#/threads/thr_old"]);
     expect(within(rail()).getByText("Old filing thread")).toBeInTheDocument();
     expect(within(rail()).getByText("keep me")).toBeInTheDocument();
     // Three other bots remain unopened; nothing was resolved and no run was started.
     expect(within(rail()).getAllByRole("button", { name: /^Private chat with / })).toHaveLength(3);
     expect(resolves(calls)).toEqual([]);
     expect(calls.filter((c) => c.method !== "GET")).toEqual([]);
+  });
+
+  it("keeps canonical, personal and group chats in Chats when a task links them", () => {
+    const canonical = summary("thr_canon", {
+      memberIds: [analyst.id],
+      privateChatBotId: analyst.id,
+      taskContext: { id: "task_1", title: "Shared goal", status: "in_progress" },
+    });
+    const linkedGroup = summary("thr_group_linked", {
+      title: "Delivery group",
+      memberIds: [analyst.id, scout.id],
+      taskContext: { id: "task_1", title: "Shared goal", status: "in_progress" },
+    });
+    const personal = summary("thr_personal", {
+      memberIds: [analyst.id],
+      privateToUserId: "usr_admin",
+      taskContext: { id: "task_1", title: "Shared goal", status: "in_progress" },
+    });
+    const sections = railSections([analyst, scout], [canonical, personal, linkedGroup]);
+    expect(sections.inboxes.find((entry) => entry.bot.id === analyst.id)?.thread?.id).toBe(
+      canonical.id,
+    );
+    expect(sections.groups.map((item) => item.id)).toEqual([linkedGroup.id]);
+    expect(sections.inboxes.find((entry) => entry.bot.id === analyst.id)?.earlier).toEqual([
+      personal,
+    ]);
   });
 
   it("shows workspace pins first and exposes the shared pin action on the row", async () => {
@@ -415,7 +445,7 @@ describe("Chats rail search and empty states", () => {
 
   it("keeps search usable with bots and zero threads and says when nothing matches", () => {
     render(<ThreadRail workspace={workspace} bots={four} threads={[]} onCreated={noop} />);
-    expect(screen.queryByLabelText("New thread")).toBeNull();
+    expect(screen.queryByLabelText("New chat")).toBeNull();
     expect(screen.queryByText("No chats yet.")).toBeNull();
     const search = screen.getByRole("searchbox", { name: "Search chats" });
     fireEvent.change(search, { target: { value: "drafts" } });
@@ -438,7 +468,10 @@ describe("Chats rail search and empty states", () => {
   it("keeps first-chat onboarding for a workspace with no bots", async () => {
     render(<ThreadRail workspace={workspace} bots={[]} threads={[]} onCreated={noop} />);
     expect(screen.getByText("No chats yet.")).toBeInTheDocument();
-    expect(await screen.findByLabelText("New thread")).toBeInTheDocument();
+    // No group can be made yet: the dialog opens on the way to a first bot, with no form.
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("link", { name: "New bot" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("form")).toBeNull();
     expect(screen.queryByRole("searchbox")).toBeNull();
   });
 

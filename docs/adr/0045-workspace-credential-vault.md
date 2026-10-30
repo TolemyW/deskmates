@@ -1,7 +1,7 @@
 # ADR-0045: Workspace credentials are used through references
 
 Date: 2026-10-13
-Status: Proposed (the owner selected tool-mediated fill/use on 2026-10-13; the detailed contract below is proposed, not implemented or runtime-verified)
+Status: Accepted (under owner delegation, 2026-10-17, as a design with two changes written into decisions 2 and 4; the owner selected tool-mediated fill/use on 2026-10-13). Implemented 2026-10-17 in code, with T0/T1 tests for every Verification row: the catalog and its Owner/Admin routes (migration `202610171523-workspace-vault.sql`), `vault_list`, `vault_fill` through the fixed `deskmates-sidecar vault-fill` command, `vault_request` with operator request definitions, redaction and capture suppression, the approval-mode behaviour of decision 4 (a human in `automatic`, the thread in `manual`, `mode:approve_all` in `approve_all`, exact-binding and origin checks in every mode) and the Vault page with its `approve_all` notice in all five locales. On 2026-10-19 all five cases of T2 `acceptance/m4-vault-browser.container.test.ts` passed: actual SDK with a scripted upstream, synthetic normally trusted HTTPS browser fill, in-flight takeover, same-document navigation refusal and normal capture/transcript canary checks (rows 5 and 7; `docs/design/vault-live-acceptance-2026-10-19.md`). This is model-free browser-path evidence, not real login or a universal secret-leak guarantee. Still unverified: row 6's HTTP-token TLS, DNS-rebinding and private-peer cases, row 2's recorded operator-form browser receipt, and the remaining foreign-frame/race cases. Private ADR-0027 targets stay unavailable to `vault_request`. Choices the text left open are in the implementation note at the end.
 Builds on: ADR-0002 (tool approvals), ADR-0004 (shared workspace), ADR-0006 (operator authentication), ADR-0012/0013 (connector credentials), ADR-0020 (egress), ADR-0027 (private HTTPS targets).
 
 ## Context
@@ -35,7 +35,9 @@ credential used inside the workspace inaccessible to that workspace.
 
 2. **People maintain values through the operator UI.** A workspace Vault page
    supports create, replace, disable and delete. Writes use the existing
-   workspace-scoped administrator policy and normal session/CSRF checks.
+   workspace-scoped administrator policy (an Owner or Admin of the workspace,
+   ADR-0022 amendment 6; changed on acceptance from the unnamed policy) and
+   normal session/CSRF checks.
    Ordinary reads return metadata, never saved values; editing a name leaves
    the value unchanged, and replacing a value is an explicit operation.
    Forms clear secret inputs after submission and never save them to browser
@@ -65,6 +67,13 @@ credential used inside the workspace inaccessible to that workspace.
    A changed target, revision or operation requires a fresh matching decision.
    No credential approval grants permission for subsequent purchases, messages,
    data changes or egress widening.
+   Added on acceptance (2026-10-17), against the workspace approval mode of
+   ADR-0002 amendment 6: a credential release is a credential-bearing action, so
+   in `automatic` it always goes to a human and never to the reviewer; in
+   `manual` it asks the thread; in `approve_all` it is allowed by the mode and
+   recorded as `mode:approve_all`, like every gated action there, and the Vault
+   page says so when the workspace is in that mode. The exact-origin and
+   revision checks of decisions 4 and 5 are not approvals and hold in every mode.
 
 5. **Browser fill is a fixed execution command.** `vault_fill` names the current
    run's tab, target frame and username/password field references. The Gateway
@@ -168,8 +177,8 @@ authoring time and after every migration on main (ADR-0030), not at design time.
 
 ## Verification
 
-All rows below are required future checks. This document creates no passing
-runtime, browser, model or release evidence. Tests use synthetic secrets only.
+The rows below are required checks; the status and dated receipts distinguish
+implemented tests from executed runtime evidence. Tests use synthetic secrets only.
 
 | Item | Concrete meaning | Test | Metric |
 |---|---|---|---|
@@ -199,3 +208,44 @@ runtime, browser, model or release evidence. Tests use synthetic secrets only.
 - Acceptance of the detailed proposal and passing implementation/runtime checks
   remain separate. No source implementation, deployment or live credential use
   is performed by this design change.
+
+## Implementation note (2026-10-17)
+
+Where the tests are, by Verification row: 1 and 9 `gateway/src/vault/scope.test.ts`; 2
+`gateway/src/api/vault-routes.test.ts` and `web/src/features/vault/vault.test.tsx`; 3
+`gateway/src/vault/store.test.ts`; 4 `gateway/src/vault/use.test.ts`,
+`contracts/src/vault.test.ts` and `sidecar/src/vault-tools.test.ts`; 5
+`sidecar/src/vault-fill.test.ts` (T0/T1) and `acceptance/m4-vault-browser.container.test.ts`
+(T2, five cases passed 2026-10-19; limits in the linked browser receipt); 6 `gateway/src/vault/http-use.test.ts`; 7 `gateway/src/vault/redaction.test.ts`
+and `sidecar/src/vault-capture.test.ts`; 8 `gateway/src/vault/use.test.ts`; 10
+`contracts/src/vault.test.ts` and `gateway/src/api/vault-routes.test.ts`. Operator reference:
+`packages/gateway/docs/vault.md`.
+
+Choices the decisions left open, for review:
+
+- One `revision` counter moves on every change: name, purpose, origin, enabled state, value and
+  request definitions. Any change therefore invalidates pending grants and Always rules; a model
+  holding an old revision is told to list again.
+- Both release tools are L2 for every entry and definition, a definition classified `read`
+  included. Decision 6's declared effect decides whether an interrupted call reports `unknown`
+  (write) or a network error (read), and is shown on the approval card; it lowers no tier.
+- The explicit preauthorization of decision 4 is a person's Always answer on a release's approval
+  card, stored as the exact matcher (tool, entry origin, `vault:<id> rev:<n> op:<operation>`).
+  There is no separate preauthorization screen; a rule typed with a wider scope is refused
+  (`rule_vault_not_exact`), and a broad deny rule still applies.
+- "Always goes to a human" in `automatic` is read strictly: besides skipping the reviewer, a
+  teammate bot's `approval_decide` on a release is refused there (`vault_human_only`). In `manual`
+  a teammate may decide it as any other request (ADR-0002 amendment 2, a soft boundary).
+- Field references are CSS selectors, optional: without them the command takes the one visible
+  password input and the last visible text, e-mail or telephone input before it. A Playwright MCP
+  snapshot `ref` belongs to that MCP session and cannot be resolved by a separate CDP client.
+- An entry's origin must be an exact `https://` origin on a public hostname; LAN login pages and
+  ADR-0027 private targets are not supported. `vault_request` refuses a host outside the
+  workspace egress list instead of opening an egress ask.
+- Capture suppression masks text-field values (textbox, searchbox, combobox, spinbutton lines of
+  the accessibility snapshot), replaces images and withholds page-code output in browser-proxy
+  results, and writes no run screenshot, while the run's tab shows the filled page. It does not
+  cover the opt-in `browser_cli_workflow` captures or the desktop tools.
+- No system-prompt text was added: a prompt change is a strategy change (AGENTS.md). Bots learn
+  the tools from their descriptions; whether they use `vault_fill` at a login page, and do not
+  ask for a password in chat instead, is unmeasured.

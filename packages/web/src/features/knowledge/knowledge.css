@@ -200,27 +200,7 @@
 .memory-table td:last-child {
   min-width: 200px;
 }
-.resource-tabs a {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  min-height: 36px;
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: var(--app-text-base);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.resource-tabs a.active {
-  background: var(--surface);
-  color: var(--foreground);
-  box-shadow: var(--app-shadow-sm);
-}
-.resource-tabs a:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
+
 .resource-intro {
   max-width: 70ch;
   margin: 0 0 12px;
@@ -330,16 +310,7 @@
   margin: 0;
   line-height: 1.5;
 }
-@media (max-width: 720px) {
-  .resource-tabs {
-    width: 100%;
-  }
-  .resource-tabs a {
-    flex: 1;
-    justify-content: center;
-    padding-inline: 10px;
-  }
-}
+
 @layer components {
   .knowledge-panel,
   .knowledge-governance,
@@ -654,29 +625,7 @@
   .learned-memory h2 {
     margin-top: 6px;
   }
-  .learned-memory [role="tablist"] {
-    display: flex;
-    gap: 2px;
-    padding: 3px;
-    border-radius: var(--app-radius);
-    background: var(--surface-3);
-    width: fit-content;
-  }
-  .learned-memory [role="tab"] {
-    padding: 6px 14px;
-    border: 0;
-    border-radius: var(--app-radius-sm);
-    background: transparent 0 0;
-    color: var(--app-text-2);
-    font-size: var(--app-text-sm);
-    font-weight: 500;
-    cursor: pointer;
-  }
-  .learned-memory [role="tab"][aria-selected="true"] {
-    background: var(--app-surface);
-    color: var(--text);
-    box-shadow: var(--app-shadow-sm);
-  }
+
   .learned-memory table td button + button {
     margin-left: 6px;
   }
@@ -714,6 +663,7 @@
   .memory-toolbar .memory-search {
     display: flex;
     flex: 1 1 240px;
+    min-width: 0;
     align-items: center;
     gap: 8px;
     max-width: 420px;
@@ -822,4 +772,37 @@
       padding: 20px;
     }
   }
+}
+
+@media (max-width: 720px) {
+  .knowledge-search {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .knowledge-search .memory-search {
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+}
+
+.memory-maintenance .review-row-actions {
+  flex-wrap: wrap;
+}
+.memory-maintenance .review-row-actions button {
+  max-width: 100%;
+  height: auto;
+  min-height: 32px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.memory-maintenance-settings {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+.memory-maintenance-settings .memory-draft-field:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

@@ -17,6 +17,7 @@ const STATUS_TEXT: Record<RunStatus, MessageKey> = {
   waiting_approval: "runContextPanel.status.waitingApproval",
   waiting_browser: "runContextPanel.status.waitingBrowser",
   waiting_continuation: "runContextPanel.status.waitingContinuation",
+  waiting_platform: "runContextPanel.status.waitingPlatform",
   succeeded: "runContextPanel.status.succeeded",
   silent: "runContextPanel.status.silent",
   failed: "runContextPanel.status.failed",
@@ -48,7 +49,8 @@ export function RunContextPanel({
   onRunChanged,
   canContinue = true,
 }: {
-  api: Pick<ApiClient, "getRunContext" | "decideContinuation">;
+  api: Pick<ApiClient, "getRunContext" | "decideContinuation"> &
+    Partial<Pick<ApiClient, "resumePlatformRuns">>;
   run: RunView;
   events: readonly RunEvent[];
   onRunChanged: (run: RunView) => void;
@@ -89,6 +91,19 @@ export function RunContextPanel({
     setActionError("");
     try {
       onRunChanged((await api.decideContinuation(run.id, decision)).run);
+    } catch (error) {
+      setActionError(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  // ADR-0029 decision 6: an operator lets a run the restart breaker holds continue.
+  const resumeHeld = async () => {
+    setBusy(true);
+    setActionError("");
+    try {
+      await api.resumePlatformRuns?.([run.id]);
+      onRunChanged({ ...run, config: { ...run.config, platformHeld: false } });
     } catch (error) {
       setActionError(errorMessage(error));
     } finally {
@@ -146,6 +161,17 @@ export function RunContextPanel({
             allowed={canContinue}
             does={t("runContextPanel.roleNote")}
           />
+          {actionError ? <p role="alert">{actionError}</p> : null}
+        </div>
+      ) : null}
+      {run.status === "waiting_platform" &&
+      run.config.platformHeld === true &&
+      api.resumePlatformRuns ? (
+        <div>
+          <p>{t("runContextPanel.platformHeld")}</p>
+          <Button disabled={busy} onClick={() => void resumeHeld()}>
+            {t("runContextPanel.platformResume")}
+          </Button>
           {actionError ? <p role="alert">{actionError}</p> : null}
         </div>
       ) : null}

@@ -1,19 +1,22 @@
-/* The role badge at the top right of the shell and the role panel it opens
+/* The role badge in the sidebar's account row (tune view) and the role panel it opens
    (ADR-0022 amendment 7 S8, S9). Loaded by src/styles/feature-styles.ts. Unlayered, like the
    first part of shell.css: the panel's table must win over design-refresh.css's th and td. */
-.content > .shell-topbar {
+.browser-hold-banner {
   position: sticky;
-  top: 0;
+  top: 8px;
   z-index: 3;
   display: flex;
   flex: 0 0 auto;
-  min-height: 0;
-  justify-content: flex-end;
-  padding: 8px 16px 0;
-  pointer-events: none;
-}
-.content > .shell-topbar > * {
-  pointer-events: auto;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 8px 16px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--app-warning) 55%, var(--app-border));
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-warning) 12%, var(--app-surface));
+  color: var(--foreground);
+  font-size: var(--app-text-sm);
 }
 .role-badge {
   display: inline-flex;
@@ -118,4 +121,24 @@
 }
 .role-panel-admin[data-own] {
   color: var(--primary);
+}
+
+/* Beside the person's name and role the badge shows only its icon, so the name keeps its width;
+   its accessible name and title still say the role, and it opens the role panel. */
+.sidebar-account-row > .role-badge {
+  flex: 0 0 auto;
+  width: 26px;
+  padding: 0;
+  justify-content: center;
+}
+.sidebar-account-row > .role-badge > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

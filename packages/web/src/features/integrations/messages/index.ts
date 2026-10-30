@@ -11,6 +11,6 @@ import zhTW from "./zh-TW.json";
 
 export const integrationsMessages = defineMessages({
   owner: "features/integrations/messages",
-  prefixes: ["integrations"],
+  prefixes: ["channelGuide", "integrations"],
   locales: { en, "zh-CN": zhCN, "zh-TW": zhTW, ja, es },
 });

@@ -1,0 +1,15 @@
+[
+  {
+    "id": "main",
+    "route": "#/costs"
+  },
+  {
+    "id": "limits",
+    "route": "#/costs",
+    "steps": [
+      {
+        "name": "Edit limits"
+      }
+    ]
+  }
+]

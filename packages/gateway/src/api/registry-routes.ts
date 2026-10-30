@@ -16,6 +16,7 @@ import {
   decidedByHuman,
   isAgentRuntime,
   isBotAvatar,
+  isIntegrationService,
   runtimeProtocol,
 } from "@deskmates/contracts";
 import type { FastifyInstance } from "fastify";
@@ -231,6 +232,19 @@ export function registerRegistryRoutes(
       ];
     }
     if (body.cron !== undefined && body.cron !== null) patch.cron = asCronEntries(body.cron);
+    // ADR-0055 decision 2: `null` is every connected app; a list holds integration service ids.
+    if (body.integrationApps !== undefined) {
+      if (body.integrationApps === null) patch.integrationApps = null;
+      else {
+        const apps = optionalStringArray(body, "integrationApps") ?? [];
+        for (const service of apps)
+          if (!isIntegrationService(service))
+            throw new DeskmatesError("validation", "integrationApps must list service ids", {
+              field: "integrationApps",
+            });
+        patch.integrationApps = apps;
+      }
+    }
     for (const key of ["model", "cheapModel"] as const) {
       if (body[key] === undefined) continue;
       // `null` is the clear; anything else must be a priced model id (ADR-0023 decision 1), and
@@ -255,7 +269,7 @@ export function registerRegistryRoutes(
     if (Object.keys(patch).length === 0 && paused === undefined && body.name === undefined) {
       throw new DeskmatesError(
         "validation",
-        "nothing to update: send name, role, connectors, messageAllowlist, cron, model, cheapModel, runtime, effort, thinking, avatar or paused",
+        "nothing to update: send name, role, connectors, messageAllowlist, integrationApps, cron, model, cheapModel, runtime, effort, thinking, avatar or paused",
       );
     }
     // ADR-0044 decision 7: judged on what the bot will run with after the patch.
@@ -316,7 +330,7 @@ export function registerRegistryRoutes(
 }
 
 /** Decision 6: probe a bot's effective model unless its key has a result or a pending probe. */
-function queueVisionProbe(
+export function queueVisionProbe(
   ctx: GatewayContext,
   bot: BotDefinition,
   trigger: "model_added" | "model_changed",
@@ -355,7 +369,11 @@ function optionalRuntime(body: Record<string, unknown>): AgentRuntime | null | u
  * ADR-0044 decision 7: a bot's loop and the upstream serving its effective model must speak the
  * same protocol, since the proxy never translates. A model with no upstream is refused too.
  */
-function requireRuntimeModel(ctx: GatewayContext, runtime: AgentRuntime, model: string): void {
+export function requireRuntimeModel(
+  ctx: GatewayContext,
+  runtime: AgentRuntime,
+  model: string,
+): void {
   const upstream = modelRegistryOf(ctx.config).resolve(model);
   const expected = runtimeProtocol(runtime);
   if (upstream === undefined || !upstreamSpeaks(upstream, expected)) {
@@ -367,7 +385,7 @@ function requireRuntimeModel(ctx: GatewayContext, runtime: AgentRuntime, model: 
   }
 }
 
-function botConfiguration(bot: BotDefinition): Record<string, unknown> {
+export function botConfiguration(bot: BotDefinition): Record<string, unknown> {
   return {
     name: bot.name,
     role: bot.role,
@@ -379,6 +397,7 @@ function botConfiguration(bot: BotDefinition): Record<string, unknown> {
     avatar: bot.avatar ?? null,
     connectors: bot.connectors,
     messageAllowlist: bot.messageAllowlist,
+    integrationApps: bot.integrationApps ?? null,
     cron: bot.cron,
     paused: bot.pausedAt !== undefined,
   };
@@ -388,7 +407,18 @@ function pick(value: Record<string, unknown>, keys: readonly string[]): Record<s
   return Object.fromEntries(keys.map((key) => [key, value[key] ?? null]));
 }
 
-function createWelcomeRun(ctx: GatewayContext, bot: BotDefinition, thread: Thread) {
+/** A welcome other than the generic one: the default bot's onboarding (ADR-0051 decision 11). */
+export interface WelcomeOverride {
+  prompt: string;
+  version: string;
+}
+
+export function createWelcomeRun(
+  ctx: GatewayContext,
+  bot: BotDefinition,
+  thread: Thread,
+  welcome?: WelcomeOverride,
+) {
   const role = bot.role.trim() || "a helpful teammate";
   return ctx.runs.create({
     botId: bot.id,
@@ -397,9 +427,11 @@ function createWelcomeRun(ctx: GatewayContext, bot: BotDefinition, thread: Threa
     triggerKind: "welcome",
     triggerRef: newId("welcome"),
     triggerPayload: {
-      prompt: `You have just joined this workspace as ${bot.name}, whose role is ${role}. Following your own instructions and voice, write a brief first welcome message to the people in this private chat. Introduce how you can help and invite them to start. Reply only with the welcome message.`,
+      prompt:
+        welcome?.prompt ??
+        `You have just joined this workspace as ${bot.name}, whose role is ${role}. Following your own instructions and voice, write a brief first welcome message to the people in this private chat. Introduce how you can help and invite them to start. Reply only with the welcome message.`,
     },
-    config: { ...ctx.runConfig(), welcomeVersion: 1 },
+    config: { ...ctx.runConfig(), welcomeVersion: welcome?.version ?? 1 },
   });
 }
 

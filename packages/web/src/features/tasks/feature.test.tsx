@@ -14,7 +14,7 @@ describeNavEntry({
   folder: "tasks",
   feature,
   group: "talk",
-  order: 30,
+  order: 20,
   icon: ClipboardList,
   label: "app.nav.tasks",
   english: "Tasks",

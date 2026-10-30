@@ -190,3 +190,59 @@ it("offers an SSO invitation only when the team trusts a provider", async () => 
   fireEvent.click(await screen.findByRole("button", { name: "Invite by link" }));
   expect(screen.getByText("How they sign in")).toBeInTheDocument();
 });
+
+it("keeps the account form open while submitting and restores navigation after failure", async () => {
+  const people = client();
+  let rejectRequest: (reason: Error) => void = () => {};
+  vi.mocked(people.createAccount).mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectRequest = reject;
+      }),
+  );
+  renderPeople(people);
+  await createAccount();
+  const form = screen.getByRole("form", { name: "Create account" });
+  fireEvent.submit(form);
+  expect(people.createAccount).toHaveBeenCalledOnce();
+  expect(screen.getByRole("button", { name: "Invite by link" })).toBeDisabled();
+  expect(
+    screen
+      .getAllByRole("button", { name: "Create account" })
+      .every((button) => button.hasAttribute("disabled")),
+  ).toBe(true);
+  rejectRequest(new Error("Account service unavailable"));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Account service unavailable");
+  expect(screen.getByLabelText("Username")).toHaveValue("max");
+  expect(screen.getByRole("button", { name: "Invite by link" })).toBeEnabled();
+});
+
+it("does not show a late account result after switching workspaces", async () => {
+  const people = client();
+  let resolveRequest: (value: Awaited<ReturnType<MembersClient["createAccount"]>>) => void =
+    () => {};
+  vi.mocked(people.createAccount).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveRequest = resolve;
+      }),
+  );
+  const view = (workspaceId: string) => (
+    <MembersScreen
+      client={people}
+      tenantRole="owner"
+      userId="usr_1"
+      ssoProviders={[]}
+      workspaceId={workspaceId}
+    />
+  );
+  const { rerender } = render(view("ws_first"));
+  await createAccount();
+  rerender(view("ws_second"));
+  resolveRequest({ member: ME, loginName: "max", initialPassword: PASSWORD });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Invite by link" })).toBeEnabled());
+  expect(screen.queryByText(PASSWORD)).not.toBeInTheDocument();
+  expect(screen.queryByRole("form", { name: "Create account" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+  expect(screen.getByLabelText("Username")).toHaveValue("");
+});

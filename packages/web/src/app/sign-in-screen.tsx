@@ -121,9 +121,21 @@ export function SignInScreen({
                 variant="outline"
                 type="button"
                 disabled={busy}
-                onClick={() =>
-                  void startSso(flows, provider, { purpose: "login" }, view.loginCsrf, setError)
-                }
+                onClick={() => {
+                  if (busy) return;
+                  setBusy(true);
+                  setError(undefined);
+                  void startSso(
+                    flows,
+                    provider,
+                    { purpose: "login" },
+                    view.loginCsrf,
+                    (message) => {
+                      setError(message);
+                      setBusy(false);
+                    },
+                  );
+                }}
               >
                 {t("app.signIn.withProvider", { provider: provider.displayName })}
               </Button>

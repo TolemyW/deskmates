@@ -1,0 +1,30 @@
+/* Web search section of the workspace detail (ADR-0049). */
+
+.web-search-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.web-search-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.web-search-list dt {
+  color: var(--muted, inherit);
+}
+
+.web-search-list dd {
+  margin: 0;
+}
+
+.web-search-note {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--app-warning);
+  background: var(--app-warning-soft);
+  color: var(--warning-text);
+}

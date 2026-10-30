@@ -133,9 +133,11 @@ host, load average about 64 when the second started).
 
 ## Amendment 1 (2026-10-13): capability probes and proposal jobs
 
-Status: Proposed for implementation under GitHub issues #87 (vision probe) and #77 (SOUL
-proposals), following the owner comments of 2026-10-13 on both issues; the integrated
-multimodal workstream is #115 and is not decided here. Decisions 1 to 3 stay in force.
+Status: Accepted under owner delegation (2026-10-17); proposed for implementation under GitHub
+issues #87 (vision probe) and #77 (SOUL proposals), following the owner comments of 2026-10-13
+on both issues, and implemented with T0/T1 tests. Real-model and T2 verification of the image
+path remain pending. The integrated multimodal workstream is #115 and is not decided here.
+Decisions 1 to 3 stay in force.
 
 ### Context
 
@@ -210,7 +212,14 @@ needs a second model job of the same shape: a SOUL proposal generated from one s
 
 ## Amendment 2 (2026-10-14): what a run does when its model cannot see
 
-Status: Proposed for implementation under GitHub issue #87 (its proposal 2, "When vision is
+Status: Accepted under owner delegation (2026-10-17), including both points of decision 11 that
+were marked proposed: an `unknown` with reason `wrong_answer` withholds, because the probe saw the
+confabulation #87 is about and the status itself is not rewritten; every other `unknown`,
+`pending` and `not_probed` delivers with no notice, because none is evidence of blindness and a
+notice on those runs would be an unevaluated strategy change. Follow-up measurement: the share of
+`wrong_answer` results on models known to see, which would show the withholding blinding a capable
+model; an operator retry (decision 8) is the remedy meanwhile. Real-model and T2 verification remain
+pending. Proposed for implementation under GitHub issue #87 (its proposal 2, "When vision is
 unsupported"). Decisions 1 to 10 stay in force. The integrated multimodal workstream (#115) is
 not decided here: this amendment concerns only image input to the Agent's text-loop model and
 does not define OCR, generation or any other operation's capability or routing.
@@ -277,7 +286,8 @@ with the probe off, or a model in use before the probe existed and not yet re-pr
 ### Open items
 
 - Owner rulings on the two proposed points of decision 11 (`wrong_answer` withholds; other
-  `unknown` delivers without a prompt notice).
+  `unknown` delivers without a prompt notice): accepted under owner delegation on 2026-10-17
+  (Status).
 - The policy follows the frozen primary model. An SDK fallback switch (decision 3) to a model
   with another vision status, and subagents on `cheapModel`, keep the primary's policy.
 - PDF reads (document blocks) and image content returned by connectors or integrations are not
@@ -296,8 +306,11 @@ with the probe off, or a model in use before the probe existed and not yet re-pr
 
 ## Amendment 3 (2026-10-14): PDF reads and connector or integration results
 
-Status: Proposed, like amendment 2, whose decisions 11 to 14 it extends to the two paths
-amendment 2 left open (issue #87, comment of 2026-10-14). A delivering run is unchanged.
+Status: Accepted under owner delegation (2026-10-17), like amendment 2, whose decisions 11 to 14
+it extends to the two paths amendment 2 left open (issue #87, comment of 2026-10-14). A delivering
+run is unchanged. The PDF text-extractor open item is answered by ADR-0040 (`poppler-utils` in
+the base image, `image_describe` reading the text layer first); real-model and T2 verification of a
+withheld PDF `Read` remain pending.
 
 ### Context
 
@@ -391,10 +404,21 @@ a model job a 60-second cap; ten retries can never finish inside it.
 | 18 | A model job's `query()` environment carries `CLAUDE_CODE_MAX_RETRIES` equal to `MODEL_JOB_MAX_RETRIES`, which is below the SDK's default of ten, and the deadline is below the Gateway's 60-second cap; an agent run never sets the variable (by construction: `run-once.ts` builds its own environment and no test asserts the absence) | T1 `packages/sidecar/src/model-job.test.ts` ("bounds the SDK's retries") | `model_retry` events per failed model job (expected at most four) |
 | 19 | A job whose query reports two `api_retry` messages and then only ends on the deadline's abort fails with the deadline error naming two retries, `HTTP 500` and `server_error`, never "aborted by user"; the error for no retry and for a connection failure reads as specified | T1 `packages/sidecar/src/model-job.test.ts` ("names the retries when the deadline ends the job") | Failed model jobs whose error names no cause = 0 |
 
+Note (2026-10-19, issue #39 item 8): `MODEL_JOB_DEADLINE_MS` is also a Gateway `.env` setting
+(`config/runs.ts`, default 55000) relayed as `modelJobDeadlineMs` on the `StartRunRequest`; the
+Gateway kills the process five seconds after it, so the default keeps decision 5's 60-second cap,
+and the decision 19 error names the effective seconds. Tests: T0
+`packages/gateway/src/config/runs.test.ts`, T1 `packages/gateway/src/model-jobs/job-limits.test.ts`
+and `packages/sidecar/src/model-job.test.ts`. `MODEL_JOB_THINKING` (default `disabled`) caps a
+job's extended thinking on the Claude path; it changes no decision here.
+
 ## Amendment 5 (2026-10-16): measure the context, split the system prompt, trim the CLI surface
 
-Status: Proposed (issue #8). It is implemented behind defaults that change nothing and is pending
-owner acceptance. Decisions 1 to 19 stay in force. Decisions 20 to 23 are framework changes: they
+Status: Accepted under owner delegation (2026-10-17) (issue #8). It is implemented behind
+defaults that change nothing. Decisions 20 to 23 are accepted as framework changes; decision 24 is
+accepted as knobs whose empty default changes nothing, and setting any of them on a deployment is a
+strategy change that still needs the paired before-and-after window of the open items, which has
+not run. Decisions 1 to 19 stay in force. Decisions 20 to 23 are framework changes: they
 add records, and they reshape the system-prompt option without changing a byte the model reads.
 Decision 24 adds strategy knobs that are off by default. Turning one on is a strategy change
 (AGENTS.md: paired evaluation, one knob per experiment).

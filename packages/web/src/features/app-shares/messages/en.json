@@ -1,15 +1,17 @@
 {
   "appShares.byPerson": "shared by a person",
   "appShares.disabled": "App sharing is not set up on this Deskmates server.",
-  "appShares.empty": "No apps published yet. Ask a bot to start an app and publish it, or share a running port below.",
-  "appShares.intro": "Web apps running in this workspace and published by a bot or a member. Each opens on its own address; only signed-in members of this workspace can use it.",
+  "appShares.empty": "No apps published yet. Ask a Bot to start an app and publish it, or share a running port below.",
+  "appShares.intro": "Web apps running in this workspace and published by a Bot or a member. Each opens on its own address; only signed-in members of this workspace can use it.",
   "appShares.loading": "Loading apps…",
   "appShares.open.continue": "Continue",
-  "appShares.open.failed": "The app could not be opened: {error}",
+  "appShares.open.failed": "The app could not be opened. Ask a Bot to check that it is running, then try again. Details: {error}",
   "appShares.open.opening": "Opening the app…",
+  "appShares.open.retry": "Try again",
   "appShares.open.title": "Published app",
   "appShares.openApp": "Open",
   "appShares.port": "port {port}",
+  "appShares.portInvalid": "Use a port from 1024 to 65535. Ports 6080–6086 are reserved for the workspace desktop.",
   "appShares.publish": "Share",
   "appShares.publishIntro": "Share a web app that is already running in the workspace (listening on 0.0.0.0).",
   "appShares.publishLabel": "Name",
@@ -21,6 +23,6 @@
   "appShares.state.unavailable": "not running",
   "appShares.stop": "Stop sharing",
   "appShares.stopConfirm": "Stop sharing “{label}”? Open tabs lose access at once; the app keeps running in the workspace.",
-  "appShares.title": "Apps",
-  "appShares.unavailableHint": "Nothing answers on this port. Ask a bot to start the app again; the address stays the same."
+  "appShares.title": "Shared apps",
+  "appShares.unavailableHint": "Nothing answers on this port. Ask a Bot to start the app again; the address stays the same."
 }

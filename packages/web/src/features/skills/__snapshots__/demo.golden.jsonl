@@ -20,4 +20,4 @@
 {"section":"after session","request":"GET /api/workspaces/ws_001q/skills","status":200,"json":{"starterPack":{"version":"","sha256":""},"starterSkills":[],"skills":[],"offset":0,"limit":25,"total":0,"pendingTotal":0}}
 {"section":"after session","request":"GET /api/workspaces/ws_001w/skills","status":200,"json":{"starterPack":{"version":"","sha256":""},"starterSkills":[],"skills":[],"offset":0,"limit":25,"total":0,"pendingTotal":0}}
 {"section":"after session","request":"GET /api/workspaces/ws_003u/skills","status":200,"json":{"starterPack":{"version":"","sha256":""},"starterSkills":[],"skills":[],"offset":0,"limit":25,"total":0,"pendingTotal":0}}
-{"section":"after session","request":"GET /api/workspaces/ws_003v/skills","status":200,"json":{"starterPack":{"version":"","sha256":""},"starterSkills":[],"skills":[],"offset":0,"limit":25,"total":0,"pendingTotal":0}}
+{"section":"after session","request":"GET /api/workspaces/ws_003x/skills","status":200,"json":{"starterPack":{"version":"","sha256":""},"starterSkills":[],"skills":[],"offset":0,"limit":25,"total":0,"pendingTotal":0}}

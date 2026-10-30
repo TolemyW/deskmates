@@ -8,6 +8,8 @@
 import { spawn } from "node:child_process";
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { inheritedEnv } from "../../inherited-env.js";
+import { managedProxyEnvironment } from "../../managed-proxy.js";
 import type { ToolOutcome, ToolSpec } from "./types.js";
 
 /** Longest tool result handed to the model, in characters. */
@@ -87,7 +89,26 @@ async function walk(root: string, onFile: (path: string) => Promise<boolean>): P
   }
 }
 
-export function builtinTools(cwd: string): ToolSpec[] {
+/**
+ * What the shell tool's child process inherits: the allowlist the Claude CLI subprocess gets in
+ * `run-once` (`inheritedEnv`) plus the managed egress proxy, never the rest of the sidecar's
+ * environment (an upstream key, an operator's proxy variables, `NODE_OPTIONS`).
+ */
+export function shellToolEnv(
+  env: Readonly<Record<string, string | undefined>>,
+): Record<string, string | undefined> {
+  return { ...inheritedEnv(env), ...managedProxyEnvironment(env) };
+}
+
+/**
+ * The file and shell tools for a run in `cwd`. `env` is the environment the child env is built
+ * from (filtered by `shellToolEnv`, never passed through as is); it defaults to the process's.
+ */
+export function builtinTools(
+  cwd: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): ToolSpec[] {
+  const childEnv = shellToolEnv(env);
   return [
     {
       name: "Read",
@@ -219,7 +240,7 @@ export function builtinTools(cwd: string): ToolSpec[] {
           BASH_MAX_TIMEOUT_MS,
           Math.max(1000, int(input, "timeout") ?? BASH_DEFAULT_TIMEOUT_MS),
         );
-        return runShell(command, cwd, timeoutMs, signal);
+        return runShell(command, cwd, childEnv, timeoutMs, signal);
       },
     },
     {
@@ -334,12 +355,14 @@ export function builtinTools(cwd: string): ToolSpec[] {
 function runShell(
   command: string,
   cwd: string,
+  env: Record<string, string | undefined>,
   timeoutMs: number,
   signal: AbortSignal | undefined,
 ): Promise<ToolOutcome> {
   return new Promise((resolveOutcome) => {
     const child = spawn("/bin/bash", ["--noprofile", "--norc", "-c", command], {
       cwd,
+      env,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let out = "";

@@ -3,7 +3,7 @@ import { parsePrivateEgressTargets } from "./private-egress.js";
 const target = {
   workspaceId: "ws_a",
   hostname: "console.vendordb.test",
-  address: "10.20.36.35",
+  address: "10.88.36.35",
   port: 443,
   expiresAt: "2026-10-12T00:00:00Z",
 };
@@ -29,7 +29,7 @@ describe("operator private egress grants", () => {
   it.each([
     "*",
     "*.vendordb.test",
-    "10.20.36.35",
+    "10.88.36.35",
     "localhost",
     "x.localhost",
     "host.docker.internal",

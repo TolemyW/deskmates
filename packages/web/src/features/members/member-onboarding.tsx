@@ -71,6 +71,7 @@ export function MemberOnboarding({
 }) {
   const t = useT();
   const [mode, setMode] = useState<Mode>();
+  const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<CreatedInvitationView>();
   const [account, setAccount] = useState<CreatedAccountView>();
   const inviteButton = useRef<HTMLButtonElement>(null);
@@ -91,6 +92,7 @@ export function MemberOnboarding({
       <div className="onboarding-actions">
         <Button
           ref={inviteButton}
+          disabled={busy || submitting}
           // The recommended path stays the primary action unless Create account is open.
           variant={mode === "create" ? "outline" : "primary"}
           type="button"
@@ -104,6 +106,7 @@ export function MemberOnboarding({
           {t("members.onboard.inviteByLink")}
         </Button>
         <Button
+          disabled={busy || submitting}
           variant={mode === "create" ? "primary" : "outline"}
           type="button"
           aria-expanded={mode === "create"}
@@ -125,6 +128,7 @@ export function MemberOnboarding({
           workspaceId={workspaceId}
           ssoProviders={ssoProviders}
           busy={busy}
+          onWorkingChange={setSubmitting}
           onCreated={async (view) => {
             setCreated(view);
             setMode(undefined);
@@ -139,6 +143,7 @@ export function MemberOnboarding({
           roleOptions={roleOptions}
           workspaceId={workspaceId}
           busy={busy}
+          onWorkingChange={setSubmitting}
           onCreated={async (view) => {
             setAccount(view);
             setMode(undefined);
@@ -178,6 +183,7 @@ function InviteByLinkForm({
   ssoProviders,
   busy,
   onCreated,
+  onWorkingChange,
   onCancel,
 }: {
   client: MembersClient;
@@ -186,6 +192,7 @@ function InviteByLinkForm({
   workspaceId: string | undefined;
   ssoProviders: SsoProviderView[];
   busy: boolean;
+  onWorkingChange: (working: boolean) => void;
   onCreated: (view: CreatedInvitationView) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -198,8 +205,10 @@ function InviteByLinkForm({
   const [error, setError] = useState<string>();
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    if (busy || working) return;
     if (method === "sso" && !email.trim()) return setError(t("members.invite.error.email"));
     setWorking(true);
+    onWorkingChange(true);
     setError(undefined);
     try {
       const target =
@@ -221,6 +230,7 @@ function InviteByLinkForm({
       );
     } finally {
       setWorking(false);
+      onWorkingChange(false);
     }
   };
   return (
@@ -362,12 +372,14 @@ function CreateAccountForm({
   workspaceId,
   busy,
   onCreated,
+  onWorkingChange,
   onCancel,
 }: {
   client: MembersClient;
   roleOptions: Array<{ value: string; label: string } | null>;
   workspaceId: string | undefined;
   busy: boolean;
+  onWorkingChange: (working: boolean) => void;
   onCreated: (view: CreatedAccountView) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -379,8 +391,10 @@ function CreateAccountForm({
   const [error, setError] = useState<string>();
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    if (busy || working) return;
     if (!loginName.trim()) return setError(t("members.create.error.username"));
     setWorking(true);
+    onWorkingChange(true);
     setError(undefined);
     try {
       await onCreated(
@@ -402,6 +416,7 @@ function CreateAccountForm({
       );
     } finally {
       setWorking(false);
+      onWorkingChange(false);
     }
   };
   return (

@@ -8,10 +8,13 @@ import { type ApprovalsApi, createApprovalsApi } from "./api.js";
 
 const CASES: GoldenCases<ApprovalsApi> = {
   decideApproval: (a) => a.decideApproval(APR, "allow_once", undefined),
+  decideApprovalGroup: (a) => a.decideApprovalGroup("same/action", "deny_all"),
   getApproval: (a) => a.getApproval(APR),
   getAutoApproval: (a) => a.getAutoApproval(WS),
   listApprovals: (a) => a.listApprovals({ status: "pending", threadId: THR }),
   listPendingApprovalsPage: (a) => a.listPendingApprovalsPage({ cursor: "c/1", limit: 50 }),
+  listPendingApprovalGroupsPage: (a) =>
+    a.listPendingApprovalGroupsPage({ cursor: "c/1", limit: 50 }),
   setApprovalExpiry: (a) => a.setApprovalExpiry(WS, 30),
   setApprovalMode: (a) => a.setApprovalMode(WS, "approve_all"),
 };

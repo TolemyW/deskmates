@@ -5,6 +5,7 @@ import {
   type BotId,
   DeskmatesError,
   PARKED_RUN_STATUSES,
+  RUN_TIMELINE_SOURCE,
   type Run,
   type RunFailureClass,
   type RunId,
@@ -81,6 +82,8 @@ export interface RunPageFilter {
   /** Only these statuses (issue #11). */
   statuses?: readonly RunStatus[];
   lane?: RunLane;
+  /** Only runs of this trigger kind (issue #39 item 7: `model_job` apart from `cron`). */
+  triggerKind?: RunTriggerKind;
   /** `created_at` at or after this canonical ISO time. */
   since?: string;
   /** `created_at` before this canonical ISO time. */
@@ -110,6 +113,7 @@ const ALL_STATUSES: readonly RunStatus[] = [
   "waiting_approval",
   "waiting_browser",
   "waiting_continuation",
+  "waiting_platform",
   "succeeded",
   "silent",
   "failed",
@@ -134,11 +138,18 @@ export const QUEUED_RUNS_SQL = `SELECT r.* FROM runs r
  * Parked runs whose approval has been decided: the scheduler's resume work list (ADR-0002
  * amendment 2, "resume keeps the ledger whole"). The approval id lives in the resume payload the
  * sidecar sent with `run_ended(deferred)`; the generated column `resume_approval_id` exposes it.
+ * Issue #62 M8: one OpenAI turn can park on several approvals, listed in the payload's
+ * `approvalIds`; a decision on any of this run's listed approvals resumes it.
  */
 export const RESUMABLE_RUNS_SQL = `SELECT r.* FROM runs r
-   JOIN approvals a ON a.id = r.resume_approval_id
-   WHERE (r.status = 'waiting_approval' AND a.decision IS NOT NULL)
-      OR (r.status = 'waiting_continuation' AND a.decision = 'allow_once')
+   WHERE (r.status = 'waiting_approval' AND EXISTS (
+       SELECT 1 FROM approvals a
+       WHERE a.decision IS NOT NULL
+         AND (a.id = r.resume_approval_id
+           OR (a.run_id = r.id
+             AND a.id IN (SELECT value FROM json_each(r.resume_payload_json, '$.approvalIds'))))))
+      OR (r.status = 'waiting_continuation' AND EXISTS (
+       SELECT 1 FROM approvals a WHERE a.id = r.resume_approval_id AND a.decision = 'allow_once'))
    ORDER BY r.created_at, r.id`;
 
 export class RunStore {
@@ -256,6 +267,10 @@ export class RunStore {
       clauses.push("r.lane = ?");
       params.push(filter.lane);
     }
+    if (filter.triggerKind !== undefined) {
+      clauses.push("r.trigger_kind = ?");
+      params.push(filter.triggerKind);
+    }
     if (filter.since !== undefined) {
       clauses.push("r.created_at >= ?");
       params.push(filter.since);
@@ -297,6 +312,7 @@ export class RunStore {
       .prepare(
         `SELECT r.* FROM bots b JOIN runs r ON r.id = (
            SELECT x.id FROM runs x WHERE x.bot_id = b.id AND ${notPrivateToOthers("x")}
+             AND x.trigger_kind <> 'model_job' AND json_extract(x.config_json, '$.runType') IS NULL
              ORDER BY x.created_at DESC, x.id DESC LIMIT 1)
          WHERE b.workspace_id = ?
          ORDER BY b.name, b.id`,
@@ -454,6 +470,27 @@ export class RunStore {
     return rows.map(toRun);
   }
 
+  /**
+   * Whether any run of the workspace ever had its container: an attempt recorded the
+   * `sandbox_ready` startup mark (ADR-0037), or, for runs from before the marks, finished with
+   * an answer or in silence, which no run does without one. The workspace page reads it to say
+   * why an absent container is absent (issue #15).
+   */
+  workspaceHadSandbox(workspaceId: WorkspaceId): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT 1 FROM runs r
+           WHERE r.workspace_id = ?
+             AND (r.status IN ('succeeded', 'silent')
+               OR EXISTS (SELECT 1 FROM run_events e
+                            WHERE e.run_id = r.id AND e.kind = 'log' AND e.source = ?
+                              AND json_extract(e.payload_json, '$.mark') = 'sandbox_ready'))
+           LIMIT 1`,
+      )
+      .get(workspaceId, RUN_TIMELINE_SOURCE);
+    return row !== undefined;
+  }
+
   /** How many runs of this trigger kind the bot has queued; the webhook queue cap reads it. */
   countQueued(botId: BotId, triggerKind: RunTriggerKind): number {
     const row = this.db
@@ -518,6 +555,18 @@ export class RunStore {
   /** Parked runs whose approval is decided, oldest first. */
   listResumable(): RunRecord[] {
     return (this.db.prepare(RESUMABLE_RUNS_SQL).all() as RunRow[]).map(toRun);
+  }
+
+  /**
+   * Runs the platform parked (ADR-0029), oldest first: the scheduler resumes them once nothing
+   * drains, and the restart breaker reads them.
+   */
+  listPlatformParked(): RunRecord[] {
+    return (
+      this.db
+        .prepare("SELECT * FROM runs WHERE status = 'waiting_platform' ORDER BY created_at, id")
+        .all() as RunRow[]
+    ).map(toRun);
   }
 
   /** A fake clock can pass `now` for the 24-hour continuation expiry test. */
@@ -654,6 +703,17 @@ export class RunStore {
         .prepare("UPDATE runs SET config_json = ? WHERE id = ?")
         .run(JSON.stringify(config), id);
       return this.mustGet(id);
+    })();
+  }
+
+  /**
+   * ADR-0029 decision 4: the session the run's current attempt is on, as its sidecar reported it
+   * at SDK init; `sdkSessionAttempt` in the config says which attempt that was.
+   */
+  setSession(id: RunId, sdkSessionId: string, attempt: number): void {
+    this.db.transaction(() => {
+      this.db.prepare("UPDATE runs SET sdk_session_id = ? WHERE id = ?").run(sdkSessionId, id);
+      this.setConfig(id, { sdkSessionAttempt: attempt });
     })();
   }
 

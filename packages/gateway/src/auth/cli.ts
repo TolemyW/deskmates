@@ -57,7 +57,8 @@ const USAGE = `usage: auth-cli <command> [options]
   bootstrap-owner [--name <display name>]               create the root account "admin" (once)
   create-root                                            the same as login admin, password admin
   create-user --login <name> --name <display> --role <owner|admin|member> [--tenant <id>]
-  reset-password --login <name>                          set a password, revoke all sessions
+                                                         requires a change at first sign-in
+  reset-password --login <name>                          set a temporary password, revoke sessions
   disable-user --login <name> | enable-user --login <name>
   revoke-sessions --login <name>                         sign the user out everywhere
   list-users [--tenant <id>]                             a trailing "maintainer" marks platform maintenance
@@ -242,8 +243,11 @@ export async function runAuthCli(argv: string[], io: CliIo): Promise<number> {
           role,
           tenantId,
           password: await newPassword(io),
+          mustChangePassword: true,
         });
-        io.out(`Created ${role} ${user.id} (${user.displayName}) in tenant ${tenantId}.`);
+        io.out(
+          `Created ${role} ${user.id} (${user.displayName}) in tenant ${tenantId}; the user must change this password at first sign-in.`,
+        );
         return 0;
       }
       case "create-tenant": {
@@ -369,7 +373,9 @@ export async function runAuthCli(argv: string[], io: CliIo): Promise<number> {
       case "reset-password": {
         const login = need(args, "login");
         const revoked = await auth.resetPassword(login, await newPassword(io));
-        io.out(`Password set; ${revoked} session(s) revoked.`);
+        io.out(
+          `Temporary password set; ${revoked} session(s) revoked; the user must change it at next sign-in.`,
+        );
         return 0;
       }
       case "disable-user":

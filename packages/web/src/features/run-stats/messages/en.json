@@ -1,0 +1,14 @@
+{
+  "runStats.disable": "Turn off run statistics",
+  "runStats.enable": "Turn on run statistics",
+  "runStats.frozen": "Runs already started keep the setting they started with.",
+  "runStats.intro": "Gives {name} a read-only tool, run_stats, that shows its own recent runs, failure causes, durations, spend, pending approvals, parked runs and tasks. Only this Bot's own figures in this workspace; never another Bot's, and never the content of anyone's private chat.",
+  "runStats.loading": "Loading run statistics…",
+  "runStats.off": "Off (the default)",
+  "runStats.on": "On",
+  "runStats.retry": "Retry",
+  "runStats.roleNote": "change run statistics",
+  "runStats.state": "Run statistics tool",
+  "runStats.strategyNote": "Giving a Bot this tool changes how it works; compare it on paired runs before relying on it.",
+  "runStats.title": "Run statistics"
+}

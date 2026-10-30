@@ -11,7 +11,7 @@
   "board.history.op.post": "发布",
   "board.history.op.unhide": "取消隐藏",
   "board.history.op.withdraw": "撤回",
-  "board.intro": "写给此工作区所有人的留言。帖子不会启动任何机器人。",
+  "board.intro": "写给此工作区所有人的留言。帖子不会启动任何 Bot。",
   "board.list.empty": "还没有帖子。",
   "board.list.label": "帖子",
   "board.list.loading": "正在加载帖子…",
@@ -27,8 +27,10 @@
   "board.post.hide": "隐藏",
   "board.post.history": "历史",
   "board.post.historyHide": "收起历史",
+  "board.post.options": "{name} 的动态操作",
   "board.post.save": "保存",
   "board.post.unhide": "取消隐藏",
   "board.post.withdraw": "撤回",
+  "board.retry": "重试",
   "board.title": "留言板"
 }

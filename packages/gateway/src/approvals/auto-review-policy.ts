@@ -4,7 +4,7 @@
 // with a human; egress and continuations are outside the reviewer's scope in `automatic`. Browser
 // actions and runs without a human instruction became reviewable on 2026-10-14 (D3).
 
-import type { Approval } from "@deskmates/contracts";
+import { type Approval, isVaultUseAction } from "@deskmates/contracts";
 
 export type ReviewIneligibility =
   | "egress"
@@ -52,6 +52,8 @@ export function reviewIneligibility(
   if (approval.kind === "continuation") return "continuation";
   const command = commandOf(approval);
   if (approval.action.unclassified) return "unclassified";
+  // ADR-0045 decision 4: a credential release always goes to a human in `automatic`.
+  if (isVaultUseAction(approval.action)) return "credential";
   if (facts.scrubbedSecrets) return "credential";
   const texts = [command, approval.action.argumentSummary, approval.action.filePath].filter(
     (text): text is string => typeof text === "string",

@@ -53,6 +53,7 @@ export interface SubmitInput {
   authorId: string;
   dispatch?: TaskSubmissionDispatch;
   occurrenceAt?: string;
+  feedback?: string;
 }
 
 /** What a dispatch did; `publish` sends its events after the caller's transaction commits. */
@@ -151,7 +152,7 @@ export class TaskDispatcher {
       const botName = this.ctx.bots.mustGet(owner).name;
       posted = this.ctx.router.postHuman({
         threadId,
-        body: instruction(task, botName, id),
+        body: instruction(task, botName, id, input.feedback),
         authorId: input.authorId,
         mustReply: true,
         externalId: `task-submission:${id}`,
@@ -279,10 +280,13 @@ export class TaskDispatcher {
 }
 
 /** The instruction a dispatch posts: who, which task, which submission, and what is asked. */
-function instruction(task: Task, botName: string, submissionId: string): string {
+function instruction(task: Task, botName: string, submissionId: string, feedback?: string): string {
   return [
     `@${botName} Please work on task "${task.title}" (task ${task.id}, scope version ${task.scopeVersion}, submission ${submissionId}).`,
     task.description.trim() === "" ? "" : `\n${task.description.trim()}`,
+    feedback === undefined
+      ? ""
+      : `\nRevision requested by the person:\n${feedback}\nPreserve earlier delivery evidence and explain what changed in the new delivery.`,
     "\nWhen it is done, deliver it with task_deliver; record progress with task_checkpoint.",
   ]
     .filter((line) => line !== "")

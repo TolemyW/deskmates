@@ -116,4 +116,74 @@ describe("thread list summaries", () => {
     const listed = await h.api<{ threads: ThreadSummary[] }>("GET", "/api/threads");
     expect(listed.json.threads[0]?.lastMessage?.excerpt).toHaveLength(160);
   });
+
+  it("resolves a human preview author's display name", async () => {
+    const { workspace, thread } = await h.seed();
+    const person = await h.app.deskmates.ctx.auth.createUser({
+      loginName: "olive",
+      displayName: "Olive Owner",
+      password: "correct horse battery staple",
+      role: "member",
+      workspaceId: workspace.id,
+    });
+    h.app.deskmates.ctx.messages.append({
+      threadId: thread.id,
+      authorKind: "human",
+      authorId: `user:${person.id}`,
+      body: "please re-run the check",
+    });
+    const listed = await h.api<{ threads: ThreadSummary[] }>("GET", "/api/threads");
+    expect(listed.json.threads[0]?.lastMessage).toMatchObject({
+      authorId: `user:${person.id}`,
+      authorName: "Olive Owner",
+    });
+  });
+
+  // Issue #16: a bot reply stored before the summary parser read the one-line fence (cf21f30)
+  // is the whole fenced block. The stored body stays; the preview shows the object text.
+  it("previews a fenced last message as its object text, leaving the stored body as it is", async () => {
+    const { bot, thread } = await h.seed();
+    const fence = "```";
+    const fenced = `${fence}json {"done": "checked the labels", "reply": "All labels verified."} ${fence}`;
+    const stored = h.app.deskmates.ctx.messages.append({
+      threadId: thread.id,
+      authorKind: "bot",
+      authorId: bot.id,
+      body: fenced,
+    });
+    const listed = await h.api<{ threads: ThreadSummary[] }>("GET", "/api/threads");
+    expect(listed.json.threads[0]?.lastMessage?.excerpt).toBe(
+      '{"done": "checked the labels", "reply": "All labels verified."}',
+    );
+    expect(h.app.deskmates.ctx.messages.mustGet(stored.id).body).toBe(fenced);
+
+    h.app.deskmates.ctx.messages.append({
+      threadId: thread.id,
+      authorKind: "bot",
+      authorId: bot.id,
+      body: `${fence}json\n{\n  "reply": "${"长".repeat(400)}"\n}\n${fence}`,
+    });
+    const cut = await h.api<{ threads: ThreadSummary[] }>("GET", "/api/threads");
+    const excerpt = cut.json.threads[0]?.lastMessage?.excerpt ?? "";
+    expect(excerpt.startsWith('{ "reply": "长长')).toBe(true);
+    expect(Array.from(excerpt)).toHaveLength(160);
+  });
+
+  it("projects linked task context without changing the conversation", async () => {
+    const { workspace, thread } = await h.seed();
+    const task = h.app.deskmates.ctx.tasks.create(workspace.id, {
+      title: "Review the release",
+      threadIds: [thread.id],
+    });
+    const listed = await h.api<{ threads: ThreadSummary[] }>(
+      "GET",
+      `/api/threads?workspaceId=${workspace.id}`,
+    );
+    expect(listed.status).toBe(200);
+    expect(listed.json.threads.find((item) => item.id === thread.id)?.taskContext).toEqual({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+    });
+  });
 });

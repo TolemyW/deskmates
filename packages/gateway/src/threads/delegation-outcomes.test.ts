@@ -4,6 +4,7 @@
 import {
   type ApprovalId,
   RELAY_COUNT_MAX,
+  RUN_ERROR_GATEWAY_RESTARTED,
   type RunEnded,
   type RunSummary,
   THREAD_LINK_ATTACHMENT_MIME,
@@ -237,19 +238,20 @@ describe("announceDelegationOutcome (decisions 8, 10, 11, 12)", () => {
     ).toBe(true);
   });
 
-  it("silent after a thread_post: the notice points at the reply the run did post", () => {
+  it("an empty end after a thread_post: the notice points at the reply the run did post", () => {
     const s = setup();
     const posted = s.ctx.router.postFromRun(
       s.ctx.runs.mustGet(s.expertRun.id),
       "Ticket 1050 is closed.",
     );
     s.lifecycle.ended(s.expertRun.id, completed(""));
-    expect(s.ctx.runs.mustGet(s.expertRun.id).status).toBe("silent");
+    // The run posted, so it is not silent (owner definition, 2026-10-17).
+    expect(s.ctx.runs.mustGet(s.expertRun.id).status).toBe("succeeded");
     const notice = s.messages().at(-1);
     expect(notice?.body).toBe(
       `Delegation outcome: expert finished the work delegated in message #${s.delegation.seq}. Its reply is message #${posted.seq}.`,
     );
-    expect(s.notices()[0]?.payload).toMatchObject({ outcome: "silent", replied: true });
+    expect(s.notices()[0]?.payload).toMatchObject({ outcome: "succeeded", replied: true });
     expect(s.ctx.runs.findQueued(s.chief.id, s.thread.id)?.triggerRef).toBe(notice?.id);
   });
 
@@ -293,7 +295,7 @@ describe("announceDelegationOutcome (decisions 8, 10, 11, 12)", () => {
     expect(wakes).toHaveLength(1);
     expect(wakes[0]).toMatchObject({ status: "queued", triggerRef: notice?.id });
     // A system message counts toward neither cap.
-    expect(s.ctx.messages.botCountSinceLastHuman(s.thread.id)).toBe(1);
+    expect(s.ctx.messages.botCountSinceOrigin(s.thread.id)).toBe(1);
   });
 
   it("failed via run_ended: the bounded error is quoted, the delegator is woken", () => {
@@ -362,6 +364,22 @@ describe("announceDelegationOutcome (decisions 8, 10, 11, 12)", () => {
     ).toBe(true);
   });
 
+  it("gateway_restarted (ADR-0029 decision 7): one inert platform notice, then the delegation notice", () => {
+    const s = setup();
+    s.ctx.runs.setConfig(s.expertRun.id, { platformResumes: 3 });
+    const before = s.messages().length;
+    const failed = s.lifecycle.parkAfterRestart(s.expertRun.id, { held: false });
+    expect(failed?.status).toBe("failed");
+    expect(failed?.error).toBe(RUN_ERROR_GATEWAY_RESTARTED);
+    const added = s.messages().slice(before);
+    expect(added.map((m) => m.authorKind)).toEqual(["system", "system"]);
+    expect(added[0]?.body).toContain("expert's run was stopped by a platform restart");
+    expect(added[1]?.body).toContain("failed the work delegated in message");
+    // Only the delegation notice wakes anyone, and only the delegator.
+    expect(s.chiefRuns().filter((r) => r.id !== s.chiefRun.id)).toHaveLength(1);
+    expect(s.ctx.runs.list({ threadId: s.thread.id, botId: s.expert.id })).toHaveLength(1);
+  });
+
   it("stopped: a continuation denied by the delegator is announced with the handoff path", () => {
     const s = setup();
     s.lifecycle.ended(s.expertRun.id, {
@@ -411,7 +429,11 @@ describe("announceDelegationOutcome (decisions 8, 10, 11, 12)", () => {
 
   it("paused thread: the notice is appended and nobody is woken", () => {
     const s = setup();
-    s.ctx.threads.setStatus(s.thread.id, "paused");
+    s.ctx.threads.pause(s.thread.id, {
+      reason: "turn_budget",
+      seq: 0,
+      at: new Date().toISOString(),
+    });
     s.lifecycle.ended(s.expertRun.id, completed(""));
     const notice = s.messages().at(-1);
     expect(notice?.authorKind).toBe("system");
@@ -680,7 +702,11 @@ describe("work that is handed on (decision 8 clarified, ADR-0005 amendment 2)", 
 
   it("a hand-on with nothing left open is announced as one, not as a reply", () => {
     const s = withTeam();
-    s.ctx.threads.setStatus(s.thread.id, "paused");
+    s.ctx.threads.pause(s.thread.id, {
+      reason: "turn_budget",
+      seq: 0,
+      at: new Date().toISOString(),
+    });
     const expertRun = s.ctx.runs.mustGet(s.expertRun.id);
     // The thread is paused, so the mention wakes nobody and nothing is open when the run ends.
     const handOn = s.ctx.router.postFromRun(expertRun, "@carol how many units are left?");
@@ -688,7 +714,8 @@ describe("work that is handed on (decision 8 clarified, ADR-0005 amendment 2)", 
     expect(s.noticesFor("expert")).toEqual([
       `Delegation outcome: expert ended the work delegated in message #${s.delegation.seq} after handing it on in message #${handOn.seq}; no reply was posted.`,
     ]);
-    expect(s.notices()[0]?.payload).toMatchObject({ outcome: "silent", replied: false });
+    // It posted the hand-on, so it is not silent (owner definition, 2026-10-17).
+    expect(s.notices()[0]?.payload).toMatchObject({ outcome: "succeeded", replied: false });
   });
 
   it("a failed continuation is announced to the first delegator", () => {
@@ -824,7 +851,7 @@ describe("work that is handed on (decision 8 clarified, ADR-0005 amendment 2)", 
     });
     ctx.router.postFromRun(running, "Closed 1050.");
     lifecycle.ended(expertRun.id, completed(""));
-    expect(ctx.runs.mustGet(expertRun.id).status).toBe("silent");
+    expect(ctx.runs.mustGet(expertRun.id).status).toBe("succeeded");
     const notice = ctx.messages.list(chat.id).at(-1);
     expect(notice?.body).toContain(
       `Delegation outcome: expert finished the work handed off with message_bot (message #1 in conversation ${bus}). Its reply is in this thread.`,

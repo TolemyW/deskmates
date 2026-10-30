@@ -414,6 +414,12 @@
     min-width: 0;
   }
 
+  /* A page heading takes focus after navigation so screen readers announce it; it is not a
+     control and Tab never reaches it, so it draws no focus ring. */
+  :is(h1, h2, h3)[tabindex="-1"]:focus {
+    outline: none;
+  }
+
   caption {
     caption-side: top;
     padding: 0 0 8px;
@@ -547,6 +553,7 @@
 
   .status.waiting_approval,
   .status.waiting_continuation,
+  .status.waiting_platform,
   .pill.warning {
     background: var(--app-warning-soft);
     color: var(--warning-text);
@@ -1227,45 +1234,6 @@
   .workspace-mark {
     background: var(--primary-soft);
     color: var(--primary-text);
-  }
-
-  .app-tabs {
-    display: flex;
-    gap: 2px;
-    border-bottom: 1px solid var(--app-border);
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .app-tabs::-webkit-scrollbar {
-    display: none;
-  }
-
-  .app-tabs button {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    flex-shrink: 0;
-    white-space: nowrap;
-    padding: 10px 14px;
-    margin-bottom: -1px;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    background: transparent;
-    color: var(--app-text-3);
-    font-size: var(--app-text-sm);
-    font-weight: 500;
-    cursor: pointer;
-  }
-
-  .app-tabs button:hover {
-    color: var(--text);
-  }
-
-  .app-tabs button.active {
-    color: var(--primary-text);
-    border-bottom-color: var(--primary);
-    font-weight: 600;
   }
 
   .profile-grid {

@@ -11,11 +11,11 @@ const load = (file: string) =>
 const policy = await load("egress-policy.mjs");
 const lan = await load("lan-grants.mjs");
 
-const subnet = { kind: "subnet", cidr: "10.20.30.0/24", schemes: ["http"], ports: [23001] };
+const subnet = { kind: "subnet", cidr: "10.88.30.0/24", schemes: ["http"], ports: [23001] };
 const host = {
   kind: "host",
   hostname: "console.vendordb.lan",
-  address: "10.20.36.35",
+  address: "10.88.36.35",
   schemes: ["https"],
   ports: [443, 8443],
 };
@@ -61,10 +61,10 @@ describe("proxy policy document (decision 6)", () => {
 
 describe("proxy grant matching (decisions 10 and 11)", () => {
   const cases: [string, string, number, boolean][] = [
-    ["http", "10.20.30.24", 23001, true],
-    ["http", "10.20.30.24", 80, false],
-    ["https", "10.20.30.24", 23001, false],
-    ["http", "10.20.31.24", 23001, false],
+    ["http", "10.88.30.24", 23001, true],
+    ["http", "10.88.30.24", 80, false],
+    ["https", "10.88.30.24", 23001, false],
+    ["http", "10.88.31.24", 23001, false],
     ["https", "console.vendordb.lan", 443, true],
     ["https", "console.vendordb.lan", 8443, true],
     ["http", "console.vendordb.lan", 443, false],
@@ -81,20 +81,20 @@ describe("proxy grant matching (decisions 10 and 11)", () => {
     expect(
       s.lanTarget("https", "console.vendordb.lan", 443, HOST_TARGET, interfaces),
     ).toMatchObject({
-      address: "10.20.36.35",
+      address: "10.88.36.35",
       family: 4,
     });
-    expect(s.lanTarget("http", "10.20.30.24", 23001, HOST_TARGET, interfaces)).toMatchObject({
-      address: "10.20.30.24",
+    expect(s.lanTarget("http", "10.88.30.24", 23001, HOST_TARGET, interfaces)).toMatchObject({
+      address: "10.88.30.24",
     });
   });
 
   it("never admits a private target through the public allowlist", async () => {
     const s = state(["*"], []);
-    expect(s.lanTarget("http", "10.20.30.24", 23001, HOST_TARGET, interfaces)).toBeUndefined();
-    const lookup = vi.fn(async () => [{ address: "10.20.30.24", family: 4 }]);
+    expect(s.lanTarget("http", "10.88.30.24", 23001, HOST_TARGET, interfaces)).toBeUndefined();
+    const lookup = vi.fn(async () => [{ address: "10.88.30.24", family: 4 }]);
     await expect(s.resolvePublic("lan.example.test", lookup)).rejects.toThrow("address denied");
-    await expect(s.resolvePublic("10.20.30.24", lookup)).rejects.toThrow();
+    await expect(s.resolvePublic("10.88.30.24", lookup)).rejects.toThrow();
   });
 
   it("refuses a grant that reaches the proxy's own networks or the host target", () => {
@@ -126,34 +126,34 @@ describe("proxy grant matching (decisions 10 and 11)", () => {
       lo: [{ family: "IPv4", address: "127.0.0.1", cidr: "127.0.0.1/8" }],
       eth0: [{ family: "IPv4", address: "192.168.16.2", cidr: "192.168.16.2/20" }],
     };
-    const grant = { kind: "subnet", cidr: "10.20.40.132/32", schemes: ["http"], ports: [45123] };
+    const grant = { kind: "subnet", cidr: "10.88.40.132/32", schemes: ["http"], ports: [45123] };
     const s = state([], [grant]);
     for (const target of ["172.17.0.1", "192.168.16.1"]) {
-      expect(s.lanTarget("http", "10.20.40.132", 45123, target, testbox)).toMatchObject({
-        address: "10.20.40.132",
+      expect(s.lanTarget("http", "10.88.40.132", 45123, target, testbox)).toMatchObject({
+        address: "10.88.40.132",
         family: 4,
       });
     }
-    expect(() => s.lanTarget("http", "10.20.40.132", 45123, "10.20.40.132", testbox)).toThrow(
+    expect(() => s.lanTarget("http", "10.88.40.132", 45123, "10.88.40.132", testbox)).toThrow(
       "infrastructure",
     );
   });
 
   it("denies an expired grant and forgets grants on revoke and fail-closed", () => {
     const s = state([], [{ ...subnet, expiresAt: "2000-01-01T00:00:00Z" }]);
-    expect(s.lanTarget("http", "10.20.30.24", 23001, HOST_TARGET, interfaces)).toBeUndefined();
+    expect(s.lanTarget("http", "10.88.30.24", 23001, HOST_TARGET, interfaces)).toBeUndefined();
     const live = state();
     live.replace(["*.example.test"], [], []);
-    expect(live.lanTarget("http", "10.20.30.24", 23001, HOST_TARGET, interfaces)).toBeUndefined();
+    expect(live.lanTarget("http", "10.88.30.24", 23001, HOST_TARGET, interfaces)).toBeUndefined();
     const closed = state();
     closed.failClosed();
-    expect(closed.lanTarget("http", "10.20.30.24", 23001, HOST_TARGET, interfaces)).toBeUndefined();
+    expect(closed.lanTarget("http", "10.88.30.24", 23001, HOST_TARGET, interfaces)).toBeUndefined();
   });
 
   it("carries the expiry so open tunnels close when the grant ends", () => {
     const expiresAt = "2099-01-01T00:00:00Z";
     const s = state([], [{ ...subnet, expiresAt }]);
-    expect(s.lanTarget("http", "10.20.30.24", 23001, HOST_TARGET, interfaces)?.expiresAt).toBe(
+    expect(s.lanTarget("http", "10.88.30.24", 23001, HOST_TARGET, interfaces)?.expiresAt).toBe(
       Date.parse(expiresAt),
     );
   });

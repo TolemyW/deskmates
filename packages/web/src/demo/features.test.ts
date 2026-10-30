@@ -89,6 +89,13 @@ const PROBES = [
   "/api/integrations/workspaces/x/connections/oauth/start",
   "/api/integrations/workspaces/x/connections/y",
   "/api/connectors",
+  "/api/channels",
+  "/api/workspaces/x/channels",
+  "/api/workspaces/x/channels/y/connect",
+  "/api/workspaces/x/channels/y/commands/test",
+  "/api/workspaces/x/channel-connections/y/commands/reconnect",
+  "/api/workspaces/x/channel-connections/y/rebind",
+  "/api/workspaces/x/channel-connections/y/blocks",
 ];
 
 const METHODS = ["GET", "POST", "PATCH", "PUT", "DELETE"];

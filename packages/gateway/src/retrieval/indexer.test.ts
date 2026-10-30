@@ -156,6 +156,37 @@ describe("indexer", () => {
     expect(retrieval.vectors.counts().memory).toBe(1);
   });
 
+  it("marks and logs only the refused source of a shared batch (#61 L14)", async () => {
+    const { fx, fake, retrieval, note } = await setup();
+    const good = note(fx.a.workspace.id, "pg_dump nightly");
+    const poison = note(fx.a.workspace.id, "poison input");
+    const also = note(fx.a.workspace.id, "backups on the NAS");
+    const logs: [string, Record<string, unknown>][] = [];
+    const picky = new RetrievalIndexer(
+      retrieval.vectors,
+      new EmbeddingClient(FAKE_EMBEDDING, async (input, init) => {
+        const body = JSON.parse(String(init?.body)) as { input: string[] };
+        if (body.input.some((text) => text.includes("poison")))
+          return new Response("refused", { status: 400 });
+        return fake.fetch(input, init);
+      }),
+      retrieval.usage,
+      { log: (msg, data) => logs.push([msg, data]) },
+    );
+    expect(await picky.runOnce()).toEqual({ knowledge: 0, memory: 2, failed: true });
+    expect(count(fx, "memory_chunk_vectors", "entry_id = ?", good)).toBe(1);
+    expect(count(fx, "memory_chunk_vectors", "entry_id = ?", also)).toBe(1);
+    expect(count(fx, "memory_chunk_vectors", "entry_id = ?", poison)).toBe(0);
+    expect(logs).toContainEqual([
+      "retrieval indexing refused a source; not retried until restart",
+      { corpus: "memory", sourceId: poison },
+    ]);
+    // The refused source is not asked again in this process.
+    fake.calls.length = 0;
+    expect(await picky.runOnce()).toEqual({ knowledge: 0, memory: 0, failed: false });
+    expect(fake.calls).toEqual([]);
+  });
+
   it("starts, kicks and stops without waiting for a hung service", async () => {
     const { fx, fake, indexer, note } = await setup();
     note(fx.a.workspace.id, "pg_dump");

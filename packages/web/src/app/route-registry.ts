@@ -51,7 +51,10 @@ export function parseRoute(hash: string): Route {
   const path = hash.replace(/^#/, "").replace(/^\/+/, "");
   const [head, rest] = path.split("/", 2);
   // A fresh object each time: the shell's effects run when the route object changes.
-  return segments.get(head ?? "")?.(rest) ?? { name: "home" };
+  if (!head) return { name: "home" };
+  const parser = segments.get(head);
+  if (!parser) return { name: "notFound", path };
+  return parser(rest) ?? { name: "home" };
 }
 
 /**

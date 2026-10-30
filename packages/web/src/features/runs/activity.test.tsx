@@ -142,7 +142,7 @@ describe("ActivityPanel", () => {
     const groups = document.querySelectorAll("details.activity-group");
     expect((groups[0] as HTMLDetailsElement).open).toBe(true);
     expect((groups[2] as HTMLDetailsElement).open).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Background" }));
+    fireEvent.click(screen.getByRole("button", { name: "Scheduled work" }));
     const cards = screen.getAllByTestId("activity-card");
     expect(cards).toHaveLength(1);
     expect(
@@ -179,6 +179,27 @@ describe("ActivityPanel", () => {
     expect(loadEvents).toHaveBeenCalledWith("run_b");
   });
 
+  it("Original counts desktop network denials and names their hosts (ADR-0048 A4)", async () => {
+    const denial = (seq: number, host: string) =>
+      ({
+        runId: "run_b" as RunId,
+        seq,
+        kind: "log",
+        ts: "2026-10-13T08:02:03.000Z",
+        payload: { source: "desktop", op: "egress_denied", level: "warn", host, kind: "hard_deny" },
+      }) as RunEvent;
+    const loadEvents = vi.fn(async () => [
+      denial(1, "10.0.0.5"),
+      denial(2, "intranet.example"),
+      denial(3, "10.0.0.5"),
+    ]);
+    panel({ loadEvents });
+    const card = screen.getAllByTestId("activity-card")[1] as HTMLElement;
+    fireEvent.click(within(card).getByRole("button", { name: "Original" }));
+    const line = await within(card).findByTestId("activity-desktop-denials");
+    expect(line.textContent).toBe("Desktop network denials: 3 (10.0.0.5, intranet.example)");
+  });
+
   it("Retry asks for the failed member of that round", async () => {
     const onRetry = vi.fn(async () => {});
     panel({ onRetry });
@@ -191,4 +212,22 @@ describe("ActivityPanel", () => {
       }),
     ).toBeNull();
   });
+});
+
+it("labels background chat replies as bot collaboration while keeping actual schedules distinct", () => {
+  const collaboration = run({
+    id: "run_bus" as RunId,
+    lane: "background",
+    triggerKind: "thread_message",
+    status: "silent",
+  });
+  const scheduled = run({
+    id: "run_cron" as RunId,
+    lane: "background",
+    triggerKind: "cron",
+    status: "silent",
+  });
+  render(<ActivityPanel runs={[collaboration, scheduled]} botName={() => "assistant"} />);
+  expect(screen.getAllByText("Bot collaboration")).toHaveLength(1);
+  expect(screen.getAllByText("Scheduled work").length).toBeGreaterThan(0);
 });

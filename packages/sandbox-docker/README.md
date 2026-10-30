@@ -102,7 +102,8 @@ host services at that target remain reachable and must be secured by the deploym
 - `host.docker.internal` has no workspace `/etc/hosts` entry. The reserved name is sent through the managed proxy. `NO_PROXY` contains only container loopback; the provider pins `egress-proxy` to its workspace-network address.
 - Restart policy `unless-stopped`, so the workspace comes back with the daemon — and with its own desktop: `entry.sh` waits on the Chromium process alone and exits non-zero when it dies, so a dead browser recreates the desktop instead of leaving a container that is "running" but permanently unhealthy. The profile is a named volume, so cookies and logins survive. `entry.sh` therefore has to be safe to run twice on the same filesystem; it clears the previous boot's X lock before starting Xvfb.
 - `CapDrop: ["ALL"]`, `SecurityOpt: ["no-new-privileges"]`, `PidsLimit: 4096`. Nothing in the image needs a Linux capability: Chromium runs `--no-sandbox`, and Xvfb, x11vnc and websockify bind unprivileged ports only. There is no `CapAdd`; if something ever needs one, add it explicitly and say why.
-- `sidecarAddress` is `docker-exec://<containerId>`: in M0 there is no sidecar supervisor, the Gateway starts `deskmates-sidecar run` through `exec` and pipes the JSON `StartRunRequest` on stdin.
+- Every process runs as root: neither workspace Dockerfile sets `USER`, and neither the container nor an exec sets `User` (`workspace-image-user.test.ts`, `docker-provider.test.ts`). With no capabilities, root cannot write a file owned by another uid (no `CAP_DAC_OVERRIDE`) or chown it (no `CAP_CHOWN`), so anything the platform or an operator places in `/work` must be owned by root, or every bot sees it as read-only (issue #3; [workspace files](../../docs/runbooks/workspace-files.md)).
+- `sidecarAddress` is `docker-exec://<containerId>`: the Gateway starts `deskmates-sidecar run` through `exec` and pipes the JSON `StartRunRequest` on stdin; the image shim manages descendant lifetime with a per-run subreaper (ADR-0029).
 
 ## Readiness (`create` and `attach`)
 
@@ -114,7 +115,23 @@ host services at that target remain reachable and must be secured by the deploym
 
 `POST /containers/{id}/exec` then a hijacked `POST /exec/{id}/start`. `stdin` is written and the write side half-closed, which the process sees as EOF; stdout and stderr are demultiplexed; the exit code comes from `GET /exec/{id}/json`. `env` and `cwd` map to the exec's `Env` and `WorkingDir`. Exec argv and `Env` are visible through the Engine API (`docker inspect` of the exec), so secrets go through `injectEnv`, never through `exec` arguments.
 
-`timeoutMs`: Docker does not kill an exec's process when the client disconnects, so every exec carries a unique `DESKMATES_EXEC_ID` environment marker. On timeout the provider closes the stream, returns `{ timedOut: true, exitCode: -1 }` with the output so far, and runs a second exec that scans `/proc/*/environ` for the marker and `kill -9`s every match, so the whole process tree goes. This needs `/bin/sh`, `tr`, `grep` and `/proc` in the image; alpine and the workspace image have them.
+`timeoutMs`: Docker does not kill an exec when the client disconnects. Every exec
+carries a unique `DESKMATES_EXEC_ID`; timeout or abort closes the stream, keeps
+partial output, and requests cleanup before returning `{ timedOut: true, exitCode: -1 }`.
+The workspace's `deskmates-sidecar run` shim starts a Linux child subreaper that
+adopts and reaps descendants even after `setsid`, double fork or environment reset.
+Cleanup signals the matching supervisor and waits for all its descendants to exit;
+normal sidecar exit also drains descendants. Linux pidfds prevent signaling a
+recycled PID. Other runs and the shared browser are outside that ancestry.
+Cleanup failure is reported as `sandbox_unavailable`, not confirmed cancellation.
+Run token revocation remains independent. See ADR-0029's descendant-cleanup clarification.
+
+Older images without `run-supervisor.py` and non-run execs retain the legacy marker
+scan (`/bin/sh`, `tr`, `grep`, `/proc`), which is best effort and can miss detached,
+environment-free children. Upgrade the workspace image to obtain supervised run
+cleanup. This is lifecycle management inside one shared workspace, not a security
+boundary: uninterruptible kernel tasks or deliberate same-user supervisor killing
+cannot be claimed to have stopped. Separate trust domains require separate workspaces.
 
 A timeout is the only case where partial output is a result. If the stream ends any other way than cleanly on a frame boundary — a socket error, or bytes left over that do not form a complete frame (`DockerStreamDemuxer.pendingBytes`) — `exec` throws `sandbox_unavailable` / `reason: "stream_error"`. Otherwise `GET /exec/{id}/json` would still report the process's real exit code and truncated output would pass for a complete, successful answer.
 
@@ -136,6 +153,7 @@ Every failure crossing the boundary is a `DeskmatesError`: `sandbox_unavailable`
 
 - `*.test.ts` (T0): stream demux including leftover-byte reporting, env-file rendering and parsing, endpoint resolution including the TLS refusal, host address. `docker-provider.test.ts` stubs the three Engine API methods the provider uses, so container selection, the readiness wait and `exec`'s stream failure modes are covered without a daemon. `build-workspace-image.test.ts` runs `scripts/build-workspace-image.sh` with `npm` and `docker` stubbed on PATH. No Docker anywhere.
 - `docker-provider.container.test.ts` (T2): the full interface against `alpine:3.20` (`containerCommand: ["sleep","infinity"]` keeps a bare image alive): create (labels, hardening, and no readiness wait because alpine has no health check) → the published noVNC port (bound on `127.0.0.1` per `docker inspect`, and an HTTP GET from the host reaches a stand-in server in the container) → exec with stdin → timeout kill → injectEnv → attach by label from a fresh provider → attach restarts a stopped container → snapshot → destroy keeps the volume → typed errors for a missing image and an unreachable daemon. A second suite makes two local tags from alpine (a tag and a commit, no build or pull) and a committed variant of the egress image, then checks `removeStaleSandbox`: current image kept, new workspace tag recreated with the `/work` volume's content intact, missing image fails closed, proxy-only drift recreates the pair. Skips with a warning when the daemon is unreachable.
+- `run-supervisor.container.test.ts` (T2): real Linux subreaper tests for cancellation, timeout, restart-by-run-id, detached environment-free descendants, nested subreapers, normal-exit cleanup and concurrent-run survival. Uses the built workspace image without a model or network, checks the installed shim/helper and preserves a real Chromium.
 - `workspace-image.container.test.ts` (T2, slow): builds `images/workspace` via `scripts/build-workspace-image.sh`, then through `DockerProvider`: `create` returns only once healthz passes, the container runs with no capabilities, noVNC from the host and inside, one Chromium on CDP 9222 with `/profile`, Playwright MCP attach + snapshot over stdio (fixture `src/fixtures/mcp-attach-check.mjs`), `playwright-cli attach`, version pins, tools on PATH, no compiled tests in the image, killing Chromium restarts the container back to healthy, clean stop. Set `DESKMATES_SKIP_IMAGE_BUILD=1` to test an existing tag, and `WORKSPACE_IMAGE` to use a tag of your own.
 
 ```

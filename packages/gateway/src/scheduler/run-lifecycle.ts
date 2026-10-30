@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { APPROVAL_PRESENTATION } from "../approvals/presentation.js";
+import { startAppScope } from "../integrations/bot-app-scope.js";
 import { ACTIVITY_SUMMARY } from "../ledger/activity-summaries.js";
 // What happens at the two ends of a run (design v0.3 §5 steps 2 and 8): preparing the sidecar's
 // StartRunRequest with a fresh short-lived token, and turning the sidecar's RunEnded into ledger
@@ -7,16 +8,25 @@ import { ACTIVITY_SUMMARY } from "../ledger/activity-summaries.js";
 
 import {
   type AgentRuntime,
+  type Approval,
+  type ApprovalDecision,
   type ApprovalId,
   type BotId,
   type DeferredAction,
   DeskmatesError,
+  type InterruptedToolCall,
+  MEMORY_VALUE_POLICY,
   type MessageId,
   PARKED_RUN_STATUSES,
+  PLATFORM_RESUME_LIMIT,
+  type PlatformInterruptionReason,
   RUN_ERROR_BUDGET,
+  RUN_ERROR_CRON_MISFIRE,
   RUN_ERROR_DEADLINE,
+  RUN_ERROR_GATEWAY_RESTARTED,
   RUN_ERROR_NO_REPLY,
   type ReasoningOverrides,
+  type ResumeDecision,
   type RunEnded,
   type RunId,
   type RunResumePayload,
@@ -29,10 +39,12 @@ import {
   type WorkspaceId,
   botHomeDir,
   canTransition,
+  canonicalJson,
   isAgentRuntime,
   isEffortLevel,
   isExecuting,
   isRecordedReasoning,
+  isSilentOutcome,
   isTerminal,
   isThinkingConfig,
   learnedFromSuggestions,
@@ -40,32 +52,67 @@ import {
   recordedSkillSet,
   resolveReasoning,
 } from "@deskmates/contracts";
-import { approvalAttachment } from "../approvals/broker.js";
+import { isReviewRun } from "../approvals/auto-review.js";
+import { approvalAttachment, denyReason } from "../approvals/broker.js";
 import { continuationPlan, settleContinuationByMode } from "../approvals/continuation-mode.js";
-import { APPROVAL_EXPIRY_ACTOR } from "../approvals/expiry.js";
+import { toolTierStart } from "../approvals/tool-tier-overrides.js";
 import { cliSurfaceStart } from "../config/cli-surface.js";
 import type { GatewayContext } from "../context.js";
 import { nowIso } from "../db/ids.js";
 import { newId } from "../db/ids.js";
+import { assistantCreationReport } from "../default-bot/creation-report.js";
+import { defaultBots } from "../default-bot/default-bot-store.js";
+import { desktopInputLocks } from "../desktop/desktop-input-lock.js";
+import { desktopTools } from "../desktop/desktop-tools.js";
 import type { GatewayEvent } from "../events/bus.js";
 import { MARKED_WRONG_REASON, RunMarkStore } from "../ledger/run-marks.js";
 import { refreshRunUsageSummary } from "../ledger/run-usage-summaries.js";
 import type { RunRecord } from "../ledger/runs.js";
 import { isConsolidationRun } from "../memory/consolidation.js";
 import { indexConfig } from "../memory/index.js";
-import { writeLearnedItems } from "../memory/learned-writes.js";
-import { modelJobSettings } from "../model-jobs/model-jobs.js";
+import { type LearnedOutcome, writeLearnedItems } from "../memory/learned-writes.js";
+import { publishLearningNotice } from "../memory/learning-notice.js";
+import {
+  MODEL_JOB_RUN_TYPES,
+  modelJobSettings,
+  modelJobThinking,
+} from "../model-jobs/model-jobs.js";
 import { visionStart } from "../model-jobs/vision-policy.js";
+import { runStatsSettings } from "../run-stats/run-stats-setting.js";
+import { withWebSearch } from "../search/web-search-settings.js";
 import { recordAuthoredSkills } from "../skills/authoring.js";
 import { STARTER_SKILL_PACK } from "../skills/starter-catalog.js";
 import { announceDelegationOutcome } from "../threads/delegation-outcomes.js";
 import { type DeliveryGroup, buildDelivery } from "../threads/delivery.js";
 import { recordFinalReplyRouting, roundFacts } from "../threads/round-delivery.js";
+import { vaultToolsOffered } from "../vault/offer.js";
 import { modelUpstreamsOf } from "./model-upstream-freeze.js";
+import {
+  PLATFORM_CONFIG,
+  PLATFORM_LOG_SOURCE,
+  announcePlatformFailure,
+  freshSessionHandoff,
+  interruptedCallOf,
+  platformResumesOf,
+  sessionOfAttempt,
+} from "./platform-recovery.js";
 import { rulesChangedSince } from "./rule-revisions.js";
 import { continuationPolicy, freezeRunLimits, runMaxTurns } from "./run-limits.js";
 import { recordTimelineMark } from "./run-timeline-marks.js";
 import { sidecarToolsFor } from "./sidecar-tools.js";
+
+/**
+ * Run types whose thinking `MODEL_JOB_THINKING` caps and whose bot reasoning never applies: the
+ * model jobs, plus the two presentation summaries (approval explanation, Activity summary), which
+ * are tool-free one-turn jobs too, so a bot's xhigh or adaptive setting never reaches them. It
+ * caps nothing on an upstream that thinks by default: the SDK omits a disabled thinking key on
+ * the wire (probe 2026-10-26), so the Activity summary's output cap leaves room for thinking.
+ */
+export const THINKING_CAPPED_RUN_TYPES: ReadonlySet<unknown> = new Set([
+  ...MODEL_JOB_RUN_TYPES,
+  APPROVAL_PRESENTATION,
+  ACTIVITY_SUMMARY,
+]);
 
 /**
  * The dimensions that identify "the same action" across processes (ADR-0002 amendment 2, "the
@@ -78,6 +125,27 @@ function deferredActionOf(action: ToolAction): DeferredAction {
     toolName: action.toolName,
     ...(action.targetOrigin === undefined ? {} : { targetOrigin: action.targetOrigin }),
     ...(action.argumentPattern === undefined ? {} : { argumentPattern: action.argumentPattern }),
+  };
+}
+
+/** One decided approval as a resume hands it over (issue #62 M8). */
+function resumeDecisionOf(
+  approval: Approval,
+  decision: ApprovalDecision,
+  toolUseId: string | undefined,
+): ResumeDecision {
+  return {
+    approvalId: approval.id,
+    decision,
+    ...(toolUseId === undefined ? {} : { toolUseId }),
+    // Issue #62 H3: "allow this site" answers the egress ask only, never the call's L2 ask.
+    approvalKind: approval.kind === "egress" ? "egress" : "tool",
+    deferredAction: deferredActionOf(approval.action),
+    // A parked denial carries the same actor and explanation as the live hook response.
+    // denyReason also preserves the fixed expiry instruction (ADR-0002 A7).
+    ...(decision === "deny" && approval.reason
+      ? { reason: denyReason(approval.decidedBy, approval.reason) }
+      : {}),
   };
 }
 
@@ -164,7 +232,14 @@ export class RunLifecycle {
     const runOverrides: ReasoningOverrides = {};
     if (isEffortLevel(run.config.effort)) runOverrides.effort = run.config.effort;
     if (isThinkingConfig(run.config.thinking)) runOverrides.thinking = run.config.thinking;
-    const resolved = resolveReasoning(runOverrides, bot);
+    // Issue #39 item 8: a model job caps thinking (`MODEL_JOB_THINKING`) unless its run sets
+    // one, and a bot's reasoning override, which no job ever applied, is not recorded for it.
+    const job = THINKING_CAPPED_RUN_TYPES.has(run.config.runType);
+    if (job && runOverrides.thinking === undefined) {
+      const thinking = modelJobThinking(this.ctx.config, run.config.runType);
+      if (thinking) runOverrides.thinking = thinking;
+    }
+    const resolved = resolveReasoning(runOverrides, job ? {} : bot);
     this.ctx.runs.setConfig(run.id, { reasoning: resolved.recorded });
     return resolved.request;
   }
@@ -393,9 +468,11 @@ export class RunLifecycle {
     const { ctx } = this;
     if (run.status === "waiting_approval" || run.status === "waiting_continuation")
       return this.resume(run);
+    if (run.status === "waiting_platform") return this.resumePlatform(run);
     if (
       run.triggerKind === "cron" ||
       run.triggerKind === "manual" ||
+      run.triggerKind === "model_job" ||
       run.triggerKind === "webhook" ||
       run.triggerKind === "welcome"
     )
@@ -452,7 +529,9 @@ export class RunLifecycle {
       runId: run.id,
       botId: run.botId,
       botName: bot.name,
+      botRole: bot.role,
       workspaceId: bot.workspaceId,
+      workspaceName: ctx.workspaces.mustGet(bot.workspaceId).name,
       threadId: thread.id,
       botHomeDir: botHomeDir(bot.name),
       attempt: started.attempt,
@@ -466,17 +545,28 @@ export class RunLifecycle {
       shortWaitSeconds: ctx.config.shortWaitSeconds,
       maxTurns: freezeRunLimits(ctx, run, bot.workspaceId),
       ...this.browserSettings(run),
+      ...toolTierStart(ctx.db, ctx.runs, run, bot.workspaceId, { resume: false }),
       ...cliSurfaceStart(run.config),
+      ...(run.config.researchGuidance === "verify-v1" && !run.config.runType
+        ? { researchGuidance: "verify-v1" as const }
+        : {}),
       ...this.workdirSettings(run, bot.workspaceId),
+      ...desktopTools(ctx).startFields(ctx.runs, run, bot.workspaceId),
       egressAllowlist: ctx.workspaces.mustGet(bot.workspaceId).egressAllowlist,
       connectors: bot.connectors,
       ...this.integrationSettings(bot.workspaceId),
       tools: sidecarToolsFor(
         true,
-        run.config,
+        withWebSearch(ctx, run, bot.workspaceId),
         bot.connectors.length > 0,
-        ctx.integrations.usableConnectionCount(bot.workspaceId) > 0,
+        ctx.integrations.usableConnectionCountFor(
+          bot.workspaceId,
+          startAppScope(ctx.runs, run, bot),
+        ) > 0,
         tasks.deliverableTasks !== undefined,
+        vaultToolsOffered(ctx, run, bot.workspaceId),
+        runStatsSettings(ctx).startMode(ctx.runs, run, bot.workspaceId) === "self-v1",
+        defaultBots(ctx).startMode(ctx.runs, run, bot.workspaceId) === "assistant-v1",
       ),
       ...tasks,
     };
@@ -502,17 +592,20 @@ export class RunLifecycle {
   }
 
   /**
-   * queued → running for a cron, webhook or welcome run. Cron and webhook have no thread;
-   * welcome owns the Bot's new private thread so its normal final reply lands there. All three
-   * carry host-authored trigger text captured with the run and start a fresh SDK session.
+   * queued → running for a cron, manual, model-job, webhook or welcome run. Cron and webhook
+   * have no thread; welcome owns the Bot's new private thread so its normal final reply lands
+   * there. All carry host-authored trigger text captured with the run and start a fresh SDK
+   * session.
    */
   private startTrigger(run: RunRecord): PreparedStart {
     const { ctx } = this;
     const payload = run.triggerPayload ?? {};
     // A manual run is its cron entry run now (ADR-0043 decision 6): the bot gets the entry's
-    // prompt as a scheduled task; the run row keeps the `manual` trigger and who asked.
+    // prompt as a scheduled task; the run row keeps the `manual` trigger and who asked. A model
+    // job (issue #39 item 7) keeps the wire shape it had as a `cron` row: the sidecar's job and
+    // presentation paths read their source text from a `cron` trigger's prompt.
     const trigger: TriggerPayload =
-      run.triggerKind === "cron" || run.triggerKind === "manual"
+      run.triggerKind === "cron" || run.triggerKind === "manual" || run.triggerKind === "model_job"
         ? { kind: "cron", prompt: typeof payload.prompt === "string" ? payload.prompt : "" }
         : run.triggerKind === "webhook"
           ? { kind: "webhook", body: typeof payload.body === "string" ? payload.body : "" }
@@ -533,7 +626,9 @@ export class RunLifecycle {
       runId: run.id,
       botId: run.botId,
       botName: bot.name,
+      botRole: bot.role,
       workspaceId: bot.workspaceId,
+      workspaceName: ctx.workspaces.mustGet(bot.workspaceId).name,
       ...(run.threadId ? { threadId: run.threadId } : {}),
       botHomeDir: botHomeDir(bot.name),
       attempt: started.attempt,
@@ -551,17 +646,28 @@ export class RunLifecycle {
       shortWaitSeconds: ctx.config.shortWaitSeconds,
       maxTurns: freezeRunLimits(ctx, run, bot.workspaceId),
       ...this.browserSettings(run),
+      ...toolTierStart(ctx.db, ctx.runs, run, bot.workspaceId, { resume: false }),
       ...cliSurfaceStart(run.config),
+      ...(run.config.researchGuidance === "verify-v1" && !run.config.runType
+        ? { researchGuidance: "verify-v1" as const }
+        : {}),
       ...this.workdirSettings(run, bot.workspaceId),
+      ...desktopTools(ctx).startFields(ctx.runs, run, bot.workspaceId),
       egressAllowlist: ctx.workspaces.mustGet(bot.workspaceId).egressAllowlist,
       connectors: bot.connectors,
       ...this.integrationSettings(bot.workspaceId),
       tools: sidecarToolsFor(
         run.threadId !== undefined,
-        run.config,
+        withWebSearch(ctx, run, bot.workspaceId),
         bot.connectors.length > 0,
-        ctx.integrations.usableConnectionCount(bot.workspaceId) > 0,
+        ctx.integrations.usableConnectionCountFor(
+          bot.workspaceId,
+          startAppScope(ctx.runs, run, bot),
+        ) > 0,
         tasks.deliverableTasks !== undefined,
+        vaultToolsOffered(ctx, run, bot.workspaceId),
+        runStatsSettings(ctx).startMode(ctx.runs, run, bot.workspaceId) === "self-v1",
+        defaultBots(ctx).startMode(ctx.runs, run, bot.workspaceId) === "assistant-v1",
       ),
       ...tasks,
       // A consolidation over untrusted sources starts tainted, so the sidecar stamps its items
@@ -583,8 +689,18 @@ export class RunLifecycle {
    * the resumed process's events — whose seq restarts at 1 — out of the redelivery filter. The
    * decision is carried as the trigger and applies to the deferred `toolUseId` only.
    */
-  private resume(run: RunRecord): PreparedStart {
+  private resume(listed: RunRecord): PreparedStart {
     const { ctx } = this;
+    // Issue #62 M8: a decision that lands while a resumed process runs never starts a second one.
+    // The caller's row may be a snapshot from before the resume; the stored one decides.
+    const run = ctx.runs.mustGet(listed.id);
+    if (run.status !== listed.status || run.attempt !== listed.attempt) {
+      throw new DeskmatesError("invalid_transition", `run ${run.id} was resumed already`, {
+        runId: run.id,
+        from: run.status,
+        attempt: run.attempt,
+      });
+    }
     const payload = run.resumePayload;
     if (!payload?.sdkSessionId || (!payload.approvalId && !payload.budget)) {
       throw new DeskmatesError("validation", "parked run has no resumable payload", {
@@ -592,6 +708,123 @@ export class RunLifecycle {
       });
     }
     const trigger = this.resumeTrigger(run, payload);
+    const handedOver =
+      trigger.kind === "approval"
+        ? (trigger.decidedApprovals?.map((d) => d.approvalId) ?? [trigger.approvalId])
+        : [];
+    // The listed approvals no process has a decision for yet stay listed for the next park.
+    const undelivered = (payload.approvalIds ?? []).filter((id) => !this.decidedOn(run, id));
+    const { approvalIds: _delivered, ...rest } = payload;
+    const prepared = this.resumeProcess(
+      run,
+      trigger,
+      payload.sdkSessionId,
+      payload.approvalIds === undefined
+        ? undefined
+        : { ...rest, ...(undelivered.length > 0 ? { approvalIds: undelivered } : {}) },
+    );
+    ctx.events.append(
+      trigger.kind === "budget_continuation"
+        ? {
+            runId: run.id,
+            kind: "log",
+            payload: { source: "budget", phase: "resumed", attempt: prepared.run.attempt },
+          }
+        : {
+            runId: run.id,
+            kind: "approval",
+            payload: {
+              phase: "resumed",
+              approvalId: "approvalId" in trigger ? trigger.approvalId : undefined,
+              ...(handedOver.length > 1 ? { approvalIds: handedOver } : {}),
+              attempt: prepared.run.attempt,
+            },
+          },
+    );
+    return prepared;
+  }
+
+  /** Whether a listed approval is this run's and decided (issue #62 M8). */
+  private decidedOn(run: RunRecord, approvalId: string): boolean {
+    const approval = this.ctx.approvals.get(approvalId as ApprovalId);
+    return approval?.runId === run.id && approval.decision !== undefined;
+  }
+
+  /**
+   * ADR-0029 decisions 2, 4 and 10: waiting_platform → running, attempt n+1. A drain that ended
+   * a live approval wait whose approval has been decided since resumes on that decision, like any
+   * approval park. Otherwise the trigger says the platform interrupted the run: after a drain the
+   * SDK replays the deferred call through the hook, after a restart the trigger names the call
+   * whose outcome is unknown. A session the SDK could not read is replaced by a fresh one that
+   * starts from the Gateway's handoff.
+   */
+  private resumePlatform(run: RunRecord): PreparedStart {
+    const { ctx } = this;
+    const payload = run.resumePayload;
+    const reason: PlatformInterruptionReason = payload?.platform ?? "restart";
+    const resumes = platformResumesOf(run) + 1;
+    ctx.runs.setConfig(run.id, { [PLATFORM_CONFIG.resumes]: resumes });
+    const decided = [payload?.approvalId, ...(payload?.approvalIds ?? [])].some(
+      (id) => id !== undefined && this.decidedOn(run, id),
+    );
+    if (decided && payload?.sdkSessionId) {
+      ctx.events.append({
+        runId: run.id,
+        kind: "log",
+        payload: { source: PLATFORM_LOG_SOURCE, op: "resumed", reason, platformResumes: resumes },
+      });
+      return this.resume(ctx.runs.mustGet(run.id));
+    }
+    const fresh = run.config[PLATFORM_CONFIG.freshSession] === true || !payload?.sdkSessionId;
+    const recorded = run.config[PLATFORM_CONFIG.interrupted] as
+      | (InterruptedToolCall & { attempt?: number })
+      | null
+      | undefined;
+    const interrupted =
+      recorded && recorded.attempt === run.attempt + 1
+        ? {
+            toolUseId: recorded.toolUseId,
+            toolName: recorded.toolName,
+            riskLevel: recorded.riskLevel,
+            ...(recorded.targetOrigin === undefined ? {} : { targetOrigin: recorded.targetOrigin }),
+            ...(recorded.argumentPattern === undefined
+              ? {}
+              : { argumentPattern: recorded.argumentPattern }),
+          }
+        : undefined;
+    const trigger: TriggerPayload = {
+      kind: "platform_resume",
+      reason,
+      ...(interrupted ? { interruptedCall: interrupted } : {}),
+      ...(fresh ? { freshSession: { handoff: freshSessionHandoff(ctx, run) } } : {}),
+      ...(payload?.currentOrigin ? { currentOrigin: payload.currentOrigin } : {}),
+    };
+    const prepared = this.resumeProcess(run, trigger, fresh ? undefined : payload?.sdkSessionId);
+    ctx.events.append({
+      runId: run.id,
+      kind: "log",
+      payload: {
+        source: PLATFORM_LOG_SOURCE,
+        op: "resumed",
+        reason,
+        attempt: prepared.run.attempt,
+        platformResumes: resumes,
+        ...(fresh ? { freshSession: true } : {}),
+        ...(interrupted ? { interruptedToolUseId: interrupted.toolUseId } : {}),
+      },
+    });
+    return prepared;
+  }
+
+  /** A second (or later) sidecar process for a parked run, on `sdkSessionId` when there is one. */
+  private resumeProcess(
+    run: RunRecord,
+    trigger: TriggerPayload,
+    sdkSessionId: string | undefined,
+    /** The parked payload as the next park should find it (issue #62 M8); absent: unchanged. */
+    resumePayload?: RunResumePayload,
+  ): PreparedStart {
+    const { ctx } = this;
     const bot = ctx.bots.mustGet(run.botId);
     const issued = ctx.tokens.issue(run.id);
     const models = this.effectiveModels(run, bot);
@@ -599,6 +832,7 @@ export class RunLifecycle {
     const started = this.setStatus(run.id, "running", {
       attempt: run.attempt + 1,
       startedAt: nowIso(),
+      ...(resumePayload === undefined ? {} : { resumePayload }),
     });
     const base = ctx.gatewayBaseUrl();
     const tasks = this.taskSettings(run.id);
@@ -606,11 +840,36 @@ export class RunLifecycle {
       runId: run.id,
       botId: run.botId,
       botName: bot.name,
+      botRole: bot.role,
       workspaceId: bot.workspaceId,
+      workspaceName: ctx.workspaces.mustGet(bot.workspaceId).name,
       ...(run.threadId ? { threadId: run.threadId } : {}),
       botHomeDir: botHomeDir(bot.name),
-      sdkSessionId: payload.sdkSessionId,
+      ...(sdkSessionId === undefined ? {} : { sdkSessionId }),
       attempt: started.attempt,
+      pendingApprovals: [
+        ...new Set([
+          ...(run.resumePayload?.approvalIds ?? []),
+          ...(run.resumePayload?.approvalId ? [run.resumePayload.approvalId] : []),
+        ]),
+      ].flatMap((id) => {
+        const approval = ctx.approvals.get(id as ApprovalId);
+        return approval?.runId === run.id &&
+          !approval.decision &&
+          approval.toolUseId &&
+          approval.kind !== "continuation"
+          ? [
+              {
+                approvalId: approval.id,
+                toolUseId: approval.toolUseId,
+                kind: approval.kind ?? "tool",
+                actionFingerprint: createHash("sha256")
+                  .update(canonicalJson(approval.action))
+                  .digest("hex"),
+              },
+            ]
+          : [];
+      }),
       trigger,
       // The resumed process gets the prompt the first one had (ADR-0005 amendment 2, item 13).
       ...(run.config.groupGuidance === "owner-v1" ? { groupGuidance: "owner-v1" as const } : {}),
@@ -622,17 +881,29 @@ export class RunLifecycle {
       shortWaitSeconds: ctx.config.shortWaitSeconds,
       maxTurns: runMaxTurns(run.config, ctx.config.maxTurns),
       ...this.browserSettings(run),
+      // ADR-0002 amendment 3, A5: the overrides the first start recorded, never newer ones.
+      ...toolTierStart(ctx.db, ctx.runs, run, bot.workspaceId, { resume: true }),
       ...cliSurfaceStart(run.config),
+      ...(run.config.researchGuidance === "verify-v1" && !run.config.runType
+        ? { researchGuidance: "verify-v1" as const }
+        : {}),
       ...this.workdirSettings(run, bot.workspaceId),
+      ...desktopTools(ctx).startFields(ctx.runs, run, bot.workspaceId),
       egressAllowlist: ctx.workspaces.mustGet(bot.workspaceId).egressAllowlist,
       connectors: bot.connectors,
       ...this.integrationSettings(bot.workspaceId),
       tools: sidecarToolsFor(
         run.threadId !== undefined,
-        run.config,
+        withWebSearch(ctx, run, bot.workspaceId),
         bot.connectors.length > 0,
-        ctx.integrations.usableConnectionCount(bot.workspaceId) > 0,
+        ctx.integrations.usableConnectionCountFor(
+          bot.workspaceId,
+          startAppScope(ctx.runs, run, bot),
+        ) > 0,
         tasks.deliverableTasks !== undefined,
+        vaultToolsOffered(ctx, run, bot.workspaceId),
+        runStatsSettings(ctx).startMode(ctx.runs, run, bot.workspaceId) === "self-v1",
+        defaultBots(ctx).startMode(ctx.runs, run, bot.workspaceId) === "assistant-v1",
       ),
       ...tasks,
       // A resumed process gets the skill set attempt 1 recorded (ADR-0015 decision 7).
@@ -651,23 +922,6 @@ export class RunLifecycle {
           }
         : {}),
     };
-    ctx.events.append(
-      trigger.kind === "budget_continuation"
-        ? {
-            runId: run.id,
-            kind: "log",
-            payload: { source: "budget", phase: "resumed", attempt: started.attempt },
-          }
-        : {
-            runId: run.id,
-            kind: "approval",
-            payload: {
-              phase: "resumed",
-              approvalId: "approvalId" in trigger ? trigger.approvalId : undefined,
-              attempt: started.attempt,
-            },
-          },
-    );
     return { run: started, request, token: issued.token };
   }
 
@@ -678,27 +932,54 @@ export class RunLifecycle {
     // ADR-0032 decision 7: an Admin continued the budget park; there is no approval.
     if (payload.budget) return { kind: "budget_continuation", ...handoff };
     const approval = this.ctx.approvals.mustGet(payload.approvalId as ApprovalId);
-    if (!approval.decision) {
+    if (payload.continuation) {
+      if (!approval.decision) {
+        throw new DeskmatesError("validation", "approval is not decided yet", {
+          runId: run.id,
+          approvalId: approval.id,
+        });
+      }
+      return { kind: "continuation", approvalId: approval.id, decision: "continue", ...handoff };
+    }
+    // Issue #62 M8: one OpenAI turn can park on several approvals and people may decide any of
+    // them first. Every decision made so far goes to the resumed process, the named one first,
+    // one per parked call; the single-decision fields carry the first for an older sidecar.
+    const others = (payload.approvalIds ?? []).filter((id) => id !== approval.id);
+    const candidates: { approval: Approval; toolUseId: string | undefined }[] = [
+      { approval, toolUseId: payload.toolUseId ?? approval.toolUseId },
+    ];
+    for (const id of others) {
+      const other = this.ctx.approvals.get(id as ApprovalId);
+      if (other?.runId === run.id) candidates.push({ approval: other, toolUseId: other.toolUseId });
+    }
+    const calls = new Set<string>();
+    const decided: ResumeDecision[] = [];
+    for (const { approval: candidate, toolUseId } of candidates) {
+      if (candidate.decision === undefined) continue;
+      if (toolUseId !== undefined) {
+        if (calls.has(toolUseId)) continue;
+        calls.add(toolUseId);
+      }
+      decided.push(resumeDecisionOf(candidate, candidate.decision, toolUseId));
+    }
+    const first = decided[0];
+    if (first === undefined) {
       throw new DeskmatesError("validation", "approval is not decided yet", {
         runId: run.id,
         approvalId: approval.id,
       });
     }
-    return payload.continuation
-      ? { kind: "continuation", approvalId: approval.id, decision: "continue", ...handoff }
-      : {
-          kind: "approval",
-          approvalId: approval.id,
-          decision: approval.decision,
-          ...(payload.toolUseId ? { toolUseId: payload.toolUseId } : {}),
-          // ADR-0002 amendment 3, A7: an expiry tells the model nobody approved it, and not to work
-          // around it; other decisions resume exactly as before.
-          ...(approval.decidedBy === APPROVAL_EXPIRY_ACTOR && approval.reason
-            ? { reason: approval.reason }
-            : {}),
-          ...(payload.currentOrigin ? { currentOrigin: payload.currentOrigin } : {}),
-          deferredAction: deferredActionOf(approval.action),
-        };
+    return {
+      kind: "approval",
+      approvalId: first.approvalId,
+      decision: first.decision,
+      ...(first.toolUseId ? { toolUseId: first.toolUseId } : {}),
+      ...(first.reason === undefined ? {} : { reason: first.reason }),
+      ...(payload.currentOrigin ? { currentOrigin: payload.currentOrigin } : {}),
+      ...(first.deferredAction === undefined ? {} : { deferredAction: first.deferredAction }),
+      approvalKind: first.approvalKind,
+      ...(others.length > 0 ? { decidedApprovals: decided } : {}),
+    };
   }
 
   /**
@@ -845,6 +1126,46 @@ export class RunLifecycle {
           });
         }
 
+        // ADR-0029 decision 2: the drain deferred the call at a safe point; the run parks for the
+        // platform, not for a human, and the Gateway continues it once the drain is over.
+        if (ended.outcome === "deferred" && ended.platformInterruption) {
+          return this.parkForPlatform(published, run, "drain", {
+            sdkSessionId: ended.sdkSessionId,
+            ...(ended.pendingApprovalId ? { approvalId: ended.pendingApprovalId } : {}),
+            ...(ended.pendingApprovalIds ? { approvalIds: ended.pendingApprovalIds } : {}),
+            ...(ended.pendingToolUseId ? { toolUseId: ended.pendingToolUseId } : {}),
+            ...(ended.currentOrigin ? { currentOrigin: ended.currentOrigin } : {}),
+          });
+        }
+        // ADR-0029 decision 10: a platform continuation whose session could not be read goes on
+        // as a new attempt on a fresh session, within the same caps.
+        if (
+          ended.outcome === "failed" &&
+          ended.resumeFailed &&
+          run.resumePayload?.platform !== undefined &&
+          run.config[PLATFORM_CONFIG.freshSession] !== true
+        ) {
+          ctx.runs.setConfig(runId, { [PLATFORM_CONFIG.freshSession]: true });
+          ctx.events.append({
+            runId,
+            kind: "log",
+            payload: {
+              source: PLATFORM_LOG_SOURCE,
+              op: "resume_failed",
+              attempt: run.attempt,
+              error: ended.error ?? null,
+            },
+          });
+          return this.parkForPlatform(
+            published,
+            ctx.runs.mustGet(runId),
+            run.resumePayload.platform,
+            {
+              sdkSessionId: run.resumePayload.sdkSessionId,
+            },
+          );
+        }
+
         // ADR-0032 decision 6: the model proxy refused this attempt for budget. Its process ended
         // however it ended; the run is checkpointed, not finished. Approval and turn parks keep
         // their own path, held by the open budget park.
@@ -876,28 +1197,52 @@ export class RunLifecycle {
           return failed;
         }
         if (ended.outcome === "deferred") {
+          // The wait the approval is now in is the parked one, not the live one. A decision that
+          // arrived while the sidecar was exiting is already on the row; the scheduler's next pass
+          // sees the parked run with a decided approval and resumes it.
+          // Issue #62 M8: one OpenAI turn can park on several approvals; each is now in the parked
+          // wait. Only this run's own approvals are touched, whatever the process named.
+          const parkedOn = [
+            ...new Set([
+              ...(ended.pendingApprovalIds ?? []),
+              ...(ended.pendingApprovalId ? [ended.pendingApprovalId] : []),
+            ]),
+          ].filter((approvalId) => ctx.approvals.get(approvalId)?.runId === runId);
+          for (const approvalId of parkedOn) ctx.approvals.setWaitMode(approvalId, "deferred");
+          // An approval the last resume could not hand over (nobody had decided it yet) stays
+          // listed while its call is parked again, so deciding its card still resumes the run.
+          const parkedCalls = new Set(
+            parkedOn.map((approvalId) => ctx.approvals.get(approvalId)?.toolUseId),
+          );
+          const carried = (run.resumePayload?.approvalIds ?? []).filter((approvalId) => {
+            const earlier = ctx.approvals.get(approvalId as ApprovalId);
+            return (
+              earlier?.runId === runId &&
+              earlier.toolUseId !== undefined &&
+              parkedCalls.has(earlier.toolUseId) &&
+              !parkedOn.includes(earlier.id)
+            );
+          });
+          const approvalIds = [...parkedOn, ...carried];
           const resumePayload = {
             sdkSessionId: ended.sdkSessionId ?? "",
             ...(ended.pendingApprovalId ? { approvalId: ended.pendingApprovalId } : {}),
+            ...(approvalIds.some((approvalId) => approvalId !== ended.pendingApprovalId)
+              ? { approvalIds }
+              : {}),
             ...(ended.pendingToolUseId ? { toolUseId: ended.pendingToolUseId } : {}),
             // Kept so the resumed process knows which page the decision was taken about; a wrong
             // origin is worse than none, so an absent one stays absent.
             ...(ended.currentOrigin ? { currentOrigin: ended.currentOrigin } : {}),
           };
-          // The wait the approval is now in is the parked one, not the live one. A decision that
-          // arrived while the sidecar was exiting is already on the row; the scheduler's next pass
-          // sees the parked run with a decided approval and resumes it.
-          if (ended.pendingApprovalId && ctx.approvals.get(ended.pendingApprovalId)) {
-            ctx.approvals.setWaitMode(ended.pendingApprovalId, "deferred");
-          }
           return this.applyStatus(published, runId, "waiting_approval", {
             ...sessionPatch,
             resumePayload,
           });
         }
-        this.recordLearned(run, ended);
+        const learnedOutcomes = this.recordLearned(run, ended);
         this.recordSkills(run, ended);
-        const reply = ended.summary?.reply.trim() ?? "";
+        const reply = assistantCreationReport(ctx, run, ended.summary?.reply.trim() ?? "");
         if (reply && run.threadId) {
           const existing = ctx.messages.findRunReply(run.threadId, run.id, run.botId, reply);
           if (existing) {
@@ -912,14 +1257,26 @@ export class RunLifecycle {
             recordFinalReplyRouting(ctx, run, message);
           }
         }
-        const silent = run.threadId !== undefined && !reply;
-        // Issue #21: a silent end on a must-reply message is `failed` / `no_reply`, unless the run
-        // answered in the thread through `thread_post`. It still saw the slice, so `last_seen_seq`
-        // advances as for `silent`: the flag changes the recorded outcome, never who is woken.
+        publishLearningNotice(ctx, run, learnedOutcomes, published);
+        const posts = ctx.messages.postedByRun(run.id).filter((m) => m.authorKind === "bot");
+        // Owner definition of 2026-10-17 (ADR-0005, "Definition of `silent`"): only a run that
+        // ended successfully without posting a message is silent. A run that posted through
+        // `thread_post` or `message_bot` and ended with an empty reply `succeeded`.
+        const silent = isSilentOutcome({
+          status: "succeeded",
+          ...(run.threadId === undefined ? {} : { threadId: run.threadId }),
+          finalReply: reply !== "",
+          postedToThread: posts.length > 0,
+        });
+        // Issue #21: an empty end on a must-reply message is `failed` / `no_reply`, unless the
+        // run answered in the thread through `thread_post`. It still saw the slice, so
+        // `last_seen_seq` advances as for `silent`: the flag changes the recorded outcome, never
+        // who is woken.
         const noReply =
-          silent &&
+          run.threadId !== undefined &&
+          !reply &&
           run.config.mustReply === true &&
-          !ctx.messages.postedByRun(run.id).some((m) => m.threadId === run.threadId);
+          !posts.some((m) => m.threadId === run.threadId);
         const terminal: RunStatus = noReply ? "failed" : silent ? "silent" : "succeeded";
         const final = this.applyStatus(published, runId, terminal, {
           ...sessionPatch,
@@ -946,6 +1303,243 @@ export class RunLifecycle {
     });
     ctx.router.runEnded(result);
     return result;
+  }
+
+  /**
+   * ADR-0029 decisions 2, 4 and 6: park a run the platform interrupted as `waiting_platform`, or,
+   * on its fourth interruption, end it `failed` with `gateway_restarted`. A drained live approval
+   * wait keeps its approval pending and parked; the run waits on it once the drain is over.
+   */
+  private parkForPlatform(
+    published: GatewayEvent[],
+    run: RunRecord,
+    reason: PlatformInterruptionReason,
+    payload: {
+      sdkSessionId: string | undefined;
+      approvalId?: ApprovalId;
+      approvalIds?: ApprovalId[];
+      toolUseId?: string;
+      currentOrigin?: string;
+    },
+  ): RunRecord {
+    const { ctx } = this;
+    if (platformResumesOf(run) >= PLATFORM_RESUME_LIMIT || !payload.sdkSessionId)
+      return this.failPlatform(published, run, reason);
+    const approvalIds = [
+      ...new Set([
+        ...(payload.approvalIds ?? []),
+        ...(payload.approvalId ? [payload.approvalId] : []),
+        ...(run.resumePayload?.approvalIds ?? []),
+        ...(run.resumePayload?.approvalId ? [run.resumePayload.approvalId] : []),
+      ]),
+    ].filter((id) => ctx.approvals.get(id as ApprovalId)?.runId === run.id);
+    const approvalId = approvalIds.includes(payload.approvalId ?? "")
+      ? payload.approvalId
+      : approvalIds[0];
+    const toolUseId = approvalId
+      ? ctx.approvals.get(approvalId as ApprovalId)?.toolUseId
+      : payload.toolUseId;
+    for (const id of approvalIds) ctx.approvals.setWaitMode(id as ApprovalId, "deferred");
+    ctx.events.append({
+      runId: run.id,
+      kind: "log",
+      payload: {
+        source: PLATFORM_LOG_SOURCE,
+        op: "parked",
+        reason,
+        attempt: run.attempt,
+        ...(payload.approvalId ? { approvalId: payload.approvalId } : {}),
+      },
+    });
+    return this.applyStatus(published, run.id, "waiting_platform", {
+      sdkSessionId: payload.sdkSessionId,
+      resumePayload: {
+        sdkSessionId: payload.sdkSessionId,
+        platform: reason,
+        ...(approvalId ? { approvalId } : {}),
+        ...(approvalIds.length > 1 ? { approvalIds } : {}),
+        ...(toolUseId ? { toolUseId } : {}),
+        ...(payload.currentOrigin ? { currentOrigin: payload.currentOrigin } : {}),
+      },
+    });
+  }
+
+  /** Decisions 6 and 7: the run ends `gateway_restarted`, says so once, and tells its delegator. */
+  private failPlatform(
+    published: GatewayEvent[],
+    run: RunRecord,
+    reason: PlatformInterruptionReason,
+  ): RunRecord {
+    const { ctx } = this;
+    ctx.events.append({
+      runId: run.id,
+      kind: "log",
+      payload: {
+        source: PLATFORM_LOG_SOURCE,
+        op: "failed",
+        reason,
+        attempt: run.attempt,
+        platformResumes: platformResumesOf(run),
+      },
+    });
+    const failed = this.applyStatus(published, run.id, "failed", {
+      error: RUN_ERROR_GATEWAY_RESTARTED,
+    });
+    // As in fail(): a failed run never resumes, so its pending approvals close, and a review job
+    // lost without a verdict goes to humans (ADR-0002 amendment 4, B4).
+    ctx.broker.closeForRun(run.id, "system:failed", "the run failed");
+    if (isReviewRun(failed)) ctx.broker.reviewLost(failed);
+    announcePlatformFailure(ctx, failed, published);
+    announceDelegationOutcome(ctx, failed, published);
+    return failed;
+  }
+
+  /**
+   * ADR-0029 decision 4, after the scheduler revoked the run's tokens and killed its old sidecar:
+   * a live run of a Gateway that is gone. Its attempt's usage comes from its requests (decision
+   * 8); a run with a session parks as `waiting_platform` (reason `restart`), with the call it was
+   * in the middle of recorded for the resumed attempt (decision 5); a run that never reached the
+   * SDK is requeued as a new attempt; a fourth interruption fails it (decision 6). A live approval
+   * wait whose approval is still pending was never executed: the run waits on that approval.
+   */
+  parkAfterRestart(runId: RunId, opts: { held: boolean }): RunRecord | undefined {
+    const { ctx } = this;
+    const run = ctx.runs.get(runId);
+    if (!run || !isExecuting(run.status)) return run;
+    const published: GatewayEvent[] = [];
+    const result = ctx.bus.batch(() => {
+      const committed = ctx.db.transaction((): RunRecord => {
+        this.fillProxyUsage(run.id, run.attempt);
+        const session = sessionOfAttempt(ctx, run);
+        const interrupted = interruptedCallOf(ctx, run);
+        const pendingApproval = interrupted
+          ? ctx.approvals
+              .forRun(run.id)
+              .find((a) => a.toolUseId === interrupted.toolUseId && !a.decision)
+          : undefined;
+        ctx.events.append({
+          runId: run.id,
+          kind: "log",
+          payload: {
+            source: PLATFORM_LOG_SOURCE,
+            op: "restart_found_live",
+            attempt: run.attempt,
+            from: run.status,
+            sessionRecorded: session !== undefined,
+            ...(interrupted
+              ? {
+                  interruptedToolUseId: interrupted.toolUseId,
+                  interruptedRiskLevel: interrupted.riskLevel,
+                  executed: pendingApproval === undefined,
+                }
+              : {}),
+          },
+        });
+        if (platformResumesOf(run) >= PLATFORM_RESUME_LIMIT)
+          return this.failPlatform(published, run, "restart");
+        if (session === undefined) {
+          ctx.runs.setConfig(run.id, { [PLATFORM_CONFIG.resumes]: platformResumesOf(run) + 1 });
+          ctx.events.append({
+            runId: run.id,
+            kind: "log",
+            payload: { source: PLATFORM_LOG_SOURCE, op: "requeued", attempt: run.attempt + 1 },
+          });
+          return this.applyStatus(published, run.id, "queued", { attempt: run.attempt + 1 });
+        }
+        const executed = interrupted !== undefined && pendingApproval === undefined;
+        ctx.runs.setConfig(run.id, {
+          [PLATFORM_CONFIG.interrupted]: executed
+            ? { ...interrupted, attempt: run.attempt + 1 }
+            : null,
+          [PLATFORM_CONFIG.l2Recheck]:
+            executed && interrupted.riskLevel === "L2"
+              ? {
+                  attempt: run.attempt + 1,
+                  toolName: interrupted.toolName,
+                  ...(interrupted.targetOrigin === undefined
+                    ? {}
+                    : { targetOrigin: interrupted.targetOrigin }),
+                  ...(interrupted.argumentPattern === undefined
+                    ? {}
+                    : { argumentPattern: interrupted.argumentPattern }),
+                }
+              : null,
+          ...(opts.held ? { [PLATFORM_CONFIG.held]: true } : {}),
+        });
+        return this.parkForPlatform(published, ctx.runs.mustGet(run.id), "restart", {
+          sdkSessionId: session,
+          approvalIds: ctx.approvals
+            .forRun(run.id)
+            .filter((approval) => !approval.decision)
+            .map((approval) => approval.id),
+          ...(pendingApproval
+            ? { approvalId: pendingApproval.id, toolUseId: pendingApproval.toolUseId }
+            : {}),
+        });
+      })();
+      for (const event of published) ctx.bus.publish(event);
+      return committed;
+    });
+    // A requeued run is not parked or terminal, so `release` would keep its lock: do it here.
+    ctx.tokens.revokeForRun(runId);
+    ctx.locks.releaseForRun(runId);
+    ctx.originQueue.releaseForRun(runId);
+    this.release(runId);
+    if (result.status !== "queued") ctx.router.runEnded(result);
+    return result;
+  }
+
+  /**
+   * A drained run whose live approval is still pending once the drain is over waits on that
+   * approval as any parked approval does (decision 2): waiting_platform → waiting_approval.
+   */
+  awaitApprovalAfterDrain(runId: RunId): RunRecord {
+    const run = this.ctx.runs.mustGet(runId);
+    this.ctx.events.append({
+      runId,
+      kind: "log",
+      payload: {
+        source: PLATFORM_LOG_SOURCE,
+        op: "waiting_on_approval",
+        approvalId: run.resumePayload?.approvalId ?? null,
+      },
+    });
+    return this.setStatus(runId, "waiting_approval");
+  }
+
+  /**
+   * ADR-0029 decision 8: an attempt that ended without the sidecar's usage gets its rows from the
+   * `model_requests` its token made, marked `proxy`. A no-op when the attempt has rows already or
+   * made no request; an accounting fault never undoes how the run ended.
+   */
+  fillProxyUsage(runId: RunId, attempt: number): void {
+    const { ctx } = this;
+    try {
+      if (ctx.usage.hasAttemptUsage(runId, attempt)) return;
+      const run = ctx.runs.mustGet(runId);
+      if (ctx.usage.recordFromProxy(runId, attempt, run.startedAt ?? run.createdAt).length === 0)
+        return;
+      try {
+        ctx.budget.charge(runId);
+      } catch (err) {
+        ctx.events.append({
+          runId,
+          kind: "log",
+          payload: { source: "budget", phase: "charge_failed", error: String(err) },
+        });
+      }
+      try {
+        refreshRunUsageSummary(ctx.db, runId);
+      } catch {
+        // The Costs reader computes a missing summary.
+      }
+    } catch (err) {
+      ctx.events.append({
+        runId,
+        kind: "log",
+        payload: { source: "usage_proxy", level: "warn", error: String(err) },
+      });
+    }
   }
 
   private recordSkippedLearned(run: RunRecord, ended: RunEnded, reason: string): void {
@@ -1128,20 +1722,20 @@ export class RunLifecycle {
    * inside the run's end-of-run transaction. The outcome of every item goes to the ledger. A run
    * from an older sidecar has only `memorySuggestions`; they become untrusted bot candidates.
    */
-  private recordLearned(run: RunRecord, ended: RunEnded): void {
+  private recordLearned(run: RunRecord, ended: RunEnded): LearnedOutcome[] {
     const { ctx } = this;
     const summary = ended.summary;
-    if (!summary) return;
+    if (!summary) return [];
     // ADR-0042 decision 3: a run an operator marked wrong before it ended learns nothing.
     if (new RunMarkStore(ctx.db).isWrong(run.id)) {
       this.recordSkippedLearned(run, ended, MARKED_WRONG_REASON);
-      return;
+      return [];
     }
     const learned =
       summary.learned && summary.learned.length > 0
         ? summary.learned
         : learnedFromSuggestions(summary.memorySuggestions, 1);
-    if (learned.length === 0) return;
+    if (learned.length === 0) return [];
     const rules = ctx.memory.rulesFor(run.botId);
     const outcomes = isConsolidationRun(run)
       ? ctx.memory.consolidation.onEnded(run, learned, rules)
@@ -1160,7 +1754,7 @@ export class RunLifecycle {
     ctx.events.append({
       runId: run.id,
       kind: "log",
-      payload: { source: "learned_memory", outcomes },
+      payload: { source: "learned_memory", valuePolicy: MEMORY_VALUE_POLICY, outcomes },
     });
     for (const outcome of outcomes) {
       if (outcome.outcome === "skipped") {
@@ -1171,6 +1765,7 @@ export class RunLifecycle {
         });
       }
     }
+    return outcomes;
   }
 
   /**
@@ -1181,6 +1776,10 @@ export class RunLifecycle {
     const run = this.ctx.runs.get(runId);
     if (!run || !canTransition(run.status, "failed")) return run;
     const failed = this.setStatus(runId, "failed", { error });
+    // A failed run never resumes: its pending approvals close, so no card stays answerable.
+    this.ctx.broker.closeForRun(runId, "system:failed", "the run failed");
+    // ADR-0002 amendment 4, B4: a review job lost without a verdict goes to humans.
+    if (isReviewRun(failed)) this.ctx.broker.reviewLost(failed);
     // ADR-0016 amendment 1: a crash, a deadline or a start failure is still an outcome the
     // delegator has to hear about; this is the case that left the chief waiting in the trial.
     const published: GatewayEvent[] = [];
@@ -1194,12 +1793,32 @@ export class RunLifecycle {
   /**
    * The run's thread passed its deadline (issue #21): any non-terminal run becomes `cancelled`
    * with reason `deadline`. Its token and browser lock go, which frees the lane and stops a live
-   * sidecar from reaching the Gateway or the model; a `run_ended` it sends later is refused.
+   * sidecar from reaching the Gateway or the model; a `run_ended` it sends later is refused. Its
+   * pending approvals close; the scheduler kills a sidecar that does not exit (as on a cancel).
    */
   cancelPastDeadline(runId: RunId): RunRecord | undefined {
     const run = this.ctx.runs.get(runId);
     if (!run || !canTransition(run.status, "cancelled")) return run;
     const cancelled = this.setStatus(runId, "cancelled", { error: RUN_ERROR_DEADLINE });
+    this.ctx.broker.closeForRun(runId, "system:deadline", "the thread passed its deadline");
+    this.release(runId);
+    this.ctx.router.runEnded(cancelled);
+    return cancelled;
+  }
+
+  /**
+   * ADR-0029 decision 11: a cron round queued during a drain could launch only after its minute
+   * was older than the grace. It is cancelled with `cron_misfire` rather than fired late.
+   */
+  cancelCronMisfire(runId: RunId, lateMs: number): RunRecord | undefined {
+    const run = this.ctx.runs.get(runId);
+    if (!run || run.status !== "queued") return run;
+    const cancelled = this.setStatus(runId, "cancelled", { error: RUN_ERROR_CRON_MISFIRE });
+    this.ctx.events.append({
+      runId,
+      kind: "log",
+      payload: { source: "cron", op: "misfire_cancelled", lateMs, triggerRef: run.triggerRef },
+    });
     this.release(runId);
     this.ctx.router.runEnded(cancelled);
     return cancelled;
@@ -1227,6 +1846,8 @@ export class RunLifecycle {
       const committed = ctx.db.transaction((): RunRecord => {
         const run = this.applyStatus(published, runId, "cancelled");
         ctx.broker.closeForRun(runId, "system:cancel", `run cancelled by ${cancelledBy}`);
+        // ADR-0002 amendment 4, B4: a cancelled review settles nothing; humans are asked.
+        if (isReviewRun(run)) ctx.broker.reviewLost(run);
         ctx.events.append({
           runId,
           kind: "log",
@@ -1285,6 +1906,7 @@ export class RunLifecycle {
     if (isTerminal(run.status) || PARKED_RUN_STATUSES.has(run.status)) {
       this.ctx.tokens.revokeForRun(runId);
       this.ctx.locks.releaseForRun(runId);
+      desktopInputLocks(this.ctx).releaseForRun(runId);
       // Trash archival hides the bot from active queries before it cancels open runs. Release is
       // cleanup for that cancellation, so it must still resolve the archived bot's workspace.
       const bot = this.ctx.bots.mustGetIncludingArchived(run.botId);

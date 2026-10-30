@@ -1,12 +1,16 @@
-// Integrations (ADR-0013), receipted connectors (ADR-0012) and chat channels (ADR-0017). No
-// response carries a credential.
+// Integrations (ADR-0013), receipted connectors (ADR-0012) and chat channels (ADR-0017, with
+// ADR-0047's connection-addressed routes). No response carries a credential.
 
 import type {
   AdoptedIntegrationProvider,
   BotId,
   ChannelCommand,
   ChannelConnection,
+  ChannelMenuRequest,
+  ChannelMenuResult,
   ChannelPluginManifest,
+  ChannelPluginManifestV2,
+  ChannelSenderBlock,
   ConnectorPage,
   ConnectorRegistration,
   CreateApiKeyConnectionRequest,
@@ -29,15 +33,33 @@ export interface IntegrationsStatus {
 }
 
 export interface IntegrationsApi {
+  channelCommandMenu(
+    workspaceId: WorkspaceId,
+    connectionId: string,
+    input: ChannelMenuRequest,
+  ): Promise<ChannelMenuResult>;
   adoptIntegrationProvider(
     service: string,
     displayName?: string,
   ): Promise<AdoptedIntegrationProvider>;
+  /** ADR-0047 decision 13: add a person to an ABI-2 connection's blocklist. */
+  blockChannelSender(
+    workspaceId: WorkspaceId,
+    connectionId: string,
+    input: { senderId: string; note?: string },
+  ): Promise<ChannelSenderBlock>;
   commandChannel(
     workspaceId: WorkspaceId,
     pluginId: string,
     command: ChannelCommand,
     input?: Record<string, string>,
+  ): Promise<ChannelConnection | undefined>;
+  /** A lifecycle command for one connection by id; `relink` carries `{ config }` on ABI 2. */
+  commandChannelConnection(
+    workspaceId: WorkspaceId,
+    connectionId: string,
+    command: ChannelCommand,
+    input?: Record<string, unknown>,
   ): Promise<ChannelConnection | undefined>;
   connectChannel(
     workspaceId: WorkspaceId,
@@ -50,7 +72,7 @@ export interface IntegrationsApi {
   ): Promise<IntegrationConnection>;
   getChannelCatalog(): Promise<{
     plugins: {
-      manifest: ChannelPluginManifest;
+      manifest: ChannelPluginManifest | ChannelPluginManifestV2;
       state: "available" | "degraded";
       message?: string;
     }[];
@@ -60,6 +82,10 @@ export interface IntegrationsApi {
   getIntegrationCatalog(): Promise<IntegrationCatalog>;
   getIntegrations(): Promise<IntegrationsStatus>;
   listChannelConnections(workspaceId: WorkspaceId): Promise<ChannelConnection[]>;
+  listChannelSenderBlocks(
+    workspaceId: WorkspaceId,
+    connectionId: string,
+  ): Promise<ChannelSenderBlock[]>;
   /**
    * One page of a workspace's receipted connectors (ADR-0012), oldest first, with the total
    * (#113). Without a position the Gateway answers its first page.
@@ -73,6 +99,12 @@ export interface IntegrationsApi {
     workspaceId: WorkspaceId,
     filters?: { status?: IntegrationConnectionStatus; offset?: number; limit?: number },
   ): Promise<IntegrationConnectionPage>;
+  /** ADR-0047 decision 8: bind an ABI-2 connection to another Bot of its workspace. */
+  rebindChannelConnection(
+    workspaceId: WorkspaceId,
+    connectionId: string,
+    botId: BotId,
+  ): Promise<ChannelConnection>;
   registerConnector(input: RegisterConnectorRequest): Promise<ConnectorRegistration>;
   revokeIntegrationConnection(
     workspaceId: WorkspaceId,
@@ -83,6 +115,11 @@ export interface IntegrationsApi {
     input: StartOAuthConnectionRequest,
   ): Promise<StartOAuthConnectionResponse>;
   unadoptIntegrationProvider(service: string): Promise<void>;
+  unblockChannelSender(
+    workspaceId: WorkspaceId,
+    connectionId: string,
+    senderId: string,
+  ): Promise<boolean>;
 }
 
 export function createIntegrationsApi(t: HttpTransport): IntegrationsApi {
@@ -90,7 +127,12 @@ export function createIntegrationsApi(t: HttpTransport): IntegrationsApi {
     `/api/integrations/workspaces/${encodeURIComponent(workspaceId)}/connections`;
   const channels = (workspaceId: WorkspaceId) =>
     `/api/workspaces/${encodeURIComponent(workspaceId)}/channels`;
+  const connection = (workspaceId: WorkspaceId, connectionId: string) =>
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/channel-connections/${encodeURIComponent(connectionId)}`;
   return {
+    async channelCommandMenu(workspaceId, connectionId, input) {
+      return t.json("POST", `${connection(workspaceId, connectionId)}/command-menu`, input);
+    },
     async adoptIntegrationProvider(service, displayName) {
       const r = await t.json<{ provider: AdoptedIntegrationProvider }>(
         "POST",
@@ -98,6 +140,22 @@ export function createIntegrationsApi(t: HttpTransport): IntegrationsApi {
         stripUndefined({ service, displayName }),
       );
       return r.provider;
+    },
+    async blockChannelSender(workspaceId, connectionId, input) {
+      const r = await t.json<{ block: ChannelSenderBlock }>(
+        "POST",
+        `${connection(workspaceId, connectionId)}/blocks`,
+        stripUndefined(input),
+      );
+      return r.block;
+    },
+    async commandChannelConnection(workspaceId, connectionId, command, input) {
+      const r = await t.json<{ connection: ChannelConnection | null }>(
+        "POST",
+        `${connection(workspaceId, connectionId)}/commands/${encodeURIComponent(command)}`,
+        input ?? {},
+      );
+      return r.connection ?? undefined;
     },
     async commandChannel(workspaceId, pluginId, command, input) {
       const r = await t.json<{ connection: ChannelConnection | null }>(
@@ -131,6 +189,28 @@ export function createIntegrationsApi(t: HttpTransport): IntegrationsApi {
     },
     getIntegrations() {
       return t.json("GET", "/api/integrations");
+    },
+    async listChannelSenderBlocks(workspaceId, connectionId) {
+      const r = await t.json<{ blocks: ChannelSenderBlock[] }>(
+        "GET",
+        `${connection(workspaceId, connectionId)}/blocks`,
+      );
+      return r.blocks;
+    },
+    async rebindChannelConnection(workspaceId, connectionId, botId) {
+      const r = await t.json<{ connection: ChannelConnection }>(
+        "POST",
+        `${connection(workspaceId, connectionId)}/rebind`,
+        { botId },
+      );
+      return r.connection;
+    },
+    async unblockChannelSender(workspaceId, connectionId, senderId) {
+      const r = await t.json<{ removed: boolean }>(
+        "DELETE",
+        `${connection(workspaceId, connectionId)}/blocks/${encodeURIComponent(senderId)}`,
+      );
+      return r.removed;
     },
     async listChannelConnections(workspaceId) {
       const r = await t.json<{ connections: ChannelConnection[] }>("GET", channels(workspaceId));

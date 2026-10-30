@@ -1,0 +1,19 @@
+[
+  {
+    "id": "personal",
+    "route": "#/account"
+  },
+  {
+    "id": "access",
+    "route": "#/account/agent-access"
+  },
+  {
+    "id": "edit-form",
+    "route": "#/account",
+    "steps": [
+      {
+        "name": "Change display name"
+      }
+    ]
+  }
+]

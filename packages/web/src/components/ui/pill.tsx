@@ -16,6 +16,7 @@ const RUN_STATUS_KEY: Readonly<Record<RunStatus, MessageKey>> = {
   waiting_approval: "pill.runStatus.waitingApproval",
   waiting_browser: "pill.runStatus.waitingBrowser",
   waiting_continuation: "pill.runStatus.waitingContinuation",
+  waiting_platform: "pill.runStatus.waitingPlatform",
   succeeded: "pill.runStatus.succeeded",
   silent: "pill.runStatus.silent",
   failed: "pill.runStatus.failed",
@@ -47,6 +48,8 @@ const RUN_STATUS_TONE: Record<RunStatus, Tone> = {
   waiting_approval: "warning",
   waiting_browser: "warning",
   waiting_continuation: "warning",
+  // ADR-0029: the platform continues it by itself, so it reads as work in progress.
+  waiting_platform: "info",
   succeeded: "success",
   silent: "success",
   failed: "danger",

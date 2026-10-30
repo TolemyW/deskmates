@@ -180,7 +180,12 @@ describe("Guest status inquiries (ADR-0022 amendment 7)", () => {
     expect(job.model).not.toBe(ctx.config.cheapModel);
     // The background lane: a person's chat with the bot is never held by a Guest's question.
     const run = ctx.runs.mustGet(runId as never);
-    expect(run).toMatchObject({ threadId: inquiry, lane: "background", status: "succeeded" });
+    expect(run).toMatchObject({
+      threadId: inquiry,
+      lane: "background",
+      triggerKind: "model_job",
+      status: "succeeded",
+    });
     expect(run.config).toMatchObject({
       runType: STATUS_INQUIRY,
       requestedBy: `user:${f.ids.gus}`,

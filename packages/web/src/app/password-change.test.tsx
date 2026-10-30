@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// T0: the forced password change (ADR-0022 amendment 6 W2). While `GET /auth/session` reports
+// T0: the forced password change (ADR-0022 amendment 6 W2, issue #21). While `GET /auth/session` reports
 // `passwordChangeRequired`, the app shows the change-password screen instead of the shell and
 // sends no `/api` request; after `POST /auth/password` it reads the session again and enters.
 import "@testing-library/jest-dom/vitest";
@@ -27,12 +27,14 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function fakeGateway() {
+function fakeGateway(root = true) {
   const state = { required: true, csrf: "csrf-1" };
   const calls: Array<{ method: string; path: string; body: unknown }> = [];
   const view = () => ({
     authenticated: true,
-    user: { id: "usr_root", displayName: "Administrator", loginName: "admin" },
+    user: root
+      ? { id: "usr_root", displayName: "Administrator", loginName: "admin" }
+      : { id: "usr_member", displayName: "New Member", loginName: "new-member" },
     tenant: { id: "tnt_default", name: "Default Tenant", role: "owner" },
     session: {
       authenticatedAt: "2026-10-13T00:00:00.000Z",
@@ -40,7 +42,7 @@ function fakeGateway() {
       absoluteExpiresAt: "2026-11-12T00:00:00.000Z",
     },
     csrfToken: state.csrf,
-    root: true,
+    ...(root ? { root: true } : {}),
     workspaceRoles: [],
     passwordChangeRequired: state.required,
   });
@@ -79,8 +81,8 @@ function fakeGateway() {
   return { calls, state };
 }
 
-it("shows the change-password screen when the session requires it", async () => {
-  const gateway = fakeGateway();
+it("redirects an administrator-created account to change its initial password", async () => {
+  const gateway = fakeGateway(false);
   render(<App />);
   expect(await screen.findByTestId("password-change")).toBeInTheDocument();
   expect(screen.getByLabelText("Current password")).toBeInTheDocument();

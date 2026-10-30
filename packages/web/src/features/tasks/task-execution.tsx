@@ -1,11 +1,13 @@
-// ADR-0021 amendment 3 in the Tasks screen: the trigger chosen at creation (Immediately by
-// default, Scheduled, Manual), and the measured execution beside the declared state: schedule
-// and next occurrence, submissions with their runs' Gateway times, deliveries and the latest
-// checkpoint. Run and Delete are explicit acts; ordinary edits never rerun a task.
+// ADR-0021 amendment 3 in the Tasks screen: the trigger chosen at creation (Immediately,
+// Scheduled, or the valid unassigned default Manual), and the measured execution beside the
+// declared state: schedule and next occurrence, submissions with their runs' Gateway times,
+// deliveries and the latest checkpoint. Run and Delete are explicit acts; ordinary edits never
+// rerun a task.
 
 import type {
   CreateTaskRequest,
   Task,
+  TaskDelivery,
   TaskDetailResponse,
   TaskExecutionState,
   TaskScheduleInput,
@@ -18,11 +20,13 @@ import { Select } from "@deskmates/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "../../api/client.js";
 import { Button } from "../../components/ui/button.js";
+import { runStatusLabel } from "../../components/ui/pill.js";
 import { errorMessage, formatDateTime } from "../../format.js";
 import type { MessageKey } from "../../i18n/catalogs.js";
 import { useT } from "../../i18n/i18n-provider.js";
-import { runHref } from "../../router.js";
+import { runHref, threadHref } from "../../router.js";
 import { WorkspaceFilePreview } from "../files/workspace-file-preview.js";
+import { useTaskLiveRefresh } from "./use-task-live-refresh.js";
 
 export interface TriggerDraft {
   trigger: TaskTrigger;
@@ -30,16 +34,24 @@ export interface TriggerDraft {
   /** `datetime-local` text, read in the browser's zone. */
   runAt: string;
   cron: string;
+  /** The zone of a repeating schedule; a one-time start is the browser's local time. */
   timeZone: string;
+}
+
+/** The browser's zone, the one a `datetime-local` value is read in. */
+function browserTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
 export function triggerDraft(): TriggerDraft {
   return {
-    trigger: "immediate",
+    // Issue #18: the untouched form must be valid even when no bot is assigned. The explicit
+    // Immediately and Scheduled choices still require an owner in `triggerRequest`.
+    trigger: "manual",
     scheduleKind: "once",
     runAt: "",
     cron: "0 9 * * 1",
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    timeZone: browserTimeZone(),
   };
 }
 
@@ -61,12 +73,14 @@ export function triggerRequest(
     const at = new Date(draft.runAt);
     if (!draft.runAt || Number.isNaN(at.getTime()) || at <= now)
       return { invalid: "tasks.invalid.schedule" };
-    schedule = { kind: "once", runAt: at.toISOString(), timeZone: draft.timeZone };
+    // The start was read in the browser's zone, so that is the zone it is shown in; a zone typed
+    // for a repeating schedule does not apply to it.
+    schedule = { kind: "once", runAt: at.toISOString(), timeZone: browserTimeZone() };
   } else {
     if (draft.cron.trim().split(/\s+/).length !== 5) return { invalid: "tasks.invalid.schedule" };
+    if (!draft.timeZone.trim()) return { invalid: "tasks.invalid.schedule" };
     schedule = { kind: "repeat", cron: draft.cron.trim(), timeZone: draft.timeZone };
   }
-  if (!draft.timeZone.trim()) return { invalid: "tasks.invalid.schedule" };
   return { trigger: "scheduled", schedule };
 }
 
@@ -116,25 +130,28 @@ export function TaskTriggerFields({
               />
             </label>
           ) : (
-            <label htmlFor={`${fieldId}-cron`}>
-              {t("tasks.trigger.cron")}
-              <Input
-                id={`${fieldId}-cron`}
-                value={draft.cron}
-                maxLength={200}
-                onChange={(event) => set({ cron: event.target.value })}
-              />
-            </label>
+            <>
+              <label htmlFor={`${fieldId}-cron`}>
+                {t("tasks.trigger.cron")}
+                <Input
+                  id={`${fieldId}-cron`}
+                  value={draft.cron}
+                  maxLength={200}
+                  onChange={(event) => set({ cron: event.target.value })}
+                />
+              </label>
+              {/* Only a repeating schedule has a zone: a one-time start is the local time. */}
+              <label htmlFor={`${fieldId}-timeZone`}>
+                {t("tasks.trigger.timeZone")}
+                <Input
+                  id={`${fieldId}-timeZone`}
+                  value={draft.timeZone}
+                  maxLength={64}
+                  onChange={(event) => set({ timeZone: event.target.value })}
+                />
+              </label>
+            </>
           )}
-          <label htmlFor={`${fieldId}-timeZone`}>
-            {t("tasks.trigger.timeZone")}
-            <Input
-              id={`${fieldId}-timeZone`}
-              value={draft.timeZone}
-              maxLength={64}
-              onChange={(event) => set({ timeZone: event.target.value })}
-            />
-          </label>
         </div>
       ) : null}
     </div>
@@ -152,11 +169,87 @@ function inZone(iso: string, zone: string): string {
   }
 }
 
+function DeliveryResult({
+  api,
+  workspaceId,
+  delivery,
+  compact = false,
+}: {
+  api: ApiClient;
+  workspaceId: WorkspaceId;
+  delivery: TaskDelivery;
+  compact?: boolean;
+}) {
+  const t = useT();
+  return (
+    <li>
+      <strong>
+        {compact
+          ? t(
+              delivery.kind === "partial"
+                ? "tasks.execution.delivery.partial"
+                : "tasks.execution.delivery.complete",
+            )
+          : t("tasks.execution.delivery.line", {
+              kind: t(
+                delivery.kind === "partial"
+                  ? "tasks.execution.delivery.partial"
+                  : "tasks.execution.delivery.complete",
+              ),
+              by: delivery.deliveredBy,
+              time: formatDateTime(delivery.createdAt),
+            })}
+      </strong>
+      <p>{delivery.summary}</p>
+      {delivery.output !== undefined ? (
+        <details>
+          <summary>{t("tasks.execution.delivery.outputSnapshot")}</summary>
+          <pre>{JSON.stringify(delivery.output, null, 2)}</pre>
+        </details>
+      ) : null}
+      {delivery.outstanding.length > 0 ? (
+        <p className="muted small">
+          {t("tasks.execution.delivery.outstanding", {
+            items: delivery.outstanding.join("; "),
+          })}
+        </p>
+      ) : null}
+      {delivery.publications.length === 0 ? (
+        <p className="muted small">{t("tasks.execution.delivery.noFiles")}</p>
+      ) : (
+        delivery.publications.map((publication) => (
+          <div key={publication.path} className="task-delivery-publication">
+            {!compact ? (
+              <p className="muted small">
+                {t("tasks.execution.delivery.published", {
+                  path: publication.path,
+                  size: publication.sizeBytes,
+                  sha: publication.sha256.slice(0, 12),
+                  time: formatDateTime(publication.checkedAt),
+                })}
+              </p>
+            ) : null}
+            {compact ? (
+              <WorkspaceFilePreview
+                api={api}
+                workspaceId={workspaceId}
+                path={publication.path}
+                compact
+              />
+            ) : null}
+          </div>
+        ))
+      )}
+    </li>
+  );
+}
+
 export function TaskExecutionPanel({
   api,
   workspaceId,
   task,
   canEdit,
+  canRun,
   onChanged,
   onDeleted,
 }: {
@@ -164,6 +257,7 @@ export function TaskExecutionPanel({
   workspaceId: WorkspaceId;
   task: Task;
   canEdit: boolean;
+  canRun: boolean;
   onChanged: (task: Task) => void;
   onDeleted: (task: Task) => void;
 }) {
@@ -186,6 +280,8 @@ export function TaskExecutionPanel({
       if (request === sequence.current) setError(errorMessage(err));
     }
   }, [api, workspaceId, task.id]);
+
+  useTaskLiveRefresh(task, load);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reload when the record's version moves
   useEffect(() => {
@@ -232,8 +328,12 @@ export function TaskExecutionPanel({
   const schedule = task.schedule;
   const activeLinked = execution?.linkedRuns.some((r) => LIVE.has(r.status)) ?? false;
   const latestDelivery = execution?.deliveries[0];
+  const latestConversation = execution?.submissions.find(
+    (submission) => submission.threadId !== null,
+  )?.threadId;
   const checkpoint = execution?.latestCheckpoint;
   const closed = task.status === "accepted" || task.status === "cancelled";
+  const mayRun = canEdit && !closed && task.status !== "delivered";
 
   return (
     <section className="task-execution" aria-label={t("tasks.execution.region")}>
@@ -267,34 +367,26 @@ export function TaskExecutionPanel({
           </p>
         </div>
       ) : null}
-      {canEdit ? (
+      {mayRun || latestConversation ? (
         <div className="task-actions">
-          <Button
-            type="button"
-            variant="default"
-            disabled={busy || closed || !task.ownerBotId}
-            onClick={() => void run()}
-          >
-            {t("tasks.execution.run")}
-          </Button>
-          <Button type="button" disabled={busy} onClick={() => void remove()}>
-            {confirmDelete ? t("tasks.execution.deleteConfirm") : t("tasks.execution.delete")}
-          </Button>
-          <Button type="button" variant="ghost" disabled={busy} onClick={() => void load()}>
-            {t("tasks.execution.refresh")}
-          </Button>
+          {mayRun ? (
+            <Button
+              type="button"
+              variant="default"
+              disabled={busy || closed || !canRun || !task.ownerBotId}
+              onClick={() => void run()}
+            >
+              {t("tasks.execution.run")}
+            </Button>
+          ) : null}
+          {latestConversation ? (
+            <a href={threadHref(latestConversation)}>{t("tasks.execution.openConversation")}</a>
+          ) : null}
         </div>
       ) : null}
-      {canEdit ? (
-        <p className="muted small">
-          {confirmDelete ? t("tasks.execution.deleteHelp") : t("tasks.execution.runHelp")}
-        </p>
-      ) : null}
+      {mayRun ? <p className="muted small">{t("tasks.execution.runHelp")}</p> : null}
       {execution ? (
         <>
-          <p className="muted small">
-            {t("tasks.execution.observed", { time: formatDateTime(execution.observedAt) })}
-          </p>
           {activeLinked && task.status === "planned" ? (
             <p className="task-warning">{t("tasks.execution.discrepancy.active")}</p>
           ) : null}
@@ -305,110 +397,158 @@ export function TaskExecutionPanel({
               })}
             </p>
           ) : null}
-          {execution.submissions.length === 0 ? (
+          {execution.submissions.length === 0 && execution.deliveries.length === 0 ? (
             <p className="muted">{t("tasks.execution.none")}</p>
-          ) : (
-            <ul className="task-submissions">
-              {execution.submissions.map((submission) => (
+          ) : null}
+          {execution.submissions.length > 0 ? (
+            <ol className="task-activity-timeline">
+              {execution.submissions.slice(0, 3).map((submission) => (
                 <li key={submission.id}>
-                  <strong>
-                    {t("tasks.execution.submission", {
-                      kind: t(
-                        `tasks.execution.kind.${submission.kind satisfies TaskSubmissionKind}` as MessageKey,
-                      ),
-                      time: formatDateTime(submission.createdAt),
-                    })}
-                  </strong>{" "}
                   <span className={`task-execution-state ${submission.state}`}>
-                    {t(
-                      `tasks.execution.state.${submission.state satisfies TaskExecutionState}` as MessageKey,
-                    )}
+                    {t(`tasks.execution.state.${submission.state}` as MessageKey)}
                   </span>
-                  {submission.runs.map((r) => (
-                    <div key={r.id} className="muted small">
-                      <a href={runHref(r.id)}>
-                        {t("tasks.execution.runLine", {
-                          id: r.id,
-                          status: r.status,
-                          created: formatDateTime(r.createdAt),
-                          started: formatDateTime(r.startedAt ?? undefined),
-                          finished: formatDateTime(r.finishedAt ?? undefined),
-                        })}
+                  <time className="muted small" dateTime={submission.createdAt}>
+                    {formatDateTime(submission.createdAt)}
+                  </time>
+                  {submission.runs
+                    .filter((run) => run.pendingApprovals > 0)
+                    .map((run) => (
+                      <a key={run.id} href={runHref(run.id)} className="small">
+                        {t("tasks.execution.pendingApprovals", { count: run.pendingApprovals })}
                       </a>
-                      {r.pendingApprovals > 0
-                        ? ` · ${t("tasks.execution.pendingApprovals", { count: r.pendingApprovals })}`
-                        : null}
-                    </div>
-                  ))}
+                    ))}
                 </li>
               ))}
-            </ul>
-          )}
-          {checkpoint ? (
-            <p className="muted small">
-              {t("tasks.execution.checkpoint", {
-                run: checkpoint.runId ?? "?",
-                attempt: checkpoint.attempt,
-                time: formatDateTime(checkpoint.createdAt),
-                done: checkpoint.completed.filter((u) => u.evidence.length > 0).length,
-                missing: checkpoint.completed.filter((u) => u.evidence.length === 0).length,
-                open: checkpoint.outstanding.length,
-              })}
-            </p>
+            </ol>
           ) : null}
-          {execution.deliveries.length > 0 ? (
+          {latestDelivery ? (
             <div className="task-deliveries">
               <h4>{t("tasks.execution.deliveries")}</h4>
               <ul>
-                {execution.deliveries.map((delivery) => (
-                  <li key={delivery.id}>
-                    <strong>
-                      {t("tasks.execution.delivery.line", {
-                        kind: t(
-                          delivery.kind === "partial"
-                            ? "tasks.execution.delivery.partial"
-                            : "tasks.execution.delivery.complete",
-                        ),
-                        by: delivery.deliveredBy,
-                        time: formatDateTime(delivery.createdAt),
-                      })}
-                    </strong>
-                    <p>{delivery.summary}</p>
-                    {delivery.outstanding.length > 0 ? (
-                      <p className="muted small">
-                        {t("tasks.execution.delivery.outstanding", {
-                          items: delivery.outstanding.join("; "),
-                        })}
-                      </p>
-                    ) : null}
-                    {delivery.publications.length === 0 ? (
-                      <p className="muted small">{t("tasks.execution.delivery.noFiles")}</p>
-                    ) : (
-                      delivery.publications.map((p) => (
-                        <div key={p.path} className="task-delivery-publication">
-                          <p className="muted small">
-                            {t("tasks.execution.delivery.published", {
-                              path: p.path,
-                              size: p.sizeBytes,
-                              sha: p.sha256.slice(0, 12),
-                              time: formatDateTime(p.checkedAt),
-                            })}
-                          </p>
-                          {/* ADR-0014 amendment A6 decision 40: the same drawer as every file link. */}
-                          <WorkspaceFilePreview
-                            api={api}
-                            workspaceId={workspaceId}
-                            path={p.path}
-                            compact
-                          />
-                        </div>
-                      ))
-                    )}
+                <DeliveryResult
+                  api={api}
+                  workspaceId={workspaceId}
+                  delivery={latestDelivery}
+                  compact
+                />
+              </ul>
+            </div>
+          ) : task.artifacts.length > 0 ? (
+            <div className="task-deliveries">
+              <h4>{t("tasks.execution.deliveries")}</h4>
+              <ul>
+                {task.artifacts.map((artifact, index) => (
+                  <li key={`${index}:${artifact.path}`}>
+                    <strong>{artifact.label}</strong>
+                    <WorkspaceFilePreview
+                      api={api}
+                      workspaceId={workspaceId}
+                      path={artifact.path}
+                      compact
+                    />
                   </li>
                 ))}
               </ul>
             </div>
           ) : null}
+          <details className="task-execution-details">
+            <summary>{t("tasks.execution.details")}</summary>
+            <div className="task-execution-details-body">
+              <ul className="task-submissions">
+                {execution.deliveries.map((delivery) => (
+                  <DeliveryResult
+                    key={delivery.id}
+                    api={api}
+                    workspaceId={workspaceId}
+                    delivery={delivery}
+                  />
+                ))}
+              </ul>
+              <p className="muted small">
+                {t("tasks.execution.observed", { time: formatDateTime(execution.observedAt) })}
+              </p>
+              {execution.submissions.length > 0 ? (
+                <ul className="task-submissions">
+                  {execution.submissions.map((submission) => (
+                    <li key={submission.id}>
+                      <strong>
+                        {t("tasks.execution.submission", {
+                          kind: t(
+                            `tasks.execution.kind.${submission.kind satisfies TaskSubmissionKind}` as MessageKey,
+                          ),
+                          time: formatDateTime(submission.createdAt),
+                        })}
+                      </strong>{" "}
+                      <span className={`task-execution-state ${submission.state}`}>
+                        {t(
+                          `tasks.execution.state.${submission.state satisfies TaskExecutionState}` as MessageKey,
+                        )}
+                      </span>
+                      {submission.threadId ? (
+                        <div className="muted small">
+                          <a href={threadHref(submission.threadId)}>
+                            {t("tasks.execution.openConversation")}
+                          </a>
+                        </div>
+                      ) : null}
+                      {submission.runs.map((r) => (
+                        <div key={r.id} className="muted small">
+                          <a href={runHref(r.id)}>
+                            {t("tasks.execution.runLine", {
+                              id: r.id,
+                              status: runStatusLabel(r.status),
+                              created: formatDateTime(r.createdAt),
+                              started: formatDateTime(r.startedAt ?? undefined),
+                              finished: formatDateTime(r.finishedAt ?? undefined),
+                            })}
+                          </a>
+                          {r.pendingApprovals > 0
+                            ? ` · ${t("tasks.execution.pendingApprovals", { count: r.pendingApprovals })}`
+                            : null}
+                        </div>
+                      ))}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {checkpoint ? (
+                <p className="muted small">
+                  {checkpoint.scopeVersion === undefined ||
+                  checkpoint.scopeVersion !== task.scopeVersion ? (
+                    <strong>
+                      {t("tasks.execution.checkpointScopeChanged", {
+                        previous: checkpoint.scopeVersion ?? "?",
+                        current: task.scopeVersion,
+                      })}{" "}
+                    </strong>
+                  ) : null}
+                  {t("tasks.execution.checkpoint", {
+                    run: checkpoint.runId ?? "?",
+                    attempt: checkpoint.attempt,
+                    time: formatDateTime(checkpoint.createdAt),
+                    done: checkpoint.completed.filter((u) => u.evidence.length > 0).length,
+                    missing: checkpoint.completed.filter((u) => u.evidence.length === 0).length,
+                    open: checkpoint.outstanding.length,
+                  })}
+                </p>
+              ) : null}
+              {canEdit ? (
+                <div className="task-actions">
+                  <Button type="button" variant="ghost" disabled={busy} onClick={() => void load()}>
+                    {t("tasks.execution.refresh")}
+                  </Button>
+                  <Button type="button" disabled={busy} onClick={() => void remove()}>
+                    {confirmDelete
+                      ? t("tasks.execution.deleteConfirm")
+                      : t("tasks.execution.delete")}
+                  </Button>
+                </div>
+              ) : null}
+              {confirmDelete ? (
+                <p className="muted small">{t("tasks.execution.deleteHelp")}</p>
+              ) : null}
+            </div>
+          </details>
         </>
       ) : null}
     </section>

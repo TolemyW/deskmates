@@ -3,7 +3,15 @@
 // Pure functions: the Gateway decides with them and trace replay can recompute the decision.
 
 import type { RunId } from "./ids.js";
-import { type MemorySourceKind, type MemoryTrust, memoryTextShape } from "./memory.js";
+import {
+  type MemorySourceKind,
+  type MemoryTrust,
+  memoryTextShape,
+  normaliseMemoryBody,
+} from "./memory.js";
+
+/** ADR-0054: multiple numeric roles require the same normalized wording to consolidate. */
+export const MEMORY_VALUE_POLICY = "multi-number-body-v1";
 
 /** Where a note's effective time came from, best first (A9). */
 export const MEMORY_EFFECTIVE_BASES = ["source", "run", "human", "ingest"] as const;
@@ -71,8 +79,8 @@ const condition = (number: string) => `cond_${number.replaceAll(".", "_")}`;
  * numbers and the polarity are the value. Word order is not part of the key, a known limit
  * measured as false supersession.
  */
-export function memoryFact(body: string): MemoryFact {
-  const text = body
+function factText(body: string): string {
+  return body
     .normalize("NFKC")
     .replace(ISO_DATE_TIME, " ")
     .replace(CONDITION_WORD, (_, word: string, number: string) => `${word} ${condition(number)}`)
@@ -80,10 +88,30 @@ export function memoryFact(body: string): MemoryFact {
       // "The 20 seats": a sentence-initial stopword is not a product name.
       memoryTextShape(name).content.size === 0 ? whole : `${name} ${condition(number)}`,
     );
-  const shape = memoryTextShape(text);
+}
+
+export function memoryFact(body: string): MemoryFact {
+  const shape = memoryTextShape(factText(body));
   const value = `${shape.negative ? "not" : "is"}|${[...shape.numbers].sort().join(",")}`;
   if (shape.content.size === 0) return { value };
   return { key: [...shape.content].sort().join(" "), value };
+}
+
+/**
+ * Compare values within one fact key/store (ADR-0011 A10, ADR-0054). Numeric sets alone lose
+ * current/previous and property roles. Count occurrences, including repeated equal numbers,
+ * after the same date/condition processing as the key. Do not change the key or gated groups.
+ */
+export function memoryValuesEquivalent(a: string, b: string): boolean {
+  if (memoryFact(a).value !== memoryFact(b).value) return false;
+  // Same numeric token grammar as memoryTextShape; condition tokens contain an underscore.
+  const count = (body: string) =>
+    (
+      factText(body)
+        .toLowerCase()
+        .match(/(?<![a-z_\d.])\d+(?:\.\d+)?/g) ?? []
+    ).length;
+  return count(a) > 1 || count(b) > 1 ? normaliseMemoryBody(a) === normaliseMemoryBody(b) : true;
 }
 
 /**

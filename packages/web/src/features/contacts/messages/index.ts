@@ -14,6 +14,7 @@ export const contactsMessages = defineMessages({
   prefixes: [
     "avatarPicker",
     "botActivity",
+    "botApps",
     "botDiary",
     "botIdentity",
     "botProfile",

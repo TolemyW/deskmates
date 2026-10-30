@@ -15,6 +15,7 @@ import {
   type WorkspaceId,
   isAgentRuntime,
   isBotAvatar,
+  isBotName,
   isThinkingConfig,
 } from "@deskmates/contracts";
 import { newId, nowIso, parseJson } from "../db/ids.js";
@@ -37,6 +38,8 @@ interface BotRow {
   memory_body: string | null;
   connectors_json: string;
   message_allowlist_json: string;
+  /** ADR-0055: NULL is every connected app. */
+  integration_apps_json: string | null;
   cron_json: string;
   webhook_token_hash: string | null;
   paused_at: string | null;
@@ -78,6 +81,8 @@ export interface BotPatch {
   connectors?: readonly string[];
   /** Bot names this one may `message_bot`; routing configuration, not access control. */
   messageAllowlist?: readonly string[];
+  /** ADR-0055: the connected apps this bot may use; `null` goes back to every app. */
+  integrationApps?: readonly string[] | null;
   model?: string | null;
   cheapModel?: string | null;
   /** ADR-0044: `null` clears the override, so the bot inherits `DEFAULT_RUNTIME` again. */
@@ -97,11 +102,9 @@ export interface RuleWrite {
   restoredFrom?: number;
 }
 
-const NAME_PATTERN = /^[\w-]+$/;
-
 /** A bot name is what `@name` resolves against and a directory name: `[A-Za-z0-9_-]+`. */
 export function assertBotName(name: string): void {
-  if (!NAME_PATTERN.test(name)) {
+  if (!isBotName(name)) {
     throw new DeskmatesError("validation", "bot name must match [A-Za-z0-9_-]+", { name });
   }
 }
@@ -320,6 +323,12 @@ export class BotStore {
       sets.push("message_allowlist_json = ?");
       values.push(JSON.stringify(patch.messageAllowlist));
     }
+    if (patch.integrationApps !== undefined) {
+      sets.push("integration_apps_json = ?");
+      values.push(
+        patch.integrationApps === null ? null : JSON.stringify([...new Set(patch.integrationApps)]),
+      );
+    }
     if (patch.model !== undefined) {
       sets.push("model = ?");
       values.push(patch.model);
@@ -487,7 +496,12 @@ export class BotStore {
       }
     ).n;
     const rows = this.db
-      .prepare(`SELECT * FROM bots WHERE ${where} ORDER BY name, id LIMIT ? OFFSET ?`)
+      // ADR-0051 decision 7: the workspace's default bot leads its rail, then names in order.
+      .prepare(
+        `SELECT * FROM bots WHERE ${where}
+         ORDER BY id IN (SELECT bot_id FROM workspace_default_bots) DESC, name, id
+         LIMIT ? OFFSET ?`,
+      )
       .all(...params, page.limit, page.offset) as BotRow[];
     return { bots: rows.map(toBot), total };
   }
@@ -505,9 +519,14 @@ export class BotStore {
   archive(id: BotId, actor: string): BotDefinition {
     const current = this.mustGetIncludingArchived(id);
     if (!current.archivedAt) {
-      this.db
-        .prepare("UPDATE bots SET archived_at = ?, archived_by = ? WHERE id = ?")
-        .run(nowIso(), actor, id);
+      this.db.transaction(() => {
+        this.db
+          .prepare("UPDATE bots SET archived_at = ?, archived_by = ? WHERE id = ?")
+          .run(nowIso(), actor, id);
+        // ADR-0051 decision 1: a bot in Trash is no workspace's default bot, and a restore does
+        // not make it one again.
+        this.db.prepare("DELETE FROM workspace_default_bots WHERE bot_id = ?").run(id);
+      })();
     }
     return this.mustGetIncludingArchived(id);
   }
@@ -530,6 +549,9 @@ function toBot(row: BotRow): BotDefinition {
     connectors: parseJson<string[]>(row.connectors_json, []),
     messageAllowlist: parseJson<string[]>(row.message_allowlist_json, []),
     cron: parseJson<CronEntry[]>(row.cron_json, []),
+    ...(row.integration_apps_json == null
+      ? {}
+      : { integrationApps: parseJson<string[]>(row.integration_apps_json, []) }),
     createdAt: row.created_at,
     ...(row.paused_at == null ? {} : { pausedAt: row.paused_at }),
     ...(row.paused_by == null ? {} : { pausedBy: row.paused_by }),

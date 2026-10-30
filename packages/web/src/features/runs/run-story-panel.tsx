@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "../../components/ui/button.js";
 import { formatTime } from "../../format.js";
 import { useT } from "../../i18n/i18n-provider.js";
+import { desktopDenials } from "./desktop-denials.js";
 import { elapsedMs, formatElapsed, formatSpan } from "./run-activity.js";
 import { screenshotSource } from "./run-event-row.js";
 import { type StorySegment, type StoryStep, storyOf, storySize } from "./run-story.js";
@@ -38,9 +39,15 @@ export function RunStory({ events, live, hasOlder, loadingOlder, onLoadOlder }: 
   const hasOpen = live && segments.some((s) => s.steps.some((step) => step.tool?.open));
   const now = useTick(hasOpen);
   const size = storySize(segments);
+  const denials = useMemo(() => desktopDenials(events), [events]);
   return (
     <section className="run-story" aria-label={t("runStory.region")}>
       <h3>{live ? t("runStory.heading.live") : t("runStory.heading.done")}</h3>
+      {denials.count > 0 ? (
+        <p className="small" role="note" data-testid="story-desktop-denials">
+          {t("runStory.desktopDenials", { count: denials.count })}
+        </p>
+      ) : null}
       {hasOlder ? (
         <Button size="sm" variant="ghost" disabled={loadingOlder} onClick={onLoadOlder}>
           {loadingOlder ? t("runStory.loadingOlder") : t("runStory.loadOlder")}

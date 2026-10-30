@@ -87,7 +87,7 @@ export class ActivitySummaryStore {
       const job = this.deps.runs.create({
         botId: run.botId,
         lane: "background",
-        triggerKind: "cron",
+        triggerKind: "model_job",
         triggerRef: `${ACTIVITY_SUMMARY}:${run.id}:${version}`,
         triggerPayload: { prompt: this.sourceOf(run) },
         config: {

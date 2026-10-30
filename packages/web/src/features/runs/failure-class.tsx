@@ -15,6 +15,9 @@ export const FAILURE_CLASS_LABEL: Readonly<Record<RunFailureClass, MessageKey>> 
   sdk_abort: "runFailure.sdkAbort",
   no_reply: "runFailure.noReply",
   budget_limit: "runFailure.budgetLimit",
+  platform_interruption: "runFailure.platformInterruption",
+  sandbox_unavailable: "runFailure.sandboxUnavailable",
+  sidecar_exit: "runFailure.sidecarExit",
   other: "runFailure.other",
 };
 
