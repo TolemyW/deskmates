@@ -2,8 +2,11 @@
 # machine (AGENTS.md). T2 runs on Testbox before a release is activated; T3 runs there for
 # milestone releases (docs/runbooks/stable-release.md).
 #
-# GitHub Actions minutes are limited, and every job is billed rounded up to the minute, so the
-# gate is one job: one `npm ci` and one typecheck instead of one per parallel runner. It runs on
+# GitHub Actions minutes are limited, and every job is billed rounded up to the minute, so in the
+# private repository the gate is one job: one `npm ci` and one typecheck instead of one per
+# parallel runner. The public mirror's minutes are free, and its publish pull requests change the
+# root toolchain and so run everything, which takes longer than one job's timeout; there the same
+# gate fans out into parallel parts (checks, two layout halves, three test shards). It runs on
 # pull requests that are ready for review (opened, pushed to, reopened, or marked ready; a draft
 # gets none, and marking it ready runs it), by hand (workflow_dispatch), and when another workflow
 # calls it (workflow_call). A merge to main does not run it, and neither does a release: releases
@@ -27,8 +30,14 @@ concurrency:
 jobs:
   gate:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    name: ${{ matrix.name && format('gate ({0})', matrix.name) || 'gate' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # A full run in one job is about 31 minutes: 14 of layout checks and 14 of tests.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(github.event.repository.private && '[{"part":"all"}]' || '[{"part":"checks","name":"checks"},{"part":"layout-tabs","name":"layout tabs"},{"part":"layout-rows","name":"layout rows"},{"part":"tests","shard":"1/3","name":"tests 1/3"},{"part":"tests","shard":"2/3","name":"tests 2/3"},{"part":"tests","shard":"3/3","name":"tests 3/3"}]') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -47,52 +56,62 @@ jobs:
       - run: npm ci
       # Builds every package's dist/ before the tests import them. The root typecheck and
       # `npm test` already cover packages/web; its build is the only web-specific step.
+      # Every part type-checks: the tests and the Web build import the packages' dist/.
       - run: npm run typecheck
         if: steps.scope.outputs.typecheck == 'true'
       - run: npm run lint
+        if: matrix.part == 'all' || matrix.part == 'checks'
       - run: npm run docs:check
+        if: matrix.part == 'all' || matrix.part == 'checks'
       # ADR-0030: a PR compares with its base branch, a push to main with the previous commit. A
       # release tag calls this workflow for a commit main already checked, so it is skipped there.
       - name: New migrations sort after the target branch
-        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        if: (matrix.part == 'all' || matrix.part == 'checks') && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: node scripts/check-migration-order.mjs --base "$BASE"
       - run: npm run build -w packages/web
-        if: steps.scope.outputs.web_build == 'true'
+        if: steps.scope.outputs.web_build == 'true' && (matrix.part == 'all' || startsWith(matrix.part, 'layout-'))
       # Real geometry cannot be checked by jsdom. Only UI-affecting changes install a browser.
       - name: Install layout-check browser
-        if: steps.scope.outputs.web_build == 'true'
+        if: steps.scope.outputs.web_build == 'true' && (matrix.part == 'all' || startsWith(matrix.part, 'layout-'))
         run: npm exec -w packages/web -- playwright install --with-deps --only-shell chromium
+      # The tab checks take about half the layout time; the public mirror runs them beside the rest.
       - name: Check layout contracts
         id: tab_layout
-        if: steps.scope.outputs.web_build == 'true'
+        if: steps.scope.outputs.web_build == 'true' && (matrix.part == 'all' || startsWith(matrix.part, 'layout-'))
         env:
+          LAYOUT_CHECKS: ${{ matrix.part == 'layout-tabs' && 'check:tab-layout' || matrix.part == 'layout-rows' && 'check:page-rows check:chat-layout check:mobile-density' || 'check:layout' }}
           TAB_LAYOUT_FEATURES: ${{ steps.scope.outputs.layout_features }}
           ROW_LAYOUT_FEATURES: ${{ steps.scope.outputs.layout_features }}
           TAB_LAYOUT_OUTPUT: ${{ runner.temp }}/deskmates-tab-layout
           ROW_LAYOUT_OUTPUT: ${{ runner.temp }}/deskmates-page-rows
-        run: npm run check:layout -w packages/web
+        run: for check in $LAYOUT_CHECKS; do npm run "$check" -w packages/web; done
       - name: Upload layout failure evidence
         if: failure() && steps.tab_layout.outcome == 'failure'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: tab-layout-failures
+          name: layout-failures-${{ matrix.part }}
           path: |
             ${{ runner.temp }}/deskmates-tab-layout
             ${{ runner.temp }}/deskmates-page-rows
           retention-days: 7
       # Source edits use Vitest's import graph; every changed path adds the tests that read it and
-      # its owner's tests. Only the root toolchain and manual invocations run the whole suite.
+      # its owner's tests. Only the root toolchain and manual invocations run the whole suite. A
+      # test part of the public mirror runs one Vitest shard of the same selection.
       - name: Test the whole suite
-        if: steps.scope.outputs.mode == 'full'
-        run: node scripts/ci/test-metrics.mjs
+        if: steps.scope.outputs.mode == 'full' && (matrix.part == 'all' || matrix.part == 'tests')
+        env:
+          TEST_SHARD: ${{ matrix.shard }}
+        run: node scripts/ci/test-metrics.mjs ${TEST_SHARD:+"--shard=$TEST_SHARD"}
       - name: Test what the change affects
-        if: steps.scope.outputs.mode != 'full'
-        run: node scripts/ci/test-metrics.mjs --changed "${{ github.event.pull_request.base.sha }}" --passWithNoTests
+        if: steps.scope.outputs.mode != 'full' && (matrix.part == 'all' || matrix.part == 'tests')
+        env:
+          TEST_SHARD: ${{ matrix.shard }}
+        run: node scripts/ci/test-metrics.mjs --changed "${{ github.event.pull_request.base.sha }}" --passWithNoTests ${TEST_SHARD:+"--shard=$TEST_SHARD"}
       # The selector emits JSON argv, never interpolated shell text. npm keeps the tier filters.
       - name: Text-reading guards and affected owner tests
-        if: steps.scope.outputs.mode != 'full'
+        if: steps.scope.outputs.mode != 'full' && (matrix.part == 'all' || matrix.part == 'checks')
         env:
           CI_GUARD_TESTS: ${{ steps.scope.outputs.guards }}
         run: node scripts/ci/test-guards.mjs

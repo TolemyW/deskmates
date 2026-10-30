@@ -7,6 +7,13 @@ Each run attempt records `log` events with `source: "run_timeline"`, `version: 1
 `session`, `trigger`, `readyAt` on a resume), `sandbox_ready` (`sandbox`: `created`, `attached`
 or `cached`; `sandboxRetried`), `sidecar_spawned`, `run_ended` (`outcome`, `replyPosted`),
 `reply_preview_published` and `attempt_closed` (`spawned`, `exitCode`, `timedOut`, `error`).
+`run_ended.outcome` is the sidecar-reported outcome, while `run_ended.runStatus` is the
+Gateway status after committing result validation and delivery. A model job can report
+`outcome: "completed"` but have `runStatus: "failed"` when it returns no usable result;
+`attempt_closed.exitCode: 0` only describes its process exit. None of these observations
+changes approval decisions or retries. Older receipts without `runStatus` leave that
+observation unknown; use the run row for its current status.
+
 The sidecar records `sidecar_started` (`processStartedAt`), `query_started`, `sdk_init` (MCP
 server statuses), `first_stream_event`, `first_token`, `first_text` and `sdk_result` (SDK-reported
 numbers, verbatim). The first upstream request and byte come from the model proxy's

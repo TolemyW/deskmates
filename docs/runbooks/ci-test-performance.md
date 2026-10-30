@@ -63,5 +63,26 @@ run. This is impact selection, not a claim that Vitest tracks arbitrary
 filesystem reads: a new kind of input that is read by building its path, and
 that no test names, needs an owner entry in `test-scope.mjs`.
 
-Thread pools, fixture lifecycle, isolation and job sharding retain their existing
-behavior. Local pre-ready validation still follows AGENTS.md.
+Thread pools, fixture lifecycle and isolation retain their existing behavior. Local
+pre-ready validation still follows AGENTS.md.
+
+## Parallel parts in the public mirror
+
+The private repository runs the gate as one job, because its minutes are billed per
+job. The public mirror's minutes are free, and a publish pull request changes the root
+toolchain, so it always runs the full selection: on 2026-10-30 that was 14 minutes of
+layout checks plus 14 minutes of tests in one job, and the job hit its timeout one
+second after every test had passed. `ci.yml` therefore reads
+`github.event.repository.private` and, in the public mirror only, runs the same gate as
+six parallel jobs of one matrix:
+
+| Part | Runs |
+|---|---|
+| `checks` | typecheck, lint, documentation, migration order, text-reading guards |
+| `layout tabs` | Web build, `check:tab-layout` |
+| `layout rows` | Web build, `check:page-rows`, `check:chat-layout`, `check:mobile-density` |
+| `tests 1/3` to `3/3` | typecheck, one Vitest `--shard` of the selected tests |
+
+Every part runs the same scope selection, so a narrow change stays narrow in both
+repositories. The job timeout is 45 minutes, enough for a full run in the single
+private job.
