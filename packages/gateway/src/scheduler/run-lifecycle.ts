@@ -1295,7 +1295,10 @@ export class RunLifecycle {
     this.release(runId);
     // ADR-0037: the sidecar's end was taken; a non-empty reply is in the thread from now on.
     recordTimelineMark(ctx, runId, run.attempt, "run_ended", {
+      // The transport may complete even when the Gateway rejects a job's result.
+      // Keep both facts in the receipt instead of treating process completion as success.
       outcome: ended.outcome,
+      runStatus: result.status,
       replyPosted:
         ended.outcome === "completed" &&
         run.threadId !== undefined &&

@@ -142,7 +142,43 @@ describe("ci workflow: one gate job, on ready pull requests only", () => {
       "npm run docs:check",
       "npm run build -w packages/web",
     ]);
-    expect(gate).not.toContain("shard");
+    expect(jobTimeout(CI, "gate")).toBe(45);
+  });
+
+  it("runs as one job in the private repository and in parallel parts in the public mirror", () => {
+    const gate = jobBlock(CI, "gate");
+    const include =
+      /^ {8}include: \$\{\{ fromJSON\(github\.event\.repository\.private && '(.+?)' \|\| '(.+?)'\) \}\}$/m.exec(
+        gate,
+      );
+    expect(include, "matrix include").not.toBeNull();
+    const [, privateParts, publicParts] = include;
+    expect(JSON.parse(privateParts)).toEqual([{ part: "all" }]);
+    const parts = JSON.parse(publicParts);
+    expect(parts.map((p) => p.part)).toEqual([
+      "checks",
+      "layout-tabs",
+      "layout-rows",
+      "tests",
+      "tests",
+      "tests",
+    ]);
+    expect(parts.filter((p) => p.shard).map((p) => p.shard)).toEqual(["1/3", "2/3", "3/3"]);
+    // The private job keeps the plain check name `gate`.
+    expect(gate).toContain(
+      "name: ${{ matrix.name && format('gate ({0})', matrix.name) || 'gate' }}",
+    );
+    expect(gate).toContain("fail-fast: false");
+    // Together the layout halves run exactly the scripts of `check:layout`.
+    const web = JSON.parse(readFileSync(join(REPO, "packages/web/package.json"), "utf8"));
+    const all = [...web.scripts["check:layout"].matchAll(/npm run (\S+)/g)].map((m) => m[1]);
+    const halves =
+      /LAYOUT_CHECKS: \$\{\{ matrix\.part == 'layout-tabs' && '([^']+)' \|\| matrix\.part == 'layout-rows' && '([^']+)' \|\| 'check:layout' \}\}/.exec(
+        gate,
+      );
+    expect(halves, "layout split").not.toBeNull();
+    expect([...halves[1].split(" "), ...halves[2].split(" ")]).toEqual(all);
+    expect(gate).toContain("name: layout-failures-${{ matrix.part }}");
   });
 
   it("pins scope selection to the PR base before expensive build steps", () => {
@@ -159,12 +195,19 @@ describe("ci workflow: one gate job, on ready pull requests only", () => {
 
   it("runs import-related tests separately from explicit text-input guards", () => {
     const gate = jobBlock(CI, "gate");
-    expect(gate).toContain("if: steps.scope.outputs.mode == 'full'");
-    expect(gate).toContain("run: node scripts/ci/test-metrics.mjs\n");
     expect(gate).toContain(
-      'node scripts/ci/test-metrics.mjs --changed "${{ github.event.pull_request.base.sha }}" --passWithNoTests',
+      "if: steps.scope.outputs.mode == 'full' && (matrix.part == 'all' || matrix.part == 'tests')",
     );
-    expect(gate).toContain("if: steps.scope.outputs.mode != 'full'");
+    expect(gate).toContain(
+      'run: node scripts/ci/test-metrics.mjs ${TEST_SHARD:+"--shard=$TEST_SHARD"}\n',
+    );
+    expect(gate).toContain(
+      'node scripts/ci/test-metrics.mjs --changed "${{ github.event.pull_request.base.sha }}" --passWithNoTests ${TEST_SHARD:+"--shard=$TEST_SHARD"}',
+    );
+    expect(gate).toContain("TEST_SHARD: ${{ matrix.shard }}");
+    expect(gate).toContain(
+      "if: steps.scope.outputs.mode != 'full' && (matrix.part == 'all' || matrix.part == 'checks')",
+    );
     expect(gate).toContain("CI_GUARD_TESTS: ${{ steps.scope.outputs.guards }}");
     expect(gate).toContain("run: node scripts/ci/test-guards.mjs");
     expect(gate).not.toContain("--no-isolate");
